@@ -72,9 +72,10 @@ int NaiveClientConnection::Connect(const CompletionCallback& callback) {
 
 void NaiveClientConnection::Disconnect() {
   full_duplex_ = false;
-  client_socket_->Disconnect();
+  // Closes server side first because latency is higher.
   if (server_socket_handle_->socket())
     server_socket_handle_->socket()->Disconnect();
+  client_socket_->Disconnect();
 
   next_state_ = STATE_NONE;
   connect_callback_.Reset();
@@ -221,8 +222,13 @@ void NaiveClientConnection::Push(StreamSocket* from,
 }
 
 void NaiveClientConnection::OnIOError(StreamSocket* socket, int error) {
+  // Avoids running run_callback_ again.
+  if (client_error_ < 0 || server_error_ < 0)
+    return;
+
   if (socket == client_socket_.get()) {
     if (client_error_ == OK) {
+      DCHECK(run_callback_);
       base::ResetAndReturn(&run_callback_).Run(error);
     }
     client_error_ = error;
@@ -230,6 +236,7 @@ void NaiveClientConnection::OnIOError(StreamSocket* socket, int error) {
   }
   if (socket == server_socket_handle_->socket()) {
     if (server_error_ == OK) {
+      DCHECK(run_callback_);
       base::ResetAndReturn(&run_callback_).Run(error);
     }
     server_error_ = error;
