@@ -53,7 +53,7 @@ Socks5ServerSocket::~Socks5ServerSocket() {
 int Socks5ServerSocket::Connect(const CompletionCallback& callback) {
   DCHECK(transport_);
   DCHECK_EQ(STATE_NONE, next_state_);
-  DCHECK(user_callback_.is_null());
+  DCHECK(!user_callback_);
 
   // If already connected, then just return OK.
   if (completed_handshake_)
@@ -173,8 +173,8 @@ int Socks5ServerSocket::Read(IOBuffer* buf,
                              const CompletionCallback& callback) {
   DCHECK(completed_handshake_);
   DCHECK_EQ(STATE_NONE, next_state_);
-  DCHECK(user_callback_.is_null());
-  DCHECK(!callback.is_null());
+  DCHECK(!user_callback_);
+  DCHECK(callback);
 
   int rv = transport_->Read(buf, buf_len,
                             base::Bind(&Socks5ServerSocket::OnReadWriteComplete,
@@ -191,8 +191,8 @@ int Socks5ServerSocket::Write(IOBuffer* buf,
                               const CompletionCallback& callback) {
   DCHECK(completed_handshake_);
   DCHECK_EQ(STATE_NONE, next_state_);
-  DCHECK(user_callback_.is_null());
-  DCHECK(!callback.is_null());
+  DCHECK(!user_callback_);
+  DCHECK(callback);
 
   int rv =
       transport_->Write(buf, buf_len,
@@ -213,7 +213,7 @@ int Socks5ServerSocket::SetSendBufferSize(int32_t size) {
 
 void Socks5ServerSocket::DoCallback(int result) {
   DCHECK_NE(ERR_IO_PENDING, result);
-  DCHECK(!user_callback_.is_null());
+  DCHECK(user_callback_);
 
   // Since Run() may result in Read being called,
   // clear user_callback_ up front.
@@ -232,7 +232,7 @@ void Socks5ServerSocket::OnIOComplete(int result) {
 void Socks5ServerSocket::OnReadWriteComplete(const CompletionCallback& callback,
                                              int result) {
   DCHECK_NE(ERR_IO_PENDING, result);
-  DCHECK(!callback.is_null());
+  DCHECK(callback);
 
   if (result > 0)
     was_ever_used_ = true;
