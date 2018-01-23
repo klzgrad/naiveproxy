@@ -56,7 +56,7 @@ NaiveClientConnection::~NaiveClientConnection() {
 int NaiveClientConnection::Connect(const CompletionCallback& callback) {
   DCHECK(client_socket_);
   DCHECK_EQ(next_state_, STATE_NONE);
-  DCHECK(connect_callback_.is_null());
+  DCHECK(!connect_callback_);
 
   if (full_duplex_)
     return OK;
@@ -84,7 +84,7 @@ void NaiveClientConnection::Disconnect() {
 
 void NaiveClientConnection::DoCallback(int result) {
   DCHECK_NE(result, ERR_IO_PENDING);
-  DCHECK(!connect_callback_.is_null());
+  DCHECK(connect_callback_);
 
   // Since Run() may result in Read being called,
   // clear connect_callback_ up front.
@@ -181,7 +181,7 @@ int NaiveClientConnection::Run(const CompletionCallback& callback) {
   DCHECK(client_socket_);
   DCHECK(server_socket_handle_->socket());
   DCHECK_EQ(next_state_, STATE_NONE);
-  DCHECK(connect_callback_.is_null());
+  DCHECK(!connect_callback_);
 
   run_callback_ = callback;
 
