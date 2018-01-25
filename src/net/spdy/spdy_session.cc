@@ -3140,7 +3140,7 @@ void SpdySession::OnWindowUpdate(spdy::SpdyStreamId stream_id,
 
     if (it == active_streams_.end()) {
       // NOTE:  it may just be that the stream was cancelled.
-      LOG(WARNING) << "Received WINDOW_UPDATE for invalid stream " << stream_id;
+      VLOG(1) << "Received WINDOW_UPDATE for invalid stream " << stream_id;
       return;
     }
 
@@ -3185,7 +3185,7 @@ void SpdySession::OnHeaders(spdy::SpdyStreamId stream_id,
   auto it = active_streams_.find(stream_id);
   if (it == active_streams_.end()) {
     // NOTE:  it may just be that the stream was cancelled.
-    LOG(WARNING) << "Received HEADERS for invalid stream " << stream_id;
+    VLOG(1) << "Received HEADERS for invalid stream " << stream_id;
     return;
   }
 
