@@ -1126,6 +1126,7 @@ jumbo_component("base") {
   all_dependent_configs = []
   defines = []
   data = []
+  libs = []
 
   configs += [
     ":base_flags",
@@ -1512,6 +1513,8 @@ jumbo_component("base") {
       ":base_win_linker_flags",
       "//tools/win/DebugVisualizers:chrome",
     ]
+  } else if (is_linux) {
+    libs += [ "event_core" ]
   } else if ((!is_nacl && !is_fuchsia) || is_nacl_nonsfi) {
     # Non-Windows.
     deps += [ "//base/third_party/libevent" ]
@@ -2327,6 +2330,7 @@ test("base_unittests") {
   ]
 
   defines = []
+  libs = []
 
   deps = [
     ":base",
@@ -2440,7 +2444,11 @@ test("base_unittests") {
 
   if (is_posix && !is_ios && !is_fuchsia) {
     sources += [ "message_loop/message_pump_libevent_unittest.cc" ]
-    deps += [ "//base/third_party/libevent" ]
+    if (is_linux) {
+      libs += [ "event_core" ]
+    } else {
+      deps += [ "//base/third_party/libevent" ]
+    }
   }
 
   if (is_fuchsia) {
