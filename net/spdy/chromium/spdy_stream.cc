@@ -514,6 +514,7 @@ void SpdyStream::OnDataReceived(std::unique_ptr<SpdyBuffer> buffer) {
   if (!buffer) {
     if (io_state_ == STATE_OPEN) {
       io_state_ = STATE_HALF_CLOSED_REMOTE;
+      delegate_->OnDataReceived(nullptr);
     } else if (io_state_ == STATE_HALF_CLOSED_LOCAL) {
       io_state_ = STATE_CLOSED;
       // Deletes |this|.
