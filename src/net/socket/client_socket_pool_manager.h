@@ -106,7 +106,7 @@ class NET_EXPORT_PRIVATE ClientSocketPoolManager {
 // |resolution_callback| will be invoked after the the hostname is
 // resolved.  If |resolution_callback| does not return OK, then the
 // connection will be aborted with that value.
-int InitSocketHandleForHttpRequest(
+NET_EXPORT int InitSocketHandleForHttpRequest(
     ClientSocketPoolManager::SocketGroupType group_type,
     const HostPortPair& endpoint,
     const HttpRequestHeaders& request_extra_headers,
