@@ -11,6 +11,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/time/time.h"
 #include "net/base/completion_callback.h"
 #include "net/base/host_port_pair.h"
 #include "net/log/net_log_with_source.h"
@@ -28,6 +29,8 @@ class StreamSocket;
 
 class NaiveClientConnection {
  public:
+  using TimeFunc = base::TimeTicks (*)();
+
   NaiveClientConnection(int id,
                         std::unique_ptr<StreamSocket> accepted_socket,
                         HttpNetworkSession* session);
@@ -47,6 +50,13 @@ class NaiveClientConnection {
     STATE_NONE,
   };
 
+  // From this direction.
+  enum Direction {
+    kClient = 0,
+    kServer = 1,
+    kNumDirections = 2,
+  };
+
   void DoCallback(int result);
   void OnIOComplete(int result);
   int DoLoop(int last_io_result);
@@ -54,18 +64,18 @@ class NaiveClientConnection {
   int DoConnectClientComplete(int result);
   int DoConnectServer();
   int DoConnectServerComplete(int result);
-  void Pull(StreamSocket* from, StreamSocket* to);
-  void Push(StreamSocket* from,
-            StreamSocket* to,
+  void Pull(Direction from, Direction to);
+  void Push(Direction from,
+            Direction to,
             scoped_refptr<IOBuffer> buffer,
             int size);
-  void OnIOError(StreamSocket* socket, int error);
-  void OnReadComplete(StreamSocket* from,
-                      StreamSocket* to,
+  void OnIOError(Direction from, int error);
+  void OnReadComplete(Direction from,
+                      Direction to,
                       scoped_refptr<IOBuffer> buffer,
                       int result);
-  void OnWriteComplete(StreamSocket* from,
-                       StreamSocket* to,
+  void OnWriteComplete(Direction from,
+                       Direction to,
                        scoped_refptr<DrainableIOBuffer> drainable,
                        int result);
 
@@ -83,13 +93,16 @@ class NaiveClientConnection {
   HostPortPair request_endpoint_;
 
   std::unique_ptr<Socks5ServerSocket> client_socket_;
-  std::unique_ptr<StreamSocket> server_socket_;
   std::unique_ptr<ClientSocketHandle> server_socket_handle_;
 
-  int client_error_;
-  int server_error_;
+  StreamSocket* sockets_[kNumDirections];
+  int errors_[kNumDirections];
+  int bytes_passed_without_yielding_[kNumDirections];
+  base::TimeTicks yield_after_time_[kNumDirections];
 
   bool full_duplex_;
+
+  TimeFunc time_func_;
 
   base::WeakPtrFactory<NaiveClientConnection> weak_ptr_factory_;
 
