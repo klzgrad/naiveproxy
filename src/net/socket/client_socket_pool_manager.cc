@@ -153,7 +153,6 @@ void ClientSocketPoolManager::set_max_sockets_per_pool(
     HttpNetworkSession::SocketPoolType pool_type,
     int socket_count) {
   DCHECK_LT(0, socket_count);
-  DCHECK_GT(1000, socket_count);  // Sanity check.
   DCHECK_LT(pool_type, HttpNetworkSession::NUM_SOCKET_POOL_TYPES);
   g_max_sockets_per_pool[pool_type] = socket_count;
   DCHECK_GE(g_max_sockets_per_pool[pool_type],
@@ -173,7 +172,6 @@ void ClientSocketPoolManager::set_max_sockets_per_group(
     int socket_count) {
   DCHECK_LT(0, socket_count);
   // The following is a sanity check... but we should NEVER be near this value.
-  DCHECK_GT(100, socket_count);
   DCHECK_LT(pool_type, HttpNetworkSession::NUM_SOCKET_POOL_TYPES);
   g_max_sockets_per_group[pool_type] = socket_count;
 
@@ -195,7 +193,6 @@ void ClientSocketPoolManager::set_max_sockets_per_proxy_chain(
     HttpNetworkSession::SocketPoolType pool_type,
     int socket_count) {
   DCHECK_LT(0, socket_count);
-  DCHECK_GT(100, socket_count);  // Sanity check.
   DCHECK_LT(pool_type, HttpNetworkSession::NUM_SOCKET_POOL_TYPES);
   // Assert this case early on. The max number of sockets per group cannot
   // exceed the max number of sockets per proxy chain.
