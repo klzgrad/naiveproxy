@@ -160,7 +160,6 @@ void ClientSocketPoolManager::set_socket_soft_cap_per_pool_for_test(
     HttpNetworkSession::SocketPoolType pool_type,
     size_t socket_count) {
   DCHECK_LT(0u, socket_count);     // At least one socket must be allowed.
-  DCHECK_GE(2048u, socket_count);  // For now, we pick a ceiling of 2^11.
   g_socket_soft_cap_per_pool[std::to_underlying(pool_type)] = socket_count;
   DCHECK_GE(g_socket_soft_cap_per_pool[std::to_underlying(pool_type)],
             g_max_sockets_per_group[std::to_underlying(pool_type)]);
@@ -177,7 +176,6 @@ void ClientSocketPoolManager::set_max_sockets_per_group_for_test(
     HttpNetworkSession::SocketPoolType pool_type,
     size_t socket_count) {
   DCHECK_LT(0u, socket_count);    // At least one socket must be allowed.
-  DCHECK_GE(512u, socket_count);  // For now, we pick a ceiling of 2^9.
   g_max_sockets_per_group[std::to_underlying(pool_type)] = socket_count;
 
   DCHECK_GE(g_socket_soft_cap_per_pool[std::to_underlying(pool_type)],
@@ -200,7 +198,6 @@ void ClientSocketPoolManager::set_max_sockets_per_proxy_chain(
   // We set out explicit limits here because they are hard coded in the
   // enterprise policy MaxConnectionsPerProxy.
   CHECK_GE(socket_count, 6u);
-  CHECK_LE(socket_count, 256u);
   // LINT.ThenChange(/net/socket/client_socket_pool_manager.cc:SetMaxConnectionsPerProxyChain)
   GlobalMaxSocketPerProxyChain()[std::to_underlying(pool_type)] = socket_count;
 }
