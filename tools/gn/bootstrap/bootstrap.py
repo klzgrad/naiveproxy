@@ -612,16 +612,13 @@ def write_gn_ninja(path, root_gen_dir, options):
         'base/time/time_conversion_posix.cc',
         'base/trace_event/heap_profiler_allocation_register_posix.cc',
     ])
+  if not is_linux:
     static_libraries['libevent'] = {
         'sources': [
             'base/third_party/libevent/buffer.c',
             'base/third_party/libevent/evbuffer.c',
-            'base/third_party/libevent/evdns.c',
             'base/third_party/libevent/event.c',
-            'base/third_party/libevent/event_tagging.c',
-            'base/third_party/libevent/evrpc.c',
             'base/third_party/libevent/evutil.c',
-            'base/third_party/libevent/http.c',
             'base/third_party/libevent/log.c',
             'base/third_party/libevent/poll.c',
             'base/third_party/libevent/select.c',
@@ -665,13 +662,7 @@ def write_gn_ninja(path, root_gen_dir, options):
         'base/allocator/allocator_shim.cc',
         'base/allocator/allocator_shim_default_dispatch_to_glibc.cc',
       ])
-      libs.extend(['-lrt', '-latomic'])
-      static_libraries['libevent']['include_dirs'].extend([
-          os.path.join(SRC_ROOT, 'base', 'third_party', 'libevent', 'linux')
-      ])
-      static_libraries['libevent']['sources'].extend([
-         'base/third_party/libevent/epoll.c',
-      ])
+      libs.extend(['-lrt', '-latomic', '-levent_core'])
     else:
       libs.extend(['-lrt'])
       static_libraries['base']['sources'].extend([
