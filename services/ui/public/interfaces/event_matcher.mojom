@@ -1,0 +1,56 @@
+// Copyright 2015 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module ui.mojom;
+
+import "ui/events/mojo/event_constants.mojom";
+import "ui/events/mojo/keyboard_codes.mojom";
+import "ui/gfx/geometry/mojo/geometry.mojom";
+
+struct KeyEventMatcher {
+  ui.mojom.KeyboardCode keyboard_code;
+};
+
+struct PointerKindMatcher {
+  ui.mojom.PointerKind pointer_kind;
+};
+
+struct PointerLocationMatcher {
+  gfx.mojom.RectF region;
+};
+
+struct EventTypeMatcher {
+  ui.mojom.EventType type;
+};
+
+struct EventFlagsMatcher {
+  // A bitfield of kEventFlag* and kMouseEventFlag* values in
+  // input_event_constants.mojom.
+  int32 flags;
+};
+
+// If a specific matcher is missing, then an Event will match this EventMatcher
+// (if relevant). For example, if |type_matcher| is missing, then events of all
+// types will match this EventMatcher. Similarly, if |key_matcher| is missing,
+// then all key-events will match.
+// An example matcher to match the Ctrl+A accelerator would be:
+// - |type_matcher.type| = ui::mojom::EventType::KEY_PRESSED
+// - |flags_matcher.flags| = ui::mojom::kEventFlagControlDown
+// - |key_matcher.keyboard_code| = ui::mojom::KeyboardCode::A
+//
+// A matcher to match any key-press event would be:
+// - |type_matcher.type| = ui::mojom::EventType::KEY_PRESSED
+struct EventMatcher {
+  // |accelerator_phase| is only applicable to accelerators.
+  // TODO(jamescook): Move this to somewhere accelerator-specific.
+  ui.mojom.AcceleratorPhase accelerator_phase;
+  EventTypeMatcher? type_matcher;
+  EventFlagsMatcher? flags_matcher;
+  // These flags will be stripped from incoming events' flags when comparing
+  // against |flags_matcher|.
+  EventFlagsMatcher? ignore_flags_matcher;
+  KeyEventMatcher? key_matcher;
+  PointerKindMatcher? pointer_kind_matcher;
+  PointerLocationMatcher? pointer_location_matcher;
+};

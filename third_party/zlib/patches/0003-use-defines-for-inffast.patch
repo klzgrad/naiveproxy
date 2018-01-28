@@ -1,0 +1,120 @@
+From 8626f3ea324e1e6f15229722761617063a70b96b Mon Sep 17 00:00:00 2001
+From: Chris Blume <cblume@google.com>
+Date: Tue, 12 Sep 2017 11:17:55 -0700
+Subject: [PATCH 1/1] Zlib: Use defines for inffast
+
+Zlib's inffast uses a handful of magic numbers. It would be easier to
+read and maintain if these magic numbers were instead #defines.
+
+NigelTao@ wrote this code to clean up the magic numbers in
+https://chromium-review.googlesource.com/c/chromium/src/+/601694
+
+Nigel gave me permission to make a separate pull request to separate out
+just the magic number cleaning.
+
+BUG=764431
+---
+ third_party/zlib/infback.c |  3 ++-
+ third_party/zlib/inffast.c | 15 +++++++++------
+ third_party/zlib/inffast.h | 15 +++++++++++++++
+ third_party/zlib/inflate.c |  3 ++-
+ 4 files changed, 28 insertions(+), 8 deletions(-)
+
+diff --git a/third_party/zlib/infback.c b/third_party/zlib/infback.c
+index 59679ecbfc5d..b93ef478e957 100644
+--- a/third_party/zlib/infback.c
++++ b/third_party/zlib/infback.c
+@@ -480,7 +480,8 @@ void FAR *out_desc;
+ 
+         case LEN:
+             /* use inflate_fast() if we have enough input and output */
+-            if (have >= 6 && left >= 258) {
++            if (have >= INFLATE_FAST_MIN_HAVE &&
++                left >= INFLATE_FAST_MIN_LEFT) {
+                 RESTORE();
+                 if (state->whave < state->wsize)
+                     state->whave = state->wsize - left;
+diff --git a/third_party/zlib/inffast.c b/third_party/zlib/inffast.c
+index 0dbd1dbc09f2..66c0d02494a9 100644
+--- a/third_party/zlib/inffast.c
++++ b/third_party/zlib/inffast.c
+@@ -23,8 +23,8 @@
+    Entry assumptions:
+ 
+         state->mode == LEN
+-        strm->avail_in >= 6
+-        strm->avail_out >= 258
++        strm->avail_in >= INFLATE_FAST_MIN_HAVE
++        strm->avail_out >= INFLATE_FAST_MIN_LEFT
+         start >= strm->avail_out
+         state->bits < 8
+ 
+@@ -80,10 +80,10 @@ unsigned start;         /* inflate()'s starting value for strm->avail_out */
+     /* copy state to local variables */
+     state = (struct inflate_state FAR *)strm->state;
+     in = strm->next_in;
+-    last = in + (strm->avail_in - 5);
++    last = in + (strm->avail_in - (INFLATE_FAST_MIN_HAVE - 1));
+     out = strm->next_out;
+     beg = out - (start - strm->avail_out);
+-    end = out + (strm->avail_out - 257);
++    end = out + (strm->avail_out - (INFLATE_FAST_MIN_LEFT - 1));
+ #ifdef INFLATE_STRICT
+     dmax = state->dmax;
+ #endif
+@@ -298,9 +298,12 @@ unsigned start;         /* inflate()'s starting value for strm->avail_out */
+     /* update state and return */
+     strm->next_in = in;
+     strm->next_out = out;
+-    strm->avail_in = (unsigned)(in < last ? 5 + (last - in) : 5 - (in - last));
++    strm->avail_in = (unsigned)(in < last ?
++        (INFLATE_FAST_MIN_HAVE - 1) + (last - in) :
++        (INFLATE_FAST_MIN_HAVE - 1) - (in - last));
+     strm->avail_out = (unsigned)(out < end ?
+-                                 257 + (end - out) : 257 - (out - end));
++        (INFLATE_FAST_MIN_LEFT - 1) + (end - out) :
++        (INFLATE_FAST_MIN_LEFT - 1) - (out - end));
+     state->hold = hold;
+     state->bits = bits;
+     return;
+diff --git a/third_party/zlib/inffast.h b/third_party/zlib/inffast.h
+index e5c1aa4ca8cd..dda6bc82cc3b 100644
+--- a/third_party/zlib/inffast.h
++++ b/third_party/zlib/inffast.h
+@@ -8,4 +8,19 @@
+    subject to change. Applications should only use zlib.h.
+  */
+ 
++
++/* INFLATE_FAST_MIN_LEFT is the minimum number of output bytes that are left,
++   so that we can call inflate_fast safely with only one up front bounds check.
++   One length-distance code pair can copy up to 258 bytes.
++ */
++#define INFLATE_FAST_MIN_LEFT 258
++
++/* INFLATE_FAST_MIN_HAVE is the minimum number of input bytes that we have, so
++   that we can call inflate_fast safely with only one up front bounds check.
++   One length-distance code pair (as two Huffman encoded values of up to 15
++   bits each) plus any additional bits (up to 5 for length and 13 for distance)
++   can require reading up to 48 bits, or 6 bytes.
++ */
++#define INFLATE_FAST_MIN_HAVE 6
++
+ void ZLIB_INTERNAL inflate_fast OF((z_streamp strm, unsigned start));
+diff --git a/third_party/zlib/inflate.c b/third_party/zlib/inflate.c
+index cc38b983485b..257b9a982668 100644
+--- a/third_party/zlib/inflate.c
++++ b/third_party/zlib/inflate.c
+@@ -1044,7 +1044,8 @@ int flush;
+         case LEN_:
+             state->mode = LEN;
+         case LEN:
+-            if (have >= 6 && left >= 258) {
++            if (have >= INFLATE_FAST_MIN_HAVE &&
++                left >= INFLATE_FAST_MIN_LEFT) {
+                 RESTORE();
+                 inflate_fast(strm, out);
+                 LOAD();
+-- 
+2.14.1.581.gf28d330327-goog
+

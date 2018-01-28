@@ -1,0 +1,67 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module content.mojom;
+
+import "content/common/service_worker/service_worker_container.mojom";
+import "content/public/common/url_loader_factory.mojom";
+import "services/service_manager/public/interfaces/interface_provider.mojom";
+import "third_party/WebKit/common/service_worker/service_worker_provider_type.mojom";
+import "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom";
+
+// The name of the InterfaceProviderSpec in service manifests used by the
+// frame tree to expose service-worker-specific interfaces between renderer
+// and browser.
+const string kNavigation_ServiceWorkerSpec = "navigation:service_worker";
+
+// Sent from the browser process to the renderer. Contains parameters for the
+// constructor of ServiceWorkerNetworkProvider used for starting a service
+// worker.
+struct ServiceWorkerProviderInfoForStartWorker {
+  int32 provider_id;
+  // |registration| is information about the service worker's
+  // registration used to populate ServiceWorkerGlobalScope#registration.
+  blink.mojom.ServiceWorkerRegistrationObjectInfo registration;
+
+  associated ServiceWorkerContainerHost host_ptr_info;
+  associated ServiceWorkerContainer& client_request;
+
+  // For servicified service worker only.
+  // The loader to use for loading the worker's main script and
+  // importScripts().
+  associated URLLoaderFactory? script_loader_factory_ptr_info;
+
+  service_manager.mojom.InterfaceProvider interface_provider;
+};
+
+// Sent from the renderer to the browser process. Contains parameters that
+// describe a browser-side provider host.
+// See also comments in
+// content/common/service_worker/service_worker_provider_host_info.h.
+struct ServiceWorkerProviderHostInfo {
+  int32 provider_id;
+  int32 route_id;
+  blink.mojom.ServiceWorkerProviderType type;
+  bool is_parent_frame_secure;
+  associated ServiceWorkerContainerHost& host_request;
+  associated ServiceWorkerContainer client_ptr_info;
+};
+
+// ServiceWorkerWorkerClient represents a service worker client that is a worker
+// (i.e., a shared worker or dedicated worker). We use this interface to let the
+// WorkerFetchContextImpl in the worker thread know about the change of
+// controlling service worker by calling SetControllerServiceWorker() from the
+// ServiceWorkerProviderContext in the main thread of the renderer process.
+//
+// TODO(horo): We should implement ServiceWorkerProvider in the worker thread
+// instead of using this interface to support WorkerNavigator.serviceWorker
+// when we can make the worker thread totally independent from the main thread.
+// Currently we handle synchronous resource loading such as importScripts() and
+// synchronous XHR in the main thread. So we need to know whether the worker is
+// controlled by a service worker or not both in the main thread and in the
+// worker thread.
+interface ServiceWorkerWorkerClient {
+  // Called when the worker is controlled by a new service worker.
+  SetControllerServiceWorker(int64 controller_version_id);
+};

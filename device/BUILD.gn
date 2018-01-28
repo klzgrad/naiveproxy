@@ -1,0 +1,331 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("vr/features/features.gni")
+import("//build/config/features.gni")
+import("//testing/test.gni")
+
+if (is_android) {
+  import("//build/config/android/config.gni")
+  import("//build/config/android/rules.gni")  # For generate_jni().
+}
+
+if (is_mac) {
+  import("//build/config/mac/mac_sdk.gni")
+}
+
+is_linux_without_udev = is_linux && !use_udev
+
+test("device_unittests") {
+  sources = [
+    "base/synchronization/one_writer_seqlock_unittest.cc",
+    "bluetooth/bluetooth_adapter_mac_unittest.mm",
+    "bluetooth/bluetooth_adapter_unittest.cc",
+    "bluetooth/bluetooth_adapter_win_unittest.cc",
+    "bluetooth/bluetooth_advertisement_unittest.cc",
+    "bluetooth/bluetooth_device_unittest.cc",
+    "bluetooth/bluetooth_device_win_unittest.cc",
+    "bluetooth/bluetooth_discovery_filter_unittest.cc",
+    "bluetooth/bluetooth_local_gatt_characteristic_unittest.cc",
+    "bluetooth/bluetooth_local_gatt_descriptor_unittest.cc",
+    "bluetooth/bluetooth_local_gatt_service_unittest.cc",
+    "bluetooth/bluetooth_low_energy_win_unittest.cc",
+    "bluetooth/bluetooth_remote_gatt_characteristic_unittest.cc",
+    "bluetooth/bluetooth_remote_gatt_descriptor_unittest.cc",
+    "bluetooth/bluetooth_remote_gatt_service_unittest.cc",
+    "bluetooth/bluetooth_service_record_win_unittest.cc",
+    "bluetooth/bluetooth_task_manager_win_unittest.cc",
+    "bluetooth/bluetooth_uuid_unittest.cc",
+    "bluetooth/device_unittest.cc",
+    "bluetooth/string_util_icu_unittest.cc",
+    "bluetooth/test/bluetooth_gatt_server_test.cc",
+    "bluetooth/test/bluetooth_gatt_server_test.h",
+    "bluetooth/test/bluetooth_test.cc",
+    "bluetooth/test/bluetooth_test.h",
+    "bluetooth/test/bluetooth_test_android.cc",
+    "bluetooth/test/bluetooth_test_android.h",
+    "bluetooth/test/bluetooth_test_mac.h",
+    "bluetooth/test/bluetooth_test_mac.mm",
+    "bluetooth/test/bluetooth_test_win.cc",
+    "bluetooth/test/bluetooth_test_win.h",
+    "bluetooth/test/mock_bluetooth_cbcharacteristic_mac.h",
+    "bluetooth/test/mock_bluetooth_cbcharacteristic_mac.mm",
+    "bluetooth/test/mock_bluetooth_cbdescriptor_mac.h",
+    "bluetooth/test/mock_bluetooth_cbdescriptor_mac.mm",
+    "bluetooth/test/mock_bluetooth_cbperipheral_mac.h",
+    "bluetooth/test/mock_bluetooth_cbperipheral_mac.mm",
+    "bluetooth/test/mock_bluetooth_cbservice_mac.h",
+    "bluetooth/test/mock_bluetooth_cbservice_mac.mm",
+    "bluetooth/test/mock_bluetooth_central_manager_mac.h",
+    "bluetooth/test/mock_bluetooth_central_manager_mac.mm",
+    "bluetooth/test/test_bluetooth_adapter_observer.cc",
+    "bluetooth/test/test_bluetooth_adapter_observer.h",
+    "bluetooth/test/test_bluetooth_local_gatt_service_delegate.cc",
+    "bluetooth/test/test_bluetooth_local_gatt_service_delegate.h",
+    "bluetooth/uribeacon/uri_encoder_unittest.cc",
+    "gamepad/gamepad_provider_unittest.cc",
+    "gamepad/gamepad_service_unittest.cc",
+    "gamepad/public/interfaces/gamepad_struct_traits_unittest.cc",
+    "sensors/data_fetcher_shared_memory_base_unittest.cc",
+    "sensors/sensor_manager_android_unittest.cc",
+    "sensors/sensor_manager_chromeos_unittest.cc",
+    "test/run_all_unittests.cc",
+    "u2f/u2f_apdu_unittest.cc",
+    "u2f/u2f_ble_frames_unittest.cc",
+    "u2f/u2f_discovery_unittest.cc",
+    "u2f/u2f_message_unittest.cc",
+    "u2f/u2f_register_unittest.cc",
+    "u2f/u2f_request_unittest.cc",
+    "u2f/u2f_sign_unittest.cc",
+  ]
+
+  deps = [
+    "//base/test:test_support",
+    "//base/third_party/dynamic_annotations:dynamic_annotations",
+    "//device/base/synchronization",
+    "//device/bluetooth",
+    "//device/bluetooth:mocks",
+    "//device/bluetooth:mojo",
+    "//device/bluetooth/uribeacon",
+    "//device/gamepad",
+    "//device/gamepad:test_helpers",
+    "//device/gamepad/public/cpp:shared_with_blink",
+    "//device/gamepad/public/interfaces",
+    "//device/gamepad/public/interfaces:gamepad_struct_traits_test",
+    "//device/geolocation:unittests",
+    "//device/sensors",
+    "//device/sensors/public/cpp:full",
+    "//device/sensors/public/interfaces",
+    "//device/u2f",
+    "//device/u2f:mocks",
+    "//mojo/common",
+    "//mojo/edk/system",
+    "//mojo/public/cpp/bindings",
+    "//net",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//third_party/WebKit/public:blink_headers",
+    "//tools/usb_gadget",
+    "//url",
+  ]
+
+  # U2F and Serial:
+  # Android doesn't compile.
+  # Linux, requires udev.
+  if (!is_linux_without_udev && !is_android) {
+    sources += [
+      "u2f/fake_hid_impl_for_testing.cc",
+      "u2f/fake_hid_impl_for_testing.h",
+      "u2f/u2f_hid_device_unittest.cc",
+      "u2f/u2f_hid_discovery_unittest.cc",
+    ]
+    deps += [
+      "//services/device/public/cpp/hid",
+      "//services/device/public/interfaces",
+      "//services/service_manager/public/cpp",
+      "//services/service_manager/public/interfaces",
+    ]
+
+    # Serial is supported in below platforms. See //device/servial/BUILD.gn
+    if (is_win || is_linux || is_mac) {
+      sources += [
+        "serial/serial_io_handler_posix_unittest.cc",
+      ]
+      deps += [
+        "//device/serial",
+      ]
+    }
+  }
+
+  if (use_udev) {
+    sources += [ "udev_linux/udev_unittest.cc" ]
+    deps += [ "//device/udev_linux" ]
+  }
+
+  # USB does not compile on iOS.
+  if (!is_ios) {
+    sources += [
+      "test/test_device_client.cc",
+      "test/test_device_client.h",
+      "usb/mojo/device_impl_unittest.cc",
+      "usb/mojo/device_manager_impl_unittest.cc",
+      "usb/mojo/mock_permission_provider.cc",
+      "usb/mojo/mock_permission_provider.h",
+      "usb/public/cpp/filter_utils_unittest.cc",
+      "usb/usb_descriptors_unittest.cc",
+      "usb/usb_device_handle_unittest.cc",
+      "usb/usb_service_unittest.cc",
+      "usb/webusb_descriptors_unittest.cc",
+    ]
+    deps += [
+      ":usb_test_gadget",
+      "//device/base",
+      "//device/base:mocks",
+      "//device/usb",
+      "//device/usb:test_support",
+      "//device/usb/mojo",
+      "//device/usb/public/cpp",
+      "//device/usb/public/interfaces",
+      "//net:test_support",
+    ]
+
+    if (!is_android) {
+      sources += [ "usb/usb_ids_unittest.cc" ]
+    }
+  }
+
+  # UsbContext is a libusb-specific object.
+  if (is_mac || is_win) {
+    sources += [ "usb/usb_context_unittest.cc" ]
+    deps += [ "//third_party/libusb" ]
+  }
+
+  if (is_android) {
+    deps += [
+      ":bluetooth_test_java",
+      ":bluetooth_test_jni_headers",
+      "//device/geolocation:geolocation_java",
+      "//device/geolocation:geolocation_java_test_support",
+      "//device/sensors:java",
+      "//device/usb:java",
+    ]
+  }
+
+  if (is_chromeos) {
+    deps += [
+      "//chromeos",
+      "//chromeos:test_support",
+      "//chromeos:test_support_without_gmock",
+    ]
+  }
+
+  if ((is_chromeos || is_linux) && use_dbus) {
+    configs += [ "//build/config/linux/dbus" ]
+
+    sources += [
+      "bluetooth/bluez/bluetooth_adapter_profile_bluez_unittest.cc",
+      "bluetooth/bluez/bluetooth_advertisement_bluez_unittest.cc",
+      "bluetooth/bluez/bluetooth_bluez_unittest.cc",
+      "bluetooth/bluez/bluetooth_gatt_bluez_unittest.cc",
+      "bluetooth/bluez/bluetooth_service_attribute_value_bluez_unittest.cc",
+      "bluetooth/bluez/bluetooth_service_record_bluez_unittest.cc",
+      "bluetooth/bluez/bluetooth_socket_bluez_unittest.cc",
+      "bluetooth/dbus/bluetooth_gatt_application_service_provider_unittest.cc",
+      "bluetooth/test/bluetooth_test_bluez.cc",
+      "bluetooth/test/bluetooth_test_bluez.h",
+    ]
+
+    deps += [ "//dbus" ]
+  }
+
+  # BLE discovery: works on Linux.
+  if (is_linux) {
+    sources += [ "u2f/u2f_ble_discovery_unittest.cc" ]
+  }
+
+  if (is_mac) {
+    deps += [ "//third_party/ocmock" ]
+    ldflags = [ "-ObjC" ]
+    libs = [
+      "IOBluetooth.framework",
+      "IOKit.framework",
+    ]
+
+    # In the OSX 10.10 SDK, CoreBluetooth became a top level framework.
+    # Previously, it was nested in IOBluetooth. In order for Chrome to run on
+    # OSes older than OSX 10.10, the top level CoreBluetooth framework must be
+    # weakly linked.
+    if (mac_sdk_version == "10.10") {
+      ldflags += [
+        "-weak_framework",
+        "CoreBluetooth",
+      ]
+    }
+  }
+
+  if (is_win) {
+    sources += [
+      "bluetooth/bluetooth_classic_win_fake.cc",
+      "bluetooth/bluetooth_classic_win_fake.h",
+      "bluetooth/bluetooth_low_energy_win_fake.cc",
+      "bluetooth/bluetooth_low_energy_win_fake.h",
+    ]
+  }
+
+  if (enable_vr && is_android) {
+    sources += [
+      "vr/vr_device_base_unittest.cc",
+      "vr/vr_display_impl_unittest.cc",
+    ]
+
+    deps += [
+      "//device/vr",
+      "//device/vr:fakes",
+      "//device/vr:java",
+      "//device/vr:mojo_bindings",
+    ]
+  }
+}
+
+source_set("usb_test_gadget") {
+  testonly = true
+
+  sources = [
+    "test/usb_test_gadget.h",
+    "test/usb_test_gadget_impl.cc",
+  ]
+
+  deps = [
+    "//device/base",
+    "//device/usb",
+    "//net:test_support",
+  ]
+}
+
+if (is_android) {
+  bluetooth_java_sources_needing_jni = [ "bluetooth/test/android/java/src/org/chromium/device/bluetooth/Fakes.java" ]
+
+  generate_jni("bluetooth_test_jni_headers") {
+    sources = bluetooth_java_sources_needing_jni
+    jni_package = "bluetooth"
+  }
+
+  android_library("bluetooth_test_java") {
+    java_files = bluetooth_java_sources_needing_jni
+    deps = [
+      "//base:base_java",
+      "//components/location/android:location_java",
+      "//device/bluetooth:java",
+      "//third_party/android_tools:android_support_annotations_java",
+    ]
+
+    srcjar_deps = [ ":bluetooth_test_javagen" ]
+  }
+
+  junit_binary("device_junit_tests") {
+    java_files = [
+      "gamepad/android/junit/src/org/chromium/device/gamepad/GamepadMappingsTest.java",
+      "geolocation/android/junit/src/org/chromium/device/geolocation/LocationProviderTest.java",
+    ]
+    deps = [
+      "$google_play_services_package:google_play_services_base_java",
+      "$google_play_services_package:google_play_services_basement_java",
+      "$google_play_services_package:google_play_services_location_java",
+      "//base:base_java",
+      "//base:base_java_test_support",
+      "//device/gamepad:java",
+      "//device/geolocation:geolocation_java",
+      "//device/geolocation:geolocation_java_test_support",
+      "//mojo/public/java:bindings_java",
+      "//third_party/android_tools:android_support_annotations_java",
+    ]
+    srcjar_deps = [ "//device/gamepad:java_enums_srcjar" ]
+  }
+
+  java_cpp_enum("bluetooth_test_javagen") {
+    sources = [
+      "bluetooth/test/bluetooth_test.h",
+    ]
+  }
+}

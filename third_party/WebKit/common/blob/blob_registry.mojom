@@ -1,0 +1,137 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module blink.mojom;
+
+import "mojo/common/file.mojom";
+import "mojo/common/file_path.mojom";
+import "mojo/common/time.mojom";
+import "third_party/WebKit/common/blob/blob.mojom";
+import "url/mojo/url.mojom";
+
+// An opaque handle passed from the browser process to a child process to
+// manage the lifetime of the returned Blob URL. The URL is revoked when
+// this handle is dropped.
+interface BlobURLHandle {
+};
+
+// This interface is the primary access point from renderer to the browser's blob system.
+// This interface provides methods to register new blobs and get references to existing blobs.
+interface BlobRegistry {
+  // Registers a new blob with the blob registry.
+  // TODO(mek): Make this method non-sync and get rid of the UUID parameter once
+  // enough of the rest of the system doesn't rely on the UUID anymore.
+  [Sync] Register(blink.mojom.Blob& blob, string uuid,
+                  string content_type, string content_disposition,
+                  array<DataElement> elements) => ();
+
+  // Registers a public Blob URL with the blob registry.
+  // TODO(kinuko,mek): This should probably create and return a new blob: URL rather
+  // than letting the caller in the renderer provide one.
+  [Sync] RegisterURL(blink.mojom.Blob blob, url.mojom.Url url) => (BlobURLHandle url_handle);
+
+  // Returns a reference to an existing blob. Should not be used by new code,
+  // is only exposed to make converting existing blob using code easier.
+  // TODO(mek): Remove when crbug.com/740744 is resolved.
+  [Sync] GetBlobFromUUID(Blob& blob, string uuid) => ();
+};
+
+// A blob is built up of elements of various types.
+union DataElement {
+  // Bytes send asynchronously at the request of the blob registry.
+  DataElementBytes bytes;
+  // A reference to a file on disk.
+  DataElementFile file;
+  // A reference to a file as a filesystem URL.
+  DataElementFilesystemURL file_filesystem;
+  // A reference to another blob.
+  DataElementBlob blob;
+};
+
+// Bytes send asynchronously at the request of the blob registry. Can
+// optionally also directly contain the data, in which case the blob registry
+// can decide to either use the embedded data or later request the data again.
+struct DataElementBytes {
+  // Maximum size of all DataElementBytes that have embedded data included in
+  // any particular call to register a new blob.
+  // Equivalent in meaning to storage::kDefaultIPCMemorySize.
+  const uint64 kMaximumEmbeddedDataSize = 256000;
+
+  // Size of the data.
+  uint64 length;
+  // Optionally embedded data. If present, the size of this array should be
+  // equal to |length|.
+  array<uint8>? embedded_data;
+  // Interface through which the blob registry can request the data.
+  BytesProvider data;
+};
+
+// Interface through which the blob registry can request data when it is ready
+// for it.
+interface BytesProvider {
+  // Requests all the data provided by this provider as an array in the reply.
+  // The size of this array must match the length attribute of the
+  // DataElementBytes struct this provider was associated with.
+  // If this method is called, it is called exactly once, and none of the other
+  // methods will be called.
+  RequestAsReply() => (array<uint8> data);
+
+  // Requests all the data provided by this provider to be transfered on a data
+  // pipe. The amount of data transfered should match the length attribute of
+  // the DataElementBytes struct this provider was associated with.
+  // If this method is called, it is called exactly once, and none of the other
+  // methods will be called.
+  RequestAsStream(handle<data_pipe_producer> pipe);
+
+  // Requests the provider to write a slice of the data provided by this
+  // provider to the given file at the given offset. When the data is written
+  // the callback should be invoked with the new modification time of the file.
+  // If this method is called, it can be called multiple times, but none of the
+  // other methods will be called.
+  // If writing for whatever reason fails, the callback is called without a
+  // modification time.
+  RequestAsFile(uint64 source_offset, uint64 source_size,
+                mojo.common.mojom.File file, uint64 file_offset)
+      => (mojo.common.mojom.Time? time_file_modified);
+};
+
+// A reference to a slice of a file on disk.
+struct DataElementFile {
+  // Path of the file.
+  mojo.common.mojom.FilePath path;
+  // Offset inside the file.
+  uint64 offset;
+  // Length of the slice. Can be uint64_max if the length is unknown. If this is
+  // the case the offset is always 0 and this DataElement should be the only
+  // element making up the blob.
+  uint64 length;
+  // Expected modification time of the file being referenced. Can be null if the
+  // modification time is unknown.
+  mojo.common.mojom.Time? expected_modification_time;
+};
+
+// A reference to a slice of a file as a filesystem URL.
+struct DataElementFilesystemURL {
+  // URL of the file.
+  url.mojom.Url url;
+  // Offset inside the file.
+  uint64 offset;
+  // Length of the slice. Can be uint64_max if the length is unknown. If this is
+  // the case the offset is always 0 and this DataElement should be the only
+  // element making up the blob.
+  uint64 length;
+  // Expected modification time of the file being referenced. Can be null if the
+  // modification time is unknown.
+  mojo.common.mojom.Time? expected_modification_time;
+};
+
+// A reference to a slice of another blob.
+struct DataElementBlob {
+  // The blob being referenced.
+  blink.mojom.Blob blob;
+  // Offset to the beginning of the slice.
+  uint64 offset;
+  // Length of the slice.
+  uint64 length;
+};

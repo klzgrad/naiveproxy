@@ -1,0 +1,120 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module viz.mojom;
+
+import "gpu/ipc/common/surface_handle.mojom";
+import "mojo/common/time.mojom";
+import "services/viz/privileged/interfaces/compositing/display_private.mojom";
+import "services/viz/privileged/interfaces/compositing/renderer_settings.mojom";
+import "services/viz/public/interfaces/compositing/compositor_frame_sink.mojom";
+import "services/viz/public/interfaces/compositing/frame_sink_id.mojom";
+import "services/viz/public/interfaces/compositing/local_surface_id.mojom";
+import "services/viz/public/interfaces/compositing/surface_id.mojom";
+import "services/viz/public/interfaces/compositing/surface_info.mojom";
+import "ui/gfx/geometry/mojo/geometry.mojom";
+import "services/viz/public/interfaces/compositing/video_detector_observer.mojom";
+
+// The FrameSinkManager interface is a privileged interface that allows the
+// frame sink manager host (browser or window server) to create
+// CompositorFrameSinks. Clients acquire a CompositorFrameSink connection
+// through the frame sink manager host. Clients request a CompositorFrameSink
+// interface, and implement a CompositorFrameSinkClient interface. The frame
+// sink manager host holds one or more display CompositorFrameSinks that are
+// tied to a valid |surface_handle| and Display. All other
+// CompositorFrameSinks must be parented by another CompositorFrameSink.
+// FrameSinkIds are fixed for a given client and are determined ahead of time.
+// Thus, a client will typically simply request a CompositorFrameSink from the
+// frame sink manager host which will forward the request to the frame sink
+// manager.
+interface FrameSinkManager {
+  // Starts the scope of temporary references tied to this |frame_sink_id|.
+  // Temporary references tied to this |frame_sink_id| will be dropped on
+  // InvalidateFrameSinkId.This must be called before Create(Root)
+  // CompositorFrameSink() is called.
+  RegisterFrameSinkId(FrameSinkId frame_sink_id);
+
+  // Invalidates |frame_sink_id| which cleans up any unsatisified surface
+  // sequences or dangling temporary references assigned to it. If there is a
+  // CompositorFrameSink for |frame_sink_id| then it will be destroyed and the
+  // message pipe to the client will be closed.
+  InvalidateFrameSinkId(FrameSinkId frame_sink_id);
+
+  // |debug_label| is used when printing out the surface hierarchy so we know
+  // which clients are contributing which surfaces.
+  SetFrameSinkDebugLabel(FrameSinkId frame_sink_id, string debug_label);
+
+  // Create a CompositorFrameSink for a privileged client (e.g. WindowServer).
+  // This is only used by privileged clients. The client can call methods that
+  // talks to the Display (e.g. ResizeDisplay(), SetDisplayVisible(), etc)
+  CreateRootCompositorFrameSink(
+      FrameSinkId frame_sink_id,
+      gpu.mojom.SurfaceHandle widget,
+      RendererSettings renderer_settings,
+      associated CompositorFrameSink& compositor_frame_sink,
+      CompositorFrameSinkClient compositor_frame_sink_client,
+      associated DisplayPrivate& display_private);
+
+  // CreateCompositorFrameSink is used by unprivileged clients. This
+  // CompositorFrameSink is not a root, and has to be parented by another
+  // CompositorFrameSink in order to appear on screen.
+  CreateCompositorFrameSink(
+      FrameSinkId frame_sink_id,
+      CompositorFrameSink& compositor_frame_sink,
+      CompositorFrameSinkClient compositor_frame_sink_client);
+
+  // Set up a BeginFrame relationship between two FrameSinkIds. In this case,
+  // the child inherits the viz::BeginFrameSource from the parent if it doesn't
+  // already have a viz::BeginFrameSource.
+  RegisterFrameSinkHierarchy(FrameSinkId parent_frame_sink_id,
+                             FrameSinkId child_frame_sink_id);
+
+  // Removes a BeginFrame relationship between two FrameSinkIds.
+  UnregisterFrameSinkHierarchy(FrameSinkId parent_frame_sink_id,
+                               FrameSinkId child_frame_sink_id);
+
+  // Assigns the temporary reference for |surface_id| to FrameSinkId |owner|.
+  // If |owner| is invalidated before it converts the temporary reference to a
+  // surface reference then the temporary reference will be dropped.
+  AssignTemporaryReference(SurfaceId surface_id,
+                           FrameSinkId owner);
+
+  // Drops the temporary reference for |surface_id|. This will get called when
+  // the FrameSinkManagerClient doesn't think |surface_id| will be embedded.
+  DropTemporaryReference(SurfaceId surface_id);
+
+  // Requests viz to notify |observer| whenever video activity is detected in
+  // one of the clients. See viz::VideoDetector.
+  AddVideoDetectorObserver(VideoDetectorObserver observer);
+};
+
+// The FrameSinkManagerClient interface is implemented by the Display
+// Compositor Host, a stable, and privileged peer service to the display
+// compositor. The frame sink manager host is either the browser process in
+// Chrome or the window server process.
+interface FrameSinkManagerClient {
+  // Called by the frame sink manager when a CompositorFrame with a new
+  // SurfaceId activates for the first time.
+  OnFirstSurfaceActivation(SurfaceInfo surface_info);
+
+  // The CompositorFrameSink pipe for |frame_sink_id| was closed. The client
+  // cannot submit any CompositorFrames to viz after this occurs.
+  OnClientConnectionClosed(FrameSinkId frame_sink_id);
+
+  // Sends |active_handle| and |idle_handle| along with their sizes to the
+  // client when they are allocated or resized.
+  OnAggregatedHitTestRegionListUpdated(FrameSinkId frame_sink_id,
+                                       handle<shared_buffer> active_handle,
+                                       uint32 active_handle_size,
+                                       handle<shared_buffer> idle_handle,
+                                       uint32 idle_handle_size);
+
+  // Tells the client to update the currently active handle.
+  SwitchActiveAggregatedHitTestRegionList(FrameSinkId frame_sink_id,
+                                          uint8 active_handle_index);
+
+  // Sends |frame_sink_id| and |frame_token| to the client when a surface
+  // of the provided |frame_sink_id| activates.
+  OnFrameTokenChanged(FrameSinkId frame_sink_id, uint32 frame_token);
+};

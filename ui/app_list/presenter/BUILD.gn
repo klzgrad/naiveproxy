@@ -1,0 +1,114 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ui.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
+import("//testing/test.gni")
+
+assert(use_aura)
+
+mojom("mojom") {
+  sources = [
+    "app_list_presenter.mojom",
+  ]
+  deps = [
+    "//services/ui/public/interfaces",
+  ]
+
+  component_output_prefix = "app_list_presenter_mojom"
+  export_class_attribute = "APP_LIST_PRESENTER_EXPORT"
+  export_define = "APP_LIST_PRESENTER_IMPLEMENTATION=1"
+  export_header = "ui/app_list/presenter/app_list_presenter_export.h"
+}
+
+component("presenter") {
+  sources = [
+    "app_list.cc",
+    "app_list.h",
+    "app_list_delegate.h",
+    "app_list_presenter_delegate.cc",
+    "app_list_presenter_delegate.h",
+    "app_list_presenter_delegate_factory.h",
+    "app_list_presenter_export.h",
+    "app_list_presenter_impl.cc",
+    "app_list_presenter_impl.h",
+    "app_list_view_delegate_factory.cc",
+    "app_list_view_delegate_factory.h",
+  ]
+
+  defines = [ "APP_LIST_PRESENTER_IMPLEMENTATION" ]
+
+  public_deps = [
+    ":mojom",
+    "//base",
+    "//mojo/public/cpp/bindings",
+    "//ui/app_list",
+    "//ui/aura",
+    "//ui/compositor",
+    "//ui/gfx/geometry",
+    "//ui/views",
+
+    # Temporary dependency to fix compile flake in http://crbug.com/611898.
+    # TODO(tapted): Remove once http://crbug.com/612382 is fixed.
+    "//ui/accessibility:ax_gen",
+  ]
+}
+
+static_library("test_support") {
+  sources = [
+    "test/app_list_presenter_impl_test_api.cc",
+    "test/app_list_presenter_impl_test_api.h",
+    "test/test_app_list_presenter.cc",
+    "test/test_app_list_presenter.h",
+    "test/test_app_list_view_delegate_factory.cc",
+    "test/test_app_list_view_delegate_factory.h",
+
+    # Temporary dependency to fix compile flake in http://crbug.com/611898.
+    # TODO(tapted): Remove once http://crbug.com/612382 is fixed.
+    "//ui/accessibility:ax_gen",
+  ]
+
+  public_deps = [
+    ":mojom",
+    ":presenter",
+  ]
+  deps = [
+    "//base",
+    "//mojo/public/cpp/bindings",
+    "//ui/app_list:test_support",
+  ]
+}
+
+test("app_list_presenter_unittests") {
+  sources = [
+    "app_list_presenter_impl_unittest.cc",
+    "test/run_all_unittests.cc",
+  ]
+
+  configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+
+  deps = [
+    ":presenter",
+    ":test_support",
+    "//base",
+    "//base/test:test_support",
+    "//mojo/edk/system",
+    "//testing/gtest",
+    "//ui/app_list:test_support",
+    "//ui/aura:aura",
+    "//ui/aura:test_support",
+    "//ui/base",
+    "//ui/gl:test_support",
+    "//ui/views:test_support",
+    "//ui/wm:wm",
+
+    # Temporary dependency to fix compile flake in http://crbug.com/611898.
+    # TODO(tapted): Remove once http://crbug.com/612382 is fixed.
+    "//ui/accessibility:ax_gen",
+  ]
+
+  data_deps = [
+    "//ui/resources:ui_test_pak_data",
+  ]
+}

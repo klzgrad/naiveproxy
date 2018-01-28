@@ -1,0 +1,52 @@
+// Copyright 2015 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module device.mojom;
+
+import "device/usb/public/interfaces/device.mojom";
+import "mojo/common/string16.mojom";
+
+struct UsbDeviceFilter {
+  bool has_vendor_id;
+  uint16 vendor_id;
+
+  bool has_product_id;
+  uint16 product_id;
+
+  bool has_class_code;
+  uint8 class_code;
+
+  bool has_subclass_code;
+  uint8 subclass_code;
+
+  bool has_protocol_code;
+  uint8 protocol_code;
+
+  mojo.common.mojom.String16? serial_number;
+};
+
+struct UsbEnumerationOptions {
+  array<UsbDeviceFilter> filters;
+};
+
+interface UsbDeviceManager {
+  // Retrieves information about all devices available to the DeviceManager
+  // implementation.
+  GetDevices(UsbEnumerationOptions? options) => (array<UsbDeviceInfo> results);
+
+  // Requests a device by guid.
+  GetDevice(string guid, UsbDevice& device_request);
+
+  // Sets the client for this DeviceManager service. The service will notify its
+  // client of device events such as connection and disconnection.
+  SetClient(UsbDeviceManagerClient client);
+};
+
+interface UsbDeviceManagerClient {
+  // Called when a device is connected to the host.
+  OnDeviceAdded(UsbDeviceInfo device_info);
+
+  // Called when a device is disconnected from the host.
+  OnDeviceRemoved(UsbDeviceInfo device_info);
+};

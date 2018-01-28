@@ -1,0 +1,62 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+source_set("libc++abi") {
+  visibility = [ "//buildtools/third_party/libc++" ]
+  deps = []
+
+  # This condition should match the one in build/config/c++.
+  if (current_cpu == "arm" || is_fuchsia) {
+    deps += [
+      "//buildtools/third_party/libunwind",
+    ]
+  }
+  sources = [
+    "trunk/src/abort_message.cpp",
+    "trunk/src/cxa_aux_runtime.cpp",
+    "trunk/src/cxa_default_handlers.cpp",
+    "trunk/src/cxa_exception.cpp",
+    "trunk/src/cxa_exception_storage.cpp",
+    "trunk/src/cxa_guard.cpp",
+    "trunk/src/cxa_handlers.cpp",
+
+    # This file is supposed to be used in fno-exception builds of
+    # libc++abi.  We build lib++/libc++abi with exceptions enabled.
+    #"trunk/src/cxa_noexception.cpp",
+    "trunk/src/cxa_personality.cpp",
+    "trunk/src/cxa_unexpected.cpp",
+    "trunk/src/cxa_vector.cpp",
+    "trunk/src/cxa_virtual.cpp",
+    "trunk/src/fallback_malloc.cpp",
+    "trunk/src/private_typeinfo.cpp",
+    "trunk/src/stdlib_exception.cpp",
+    "trunk/src/stdlib_stdexcept.cpp",
+    "trunk/src/stdlib_typeinfo.cpp",
+  ]
+
+  # On Android, android_crazy_linker provides __cxa_demangle.
+  if (is_android) {
+    deps += [ "//third_party/android_crazy_linker" ]
+  } else {
+    sources += [ "trunk/src/cxa_demangle.cpp" ]
+  }
+
+  # This file should really be included on linux as well, but that
+  # would introduce an unwanted glibc 2.18 dependency.
+  if (is_posix && !is_mac && !is_linux) {
+    sources += [ "trunk/src/cxa_thread_atexit.cpp" ]
+  }
+  configs -= [
+    "//build/config/compiler:chromium_code",
+    "//build/config/compiler:no_exceptions",
+    "//build/config/compiler:no_rtti",
+    "//build/config/coverage:default_coverage",
+  ]
+  configs += [
+    "//build/config/compiler:no_chromium_code",
+    "//build/config/compiler:exceptions",
+    "//build/config/compiler:rtti",
+    "//buildtools/third_party/libc++:config",
+  ]
+}

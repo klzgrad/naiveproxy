@@ -1,0 +1,106 @@
+# Copyright 2015 The Crashpad Authors. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("//testing/test.gni")
+
+static_library("client") {
+  sources = [
+    "annotation.cc",
+    "annotation.h",
+    "annotation_list.cc",
+    "annotation_list.h",
+    "crash_report_database.cc",
+    "crash_report_database.h",
+    "crash_report_database_mac.mm",
+    "crash_report_database_win.cc",
+    "crashpad_client.h",
+    "crashpad_client_mac.cc",
+    "crashpad_client_win.cc",
+    "crashpad_info.cc",
+    "crashpad_info.h",
+    "prune_crash_reports.cc",
+    "prune_crash_reports.h",
+    "settings.cc",
+    "settings.h",
+    "simple_address_range_bag.h",
+    "simple_string_dictionary.h",
+    "simulate_crash.h",
+    "simulate_crash_mac.cc",
+    "simulate_crash_mac.h",
+    "simulate_crash_win.h",
+  ]
+
+  if (is_mac) {
+    sources += [
+      "capture_context_mac.S",
+      "capture_context_mac.h",
+    ]
+  }
+
+  public_configs = [ "..:crashpad_config" ]
+
+  deps = [
+    "../compat",
+    "../util",
+    "//base",
+  ]
+
+  if (is_win) {
+    libs = [ "rpcrt4.lib" ]
+    cflags = [ "/wd4201" ]  # nonstandard extension used : nameless struct/union
+  }
+}
+
+source_set("client_test") {
+  testonly = true
+
+  sources = [
+    "annotation_list_test.cc",
+    "annotation_test.cc",
+    "crash_report_database_test.cc",
+    "prune_crash_reports_test.cc",
+    "settings_test.cc",
+    "simple_address_range_bag_test.cc",
+    "simple_string_dictionary_test.cc",
+  ]
+
+  if (is_mac) {
+    sources += [
+      "capture_context_mac_test.cc",
+      "simulate_crash_mac_test.cc",
+    ]
+  }
+
+  if (is_win) {
+    sources += [ "crashpad_client_win_test.cc" ]
+  }
+
+  deps = [
+    ":client",
+    "../compat",
+    "../test",
+    "../util",
+    "//base",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+
+  data_deps = [
+    "../handler:crashpad_handler",
+  ]
+
+  if (is_win) {
+    data_deps += [ "../handler:crashpad_handler_console" ]
+  }
+}

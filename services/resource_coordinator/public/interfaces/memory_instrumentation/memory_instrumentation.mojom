@@ -1,0 +1,250 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module memory_instrumentation.mojom;
+
+import "mojo/common/process_id.mojom";
+
+// Common structs:
+
+enum DumpType {
+  PERIODIC_INTERVAL,
+  EXPLICITLY_TRIGGERED,
+  PEAK_MEMORY_USAGE,
+  SUMMARY_ONLY
+};
+
+enum LevelOfDetail {
+  BACKGROUND,
+  LIGHT,
+  VM_REGIONS_ONLY_FOR_HEAP_PROFILER,
+  DETAILED
+};
+
+enum ProcessType {
+  OTHER,
+  BROWSER,
+  RENDERER,
+  GPU,
+  UTILITY,
+  PLUGIN
+};
+
+enum HeapProfilingMode {
+  DISABLED,
+  TASK_PROFILER,
+  BACKGROUND,
+  PSEUDO_STACK,
+  NATIVE_STACK
+};
+
+struct ChromeMemDump {
+  uint32 malloc_total_kb = 0;
+  uint32 command_buffer_total_kb = 0;
+  uint32 partition_alloc_total_kb = 0;
+  uint32 blink_gc_total_kb = 0;
+  uint32 v8_total_kb = 0;
+};
+
+// These structs are internal only (only for the communication between
+// the service and the ClientProcess library).
+// See corresponding types in //base/trace_event for comments.
+
+struct RequestArgs {
+  uint64 dump_guid;
+  DumpType dump_type;
+  LevelOfDetail level_of_detail;
+};
+
+struct RawAllocatorDumpEdge {
+  uint64 source_id;
+  uint64 target_id;
+  int64 importance;
+  bool overridable;
+};
+
+union RawAllocatorDumpEntryValue {
+  uint64 value_uint64;
+  string value_string;
+};
+
+struct RawAllocatorDumpEntry {
+  string name;
+  string units;
+  RawAllocatorDumpEntryValue value;
+};
+
+struct RawAllocatorDump {
+  uint64 id;
+  string absolute_name;
+  bool weak;
+  LevelOfDetail level_of_detail;
+  array<RawAllocatorDumpEntry> entries;
+};
+
+struct RawProcessMemoryDump {
+  LevelOfDetail level_of_detail;
+  array<RawAllocatorDumpEdge> allocator_dump_edges;
+  array<RawAllocatorDump> allocator_dumps;
+};
+
+struct VmRegion {
+  const uint32 kProtectionFlagsRead = 4;
+  const uint32 kProtectionFlagsWrite = 2;
+  const uint32 kProtectionFlagsExec = 1;
+  const uint32 kProtectionFlagsMayshare = 128;
+
+  uint64 start_address;
+  uint64 size_in_bytes;
+  uint64 module_timestamp;
+  uint32 protection_flags;
+
+  string mapped_file;
+
+  // private_dirty_resident + private_clean_resident + shared_dirty_resident +
+  // shared_clean_resident = resident set size.
+  uint64 byte_stats_private_dirty_resident;
+  uint64 byte_stats_private_clean_resident;
+  uint64 byte_stats_shared_dirty_resident;
+  uint64 byte_stats_shared_clean_resident;
+
+  uint64 byte_stats_swapped;
+
+  // For multiprocess accounting.
+  uint64 byte_stats_proportional_resident;
+};
+
+// Platform-specific data that will be used to compute the
+// PrivateMemoryFootprint.
+struct PlatformPrivateFootprint {
+  uint64 phys_footprint_bytes = 0;
+  // macOS 10.12+
+  uint64 internal_bytes = 0;
+
+  // macOS [all versions]
+  uint64 compressed_bytes = 0;
+  uint64 rss_anon_bytes = 0;
+
+  // Linux, Android, ChromeOS
+  uint64 vm_swap_bytes = 0;
+
+  // On Windows,
+  uint64 private_bytes = 0;
+
+  // On iOS,
+  //   TBD: https://crbug.com/714961
+};
+
+struct RawOSMemDump {
+  uint32 resident_set_kb = 0;
+  PlatformPrivateFootprint platform_private_footprint;
+  array<VmRegion> memory_maps;
+};
+
+// These structs are public:
+
+struct GlobalRequestArgs {
+  DumpType dump_type;
+  LevelOfDetail level_of_detail;
+};
+
+struct OSMemDump {
+  uint32 resident_set_kb = 0;
+
+  // This is roughly private, anonymous, non-discardable, resident or swapped
+  // memory in kilobytes. For more details, see https://goo.gl/3kPb9S.
+  uint32 private_footprint_kb = 0;
+
+  // This is roughly non-private, anonymous, non-discardable, resident memory
+  // in kilobytes. For more details, see https://goo.gl/3kPb9S.
+  uint32 shared_footprint_kb = 0;
+
+  // This field is present only when the dump is obtained through
+  // Coordinator.GetVmRegionsForHeapProfiler(), empty in the generic case of
+  // RequestGlobalMemoryDump().
+  array<VmRegion> memory_maps_for_heap_profiler;
+
+  // This is private swapped memory in kilobytes reported on Linux and Android
+  // only.
+  // TODO(crbug.com/676224): add platform restrictions when preprocessing in
+  // mojoms is supported.
+  uint32 private_footprint_swap_kb = 0;
+};
+
+// This struct is used for the public-facing API
+// Coordinator::RequestGlobalMemoryDump().
+struct ProcessMemoryDump {
+  ProcessType process_type;
+  OSMemDump os_dump;
+  ChromeMemDump chrome_dump;
+
+  // |pid| is necessary to correlate a ProcessMemoryDump with the URLs for the
+  // process, which is obtained from the ResourceCoordinator service. In a
+  // future world where both ResourceCoordinator and MemoryInstrumentation are
+  // less in flux, they will probably be merged into a single service, and this
+  // parameter can be removed.
+  mojo.common.mojom.ProcessId pid;
+};
+
+
+// This struct is returned by the public-facing API
+// Coordinator::RequestGlobalMemoryDump().
+struct GlobalMemoryDump {
+  array<ProcessMemoryDump> process_dumps;
+};
+
+// This is the interface implemented by the per-process client library. This
+// allows a process to contribute to memory-infra dumps. There should be at
+// most one instance of this per hosting process.
+interface ClientProcess {
+  // When |success| == true the dump is appended in the process-local trace
+  // buffer of the target process and an ACK. A summary of the dump is also
+  // returned in case of success.
+  RequestChromeMemoryDump(RequestArgs args) =>
+      (bool success, uint64 dump_id, RawProcessMemoryDump? raw_process_memory_dump);
+
+  // Enable heap profiler in the client process.
+  EnableHeapProfiling(HeapProfilingMode mode) =>
+      (bool success);
+
+  // Requests an OSMemDump for each pid in |pids|.
+  // The Memory-infra service deals with two kinds of information:
+  // 1) Chrome's view of its own memory use (recorded as ChromeMemDumps)
+  // 2) The OS's view of Chrome's memory use (recorded as OSMemDumps)
+  // Both of these are collected per process. On most platforms each process
+  // can make the system calls to collect its own OSMemDump however on some
+  // platforms *cough* Linux *cough* due to sandboxing only the browser
+  // process can collect OSMemDumps. This API allows for these two cases.
+  // On most platforms we send this message to each ClientProcess with
+  // with one pid - kNullProcessId - meaning return just your own OSMemDump.
+  // On Linux we call this once on the browser process ClientProcess passing
+  // the pids for all processes.
+  // See crbug.com/461788
+  RequestOSMemoryDump(bool want_mmaps, array<mojo.common.mojom.ProcessId> pids) =>
+      (bool success, map<mojo.common.mojom.ProcessId, RawOSMemDump> dumps);
+};
+
+// The memory-infra service implements this interface. There is one instance for
+// the whole system. The coordinator maintains a list of registered client
+// processes and polls them whenever a global dump is required.
+interface Coordinator {
+  // Registers a client process.
+  RegisterClientProcess(ClientProcess client_process, ProcessType process_type);
+
+  // Broadcasts a dump request to all registered client processes and returns a
+  // summarized dump back (if args.dump_type == SUMMARY_ONLY).
+  RequestGlobalMemoryDump(GlobalRequestArgs args) =>
+      (bool success, GlobalMemoryDump? global_memory_dump);
+
+  // Broadcasts a dump request to all registered client processes and injects the
+  // dump in the trace buffer (if tracing is enabled).
+  RequestGlobalMemoryDumpAndAppendToTrace(GlobalRequestArgs args) =>
+      (bool success, uint64 dump_id);
+
+  // Broadcasts a RequestOSMemoryDump-only request for all registered client
+  // processes, retrieves only their memory maps and returns them in the field
+  // |global_memory_dump.process_dumps.os_dump.memory_maps_for_heap_profiler|.
+  GetVmRegionsForHeapProfiler() =>
+      (bool success, GlobalMemoryDump? global_memory_dump);
+};

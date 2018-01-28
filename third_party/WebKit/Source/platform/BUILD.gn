@@ -1,0 +1,2216 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/buildflag_header.gni")
+import("//build/config/features.gni")
+import("//build/config/jumbo.gni")
+import("//build/config/ui.gni")
+import("//testing/libfuzzer/fuzzer_test.gni")
+import("//testing/test.gni")
+import("//third_party/WebKit/public/public_features.gni")
+import("//third_party/WebKit/Source/build/scripts/scripts.gni")
+import("//third_party/WebKit/Source/config.gni")
+import("//third_party/WebKit/Source/platform/platform_generated.gni")
+
+# Most targets in this file are private actions so use that as the default.
+visibility = [ ":*" ]
+
+blink_platform_neon_files = [ "graphics/cpu/arm/WebGLImageConversionNEON.h" ]
+
+blink_platform_msa_files = [ "graphics/cpu/mips/WebGLImageConversionMSA.h" ]
+
+blink_platform_sse_files = [ "graphics/cpu/x86/WebGLImageConversionSSE.h" ]
+
+make_names("font_family_names") {
+  in_files = [ "fonts/font_family_names.json5" ]
+  output_dir = blink_platform_output_dir
+}
+
+action("runtime_enabled_features") {
+  script = "../build/scripts/make_runtime_features.py"
+
+  runtime_enabled_features_json5 = "runtime_enabled_features.json5"
+  inputs =
+      scripts_for_json5_files + [
+        runtime_enabled_features_json5,
+        "../build/scripts/templates/runtime_enabled_features.cc.tmpl",
+        "../build/scripts/templates/runtime_enabled_features.h.tmpl",
+        "../build/scripts/templates/RuntimeEnabledFeaturesTestHelpers.h.tmpl",
+      ]
+
+  outputs = [
+    "$blink_platform_output_dir/runtime_enabled_features.cc",
+    "$blink_platform_output_dir/runtime_enabled_features.h",
+    "$blink_platform_output_dir/testing/RuntimeEnabledFeaturesTestHelpers.h",
+  ]
+
+  args = [
+    rebase_path(runtime_enabled_features_json5, root_build_dir),
+    "--output_dir",
+    rebase_path(blink_platform_output_dir, root_build_dir),
+  ]
+}
+
+action("color_data") {
+  script = "../build/scripts/gperf.py"
+
+  color_data_gperf = "ColorData.gperf"
+  inputs = [
+    color_data_gperf,
+  ]
+
+  output_file = "$blink_platform_output_dir/ColorData.cpp"
+  outputs = [
+    output_file,
+  ]
+
+  args = []
+  if (is_mac && !use_system_xcode) {
+    args += [
+      "--developer_dir",
+      hermetic_xcode_path,
+    ]
+  }
+
+  args += [
+    gperf_exe,
+    "--key-positions=*",
+    "-D",
+    "-s",
+    "2",
+    rebase_path(color_data_gperf, root_build_dir),
+    "--output-file=" + rebase_path(output_file, root_build_dir),
+  ]
+}
+
+action("character_data") {
+  script = "../build/scripts/gperf.py"
+  deps = [
+    ":character_data_generator($host_toolchain)",
+  ]
+  output_file = "$blink_platform_output_dir/CharacterPropertyData.cpp"
+  outputs = [
+    output_file,
+  ]
+
+  # Find character_data_generator, which is generated in a different directory
+  # when cross-compile.
+  generator = "./" + rebase_path(
+                  get_label_info(":character_data_generator($host_toolchain)",
+                                 "root_out_dir") + "/character_data_generator",
+                  root_build_dir)
+  args = [
+    generator,
+    rebase_path(output_file, root_build_dir),
+  ]
+}
+
+action("instrumentation_probes") {
+  script = "../build/scripts/make_instrumenting_probes.py"
+
+  input_file = "probe/PlatformProbes.pidl"
+  inputs = [
+    input_file,
+    "probe/PlatformProbes.json5",
+    "../build/scripts/templates/InstrumentingProbesImpl.cpp.tmpl",
+    "../build/scripts/templates/InstrumentingProbesInl.h.tmpl",
+    "../build/scripts/templates/ProbeSink.h.tmpl",
+  ]
+
+  outputs = [
+    "$blink_platform_output_dir/PlatformProbeSink.h",
+    "$blink_platform_output_dir/PlatformProbesImpl.cpp",
+    "$blink_platform_output_dir/PlatformProbesInl.h",
+  ]
+
+  args = [
+    rebase_path(inputs[0], root_build_dir),
+    "--config",
+    rebase_path("probe/PlatformProbes.json5", root_build_dir),
+    "--output_dir",
+    rebase_path(blink_platform_output_dir, root_build_dir),
+  ]
+}
+
+executable("character_data_generator") {
+  sources = [
+    "text/CharacterPropertyDataGenerator.cpp",
+    "text/CharacterPropertyDataGenerator.h",
+  ]
+  configs += [ "//third_party/WebKit/Source:config" ]
+  deps = [
+    "//build/config:exe_and_shlib_deps",
+
+    # Default manifest on Windows (a no-op elsewhere).
+    "//build/win:default_exe_manifest",
+    "//third_party/icu",
+  ]
+}
+
+# This isn't strictly necessary since we can just add the deps to "platform",
+# but it helps to have the targets match the GYP build.
+group("make_platform_generated") {
+  visibility = []  # Allow re-assignment of list.
+  visibility = [ "//third_party/WebKit/Source/*" ]
+  public_deps = [
+    ":character_data",
+    ":color_data",
+    ":font_family_names",
+    ":instrumentation_probes",
+    ":runtime_enabled_features",
+    "//third_party/WebKit/Source/platform/network:make_generated",
+  ]
+}
+
+import("//build/config/pch.gni")
+
+config("blink_platform_config") {
+  include_dirs = [
+    #"$angle_path/include",
+    "$root_gen_dir/blink",
+  ]
+
+  configs = [
+    "//third_party/WebKit/Source:config",
+    "//third_party/WebKit/Source:inside_blink",
+
+    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+    "//build/config/compiler:no_size_t_to_int_warning",
+  ]
+}
+
+declare_args() {
+  runtime_call_stats_count_everything = false
+}
+
+buildflag_header("rcs_count_everything") {
+  header = "RuntimeCallStatsCountEverything.h"
+
+  header_dir = "blink/platform/bindings"
+
+  flags = [ "RCS_COUNT_EVERYTHING=$runtime_call_stats_count_everything" ]
+}
+
+config("blink_platform_implementation") {
+  defines = [ "BLINK_PLATFORM_IMPLEMENTATION=1" ]
+}
+
+config("blink_platform_pch") {
+  if (enable_precompiled_headers) {
+    if (is_win) {
+      # This is a string rather than a file GN knows about. It has to match
+      # exactly what's in the /FI flag below, and what might appear in the
+      # source code in quotes for an #include directive.
+      precompiled_header = rebase_path("Precompile-platform.h", root_build_dir)
+
+      # This is a file that GN will compile with the above header. It will be
+      # implicitly added to the sources (potentially multiple times, with one
+      # variant for each language used in the target).
+      precompiled_source =
+          "//third_party/WebKit/Source/platform/win/Precompile-platform.cpp"
+
+      # Force include the header.
+      cflags = [ "/FI$precompiled_header" ]
+    } else if (is_mac) {
+      precompiled_source =
+          "//third_party/WebKit/Source/platform/Precompile-platform.h"
+    }
+  }
+}
+
+jumbo_component("platform") {
+  visibility = []  # Allow re-assignment of list.
+  visibility = [
+    "//components/pdf/common:interfaces_blink",
+    "//third_party/WebKit/*",
+    "//url/mojo:url_mojom_origin_blink",
+    "//url/mojo:url_mojom_gurl_blink",
+  ]
+  output_name = "blink_platform"
+
+  sources = [
+    "AsyncFileSystemCallbacks.h",
+    "AsyncMethodRunner.h",
+    "CalculationValue.h",
+    "ContentDecryptionModuleResult.h",
+    "ContentSettingCallbacks.cpp",
+    "ContentSettingCallbacks.h",
+    "ContextMenu.cpp",
+    "ContextMenu.h",
+    "ContextMenuItem.cpp",
+    "ContextMenuItem.h",
+    "CrossOriginAttributeValue.h",
+    "CrossThreadCopier.cpp",
+    "CrossThreadCopier.h",
+    "CrossThreadFunctional.h",
+    "Crypto.cpp",
+    "Crypto.h",
+    "CryptoResult.h",
+    "Cursor.cpp",
+    "Cursor.h",
+    "DataResourceHelper.cpp",
+    "DataResourceHelper.h",
+    "DateComponents.cpp",
+    "DateComponents.h",
+    "Decimal.cpp",
+    "Decimal.h",
+    "DragImage.cpp",
+    "DragImage.h",
+    "EventDispatchForbiddenScope.cpp",
+    "EventDispatchForbiddenScope.h",
+    "FileMetadata.cpp",
+    "FileMetadata.h",
+    "FileSystemType.h",
+    "Histogram.cpp",
+    "Histogram.h",
+    "InstanceCounters.cpp",
+    "InstanceCounters.h",
+    "InstanceCountersMemoryDumpProvider.cc",
+    "InstanceCountersMemoryDumpProvider.h",
+    "KeyboardCodes.h",
+    "KillRing.h",
+    "KillRingNone.cpp",
+    "Language.cpp",
+    "Language.h",
+    "LayoutLocale.cpp",
+    "LayoutLocale.h",
+    "LayoutTestSupport.cpp",
+    "LayoutTestSupport.h",
+    "LayoutUnit.cpp",
+    "LayoutUnit.h",
+    "Length.cpp",
+    "Length.h",
+    "LengthBox.h",
+    "LengthFunctions.cpp",
+    "LengthFunctions.h",
+    "LengthPoint.h",
+    "LengthSize.h",
+    "LifecycleNotifier.h",
+    "LifecycleObserver.h",
+    "LinkHash.cpp",
+    "LinkHash.h",
+    "LongTaskDetector.cpp",
+    "LongTaskDetector.h",
+    "MemoryCoordinator.cpp",
+    "MemoryCoordinator.h",
+    "PODArena.h",
+    "PODFreeListArena.h",
+    "PODInterval.h",
+    "PODIntervalTree.h",
+    "PODRedBlackTree.h",
+    "PartitionAllocMemoryDumpProvider.cpp",
+    "PartitionAllocMemoryDumpProvider.h",
+    "PasteMode.h",
+    "PlatformChromeClient.h",
+    "PlatformExport.h",
+    "PlatformFrameView.h",
+    "Prerender.cpp",
+    "Prerender.h",
+    "PrerenderClient.h",
+    "ResolutionUnits.h",
+    "ScopedOrientationChangeIndicator.cpp",
+    "ScopedOrientationChangeIndicator.h",
+    "SecureTextInput.cpp",
+    "SecureTextInput.h",
+    "SerializedResource.h",
+    "SharedBuffer.cpp",
+    "SharedBuffer.h",
+    "SharedBufferChunkReader.cpp",
+    "SharedBufferChunkReader.h",
+    "StorageQuotaCallbacks.h",
+    "Supplementable.cpp",
+    "Supplementable.h",
+    "Theme.cpp",
+    "Theme.h",
+    "ThemeTypes.h",
+    "TimeClamper.cpp",
+    "TimeClamper.h",
+    "Timer.cpp",
+    "Timer.h",
+    "UUID.cpp",
+    "UUID.h",
+    "WaitableEvent.cpp",
+    "WaitableEvent.h",
+    "WebFrameScheduler.h",
+    "WebGestureEvent.cpp",
+    "WebIconSizesParser.cpp",
+    "WebMouseEvent.cpp",
+    "WebMouseWheelEvent.cpp",
+    "WebPointerEvent.cpp",
+    "WebScheduler.cpp",
+    "WebTaskRunner.cpp",
+    "WebTaskRunner.h",
+    "WebTextInputInfo.cpp",
+    "WebThread.cpp",
+    "WebThreadSupportingGC.cpp",
+    "WebThreadSupportingGC.h",
+    "WebTouchEvent.cpp",
+    "WindowsKeyboardCodes.h",
+    "animation/AnimationTranslationUtil.cpp",
+    "animation/AnimationTranslationUtil.h",
+    "animation/AnimationUtilities.h",
+    "animation/CompositorAnimation.cpp",
+    "animation/CompositorAnimation.h",
+    "animation/CompositorAnimationCurve.h",
+    "animation/CompositorAnimationDelegate.h",
+    "animation/CompositorAnimationHost.cpp",
+    "animation/CompositorAnimationHost.h",
+    "animation/CompositorAnimationPlayer.cpp",
+    "animation/CompositorAnimationPlayer.h",
+    "animation/CompositorAnimationPlayerClient.cpp",
+    "animation/CompositorAnimationPlayerClient.h",
+    "animation/CompositorAnimationTimeline.cpp",
+    "animation/CompositorAnimationTimeline.h",
+    "animation/CompositorFilterAnimationCurve.cpp",
+    "animation/CompositorFilterAnimationCurve.h",
+    "animation/CompositorFilterKeyframe.cpp",
+    "animation/CompositorFilterKeyframe.h",
+    "animation/CompositorFloatAnimationCurve.cpp",
+    "animation/CompositorFloatAnimationCurve.h",
+    "animation/CompositorFloatKeyframe.cpp",
+    "animation/CompositorFloatKeyframe.h",
+    "animation/CompositorKeyframe.cpp",
+    "animation/CompositorKeyframe.h",
+    "animation/CompositorScrollOffsetAnimationCurve.cpp",
+    "animation/CompositorScrollOffsetAnimationCurve.h",
+    "animation/CompositorTargetProperty.h",
+    "animation/CompositorTransformAnimationCurve.cpp",
+    "animation/CompositorTransformAnimationCurve.h",
+    "animation/CompositorTransformKeyframe.cpp",
+    "animation/CompositorTransformKeyframe.h",
+    "animation/CompositorTransformOperations.cpp",
+    "animation/CompositorTransformOperations.h",
+    "animation/TimingFunction.cpp",
+    "animation/TimingFunction.h",
+    "audio/AudioArray.h",
+    "audio/AudioBus.cpp",
+    "audio/AudioBus.h",
+    "audio/AudioChannel.cpp",
+    "audio/AudioChannel.h",
+    "audio/AudioDSPKernel.cpp",
+    "audio/AudioDSPKernel.h",
+    "audio/AudioDSPKernelProcessor.cpp",
+    "audio/AudioDSPKernelProcessor.h",
+    "audio/AudioDelayDSPKernel.cpp",
+    "audio/AudioDelayDSPKernel.h",
+    "audio/AudioDestination.cpp",
+    "audio/AudioDestination.h",
+    "audio/AudioDestinationConsumer.h",
+    "audio/AudioFileReader.h",
+    "audio/AudioIOCallback.h",
+    "audio/AudioProcessor.cpp",
+    "audio/AudioProcessor.h",
+    "audio/AudioResampler.cpp",
+    "audio/AudioResampler.h",
+    "audio/AudioResamplerKernel.cpp",
+    "audio/AudioResamplerKernel.h",
+    "audio/AudioSourceProvider.h",
+    "audio/AudioSourceProviderClient.h",
+    "audio/AudioUtilities.cpp",
+    "audio/AudioUtilities.h",
+    "audio/Biquad.cpp",
+    "audio/Biquad.h",
+    "audio/Cone.cpp",
+    "audio/Cone.h",
+    "audio/DenormalDisabler.h",
+    "audio/DirectConvolver.cpp",
+    "audio/DirectConvolver.h",
+    "audio/DistanceEffect.cpp",
+    "audio/DistanceEffect.h",
+    "audio/DownSampler.cpp",
+    "audio/DownSampler.h",
+    "audio/DynamicsCompressor.cpp",
+    "audio/DynamicsCompressor.h",
+    "audio/DynamicsCompressorKernel.cpp",
+    "audio/DynamicsCompressorKernel.h",
+    "audio/EqualPowerPanner.cpp",
+    "audio/EqualPowerPanner.h",
+    "audio/FFTConvolver.cpp",
+    "audio/FFTConvolver.h",
+    "audio/FFTFrame.cpp",
+    "audio/FFTFrame.h",
+    "audio/FFTFrameStub.cpp",
+    "audio/HRTFDatabase.cpp",
+    "audio/HRTFDatabase.h",
+    "audio/HRTFDatabaseLoader.cpp",
+    "audio/HRTFDatabaseLoader.h",
+    "audio/HRTFElevation.cpp",
+    "audio/HRTFElevation.h",
+    "audio/HRTFKernel.cpp",
+    "audio/HRTFKernel.h",
+    "audio/HRTFPanner.cpp",
+    "audio/HRTFPanner.h",
+    "audio/IIRFilter.cpp",
+    "audio/IIRFilter.h",
+    "audio/MultiChannelResampler.cpp",
+    "audio/MultiChannelResampler.h",
+    "audio/Panner.cpp",
+    "audio/Panner.h",
+    "audio/PushPullFIFO.cpp",
+    "audio/PushPullFIFO.h",
+    "audio/Reverb.cpp",
+    "audio/Reverb.h",
+    "audio/ReverbAccumulationBuffer.cpp",
+    "audio/ReverbAccumulationBuffer.h",
+    "audio/ReverbConvolver.cpp",
+    "audio/ReverbConvolver.h",
+    "audio/ReverbConvolverStage.cpp",
+    "audio/ReverbConvolverStage.h",
+    "audio/ReverbInputBuffer.cpp",
+    "audio/ReverbInputBuffer.h",
+    "audio/SincResampler.cpp",
+    "audio/SincResampler.h",
+    "audio/StereoPanner.cpp",
+    "audio/StereoPanner.h",
+    "audio/UpSampler.cpp",
+    "audio/UpSampler.h",
+    "audio/VectorMath.cpp",
+    "audio/VectorMath.h",
+    "audio/android/FFTFrameOpenMAXDLAndroid.cpp",
+    "audio/ffmpeg/FFTFrameFFMPEG.cpp",
+    "audio/mac/FFTFrameMac.cpp",
+    "bindings/ActiveScriptWrappableBase.cpp",
+    "bindings/ActiveScriptWrappableBase.h",
+    "bindings/CallbackFunctionBase.cpp",
+    "bindings/CallbackFunctionBase.h",
+    "bindings/CallbackInterfaceBase.cpp",
+    "bindings/CallbackInterfaceBase.h",
+    "bindings/DOMDataStore.h",
+    "bindings/DOMWrapperMap.h",
+    "bindings/DOMWrapperWorld.cpp",
+    "bindings/DOMWrapperWorld.h",
+    "bindings/Microtask.cpp",
+    "bindings/Microtask.h",
+    "bindings/OriginTrialFeatures.cpp",
+    "bindings/OriginTrialFeatures.h",
+    "bindings/RuntimeCallStats.cpp",
+    "bindings/RuntimeCallStats.h",
+    "bindings/ScopedPersistent.h",
+    "bindings/ScriptForbiddenScope.cpp",
+    "bindings/ScriptForbiddenScope.h",
+    "bindings/ScriptPromiseProperties.h",
+    "bindings/ScriptState.cpp",
+    "bindings/ScriptState.h",
+    "bindings/ScriptWrappable.cpp",
+    "bindings/ScriptWrappable.h",
+    "bindings/ScriptWrappableVisitor.cpp",
+    "bindings/ScriptWrappableVisitor.h",
+    "bindings/ScriptWrappableVisitorVerifier.h",
+    "bindings/SharedPersistent.h",
+    "bindings/StringResource.cpp",
+    "bindings/StringResource.h",
+    "bindings/ToV8.h",
+    "bindings/TraceWrapperBase.h",
+    "bindings/TraceWrapperMember.h",
+    "bindings/TraceWrapperV8Reference.h",
+    "bindings/V0CustomElementBinding.cpp",
+    "bindings/V0CustomElementBinding.h",
+    "bindings/V8Binding.cpp",
+    "bindings/V8Binding.h",
+    "bindings/V8BindingMacros.h",
+    "bindings/V8DOMActivityLogger.cpp",
+    "bindings/V8DOMActivityLogger.h",
+    "bindings/V8DOMWrapper.cpp",
+    "bindings/V8DOMWrapper.h",
+    "bindings/V8GlobalValueMap.h",
+    "bindings/V8ObjectConstructor.cpp",
+    "bindings/V8ObjectConstructor.h",
+    "bindings/V8PerContextData.cpp",
+    "bindings/V8PerContextData.h",
+    "bindings/V8PerIsolateData.cpp",
+    "bindings/V8PerIsolateData.h",
+    "bindings/V8PrivateProperty.cpp",
+    "bindings/V8PrivateProperty.h",
+    "bindings/V8ThrowException.cpp",
+    "bindings/V8ThrowException.h",
+    "bindings/V8ValueCache.cpp",
+    "bindings/V8ValueCache.h",
+    "bindings/WrapperCreationSecurityCheck.cpp",
+    "bindings/WrapperCreationSecurityCheck.h",
+    "bindings/WrapperTypeInfo.cpp",
+    "bindings/WrapperTypeInfo.h",
+    "clipboard/ClipboardMimeTypes.cpp",
+    "clipboard/ClipboardMimeTypes.h",
+    "clipboard/ClipboardUtilities.cpp",
+    "clipboard/ClipboardUtilities.h",
+    "cpu/mips/CommonMacrosMSA.h",
+    "credentialmanager/PlatformCredential.cpp",
+    "credentialmanager/PlatformCredential.h",
+    "credentialmanager/PlatformFederatedCredential.cpp",
+    "credentialmanager/PlatformFederatedCredential.h",
+    "credentialmanager/PlatformPasswordCredential.cpp",
+    "credentialmanager/PlatformPasswordCredential.h",
+    "exported/FilePathConversion.cpp",
+    "exported/InterfaceRegistry.cpp",
+    "exported/Platform.cpp",
+    "exported/ServiceRegistry.cpp",
+    "exported/URLConversion.cpp",
+    "exported/WebActiveGestureAnimation.cpp",
+    "exported/WebActiveGestureAnimation.h",
+    "exported/WebAudioBus.cpp",
+    "exported/WebAudioDevice.cpp",
+    "exported/WebBlobData.cpp",
+    "exported/WebBlobInfo.cpp",
+    "exported/WebCORS.cpp",
+    "exported/WebCORSPreflightResultCache.cpp",
+    "exported/WebCache.cpp",
+    "exported/WebCanvasCaptureHandler.cpp",
+    "exported/WebCoalescedInputEvent.cpp",
+    "exported/WebContentDecryptionModule.cpp",
+    "exported/WebContentDecryptionModuleAccess.cpp",
+    "exported/WebContentDecryptionModuleResult.cpp",
+    "exported/WebContentDecryptionModuleSession.cpp",
+    "exported/WebContentSettingCallbacks.cpp",
+    "exported/WebCredential.cpp",
+    "exported/WebCryptoAlgorithm.cpp",
+    "exported/WebCryptoKey.cpp",
+    "exported/WebCryptoKeyAlgorithm.cpp",
+    "exported/WebCryptoResult.cpp",
+    "exported/WebCursorInfo.cpp",
+    "exported/WebData.cpp",
+    "exported/WebDataConsumerHandle.cpp",
+    "exported/WebDragData.cpp",
+    "exported/WebEncryptedMediaClient.cpp",
+    "exported/WebEncryptedMediaKeyInformation.cpp",
+    "exported/WebEncryptedMediaRequest.cpp",
+    "exported/WebFederatedCredential.cpp",
+    "exported/WebFileSystemCallbacks.cpp",
+    "exported/WebFont.cpp",
+    "exported/WebFontDescription.cpp",
+    "exported/WebHTTPBody.cpp",
+    "exported/WebHTTPHeaderMap.cpp",
+    "exported/WebHTTPLoadInfo.cpp",
+    "exported/WebImage.cpp",
+    "exported/WebImageGenerator.cpp",
+    "exported/WebInputEvent.cpp",
+    "exported/WebMediaConstraints.cpp",
+    "exported/WebMediaDeviceInfo.cpp",
+    "exported/WebMediaPlayerClient.cpp",
+    "exported/WebMediaPlayerEncryptedMediaClient.cpp",
+    "exported/WebMediaPlayerSource.cpp",
+    "exported/WebMediaRecorderHandler.cpp",
+    "exported/WebMediaStream.cpp",
+    "exported/WebMediaStreamSource.cpp",
+    "exported/WebMediaStreamTrack.cpp",
+    "exported/WebMemoryCoordinator.cpp",
+    "exported/WebMixedContent.cpp",
+    "exported/WebMockClipboard.cpp",
+    "exported/WebNetworkStateNotifier.cpp",
+    "exported/WebPasswordCredential.cpp",
+    "exported/WebPrerender.cpp",
+    "exported/WebPrerenderingSupport.cpp",
+    "exported/WebPresentationAvailabilityObserver.cpp",
+    "exported/WebPresentationConnection.cpp",
+    "exported/WebPresentationConnectionCallbacks.cpp",
+    "exported/WebPresentationController.cpp",
+    "exported/WebPresentationReceiver.cpp",
+    "exported/WebRTCAnswerOptions.cpp",
+    "exported/WebRTCOfferOptions.cpp",
+    "exported/WebRTCPeerConnectionHandlerClient.cpp",
+    "exported/WebRTCRtpContributingSource.cpp",
+    "exported/WebRTCRtpReceiver.cpp",
+    "exported/WebRTCRtpSender.cpp",
+    "exported/WebRTCSessionDescription.cpp",
+    "exported/WebRTCSessionDescriptionRequest.cpp",
+    "exported/WebRTCStats.cpp",
+    "exported/WebRTCStatsRequest.cpp",
+    "exported/WebRTCStatsResponse.cpp",
+    "exported/WebRTCVoidRequest.cpp",
+    "exported/WebRemoteScrollProperties.cpp",
+    "exported/WebRuntimeFeatures.cpp",
+    "exported/WebScrollbarImpl.cpp",
+    "exported/WebScrollbarImpl.h",
+    "exported/WebScrollbarThemeClientImpl.cpp",
+    "exported/WebScrollbarThemeClientImpl.h",
+    "exported/WebScrollbarThemeGeometryNative.cpp",
+    "exported/WebScrollbarThemeGeometryNative.h",
+    "exported/WebScrollbarThemePainter.cpp",
+    "exported/WebSecurityOrigin.cpp",
+    "exported/WebServiceWorkerInstalledScriptsManager.cpp",
+    "exported/WebServiceWorkerRequest.cpp",
+    "exported/WebServiceWorkerResponse.cpp",
+    "exported/WebServiceWorkerStreamHandle.cpp",
+    "exported/WebSpeechSynthesisUtterance.cpp",
+    "exported/WebSpeechSynthesisVoice.cpp",
+    "exported/WebSpeechSynthesizerClientImpl.cpp",
+    "exported/WebSpeechSynthesizerClientImpl.h",
+    "exported/WebStorageQuotaCallbacks.cpp",
+    "exported/WebString.cpp",
+    "exported/WebSurfaceLayerBridge.cpp",
+    "exported/WebTextRun.cpp",
+    "exported/WebThreadSafeData.cpp",
+    "exported/WebURL.cpp",
+    "exported/WebURLError.cpp",
+    "exported/WebURLLoadTiming.cpp",
+    "exported/WebURLLoaderClient.cpp",
+    "exported/WebURLLoaderTestDelegate.cpp",
+    "exported/WebURLRequest.cpp",
+    "exported/WebURLResponse.cpp",
+    "exported/WebVideoFrameSubmitter.cpp",
+    "exported/WrappedResourceRequest.h",
+    "exported/WrappedResourceResponse.h",
+    "exported/linux/WebFontRenderStyle.cpp",
+    "feature_policy/FeaturePolicy.cpp",
+    "feature_policy/FeaturePolicy.h",
+    "fonts/AcceptLanguagesResolver.cpp",
+    "fonts/AcceptLanguagesResolver.h",
+    "fonts/AlternateFontFamily.h",
+    "fonts/BitmapGlyphsBlacklist.cpp",
+    "fonts/BitmapGlyphsBlacklist.h",
+    "fonts/CanvasRotationInVertical.h",
+    "fonts/CharacterRange.h",
+    "fonts/CustomFontData.h",
+    "fonts/FallbackListCompositeKey.h",
+    "fonts/Font.cpp",
+    "fonts/Font.h",
+    "fonts/FontBaseline.h",
+    "fonts/FontCache.cpp",
+    "fonts/FontCache.h",
+    "fonts/FontCacheClient.h",
+    "fonts/FontCacheKey.h",
+    "fonts/FontCacheMemoryDumpProvider.cpp",
+    "fonts/FontCacheMemoryDumpProvider.h",
+    "fonts/FontCustomPlatformData.cpp",
+    "fonts/FontCustomPlatformData.h",
+    "fonts/FontData.cpp",
+    "fonts/FontData.h",
+    "fonts/FontDataCache.cpp",
+    "fonts/FontDataCache.h",
+    "fonts/FontDataForRangeSet.cpp",
+    "fonts/FontDataForRangeSet.h",
+    "fonts/FontDescription.cpp",
+    "fonts/FontDescription.h",
+    "fonts/FontFaceCreationParams.h",
+    "fonts/FontFallbackIterator.cpp",
+    "fonts/FontFallbackIterator.h",
+    "fonts/FontFallbackList.cpp",
+    "fonts/FontFallbackList.h",
+    "fonts/FontFallbackPriority.cpp",
+    "fonts/FontFallbackPriority.h",
+    "fonts/FontFamily.cpp",
+    "fonts/FontFamily.h",
+    "fonts/FontGlobalContext.cpp",
+    "fonts/FontGlobalContext.h",
+    "fonts/FontMetrics.cpp",
+    "fonts/FontMetrics.h",
+    "fonts/FontOrientation.cpp",
+    "fonts/FontOrientation.h",
+    "fonts/FontPlatformData.cpp",
+    "fonts/FontPlatformData.h",
+    "fonts/FontSelectionAlgorithm.cpp",
+    "fonts/FontSelectionAlgorithm.h",
+    "fonts/FontSelectionTypes.cpp",
+    "fonts/FontSelectionTypes.h",
+    "fonts/FontSelector.cpp",
+    "fonts/FontSelector.h",
+    "fonts/FontSelectorClient.h",
+    "fonts/FontSmoothingMode.cpp",
+    "fonts/FontSmoothingMode.h",
+    "fonts/FontVariantEastAsian.cpp",
+    "fonts/FontVariantEastAsian.h",
+    "fonts/FontVariantNumeric.cpp",
+    "fonts/FontVariantNumeric.h",
+    "fonts/FontWidthVariant.cpp",
+    "fonts/FontWidthVariant.h",
+    "fonts/GenericFontFamilySettings.cpp",
+    "fonts/GenericFontFamilySettings.h",
+    "fonts/GlyphMetricsMap.h",
+    "fonts/NGTextFragmentPaintInfo.h",
+    "fonts/OrientationIterator.cpp",
+    "fonts/OrientationIterator.h",
+    "fonts/ScriptRunIterator.cpp",
+    "fonts/ScriptRunIterator.h",
+    "fonts/SegmentedFontData.cpp",
+    "fonts/SegmentedFontData.h",
+    "fonts/SimpleFontData.cpp",
+    "fonts/SimpleFontData.h",
+    "fonts/SmallCapsIterator.cpp",
+    "fonts/SmallCapsIterator.h",
+    "fonts/SymbolsIterator.cpp",
+    "fonts/SymbolsIterator.h",
+    "fonts/TextRenderingMode.cpp",
+    "fonts/TextRenderingMode.h",
+    "fonts/TypesettingFeatures.cpp",
+    "fonts/TypesettingFeatures.h",
+    "fonts/UTF16TextIterator.cpp",
+    "fonts/UTF16TextIterator.h",
+    "fonts/UnicodeRangeSet.cpp",
+    "fonts/UnicodeRangeSet.h",
+    "fonts/VDMXParser.cpp",
+    "fonts/VDMXParser.h",
+    "fonts/WebFontDecoder.cpp",
+    "fonts/WebFontDecoder.h",
+    "fonts/android/FontCacheAndroid.cpp",
+    "fonts/linux/FontCacheLinux.cpp",
+    "fonts/linux/FontPlatformDataLinux.cpp",
+    "fonts/linux/FontRenderStyle.cpp",
+    "fonts/linux/FontRenderStyle.h",
+    "fonts/mac/CoreTextVariationsSupport.cpp",
+    "fonts/mac/CoreTextVariationsSupport.h",
+    "fonts/mac/FontCacheMac.mm",
+    "fonts/mac/FontFamilyMatcherMac.h",
+    "fonts/mac/FontFamilyMatcherMac.mm",
+    "fonts/mac/FontPlatformDataMac.mm",
+    "fonts/opentype/FontSettings.cpp",
+    "fonts/opentype/FontSettings.h",
+    "fonts/opentype/OpenTypeCapsSupport.cpp",
+    "fonts/opentype/OpenTypeCapsSupport.h",
+    "fonts/opentype/OpenTypeCapsSupportMPL.cpp",
+    "fonts/opentype/OpenTypeTypes.h",
+    "fonts/opentype/OpenTypeVerticalData.cpp",
+    "fonts/opentype/OpenTypeVerticalData.h",
+    "fonts/opentype/VariableFontCheck.cpp",
+    "fonts/opentype/VariableFontCheck.h",
+    "fonts/shaping/CachingWordShapeIterator.cpp",
+    "fonts/shaping/CachingWordShapeIterator.h",
+    "fonts/shaping/CachingWordShaper.cpp",
+    "fonts/shaping/CachingWordShaper.h",
+    "fonts/shaping/CaseMappingHarfBuzzBufferFiller.cpp",
+    "fonts/shaping/CaseMappingHarfBuzzBufferFiller.h",
+    "fonts/shaping/HarfBuzzFace.cpp",
+    "fonts/shaping/HarfBuzzFace.h",
+    "fonts/shaping/HarfBuzzFontCache.h",
+    "fonts/shaping/HarfBuzzShaper.cpp",
+    "fonts/shaping/HarfBuzzShaper.h",
+    "fonts/shaping/RunSegmenter.cpp",
+    "fonts/shaping/RunSegmenter.h",
+    "fonts/shaping/ShapeCache.cpp",
+    "fonts/shaping/ShapeCache.h",
+    "fonts/shaping/ShapeResult.cpp",
+    "fonts/shaping/ShapeResult.h",
+    "fonts/shaping/ShapeResultBloberizer.cpp",
+    "fonts/shaping/ShapeResultBloberizer.h",
+    "fonts/shaping/ShapeResultBuffer.cpp",
+    "fonts/shaping/ShapeResultBuffer.h",
+    "fonts/shaping/ShapeResultInlineHeaders.h",
+    "fonts/shaping/ShapeResultSpacing.cpp",
+    "fonts/shaping/ShapeResultSpacing.h",
+    "fonts/shaping/ShapeResultTestInfo.cpp",
+    "fonts/shaping/ShapeResultTestInfo.h",
+    "fonts/shaping/ShapingLineBreaker.cpp",
+    "fonts/shaping/ShapingLineBreaker.h",
+    "fonts/skia/FontCacheSkia.cpp",
+    "fonts/skia/SkiaTextMetrics.cpp",
+    "fonts/skia/SkiaTextMetrics.h",
+    "fonts/win/FontCacheSkiaWin.cpp",
+    "fonts/win/FontFallbackWin.cpp",
+    "fonts/win/FontFallbackWin.h",
+    "fonts/win/FontPlatformDataWin.cpp",
+    "geometry/DoublePoint.cpp",
+    "geometry/DoublePoint.h",
+    "geometry/DoubleRect.cpp",
+    "geometry/DoubleRect.h",
+    "geometry/DoubleSize.cpp",
+    "geometry/DoubleSize.h",
+    "geometry/FloatBox.cpp",
+    "geometry/FloatBox.h",
+    "geometry/FloatPoint.cpp",
+    "geometry/FloatPoint.h",
+    "geometry/FloatPoint3D.cpp",
+    "geometry/FloatPoint3D.h",
+    "geometry/FloatPolygon.cpp",
+    "geometry/FloatPolygon.h",
+    "geometry/FloatQuad.cpp",
+    "geometry/FloatQuad.h",
+    "geometry/FloatRect.cpp",
+    "geometry/FloatRect.h",
+    "geometry/FloatRectOutsets.cpp",
+    "geometry/FloatRectOutsets.h",
+    "geometry/FloatRoundedRect.cpp",
+    "geometry/FloatRoundedRect.h",
+    "geometry/FloatSize.cpp",
+    "geometry/FloatSize.h",
+    "geometry/GeometryAsJSON.cpp",
+    "geometry/GeometryAsJSON.h",
+    "geometry/IntPoint.cpp",
+    "geometry/IntPoint.h",
+    "geometry/IntRect.cpp",
+    "geometry/IntRect.h",
+    "geometry/IntRectOutsets.h",
+    "geometry/IntSize.cpp",
+    "geometry/IntSize.h",
+    "geometry/IntSizeHash.h",
+    "geometry/LayoutPoint.cpp",
+    "geometry/LayoutPoint.h",
+    "geometry/LayoutRect.cpp",
+    "geometry/LayoutRect.h",
+    "geometry/LayoutRectOutsets.cpp",
+    "geometry/LayoutRectOutsets.h",
+    "geometry/LayoutSize.cpp",
+    "geometry/LayoutSize.h",
+    "geometry/Region.cpp",
+    "geometry/Region.h",
+    "geometry/TransformState.cpp",
+    "geometry/TransformState.h",
+    "geometry/cg/FloatPointCG.cpp",
+    "geometry/cg/FloatRectCG.cpp",
+    "geometry/cg/FloatSizeCG.cpp",
+    "geometry/cg/IntPointCG.cpp",
+    "geometry/cg/IntRectCG.cpp",
+    "geometry/cg/IntSizeCG.cpp",
+    "graphics/AcceleratedStaticBitmapImage.cpp",
+    "graphics/AcceleratedStaticBitmapImage.h",
+    "graphics/BitmapImage.cpp",
+    "graphics/BitmapImage.h",
+    "graphics/BitmapImageMetrics.cpp",
+    "graphics/BitmapImageMetrics.h",
+    "graphics/BoxReflection.cpp",
+    "graphics/BoxReflection.h",
+    "graphics/Canvas2DLayerBridge.cpp",
+    "graphics/Canvas2DLayerBridge.h",
+    "graphics/CanvasColorParams.cpp",
+    "graphics/CanvasColorParams.h",
+    "graphics/CanvasHeuristicParameters.h",
+    "graphics/CanvasMetrics.cpp",
+    "graphics/CanvasMetrics.h",
+    "graphics/CanvasResource.cpp",
+    "graphics/CanvasResource.h",
+    "graphics/CanvasResourceHost.h",
+    "graphics/CanvasResourceProvider.cpp",
+    "graphics/CanvasResourceProvider.h",
+    "graphics/Color.cpp",
+    "graphics/Color.h",
+    "graphics/ColorBehavior.cpp",
+    "graphics/ColorBehavior.h",
+    "graphics/ColorBlend.h",
+    "graphics/ColorSpaceGamut.cpp",
+    "graphics/ColorSpaceGamut.h",
+    "graphics/ColorSpaceProfileData.cpp",
+    "graphics/ColorSpaceProfileData.h",
+    "graphics/CompositingReasons.cpp",
+    "graphics/CompositingReasons.h",
+    "graphics/CompositorAnimatorsState.h",
+    "graphics/CompositorElementId.cpp",
+    "graphics/CompositorElementId.h",
+    "graphics/CompositorFilterOperations.cpp",
+    "graphics/CompositorFilterOperations.h",
+    "graphics/CompositorMutator.h",
+    "graphics/CompositorMutatorClient.cpp",
+    "graphics/CompositorMutatorClient.h",
+    "graphics/ContiguousContainer.cpp",
+    "graphics/ContiguousContainer.h",
+    "graphics/CrossfadeGeneratedImage.cpp",
+    "graphics/CrossfadeGeneratedImage.h",
+    "graphics/DashArray.h",
+    "graphics/DecodingImageGenerator.cpp",
+    "graphics/DecodingImageGenerator.h",
+    "graphics/DeferredImageDecoder.cpp",
+    "graphics/DeferredImageDecoder.h",
+    "graphics/DrawLooperBuilder.cpp",
+    "graphics/DrawLooperBuilder.h",
+    "graphics/FirstPaintInvalidationTracking.cpp",
+    "graphics/FirstPaintInvalidationTracking.h",
+    "graphics/FrameData.cpp",
+    "graphics/FrameData.h",
+    "graphics/GeneratedImage.cpp",
+    "graphics/GeneratedImage.h",
+    "graphics/GpuMemoryBufferImageCopy.cpp",
+    "graphics/GpuMemoryBufferImageCopy.h",
+    "graphics/Gradient.cpp",
+    "graphics/Gradient.h",
+    "graphics/GradientGeneratedImage.cpp",
+    "graphics/GradientGeneratedImage.h",
+    "graphics/GraphicsContext.cpp",
+    "graphics/GraphicsContext.h",
+    "graphics/GraphicsContextState.cpp",
+    "graphics/GraphicsContextState.h",
+    "graphics/GraphicsContextStateSaver.h",
+    "graphics/GraphicsLayer.cpp",
+    "graphics/GraphicsLayer.h",
+    "graphics/GraphicsLayerClient.h",
+    "graphics/GraphicsLayerDebugInfo.cpp",
+    "graphics/GraphicsLayerDebugInfo.h",
+    "graphics/GraphicsTypes.cpp",
+    "graphics/GraphicsTypes.h",
+    "graphics/GraphicsTypes3D.h",
+    "graphics/HighContrastImageClassifier.cpp",
+    "graphics/HighContrastImageClassifier.h",
+    "graphics/HighContrastSettings.h",
+    "graphics/Image.cpp",
+    "graphics/Image.h",
+    "graphics/ImageAnimationPolicy.h",
+    "graphics/ImageBuffer.cpp",
+    "graphics/ImageBuffer.h",
+    "graphics/ImageBufferSurface.cpp",
+    "graphics/ImageBufferSurface.h",
+    "graphics/ImageDecodingStore.cpp",
+    "graphics/ImageDecodingStore.h",
+    "graphics/ImageFrameGenerator.cpp",
+    "graphics/ImageFrameGenerator.h",
+    "graphics/ImageObserver.cpp",
+    "graphics/ImageObserver.h",
+    "graphics/ImageOrientation.cpp",
+    "graphics/ImageOrientation.h",
+    "graphics/ImagePattern.cpp",
+    "graphics/ImagePattern.h",
+    "graphics/InterceptingCanvas.cpp",
+    "graphics/InterceptingCanvas.h",
+    "graphics/InterpolationSpace.cpp",
+    "graphics/InterpolationSpace.h",
+    "graphics/LinkHighlight.h",
+    "graphics/LoggingCanvas.cpp",
+    "graphics/LoggingCanvas.h",
+    "graphics/MailboxTextureHolder.cpp",
+    "graphics/MailboxTextureHolder.h",
+    "graphics/OffscreenCanvasFrameDispatcher.h",
+    "graphics/OffscreenCanvasFrameDispatcherImpl.cpp",
+    "graphics/OffscreenCanvasFrameDispatcherImpl.h",
+    "graphics/OffscreenCanvasPlaceholder.cpp",
+    "graphics/OffscreenCanvasPlaceholder.h",
+    "graphics/OffscreenCanvasResourceProvider.cpp",
+    "graphics/OffscreenCanvasResourceProvider.h",
+    "graphics/PaintGeneratedImage.cpp",
+    "graphics/PaintGeneratedImage.h",
+    "graphics/PaintInvalidationReason.cpp",
+    "graphics/PaintInvalidationReason.h",
+    "graphics/PaintRecordPattern.cpp",
+    "graphics/PaintRecordPattern.h",
+    "graphics/Path.cpp",
+    "graphics/Path.h",
+    "graphics/PathTraversalState.cpp",
+    "graphics/PathTraversalState.h",
+    "graphics/Pattern.cpp",
+    "graphics/Pattern.h",
+    "graphics/PictureSnapshot.cpp",
+    "graphics/PictureSnapshot.h",
+    "graphics/PlaceholderImage.cpp",
+    "graphics/PlaceholderImage.h",
+    "graphics/ProfilingCanvas.cpp",
+    "graphics/ProfilingCanvas.h",
+    "graphics/RecordingImageBufferSurface.cpp",
+    "graphics/RecordingImageBufferSurface.h",
+    "graphics/ReplayingCanvas.cpp",
+    "graphics/ReplayingCanvas.h",
+    "graphics/ScopedInterpolationQuality.h",
+    "graphics/SkiaTextureHolder.cpp",
+    "graphics/SkiaTextureHolder.h",
+    "graphics/SquashingDisallowedReasons.cpp",
+    "graphics/SquashingDisallowedReasons.h",
+    "graphics/StaticBitmapImage.cpp",
+    "graphics/StaticBitmapImage.h",
+    "graphics/StrokeData.cpp",
+    "graphics/StrokeData.h",
+    "graphics/SurfaceLayerBridge.cpp",
+    "graphics/SurfaceLayerBridge.h",
+    "graphics/TextureHolder.h",
+    "graphics/TouchAction.h",
+    "graphics/UnacceleratedImageBufferSurface.cpp",
+    "graphics/UnacceleratedImageBufferSurface.h",
+    "graphics/UnacceleratedStaticBitmapImage.cpp",
+    "graphics/UnacceleratedStaticBitmapImage.h",
+    "graphics/VideoFrameResourceProvider.cpp",
+    "graphics/VideoFrameResourceProvider.h",
+    "graphics/VideoFrameSubmitter.cpp",
+    "graphics/VideoFrameSubmitter.h",
+    "graphics/WebGraphicsContext3DProviderWrapper.h",
+    "graphics/compositing/CompositedLayerRasterInvalidator.cpp",
+    "graphics/compositing/CompositedLayerRasterInvalidator.h",
+    "graphics/compositing/ContentLayerClientImpl.cpp",
+    "graphics/compositing/ContentLayerClientImpl.h",
+    "graphics/compositing/PaintArtifactCompositor.cpp",
+    "graphics/compositing/PaintArtifactCompositor.h",
+    "graphics/compositing/PaintChunksToCcLayer.cpp",
+    "graphics/compositing/PaintChunksToCcLayer.h",
+    "graphics/compositing/PropertyTreeManager.cpp",
+    "graphics/compositing/PropertyTreeManager.h",
+    "graphics/cpu/arm/WebGLImageConversionNEON.h",
+    "graphics/cpu/mips/WebGLImageConversionMSA.h",
+    "graphics/cpu/x86/WebGLImageConversionSSE.h",
+    "graphics/filters/DistantLightSource.cpp",
+    "graphics/filters/DistantLightSource.h",
+    "graphics/filters/FEBlend.cpp",
+    "graphics/filters/FEBlend.h",
+    "graphics/filters/FEBoxReflect.cpp",
+    "graphics/filters/FEBoxReflect.h",
+    "graphics/filters/FEColorMatrix.cpp",
+    "graphics/filters/FEColorMatrix.h",
+    "graphics/filters/FEComponentTransfer.cpp",
+    "graphics/filters/FEComponentTransfer.h",
+    "graphics/filters/FEComposite.cpp",
+    "graphics/filters/FEComposite.h",
+    "graphics/filters/FEConvolveMatrix.cpp",
+    "graphics/filters/FEConvolveMatrix.h",
+    "graphics/filters/FEDiffuseLighting.cpp",
+    "graphics/filters/FEDiffuseLighting.h",
+    "graphics/filters/FEDisplacementMap.cpp",
+    "graphics/filters/FEDisplacementMap.h",
+    "graphics/filters/FEDropShadow.cpp",
+    "graphics/filters/FEDropShadow.h",
+    "graphics/filters/FEFlood.cpp",
+    "graphics/filters/FEFlood.h",
+    "graphics/filters/FEGaussianBlur.cpp",
+    "graphics/filters/FEGaussianBlur.h",
+    "graphics/filters/FELighting.cpp",
+    "graphics/filters/FELighting.h",
+    "graphics/filters/FEMerge.cpp",
+    "graphics/filters/FEMerge.h",
+    "graphics/filters/FEMorphology.cpp",
+    "graphics/filters/FEMorphology.h",
+    "graphics/filters/FEOffset.cpp",
+    "graphics/filters/FEOffset.h",
+    "graphics/filters/FESpecularLighting.cpp",
+    "graphics/filters/FESpecularLighting.h",
+    "graphics/filters/FETile.cpp",
+    "graphics/filters/FETile.h",
+    "graphics/filters/FETurbulence.cpp",
+    "graphics/filters/FETurbulence.h",
+    "graphics/filters/Filter.cpp",
+    "graphics/filters/Filter.h",
+    "graphics/filters/FilterEffect.cpp",
+    "graphics/filters/FilterEffect.h",
+    "graphics/filters/LightSource.cpp",
+    "graphics/filters/LightSource.h",
+    "graphics/filters/PaintFilterBuilder.cpp",
+    "graphics/filters/PaintFilterBuilder.h",
+    "graphics/filters/PaintFilterEffect.cpp",
+    "graphics/filters/PaintFilterEffect.h",
+    "graphics/filters/PointLightSource.cpp",
+    "graphics/filters/PointLightSource.h",
+    "graphics/filters/SourceAlpha.cpp",
+    "graphics/filters/SourceAlpha.h",
+    "graphics/filters/SourceGraphic.cpp",
+    "graphics/filters/SourceGraphic.h",
+    "graphics/filters/SpotLightSource.cpp",
+    "graphics/filters/SpotLightSource.h",
+    "graphics/gpu/AcceleratedImageBufferSurface.cpp",
+    "graphics/gpu/AcceleratedImageBufferSurface.h",
+    "graphics/gpu/DrawingBuffer.cpp",
+    "graphics/gpu/DrawingBuffer.h",
+    "graphics/gpu/Extensions3DUtil.cpp",
+    "graphics/gpu/Extensions3DUtil.h",
+    "graphics/gpu/GraphicsContext3DUtils.cpp",
+    "graphics/gpu/GraphicsContext3DUtils.h",
+    "graphics/gpu/ImageLayerBridge.cpp",
+    "graphics/gpu/ImageLayerBridge.h",
+    "graphics/gpu/SharedContextRateLimiter.cpp",
+    "graphics/gpu/SharedContextRateLimiter.h",
+    "graphics/gpu/SharedGpuContext.cpp",
+    "graphics/gpu/SharedGpuContext.h",
+    "graphics/gpu/WebGLImageConversion.cpp",
+    "graphics/gpu/WebGLImageConversion.h",
+    "graphics/highcontrast/highcontrast_classifier.cc",
+    "graphics/highcontrast/highcontrast_classifier.h",
+    "graphics/paint/ClipDisplayItem.cpp",
+    "graphics/paint/ClipDisplayItem.h",
+    "graphics/paint/ClipPaintPropertyNode.cpp",
+    "graphics/paint/ClipPaintPropertyNode.h",
+    "graphics/paint/ClipPathDisplayItem.cpp",
+    "graphics/paint/ClipPathDisplayItem.h",
+    "graphics/paint/ClipPathRecorder.cpp",
+    "graphics/paint/ClipPathRecorder.h",
+    "graphics/paint/ClipRecorder.cpp",
+    "graphics/paint/ClipRecorder.h",
+    "graphics/paint/CompositingDisplayItem.cpp",
+    "graphics/paint/CompositingDisplayItem.h",
+    "graphics/paint/CompositingRecorder.cpp",
+    "graphics/paint/CompositingRecorder.h",
+    "graphics/paint/CullRect.cpp",
+    "graphics/paint/CullRect.h",
+    "graphics/paint/DisplayItem.cpp",
+    "graphics/paint/DisplayItem.h",
+    "graphics/paint/DisplayItemCacheSkipper.h",
+    "graphics/paint/DisplayItemClient.cpp",
+    "graphics/paint/DisplayItemClient.h",
+    "graphics/paint/DisplayItemList.cpp",
+    "graphics/paint/DisplayItemList.h",
+    "graphics/paint/DrawingDisplayItem.cpp",
+    "graphics/paint/DrawingDisplayItem.h",
+    "graphics/paint/DrawingRecorder.cpp",
+    "graphics/paint/DrawingRecorder.h",
+    "graphics/paint/EffectPaintPropertyNode.cpp",
+    "graphics/paint/EffectPaintPropertyNode.h",
+    "graphics/paint/FilterDisplayItem.cpp",
+    "graphics/paint/FilterDisplayItem.h",
+    "graphics/paint/FloatClipDisplayItem.cpp",
+    "graphics/paint/FloatClipDisplayItem.h",
+    "graphics/paint/FloatClipRect.h",
+    "graphics/paint/ForeignLayerDisplayItem.cpp",
+    "graphics/paint/ForeignLayerDisplayItem.h",
+    "graphics/paint/GeometryMapper.cpp",
+    "graphics/paint/GeometryMapper.h",
+    "graphics/paint/GeometryMapperClipCache.cpp",
+    "graphics/paint/GeometryMapperClipCache.h",
+    "graphics/paint/GeometryMapperTransformCache.cpp",
+    "graphics/paint/GeometryMapperTransformCache.h",
+    "graphics/paint/PaintArtifact.cpp",
+    "graphics/paint/PaintArtifact.h",
+    "graphics/paint/PaintCanvas.h",
+    "graphics/paint/PaintChunk.cpp",
+    "graphics/paint/PaintChunk.h",
+    "graphics/paint/PaintChunkProperties.cpp",
+    "graphics/paint/PaintChunkProperties.h",
+    "graphics/paint/PaintChunker.cpp",
+    "graphics/paint/PaintChunker.h",
+    "graphics/paint/PaintController.cpp",
+    "graphics/paint/PaintController.h",
+    "graphics/paint/PaintControllerDebugData.cpp",
+    "graphics/paint/PaintFilter.h",
+    "graphics/paint/PaintFlags.h",
+    "graphics/paint/PaintFont.h",
+    "graphics/paint/PaintPropertyNode.cpp",
+    "graphics/paint/PaintPropertyNode.h",
+    "graphics/paint/PaintRecord.h",
+    "graphics/paint/PaintRecordBuilder.cpp",
+    "graphics/paint/PaintRecordBuilder.h",
+    "graphics/paint/PaintRecorder.h",
+    "graphics/paint/PaintShader.h",
+    "graphics/paint/PaintTextBlob.h",
+    "graphics/paint/PaintTypeface.h",
+    "graphics/paint/PropertyTreeState.cpp",
+    "graphics/paint/PropertyTreeState.h",
+    "graphics/paint/RasterInvalidationTracking.cpp",
+    "graphics/paint/RasterInvalidationTracking.h",
+    "graphics/paint/ScopedPaintChunkProperties.h",
+    "graphics/paint/ScrollDisplayItem.cpp",
+    "graphics/paint/ScrollDisplayItem.h",
+    "graphics/paint/ScrollHitTestDisplayItem.cpp",
+    "graphics/paint/ScrollHitTestDisplayItem.h",
+    "graphics/paint/ScrollPaintPropertyNode.cpp",
+    "graphics/paint/ScrollPaintPropertyNode.h",
+    "graphics/paint/SubsequenceRecorder.h",
+    "graphics/paint/Transform3DDisplayItem.cpp",
+    "graphics/paint/Transform3DDisplayItem.h",
+    "graphics/paint/TransformDisplayItem.cpp",
+    "graphics/paint/TransformDisplayItem.h",
+    "graphics/paint/TransformPaintPropertyNode.cpp",
+    "graphics/paint/TransformPaintPropertyNode.h",
+    "graphics/skia/ImagePixelLocker.cpp",
+    "graphics/skia/ImagePixelLocker.h",
+    "graphics/skia/SkSizeHash.h",
+    "graphics/skia/SkiaUtils.cpp",
+    "graphics/skia/SkiaUtils.h",
+    "image-decoders/FastSharedBufferReader.cpp",
+    "image-decoders/FastSharedBufferReader.h",
+    "image-decoders/ImageAnimation.h",
+    "image-decoders/ImageDecoder.cpp",
+    "image-decoders/ImageDecoder.h",
+    "image-decoders/ImageFrame.cpp",
+    "image-decoders/ImageFrame.h",
+    "image-decoders/SegmentReader.cpp",
+    "image-decoders/SegmentReader.h",
+    "image-decoders/bmp/BMPImageDecoder.cpp",
+    "image-decoders/bmp/BMPImageDecoder.h",
+    "image-decoders/bmp/BMPImageReader.cpp",
+    "image-decoders/bmp/BMPImageReader.h",
+    "image-decoders/gif/GIFImageDecoder.cpp",
+    "image-decoders/gif/GIFImageDecoder.h",
+    "image-decoders/gif/GIFImageReader.cpp",
+    "image-decoders/gif/GIFImageReader.h",
+    "image-decoders/ico/ICOImageDecoder.cpp",
+    "image-decoders/ico/ICOImageDecoder.h",
+    "image-decoders/jpeg/JPEGImageDecoder.cpp",
+    "image-decoders/jpeg/JPEGImageDecoder.h",
+    "image-decoders/png/PNGImageDecoder.cpp",
+    "image-decoders/png/PNGImageDecoder.h",
+    "image-decoders/png/PNGImageReader.cpp",
+    "image-decoders/png/PNGImageReader.h",
+    "image-decoders/webp/WEBPImageDecoder.cpp",
+    "image-decoders/webp/WEBPImageDecoder.h",
+    "image-encoders/ImageEncoder.cpp",
+    "image-encoders/ImageEncoder.h",
+    "image-encoders/ImageEncoderUtils.cpp",
+    "image-encoders/ImageEncoderUtils.h",
+    "json/JSONParser.cpp",
+    "json/JSONParser.h",
+    "json/JSONValues.cpp",
+    "json/JSONValues.h",
+    "mac/BlockExceptions.h",
+    "mac/BlockExceptions.mm",
+    "mac/ColorMac.h",
+    "mac/ColorMac.mm",
+    "mac/GraphicsContextCanvas.h",
+    "mac/GraphicsContextCanvas.mm",
+    "mac/KillRingMac.mm",
+    "mac/LocalCurrentGraphicsContext.h",
+    "mac/LocalCurrentGraphicsContext.mm",
+    "mac/NSScrollerImpDetails.h",
+    "mac/ScrollAnimatorMac.h",
+    "mac/ScrollAnimatorMac.mm",
+    "mac/ThemeMac.h",
+    "mac/ThemeMac.mm",
+    "mac/VersionUtilMac.h",
+    "mac/VersionUtilMac.mm",
+    "mac/WebCoreNSCellExtras.h",
+    "mac/WebCoreNSCellExtras.mm",
+    "mediastream/MediaStreamCenter.cpp",
+    "mediastream/MediaStreamCenter.h",
+    "mediastream/MediaStreamComponent.cpp",
+    "mediastream/MediaStreamComponent.h",
+    "mediastream/MediaStreamDescriptor.cpp",
+    "mediastream/MediaStreamDescriptor.h",
+    "mediastream/MediaStreamSource.cpp",
+    "mediastream/MediaStreamSource.h",
+    "mediastream/MediaStreamWebAudioSource.cpp",
+    "mediastream/MediaStreamWebAudioSource.h",
+    "mhtml/ArchiveResource.cpp",
+    "mhtml/ArchiveResource.h",
+    "mhtml/MHTMLArchive.cpp",
+    "mhtml/MHTMLArchive.h",
+    "mhtml/MHTMLParser.cpp",
+    "mhtml/MHTMLParser.h",
+    "mojo/BluetoothStructTraits.cpp",
+    "mojo/BluetoothStructTraits.h",
+    "mojo/CommonCustomTypesStructTraits.cpp",
+    "mojo/CommonCustomTypesStructTraits.h",
+    "mojo/FetchAPIRequestStructTraits.cpp",
+    "mojo/MojoHelper.h",
+    "peerconnection/RTCAnswerOptionsPlatform.h",
+    "peerconnection/RTCOfferOptionsPlatform.h",
+    "peerconnection/RTCSessionDescriptionRequest.h",
+    "peerconnection/RTCStatsRequest.h",
+    "peerconnection/RTCStatsResponseBase.h",
+    "peerconnection/RTCVoidRequest.h",
+    "plugins/PluginData.cpp",
+    "plugins/PluginData.h",
+    "plugins/PluginListBuilder.cpp",
+    "plugins/PluginListBuilder.h",
+    "plugins/PluginScriptForbiddenScope.cpp",
+    "plugins/PluginScriptForbiddenScope.h",
+    "probe/PlatformProbes.cpp",
+    "probe/PlatformProbes.h",
+    "probe/PlatformTraceEventsAgent.cpp",
+    "probe/PlatformTraceEventsAgent.h",
+    "scroll/MainThreadScrollingReason.h",
+    "scroll/ProgrammaticScrollAnimator.cpp",
+    "scroll/ProgrammaticScrollAnimator.h",
+    "scroll/ScrollAnimator.cpp",
+    "scroll/ScrollAnimator.h",
+    "scroll/ScrollAnimatorBase.cpp",
+    "scroll/ScrollAnimatorBase.h",
+    "scroll/ScrollAnimatorCompositorCoordinator.cpp",
+    "scroll/ScrollAnimatorCompositorCoordinator.h",
+    "scroll/ScrollStateData.h",
+    "scroll/ScrollTypes.h",
+    "scroll/ScrollableArea.cpp",
+    "scroll/ScrollableArea.h",
+    "scroll/Scrollbar.cpp",
+    "scroll/Scrollbar.h",
+    "scroll/ScrollbarTheme.cpp",
+    "scroll/ScrollbarTheme.h",
+    "scroll/ScrollbarThemeAndroid.cpp",
+    "scroll/ScrollbarThemeAura.cpp",
+    "scroll/ScrollbarThemeAura.h",
+    "scroll/ScrollbarThemeClient.h",
+    "scroll/ScrollbarThemeMac.h",
+    "scroll/ScrollbarThemeMac.mm",
+    "scroll/ScrollbarThemeMock.cpp",
+    "scroll/ScrollbarThemeMock.h",
+    "scroll/ScrollbarThemeOverlay.cpp",
+    "scroll/ScrollbarThemeOverlay.h",
+    "scroll/ScrollbarThemeOverlayMock.h",
+    "scroll/SmoothScrollSequencer.cpp",
+    "scroll/SmoothScrollSequencer.h",
+    "scroll/WebScrollbarTheme.mm",
+    "speech/PlatformSpeechSynthesisUtterance.cpp",
+    "speech/PlatformSpeechSynthesisUtterance.h",
+    "speech/PlatformSpeechSynthesisVoice.cpp",
+    "speech/PlatformSpeechSynthesisVoice.h",
+    "speech/PlatformSpeechSynthesizer.cpp",
+    "speech/PlatformSpeechSynthesizer.h",
+    "text/BidiCharacterRun.cpp",
+    "text/BidiCharacterRun.h",
+    "text/BidiContext.cpp",
+    "text/BidiContext.h",
+    "text/BidiResolver.h",
+    "text/BidiRunList.h",
+    "text/BidiTextRun.cpp",
+    "text/BidiTextRun.h",
+    "text/Character.cpp",
+    "text/Character.h",
+    "text/CharacterEmoji.cpp",
+    "text/CharacterProperty.h",
+    "text/DateTimeFormat.cpp",
+    "text/DateTimeFormat.h",
+    "text/DecodeEscapeSequences.h",
+    "text/Hyphenation.cpp",
+    "text/Hyphenation.h",
+    "text/ICUError.cpp",
+    "text/ICUError.h",
+    "text/LineEnding.cpp",
+    "text/LineEnding.h",
+    "text/LocaleICU.cpp",
+    "text/LocaleICU.h",
+    "text/LocaleMac.h",
+    "text/LocaleMac.mm",
+    "text/LocaleToScriptMapping.cpp",
+    "text/LocaleToScriptMapping.h",
+    "text/LocaleWin.cpp",
+    "text/LocaleWin.h",
+    "text/PlatformLocale.cpp",
+    "text/PlatformLocale.h",
+    "text/QuotedPrintable.cpp",
+    "text/QuotedPrintable.h",
+    "text/SegmentedString.cpp",
+    "text/SegmentedString.h",
+    "text/StringTruncator.cpp",
+    "text/StringTruncator.h",
+    "text/SuffixTree.h",
+    "text/TextBoundaries.cpp",
+    "text/TextBoundaries.h",
+    "text/TextBreakIterator.cpp",
+    "text/TextBreakIterator.h",
+    "text/TextBreakIteratorICU.cpp",
+    "text/TextBreakIteratorInternalICU.cpp",
+    "text/TextBreakIteratorInternalICU.h",
+    "text/TextDirection.cpp",
+    "text/TextDirection.h",
+    "text/TextEncodingDetector.cpp",
+    "text/TextEncodingDetector.h",
+    "text/TextJustify.h",
+    "text/TextRun.cpp",
+    "text/TextRun.h",
+    "text/TextRunIterator.h",
+    "text/TextStream.cpp",
+    "text/TextStream.h",
+    "text/Truncation.h",
+    "text/UnicodeBidi.h",
+    "text/UnicodeRange.cpp",
+    "text/UnicodeRange.h",
+    "text/UnicodeUtilities.cpp",
+    "text/UnicodeUtilities.h",
+    "text/WebEntities.cpp",
+    "text/WebEntities.h",
+    "text/WritingMode.h",
+    "text/WritingModeUtils.h",
+    "text/linux/HyphenationLinux.cpp",
+    "text/mac/HyphenationMac.cpp",
+    "text/win/HyphenationWin.cpp",
+    "threading/BackgroundTaskRunner.cpp",
+    "threading/BackgroundTaskRunner.h",
+    "transforms/AffineTransform.cpp",
+    "transforms/AffineTransform.h",
+    "transforms/IdentityTransformOperation.h",
+    "transforms/InterpolatedTransformOperation.cpp",
+    "transforms/InterpolatedTransformOperation.h",
+    "transforms/Matrix3DTransformOperation.cpp",
+    "transforms/Matrix3DTransformOperation.h",
+    "transforms/MatrixTransformOperation.cpp",
+    "transforms/MatrixTransformOperation.h",
+    "transforms/PerspectiveTransformOperation.cpp",
+    "transforms/PerspectiveTransformOperation.h",
+    "transforms/RotateTransformOperation.cpp",
+    "transforms/RotateTransformOperation.h",
+    "transforms/Rotation.cpp",
+    "transforms/Rotation.h",
+    "transforms/ScaleTransformOperation.cpp",
+    "transforms/ScaleTransformOperation.h",
+    "transforms/SkewTransformOperation.cpp",
+    "transforms/SkewTransformOperation.h",
+    "transforms/TransformOperations.cpp",
+    "transforms/TransformOperations.h",
+    "transforms/TransformationMatrix.cpp",
+    "transforms/TransformationMatrix.h",
+    "transforms/TranslateTransformOperation.cpp",
+    "transforms/TranslateTransformOperation.h",
+    "weborigin/KURL.cpp",
+    "weborigin/KURL.h",
+    "weborigin/KURLHash.h",
+    "weborigin/KnownPorts.cpp",
+    "weborigin/KnownPorts.h",
+    "weborigin/OriginAccessEntry.cpp",
+    "weborigin/OriginAccessEntry.h",
+    "weborigin/Referrer.h",
+    "weborigin/ReferrerPolicy.h",
+    "weborigin/SchemeRegistry.cpp",
+    "weborigin/SchemeRegistry.h",
+    "weborigin/SecurityOrigin.cpp",
+    "weborigin/SecurityOrigin.h",
+    "weborigin/SecurityOriginHash.h",
+    "weborigin/SecurityPolicy.cpp",
+    "weborigin/SecurityPolicy.h",
+    "weborigin/SecurityViolationReportingPolicy.h",
+    "weborigin/Suborigin.cpp",
+    "weborigin/Suborigin.h",
+    "weborigin/URLSecurityOriginMap.h",
+  ]
+
+  sources -= blink_platform_neon_files
+  sources -= blink_platform_msa_files
+  sources -= blink_platform_sse_files
+
+  # Add in the generated files.
+  sources += get_target_outputs(":character_data") +
+             get_target_outputs(":color_data") +
+             get_target_outputs(":font_family_names") +
+             get_target_outputs(":instrumentation_probes") +
+             get_target_outputs(":runtime_enabled_features")
+
+  if (is_win) {
+    jumbo_excluded_sources = [
+      # https://crbug.com/775979 - Uses libjpeg_turbo which uses a
+      # "boolean" typedef which is different (int) from the Windows
+      # standard "boolean" typedef (unsigned char), resulting in
+      # compilation errors when both are joined in a translation unit.
+      "image-decoders/jpeg/JPEGImageDecoder.cpp",
+    ]
+
+    if (is_component_build) {
+      # https://crbug.com/764823 - Mixing certain //url/ headers and
+      # using url::RawCanonOutputT<char> in one translation unit breaks
+      # the Windows component build. These files use RawCanonOutput.
+      jumbo_excluded_sources += [
+        "LinkHash.cpp",
+        "weborigin/KURL.cpp",
+        "weborigin/OriginAccessEntry.cpp",
+        "weborigin/SecurityOrigin.cpp",
+      ]
+    }
+  }
+  configs += [
+    ":blink_platform_pch",
+    ":blink_platform_config",
+    ":blink_platform_implementation",
+    "//third_party/WebKit/Source:non_test_config",
+  ]
+
+  include_dirs = []
+
+  public_deps = [
+    ":make_platform_generated",
+    ":rcs_count_everything",
+    "//base",
+    "//cc",
+    "//cc/animation",
+    "//cc/paint",
+    "//gpu/command_buffer/client:client",
+    "//gpu/command_buffer/client:gles2_c_lib",
+    "//gpu/command_buffer/client:gles2_interface",
+    "//gpu/command_buffer/common:common",
+    "//media",
+    "//net",
+    "//services/resource_coordinator/public/cpp:resource_coordinator_cpp",
+    "//services/service_manager/public/interfaces:interfaces_blink",
+    "//skia",
+    "//third_party:jpeg",
+    "//third_party/WebKit/Source/platform/wtf",
+    "//third_party/WebKit/common:blink_common",
+    "//third_party/WebKit/common:mojo_platform_bindings_blink",
+    "//third_party/WebKit/public:mojo_bindings_blink",
+    "//third_party/iccjpeg",
+    "//third_party/libpng",
+    "//third_party/libwebp",
+    "//third_party/ots",
+    "//url",
+    "//v8",
+  ]
+  deps = [
+    "//components/viz/service",
+    "//device/base/synchronization",
+    "//gin",
+    "//mojo/public/cpp/bindings",
+    "//mojo/public/cpp/bindings:wtf_support",
+    "//services/service_manager/public/cpp",
+    "//third_party:freetype_harfbuzz",
+    "//third_party/WebKit/Source/platform/blob",
+    "//third_party/WebKit/Source/platform/heap",
+    "//third_party/WebKit/Source/platform/instrumentation",
+    "//third_party/WebKit/Source/platform/loader",
+    "//third_party/WebKit/Source/platform/media",
+    "//third_party/WebKit/Source/platform/network",
+    "//third_party/WebKit/Source/platform/scheduler",
+    "//third_party/WebKit/public:offscreen_canvas_mojo_bindings_blink",
+    "//third_party/ced",
+    "//third_party/icu",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+  ]
+
+  if (is_mac) {
+    sources -= [
+      # Uses KillRingMac.mm instead.
+      "KillRingNone.cpp",
+      "fonts/skia/FontCacheSkia.cpp",
+      "scroll/ScrollAnimator.cpp",
+      "scroll/ScrollAnimator.h",
+
+      # Uses LocaleMac instead.
+      "text/LocaleICU.cpp",
+      "text/LocaleICU.h",
+    ]
+
+    libs = [
+      "AppKit.framework",
+      "Accelerate.framework",
+      "Carbon.framework",
+      "Foundation.framework",
+    ]
+  } else {
+    sources -= [
+      "geometry/cg/FloatPointCG.cpp",
+      "geometry/cg/FloatRectCG.cpp",
+      "geometry/cg/FloatSizeCG.cpp",
+      "geometry/cg/IntPointCG.cpp",
+      "geometry/cg/IntRectCG.cpp",
+      "geometry/cg/IntSizeCG.cpp",
+    ]
+  }
+
+  if (is_win) {
+    sources += [ "clipboard/ClipboardUtilitiesWin.cpp" ]
+    sources -= [
+      # Uses LocaleWin instead.
+      "text/LocaleICU.cpp",
+      "text/LocaleICU.h",
+    ]
+    cflags = [
+      "/wd4334",  # Result of 32-bit shift implicitly converted to 64 bits.
+      "/wd4724",  # Modulo by 0.
+    ]
+  } else {
+    if (!snake_case_source_files) {
+      sources -= [ "text/LocaleWin.cpp" ]
+    }
+  }
+
+  if (is_android) {
+    # Add in some Linux files also shared with Android.
+    set_sources_assignment_filter([])
+    sources += [
+      "exported/linux/WebFontRenderStyle.cpp",
+      "fonts/linux/FontPlatformDataLinux.cpp",
+      "fonts/linux/FontRenderStyle.cpp",
+      "fonts/linux/FontRenderStyle.h",
+    ]
+    set_sources_assignment_filter(sources_assignment_filter)
+  } else {
+    if (!snake_case_source_files) {
+      sources -= [ "scroll/ScrollbarThemeAndroid.cpp" ]
+    }
+  }
+
+  if (is_fuchsia) {
+    sources += [
+      "fonts/fuchsia/FontCacheFuchsia.cpp",
+      "fonts/fuchsia/FontPlatformDataFuchsia.cpp",
+      "text/fuchsia/HyphenationFuchsia.cpp",
+    ]
+  }
+
+  if (use_minikin_hyphenation) {
+    sources += [
+      "text/hyphenation/HyphenationMinikin.cpp",
+      "text/hyphenation/HyphenationMinikin.h",
+      "text/hyphenation/HyphenatorAOSP.cpp",
+      "text/hyphenation/HyphenatorAOSP.h",
+    ]
+  }
+
+  if (!use_default_render_theme) {
+    sources -= [
+      "scroll/ScrollbarThemeAura.cpp",
+      "scroll/ScrollbarThemeAura.h",
+    ]
+  }
+
+  if (current_cpu == "arm") {
+    deps += [ ":blink_arm_neon" ]
+  }
+
+  if (current_cpu == "mipsel" || current_cpu == "mips64el") {
+    deps += [ ":blink_mips_msa" ]
+  }
+
+  if (current_cpu == "x86" || current_cpu == "x64") {
+    deps += [ ":blink_x86_sse" ]
+  }
+
+  if (use_webaudio_ffmpeg) {
+    include_dirs += [ "//third_party/ffmpeg" ]
+    deps += [ "//third_party/ffmpeg" ]
+  }
+  if (use_openmax_dl_fft) {
+    include_dirs += [ "//third_party/openmax_dl" ]
+    deps += [ "//third_party/openmax_dl/dl" ]
+  }
+
+  if (remove_webcore_debug_symbols) {
+    configs -= [ "//build/config/compiler:default_symbols" ]
+    configs += remove_webcore_symbols_config
+  }
+}
+
+jumbo_static_library("test_support") {
+  visibility += [ "//third_party/WebKit/*" ]
+  testonly = true
+
+  sources = [
+    "graphics/gpu/DrawingBufferTestHelpers.h",
+    "scroll/ScrollbarTestSuite.h",
+    "testing/CompositorTest.cpp",
+    "testing/CompositorTest.h",
+    "testing/EmptyWebMediaPlayer.cpp",
+    "testing/EmptyWebMediaPlayer.h",
+    "testing/FakeDisplayItemClient.h",
+    "testing/FakeGraphicsLayer.h",
+    "testing/FakeGraphicsLayerClient.h",
+    "testing/FontTestHelpers.cpp",
+    "testing/FontTestHelpers.h",
+    "testing/FuzzedDataProvider.cpp",
+    "testing/FuzzedDataProvider.h",
+    "testing/GeometryPrinters.cpp",
+    "testing/GeometryPrinters.h",
+    "testing/HistogramTester.cpp",
+    "testing/HistogramTester.h",
+    "testing/MessageLoopForMojo.h",
+    "testing/MockWebCrypto.cpp",
+    "testing/MockWebCrypto.h",
+    "testing/PaintPrinters.cpp",
+    "testing/PaintPrinters.h",
+    "testing/PaintPropertyTestHelpers.h",
+    "testing/PaintTestConfigurations.h",
+    "testing/PictureMatchers.cpp",
+    "testing/PictureMatchers.h",
+    "testing/PlatformTestPrinters.cpp",
+    "testing/ScopedMockedURL.cpp",
+    "testing/ScopedMockedURL.h",
+    "testing/TestPaintArtifact.cpp",
+    "testing/TestPaintArtifact.h",
+    "testing/TestingPlatformSupport.cpp",
+    "testing/TestingPlatformSupport.h",
+    "testing/TestingPlatformSupportWithMockScheduler.cpp",
+    "testing/TestingPlatformSupportWithMockScheduler.h",
+    "testing/TestingPlatformSupportWithWebRTC.cpp",
+    "testing/TestingPlatformSupportWithWebRTC.h",
+    "testing/TransformPrinters.cpp",
+    "testing/TransformPrinters.h",
+    "testing/URLTestHelpers.cpp",
+    "testing/URLTestHelpers.h",
+    "testing/UnitTestHelpers.cpp",
+    "testing/UnitTestHelpers.h",
+    "testing/UseMockScrollbarSettings.h",
+    "testing/WebLayerTreeViewImplForTesting.cpp",
+    "testing/WebLayerTreeViewImplForTesting.h",
+    "testing/weburl_loader_mock.cc",
+    "testing/weburl_loader_mock.h",
+    "testing/weburl_loader_mock_factory_impl.cc",
+    "testing/weburl_loader_mock_factory_impl.h",
+  ]
+
+  configs += [
+    ":blink_platform_pch",
+    "//third_party/WebKit/Source:config",
+    "//third_party/WebKit/Source:inside_blink",
+    "//third_party/WebKit/Source:non_test_config",
+  ]
+
+  public_deps = [
+    ":platform",
+    "//cc",
+    "//cc:test_support",
+    "//cc/blink",
+    "//components/viz/test:test_support",
+    "//testing/gmock",
+    "//testing/gtest:gtest",
+    "//testing/perf",
+  ]
+
+  deps = [
+    "//base/test:test_support",
+    "//mojo/edk/system",
+    "//third_party/WebKit/Source/platform/loader:test_support",
+    "//third_party/WebKit/Source/platform/network:test_support",
+    "//third_party/WebKit/Source/platform/scheduler:test_support",
+  ]
+
+  if (is_win) {
+    cflags = [ "/wd4267" ]  # Truncation from size_t to int.
+  }
+}
+
+test("blink_platform_unittests") {
+  deps = [
+    ":blink_platform_unittests_sources",
+  ]
+}
+
+jumbo_source_set("blink_platform_unittests_sources") {
+  visibility = []  # Allow re-assignment of list.
+  visibility = [ "*" ]
+  testonly = true
+
+  sources = [
+    "DecimalTest.cpp",
+    "DragImageTest.cpp",
+    "HistogramTest.cpp",
+    "LayoutLocaleTest.cpp",
+    "LayoutUnitTest.cpp",
+    "LifecycleContextTest.cpp",
+    "LongTaskDetectorTest.cpp",
+    "PODArenaTest.cpp",
+    "PODFreeListArenaTest.cpp",
+    "PODIntervalTreeTest.cpp",
+    "PODRedBlackTreeTest.cpp",
+    "ScopedOrientationChangeIndicatorTest.cpp",
+    "SharedBufferTest.cpp",
+    "TimeClamperTest.cpp",
+    "TimerTest.cpp",
+    "UUIDTest.cpp",
+    "WebIconSizesParserTest.cpp",
+    "WebScreenInfoTest.cpp",
+    "WebTaskRunnerTest.cpp",
+    "WebVectorTest.cpp",
+    "animation/AnimationTranslationUtilTest.cpp",
+    "animation/CompositorAnimationHostTest.cpp",
+    "animation/CompositorAnimationPlayerTest.cpp",
+    "animation/CompositorAnimationTest.cpp",
+    "animation/CompositorAnimationTimelineTest.cpp",
+    "animation/CompositorFloatAnimationCurveTest.cpp",
+    "animation/TimingFunctionTest.cpp",
+    "audio/PushPullFIFOMultithreadTest.cpp",
+    "audio/PushPullFIFOTest.cpp",
+    "audio/VectorMathTest.cpp",
+    "bindings/RuntimeCallStatsTest.cpp",
+    "exported/FilePathConversionTest.cpp",
+    "exported/WebCORSPreflightResultCacheTest.cpp",
+    "exported/WebCORSTest.cpp",
+    "exported/WebStringTest.cpp",
+    "feature_policy/FeaturePolicyTest.cpp",
+    "fonts/AcceptLanguagesResolverTest.cpp",
+    "fonts/BitmapGlyphsBlacklistTest.cpp",
+    "fonts/FontCacheTest.cpp",
+    "fonts/FontDescriptionTest.cpp",
+    "fonts/FontFamilyTest.cpp",
+    "fonts/FontPlatformDataTest.cpp",
+    "fonts/FontSelectionTypesTest.cpp",
+    "fonts/FontTest.cpp",
+    "fonts/FontTestUtilities.cpp",
+    "fonts/GenericFontFamilySettingsTest.cpp",
+    "fonts/OrientationIteratorTest.cpp",
+    "fonts/ScriptRunIteratorTest.cpp",
+    "fonts/SmallCapsIteratorTest.cpp",
+    "fonts/SymbolsIteratorTest.cpp",
+    "fonts/TypesettingFeaturesTest.cpp",
+    "fonts/UnicodeRangeSetTest.cpp",
+    "fonts/android/FontCacheAndroidTest.cpp",
+    "fonts/mac/FontFamilyMatcherMacTest.mm",
+    "fonts/opentype/FontSettingsTest.cpp",
+    "fonts/opentype/OpenTypeVerticalDataTest.cpp",
+    "fonts/shaping/CachingWordShaperTest.cpp",
+    "fonts/shaping/HarfBuzzShaperTest.cpp",
+    "fonts/shaping/RunSegmenterTest.cpp",
+    "fonts/shaping/ShapeResultBloberizerTest.cpp",
+    "fonts/shaping/ShapingLineBreakerTest.cpp",
+    "geometry/DoubleRectTest.cpp",
+    "geometry/FloatBoxTest.cpp",
+    "geometry/FloatBoxTestHelpers.cpp",
+    "geometry/FloatBoxTestHelpers.h",
+    "geometry/FloatPointTest.cpp",
+    "geometry/FloatPolygonTest.cpp",
+    "geometry/FloatQuadTest.cpp",
+    "geometry/FloatRectTest.cpp",
+    "geometry/FloatRoundedRectTest.cpp",
+    "geometry/FloatSizeTest.cpp",
+    "geometry/GeometryTestHelpers.cpp",
+    "geometry/GeometryTestHelpers.h",
+    "geometry/IntRectTest.cpp",
+    "geometry/LayoutRectOutsetsTest.cpp",
+    "geometry/LayoutRectTest.cpp",
+    "geometry/LayoutSizeTest.cpp",
+    "geometry/RegionTest.cpp",
+    "graphics/BitmapImageTest.cpp",
+    "graphics/CanvasResourceTest.cpp",
+    "graphics/CompositorElementIdTest.cpp",
+    "graphics/ContiguousContainerTest.cpp",
+    "graphics/DecodingImageGeneratorTest.cpp",
+    "graphics/DeferredImageDecoderTestWoPlatform.cpp",
+    "graphics/GraphicsContextTest.cpp",
+    "graphics/HighContrastImageClassifierTest.cpp",
+    "graphics/ImageBufferTest.cpp",
+    "graphics/PaintInvalidationReasonTest.cpp",
+    "graphics/RecordingImageBufferSurfaceTest.cpp",
+    "graphics/VideoFrameSubmitterTest.cpp",
+    "graphics/compositing/CompositedLayerRasterInvalidatorTest.cpp",
+    "graphics/compositing/PaintArtifactCompositorTest.cpp",
+    "graphics/compositing/PaintChunksToCcLayerTest.cpp",
+    "graphics/filters/FECompositeTest.cpp",
+    "graphics/filters/ImageFilterBuilderTest.cpp",
+    "graphics/gpu/DrawingBufferTest.cpp",
+    "graphics/gpu/SharedGpuContextTest.cpp",
+    "graphics/gpu/WebGLImageConversionTest.cpp",
+    "graphics/paint/CullRectTest.cpp",
+    "graphics/paint/DisplayItemClientTest.cpp",
+    "graphics/paint/DisplayItemTest.cpp",
+    "graphics/paint/DrawingDisplayItemTest.cpp",
+    "graphics/paint/DrawingRecorderTest.cpp",
+    "graphics/paint/FloatClipRectTest.cpp",
+    "graphics/paint/GeometryMapperTest.cpp",
+    "graphics/paint/PaintChunkTest.cpp",
+    "graphics/paint/PaintChunkerTest.cpp",
+    "graphics/paint/PaintControllerTest.cpp",
+    "graphics/paint/PaintControllerTest.h",
+    "graphics/paint/PaintPropertyNodeTest.cpp",
+    "graphics/paint/PaintRecordBuilderTest.cpp",
+    "graphics/paint/PropertyTreeStateTest.cpp",
+    "image-decoders/FastSharedBufferReaderTest.cpp",
+    "image-decoders/ImageDecoderTest.cpp",
+    "image-decoders/ImageDecoderTestHelpers.cpp",
+    "image-decoders/ImageDecoderTestHelpers.h",
+    "image-decoders/bmp/BMPImageDecoderTest.cpp",
+    "image-decoders/gif/GIFImageDecoderTest.cpp",
+    "image-decoders/ico/ICOImageDecoderTest.cpp",
+    "image-decoders/jpeg/JPEGImageDecoderTest.cpp",
+    "image-decoders/png/PNGImageDecoderTest.cpp",
+    "image-decoders/webp/WEBPImageDecoderTest.cpp",
+    "json/JSONParserTest.cpp",
+    "json/JSONValuesTest.cpp",
+    "mac/GraphicsContextCanvasTest.mm",
+    "mac/VersionUtilMacTest.mm",
+    "mojo/CommonCustomTypesStructTraitsTest.cpp",
+    "mojo/GeometryStructTraitsTest.cpp",
+    "mojo/KURLSecurityOriginTest.cpp",
+    "scroll/ScrollableAreaTest.cpp",
+    "scroll/ScrollbarThemeOverlayTest.cpp",
+    "testing/ArenaTestHelpers.h",
+    "testing/TreeTestHelpers.cpp",
+    "testing/TreeTestHelpers.h",
+    "text/BidiResolverTest.cpp",
+    "text/BidiTestHarness.h",
+    "text/CharacterTest.cpp",
+    "text/DateTimeFormatTest.cpp",
+    "text/HyphenationTest.cpp",
+    "text/ICUErrorTest.cpp",
+    "text/PlatformLocaleTest.cpp",
+    "text/SegmentedStringTest.cpp",
+    "text/SuffixTreeTest.cpp",
+    "text/TextBreakIteratorTest.cpp",
+    "text/TextEncodingDetectorTest.cpp",
+    "text/TextRunTest.cpp",
+    "text/UnicodeUtilitiesTest.cpp",
+    "text/WritingModeUtilsTest.cpp",
+    "threading/BackgroundTaskRunnerTest.cpp",
+    "transforms/AffineTransformTest.cpp",
+    "transforms/RotationTest.cpp",
+    "transforms/TransformOperationsTest.cpp",
+    "transforms/TransformationMatrixTest.cpp",
+    "weborigin/KURLTest.cpp",
+    "weborigin/KnownPortsTest.cpp",
+    "weborigin/OriginAccessEntryTest.cpp",
+    "weborigin/SchemeRegistryTest.cpp",
+    "weborigin/SecurityOriginTest.cpp",
+    "weborigin/SecurityPolicyTest.cpp",
+    "weborigin/SuboriginTest.cpp",
+  ]
+
+  if (is_win) {
+    sources += [ "text/LocaleWinTest.cpp" ]
+  } else if (is_mac) {
+    sources += [ "text/LocaleMacTest.cpp" ]
+  } else if (is_posix) {
+    sources += [ "text/LocaleICUTest.cpp" ]
+  }
+
+  if (!is_mac) {
+    sources += [ "scroll/ScrollAnimatorTest.cpp" ]
+  }
+
+  if (use_default_render_theme) {
+    sources += [ "scroll/ScrollbarThemeAuraTest.cpp" ]
+  }
+
+  sources += [ "testing/RunAllTests.cpp" ]
+
+  configs += [
+    ":blink_platform_pch",
+    "//third_party/WebKit/Source/platform/wtf:wtf_config",
+    "//third_party/WebKit/Source:config",
+  ]
+
+  deps = [
+    ":platform",
+    ":test_support",
+    "//base",
+    "//base/test:test_support",
+    "//cc",
+    "//cc:test_support",
+    "//cc/blink",
+    "//device/base/synchronization",
+    "//mojo/common:test_common_custom_types_blink",
+    "//mojo/edk/system",
+    "//mojo/public/cpp/bindings/tests:for_blink_tests",
+    "//services/viz/public/interfaces",
+    "//services/viz/public/interfaces:interfaces_blink",
+    "//skia",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//third_party:freetype_harfbuzz",
+    "//third_party/WebKit/Source/platform/blob:unit_tests",
+    "//third_party/WebKit/Source/platform/instrumentation:unit_tests",
+    "//third_party/WebKit/Source/platform/loader:unit_tests",
+    "//third_party/WebKit/Source/platform/network:unit_tests",
+    "//third_party/WebKit/Source/platform/scheduler:unit_tests",
+    "//third_party/WebKit/Source/platform/wtf",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+    "//ui/gfx/geometry/mojo:test_interfaces_blink",
+    "//url",
+    "//url/mojo:test_url_mojom_gurl_blink",
+  ]
+
+  data_deps = [
+    ":blink_platform_unittests_data",
+  ]
+
+  defines = [ "INSIDE_BLINK" ]
+
+  include_dirs = [ "$root_gen_dir/blink" ]
+}
+
+test("image_decode_bench") {
+  visibility = []  # Allow re-assignment of list.
+  visibility = [ "*" ]
+
+  sources = [
+    "testing/ImageDecodeBench.cpp",
+  ]
+
+  deps = [
+    ":platform",
+    "//mojo/edk/system",
+    "//third_party/WebKit/Source/platform/wtf",
+    "//ui/gfx:test_support",
+  ]
+
+  configs += [
+    "//third_party/WebKit/Source/platform/wtf:wtf_config",
+    "//third_party/WebKit/Source:config",
+  ]
+
+  defines = [ "INSIDE_BLINK" ]
+}
+
+test("blink_platform_perftests") {
+  sources = [
+    "testing/BlinkPerfTestSuite.cpp",
+    "testing/BlinkPerfTestSuite.h",
+    "testing/RunAllPerfTests.cpp",
+    "testing/ShapingLineBreakerPerfTest.cpp",
+  ]
+
+  configs += [
+    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+    "//build/config/compiler:no_size_t_to_int_warning",
+    "//third_party/WebKit/Source/platform/wtf:wtf_config",
+    "//third_party/WebKit/Source:config",
+  ]
+
+  deps = [
+    ":platform",
+    ":test_support",
+    "//base",
+    "//base/test:test_support",
+    "//services/network/public/cpp:cpp",
+    "//testing/gtest",
+    "//testing/perf",
+    "//third_party:freetype_harfbuzz",
+    "//third_party/WebKit/Source/platform/scheduler:perf_tests",
+  ]
+}
+
+group("blink_platform_unittests_data") {
+  data = [
+    "testing/data/",
+
+    # Required by some image decoder tests.
+    "image-decoders/testing/",
+    "../../LayoutTests/images/resources/",
+  ]
+}
+
+if (current_cpu == "arm") {
+  source_set("blink_arm_neon") {
+    sources = blink_platform_neon_files
+    # The *NEON.cpp files fail to compile when -mthumb is passed. Force
+    # them to build in ARM mode.
+    # See https://bugs.webkit.org/show_bug.cgi?id=62916.
+    # TODO(GYP)
+    #'cflags': ['-marm'],
+    #    'conditions': [
+    #      ['OS=="android"', {
+    #        'cflags!': ['-mthumb'],
+    #      }],
+    #    ],
+  }
+}
+
+if (current_cpu == "mipsel" || current_cpu == "mips64el") {
+  source_set("blink_mips_msa") {
+    sources = blink_platform_msa_files
+  }
+}
+
+if (current_cpu == "x86" || current_cpu == "x64") {
+  source_set("blink_x86_sse") {
+    sources = blink_platform_sse_files
+  }
+}
+
+# This source set is used for fuzzers that need an environment similar to unit
+# tests.
+jumbo_source_set("blink_fuzzer_test_support") {
+  testonly = true
+  visibility = []  # Allow re-assignment of list.
+  visibility = [ "*" ]
+  sources = [
+    "testing/BlinkFuzzerTestSupport.cpp",
+    "testing/BlinkFuzzerTestSupport.h",
+  ]
+  deps = [
+    ":platform",
+    ":test_support",
+    "//content/test:test_support",
+  ]
+}
+
+# Fuzzer for blink::MHTMLParser.
+fuzzer_test("mhtml_parser_fuzzer") {
+  sources = [
+    "mhtml/MHTMLFuzzer.cpp",
+  ]
+  deps = [
+    ":blink_fuzzer_test_support",
+    ":platform",
+  ]
+  dict = "//testing/libfuzzer/fuzzers/dicts/mhtml.dict"
+  seed_corpus = "//third_party/WebKit/LayoutTests/mhtml"
+  additional_configs = [
+    "//third_party/WebKit/Source/platform/wtf:wtf_config",
+    "//third_party/WebKit/Source:config",
+  ]
+}
+
+# Fuzzer for blink::WebIconSizesParser.
+fuzzer_test("web_icon_sizes_fuzzer") {
+  sources = [
+    "WebIconSizesFuzzer.cpp",
+  ]
+  deps = [
+    ":blink_fuzzer_test_support",
+    ":platform",
+  ]
+  dict = "//testing/libfuzzer/fuzzers/dicts/web_icon_sizes.dict"
+}
+
+fuzzer_test("blink_png_decoder_fuzzer") {
+  sources = [
+    "PngFuzzer.cpp",
+  ]
+  deps = [
+    ":blink_fuzzer_test_support",
+    ":platform",
+    "//third_party/libpng",
+  ]
+  dict = "//testing/libfuzzer/fuzzers/dicts/png.dict"
+  seed_corpuses = [
+    "//components/viz/test/data",
+    "//third_party/WebKit/LayoutTests/images/png-suite/samples",
+    "//third_party/WebKit/LayoutTests/images/resources/pngfuzz",
+  ]
+}
+
+# Fuzzer for blink::JSONParser.
+fuzzer_test("blink_json_parser_fuzzer") {
+  sources = [
+    "json/JSONParserFuzzer.cpp",
+  ]
+  deps = [
+    ":blink_fuzzer_test_support",
+    ":platform",
+  ]
+  dict = "//testing/libfuzzer/fuzzers/dicts/json.dict"
+}
+
+# Fuzzer for blink::FeaturePolicy.
+fuzzer_test("feature_policy_fuzzer") {
+  sources = [
+    "feature_policy/FeaturePolicyFuzzer.cpp",
+  ]
+  deps = [
+    ":blink_fuzzer_test_support",
+    ":platform",
+  ]
+  dict = "//testing/libfuzzer/fuzzers/dicts/feature_policy.dict"
+  seed_corpus = "//testing/libfuzzer/fuzzers/feature_policy_corpus"
+}
+
+fuzzer_test("blink_harfbuzz_shaper_fuzzer") {
+  sources = [
+    "fonts/shaping/HarfBuzzShaperFuzzer.cpp",
+  ]
+  deps = [
+    ":blink_fuzzer_test_support",
+    ":platform",
+    "//third_party/icu",
+  ]
+  libfuzzer_options = [ "max_len=256" ]
+}
+
+# Fuzzer template for WTF::TextCodec.
+template("blink_text_codec_fuzzer") {
+  forward_variables_from(invoker, "*")
+  config(target_name + "_config") {
+    defines = [ "$target_name" ]
+  }
+  name = target_name
+  fuzzer_test("blink_text_codec_" + name + "_fuzzer") {
+    sources = [
+      "TextCodecFuzzer.cpp",
+    ]
+    deps = [
+      ":blink_fuzzer_test_support",
+      ":platform",
+    ]
+    additional_configs = [ ":" + name + "_config" ]
+    seed_corpus = "text_codec_fuzzer_seed_corpus"
+  }
+}
+
+blink_text_codec_fuzzer("UTF_8") {
+}
+blink_text_codec_fuzzer("WINDOWS_1252") {
+}
+
+# NOTE: These are legacy unit tests and tests that require a Platform
+# object. Do not add more unless the test requires a Platform object.
+# These tests are a part of the webkit_unit_tests binary.
+jumbo_source_set("unit_tests") {
+  testonly = true
+  visibility = []
+  visibility = [ "//third_party/WebKit/Source/*" ]
+  sources = [
+    "graphics/Canvas2DLayerBridgeTest.cpp",
+    "graphics/CanvasColorParamsTest.cpp",
+    "graphics/ColorCorrectionTestUtils.cpp",
+    "graphics/DeferredImageDecoderTest.cpp",
+    "graphics/GraphicsLayerTest.cpp",
+    "graphics/ImageDecodingStoreTest.cpp",
+    "graphics/ImageFrameGeneratorTest.cpp",
+    "graphics/ImageLayerChromiumTest.cpp",
+    "graphics/OffscreenCanvasFrameDispatcherImplTest.cpp",
+    "graphics/gpu/DrawingBufferSoftwareRenderingTest.cpp",
+    "graphics/test/FakeGLES2Interface.h",
+    "graphics/test/FakeScrollableArea.h",
+    "graphics/test/FakeWebGraphicsContext3DProvider.h",
+    "graphics/test/MockImageDecoder.h",
+    "graphics/test/MockPaintCanvas.h",
+    "graphics/test/StubImage.h",
+
+    # Tests migrated from the web/tests directory.
+    "TimerPerfTest.cpp",
+    "exported/WebImageTest.cpp",
+    "exported/WebURLRequestTest.cpp",
+    "exported/WebURLResponseTest.cpp",
+  ]
+
+  configs += [
+    ":blink_platform_pch",
+    "//third_party/WebKit/Source:config",
+    "//third_party/WebKit/Source:inside_blink",
+  ]
+
+  deps = [
+    ":test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+}

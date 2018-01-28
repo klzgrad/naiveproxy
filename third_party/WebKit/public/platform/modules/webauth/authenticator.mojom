@@ -1,0 +1,142 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module webauth.mojom;
+
+import "mojo/common/time.mojom";
+import "url/mojo/url.mojom";
+
+// This file describes the communication between the WebAuthentication renderer
+// implementation and browser-side implementations to create public key
+// credentials and use already-created credentials to get assertions.
+// See https://w3c.github.io/webauthn/.
+
+enum AuthenticatorStatus {
+  SUCCESS,
+  CANCELLED,
+  UNKNOWN_ERROR,
+  NOT_ALLOWED_ERROR,
+  NOT_SUPPORTED_ERROR,
+  SECURITY_ERROR,
+  NOT_IMPLEMENTED,
+};
+
+// The public key and attestation that is returned by an authenticator's
+// call to makeCredential.
+struct PublicKeyCredentialInfo {
+  // The base64url encoding of |raw_id|.
+  string id;
+
+  // An identifier for the credential.
+  array<uint8> raw_id;
+
+  // A blob of data containing the JSON serialization of client data passed
+  // to the authenticator.
+  array<uint8> client_data_json;
+
+  // The response data from the authenticator.
+  AuthenticatorResponse response;
+};
+
+// Contains the authenticator's response to the request to either
+// create a public key credential, or generate an authentication assertion.
+struct AuthenticatorResponse {
+  // A blob of data returned by the authenticator after creating a credential.
+  array<uint8> attestation_object;
+
+  // A blob of data returned by the authenticator after generating an assertion.
+  array<uint8> authenticator_data;
+
+  // Cryptographic signature proving possession of the credential private key.
+  array<uint8> signature;
+};
+
+// Information about the relying party. These fields take arbitrary input.
+struct PublicKeyCredentialRpEntity {
+  // An ASCII serialization of an origin.
+  string? id;
+
+  // Friendly name associated with the relying party intended for display.
+  // e.g. "Acme Corporation".
+  string name;
+
+  // Image associated with the entity. e.g. a relying party's logo.
+  url.mojom.Url? icon;
+};
+
+// Informatiom about the account held by the user. These fields take
+// arbitrary input.
+struct PublicKeyCredentialUserEntity {
+  // Unique identifier for a user account An opaque byte sequence with a
+  // maximum size of 64 bytes.
+  array<uint8> id;
+
+  // Friendly name associated with the entity intended for display.
+  // e.g."john.p.smith@example.com" or "+14255551234" for a user.
+  string name;
+
+  // Image associated with the entity. For example, a user’s avatar.
+  url.mojom.Url? icon;
+
+  // Contains a friendly name for the user account (e.g., "John P. Smith").
+  string display_name;
+};
+
+// Parameters that are used to generate an appropriate public key credential.
+struct PublicKeyCredentialParameters {
+  PublicKeyCredentialType type;
+  int32 algorithm_identifier;
+};
+
+// Parameters passed into calls to MakeCredential.
+struct MakePublicKeyCredentialOptions {
+  // Information about the relying party and user entities, respectively.
+  // Used by the authenticator to create or retrieve an appropriate public key
+  // credential for the requested account.
+  PublicKeyCredentialRpEntity relying_party;
+  PublicKeyCredentialUserEntity user;
+
+  // A blob passed from the the relying party server.
+  array<uint8> challenge;
+
+  array<PublicKeyCredentialParameters> public_key_parameters;
+
+  mojo.common.mojom.TimeDelta adjusted_timeout;
+
+  array<PublicKeyCredentialDescriptor> exclude_credentials;
+
+  // TODO(kpaulhamus): add AuthenticatorSelectionCriteria
+};
+
+enum PublicKeyCredentialType {
+  PUBLIC_KEY,
+};
+
+// Describes the credentials that the relying party already knows about for
+// the given account. If any of these are known to the authenticator,
+// it should not create a new credential.
+struct PublicKeyCredentialDescriptor {
+  PublicKeyCredentialType type;
+
+  // Blob representing a credential key handle. Up to 255 bytes for
+  // U2F authenticators.
+  array<uint8> id;
+
+  array<AuthenticatorTransport> transports;
+};
+
+enum AuthenticatorTransport {
+  USB,
+  NFC,
+  BLE,
+};
+
+// Interface to direct authenticators to create or use a public key credential.
+interface Authenticator {
+  // Gets the credential info for a new public key credential created by an
+  // authenticator for the given |MakePublicKeyCredentialOptions|
+  // [PublicKeyCredentialInfo] will only be set if status == SUCCESS.
+  MakeCredential(MakePublicKeyCredentialOptions options)
+      => (AuthenticatorStatus status, PublicKeyCredentialInfo? credential);
+};

@@ -1,0 +1,116 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//testing/test.gni")
+
+component("sql") {
+  sources = [
+    "connection.cc",
+    "connection.h",
+    "connection_memory_dump_provider.cc",
+    "connection_memory_dump_provider.h",
+    "error_delegate_util.cc",
+    "error_delegate_util.h",
+    "init_status.h",
+    "meta_table.cc",
+    "meta_table.h",
+    "recovery.cc",
+    "recovery.h",
+    "sql_export.h",
+    "sql_memory_dump_provider.cc",
+    "sql_memory_dump_provider.h",
+    "statement.cc",
+    "statement.h",
+    "transaction.cc",
+    "transaction.h",
+    "vfs_wrapper.cc",
+    "vfs_wrapper.h",
+  ]
+
+  # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+  configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+
+  defines = [ "SQL_IMPLEMENTATION" ]
+
+  deps = [
+    "//base",
+    "//base/third_party/dynamic_annotations",
+    "//third_party/sqlite",
+  ]
+
+  # For vfs_wrapper.cc time-machine exclusions.
+  if (is_mac) {
+    libs = [
+      "CoreFoundation.framework",
+      "CoreServices.framework",
+    ]
+  }
+}
+
+static_library("test_support") {
+  testonly = true
+  sources = [
+    "test/error_callback_support.cc",
+    "test/error_callback_support.h",
+    "test/scoped_error_expecter.cc",
+    "test/scoped_error_expecter.h",
+    "test/test_helpers.cc",
+    "test/test_helpers.h",
+  ]
+
+  public_deps = [
+    ":sql",
+  ]
+  deps = [
+    "//base",
+    "//testing/gtest",
+    "//third_party/sqlite",
+  ]
+}
+
+bundle_data("sql_unittests_bundle_data") {
+  testonly = true
+  sources = [
+    "test/data/recovery_387868",
+  ]
+  outputs = [
+    "{{bundle_resources_dir}}/" +
+        "{{source_root_relative_dir}}/{{source_file_part}}",
+  ]
+}
+
+test("sql_unittests") {
+  sources = [
+    "connection_unittest.cc",
+    "meta_table_unittest.cc",
+    "recovery_unittest.cc",
+    "sql_memory_dump_provider_unittest.cc",
+    "sqlite_features_unittest.cc",
+    "statement_unittest.cc",
+    "test/paths.cc",
+    "test/paths.h",
+    "test/run_all_unittests.cc",
+    "test/sql_test_base.cc",
+    "test/sql_test_base.h",
+    "test/sql_test_suite.cc",
+    "test/sql_test_suite.h",
+    "transaction_unittest.cc",
+  ]
+
+  data = [
+    "test/data/",
+  ]
+
+  # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+  configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+
+  deps = [
+    ":sql",
+    ":sql_unittests_bundle_data",
+    ":test_support",
+    "//base/test:test_support",
+    "//testing/gtest",
+    "//third_party/sqlite",
+  ]
+}

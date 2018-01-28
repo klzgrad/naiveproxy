@@ -1,0 +1,53 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module video_capture.mojom;
+
+import "media/capture/mojo/video_capture_types.mojom";
+import "services/video_capture/public/interfaces/device.mojom";
+import "services/video_capture/public/interfaces/producer.mojom";
+import "services/video_capture/public/interfaces/virtual_device.mojom";
+
+enum DeviceAccessResultCode {
+  NOT_INITIALIZED,
+  SUCCESS,
+  ERROR_DEVICE_NOT_FOUND
+};
+
+// Enables access to a set of video capture devices.
+// Typical operation is to first call GetDeviceInfos() to obtain
+// information about available devices. The |device_id| of the infos can
+// subsequently be used to create an instance of
+// video_capture.mojom.Device using CreateDevice().
+// The factory guarantees that no two device infos it returns use the
+// same |device_id|.
+interface DeviceFactory {
+  GetDeviceInfos()
+      => (array<media.mojom.VideoCaptureDeviceInfo> device_infos);
+
+  // Provides exclusive access to the device identified by |device_id|.
+  // The access is valid until either the message pipe associated with
+  // |device_request| is closed by the client, or a subsequent call to
+  // CreateDevice() is made. When a subsequent call is made while the
+  // |device_request| from a previous call has not yet been closed, the service
+  // "revokes" that previous |device_request| (by closing the connection) and
+  // the exclusive access goes to the new |device_request|.
+  // Note: This design avoids the issue of it not being clear how soon after a
+  // |device_request| has been (asynchronously) discarded a subsequent call to
+  // CreateDevice() would succeed if it were to deny access while still
+  // in use.
+  CreateDevice(string device_id, Device& device_request)
+      => (DeviceAccessResultCode result_code);
+
+  // Creates a new virtual capture device, which will be exposed by the device
+  // factory using the given |device_info|. The returned |virtual_device| is to
+  // be used by the caller to subsequently push video frames. These frames will
+  // appear to clients of the device as if they were produced by the device.
+  // The virtual device is removed either when the caller releases
+  // |virtual_device| or the given |producer| is closed.
+  AddVirtualDevice(
+      media.mojom.VideoCaptureDeviceInfo device_info,
+      Producer producer,
+      VirtualDevice& virtual_device);
+};

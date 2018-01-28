@@ -1,0 +1,55 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+if (current_cpu == "x86" || current_cpu == "x64") {
+  import("//third_party/yasm/yasm_assemble.gni")
+
+  yasm_assemble("asm") {
+    assert(current_cpu == "x86" || current_cpu == "x64")
+
+    sources = [
+      "SaveRegisters_x86.asm",
+    ]
+
+    yasm_flags = []
+    if (is_mac) {
+      # Necessary to ensure symbols end up with a _ prefix; added by
+      # yasm_compile.gypi for Windows, but not Mac.
+      yasm_flags += [ "-DPREFIX" ]
+    }
+    if (current_cpu == "x64") {
+      if (is_win) {
+        yasm_flags += [ "-DX64WIN=1" ]
+      } else {
+        yasm_flags += [ "-DX64POSIX=1" ]
+      }
+    } else {  # current_cpu == "x86"
+      yasm_flags += [ "-DIA32=1" ]
+    }
+  }
+} else {  # current_cpu == "x86" || current_cpu == "x64"
+  source_set("asm") {
+    if (current_cpu == "arm") {
+      sources = [
+        "SaveRegisters_arm.S",
+      ]
+    } else if (current_cpu == "arm64") {
+      sources = [
+        "SaveRegisters_arm64.S",
+      ]
+    } else if (current_cpu == "mipsel") {
+      sources = [
+        "SaveRegisters_mips.S",
+      ]
+    } else if (current_cpu == "mips64el") {
+      sources = [
+        "SaveRegisters_mips64.S",
+      ]
+    }
+
+    if (current_cpu == "arm") {
+      defines = [ "ARM=1" ]
+    }
+  }
+}  # current_cpu == "x86" || current_cpu == "x64"

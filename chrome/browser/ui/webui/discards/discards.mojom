@@ -1,0 +1,68 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module mojom;
+
+// Discard related information about a single tab in a browser.
+struct TabDiscardsInfo {
+  // The URL associated with the tab. This corresponds to GetLastCommittedURL,
+  // and is also what is visible in the Omnibox for a given tab.
+  string tab_url;
+  // The URL of the favicon being displayed for a tab.
+  string favicon_url;
+  // The title of the tab, as displayed on the tab itself.
+  string title;
+  // If the tab corresponds to a Chrome App, this is true.
+  bool is_app;
+  // If the tab corresponds to internal Chrome WebUI, this is true.
+  bool is_internal;
+  // If the tab is currently using media functionality (casting, WebRTC, playing
+  // audio, etc) this is true.
+  bool is_media;
+  // If the tab is pinned in its TabStripModel, this is true.
+  bool is_pinned;
+  // If the tab is currently discarded, this is true.
+  bool is_discarded;
+  // The number of times this tab has been discarded in the current browser
+  // session.
+  int32 discard_count;
+  // The rank of the tab in the "importance to user" list. The tab with 1 is the
+  // most important, the tab with N is the least important.
+  int32 utility_rank;
+  // The time the tab was last active (foreground in a window), in seconds.
+  int32 last_active_seconds;
+  // A unique ID for the tab. This is unique for a browser session and follows a
+  // tab across tab strip operations, reloads and discards.
+  int32 id;
+  // Whether or not the tab is eligible for auto-discarding by the browser.
+  // This can be manipulated by the chrome://discards UI, or via the discards
+  // extension API.
+  bool is_auto_discardable;
+};
+
+// Interface for providing information about discards. Lives in the browser
+// process and is invoked in the renderer process via Javascript code running in
+// the chrome://discards WebUI.
+interface DiscardsDetailsProvider {
+  // Returns an array of TabDiscardsInfo containing discard information about
+  // each tab currently open in the browser, across all profiles.
+  GetTabDiscardsInfo() => (array<TabDiscardsInfo> infos);
+
+  // Sets the auto-discardable state of a tab, as specified by its stable
+  // |tab_id|, earlier returned by GetTabDiscardsInfo. Invokes a callback when
+  // the change has been made.
+  SetAutoDiscardable(int32 tab_id, bool is_auto_discardable) => ();
+
+  // Discards a tab given its |tab_id|. If |urgent| is specified the unload
+  // handlers will not be run, and the tab will be unloaded with prejudice.
+  // Invokes a callback when the discard is complete.
+  DiscardById(int32 tab_id, bool urgent) => ();
+
+  // Discards the least important tab. If |urgent| is specified the unload
+  // handlers will not be run, and the tab will be unloaded with prejudice.
+  // This can fail to discard a tab if no tabs are currently considered
+  // eligible for discard. Invokes a callback when the discard is complete, or
+  // if the decision was made not to discard.
+  Discard(bool urgent) => ();
+};

@@ -1,0 +1,175 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//net/features.gni")
+
+static_library("update_client") {
+  sources = [
+    "action_runner.cc",
+    "action_runner.h",
+    "action_runner_win.cc",
+    "activity_data_service.h",
+    "background_downloader_win.cc",
+    "background_downloader_win.h",
+    "component.cc",
+    "component.h",
+    "component_patcher.cc",
+    "component_patcher.h",
+    "component_patcher_operation.cc",
+    "component_patcher_operation.h",
+    "component_unpacker.cc",
+    "component_unpacker.h",
+    "configurator.h",
+    "crx_downloader.cc",
+    "crx_downloader.h",
+    "crx_update_item.h",
+    "persisted_data.cc",
+    "persisted_data.h",
+    "ping_manager.cc",
+    "ping_manager.h",
+    "protocol_builder.cc",
+    "protocol_builder.h",
+    "protocol_parser.cc",
+    "protocol_parser.h",
+    "request_sender.cc",
+    "request_sender.h",
+    "task.h",
+    "task_send_uninstall_ping.cc",
+    "task_send_uninstall_ping.h",
+    "task_traits.h",
+    "task_update.cc",
+    "task_update.h",
+    "update_checker.cc",
+    "update_checker.h",
+    "update_client.cc",
+    "update_client.h",
+    "update_client_errors.h",
+    "update_client_internal.h",
+    "update_engine.cc",
+    "update_engine.h",
+    "update_query_params.cc",
+    "update_query_params.h",
+    "update_query_params_delegate.cc",
+    "update_query_params_delegate.h",
+    "updater_state.cc",
+    "updater_state.h",
+    "updater_state_mac.mm",
+    "updater_state_win.cc",
+    "url_fetcher_downloader.cc",
+    "url_fetcher_downloader.h",
+    "utils.cc",
+    "utils.h",
+  ]
+
+  deps = [
+    "//base",
+    "//components/client_update_protocol",
+    "//components/crx_file",
+    "//components/data_use_measurement/core",
+    "//components/patch_service/public/cpp",
+    "//components/prefs",
+    "//components/version_info:version_info",
+    "//courgette:courgette_lib",
+    "//crypto",
+    "//net",
+    "//third_party/libxml",
+    "//third_party/zlib/google:zip",
+    "//url",
+  ]
+  libs = []
+  if (is_mac) {
+    libs += [ "OpenDirectory.framework" ]
+  }
+}
+
+static_library("test_support") {
+  testonly = true
+  sources = [
+    "test_configurator.cc",
+    "test_configurator.h",
+    "test_installer.cc",
+    "test_installer.h",
+    "url_request_post_interceptor.cc",
+    "url_request_post_interceptor.h",
+  ]
+
+  public_deps = [
+    ":update_client",
+  ]
+  deps = [
+    "//base",
+    "//components/patch_service:lib",
+    "//components/prefs",
+    "//net:test_support",
+    "//services/service_manager/public/cpp/test:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//url",
+  ]
+}
+
+bundle_data("unit_tests_bundle_data") {
+  visibility = [ ":unit_tests" ]
+  testonly = true
+  sources = [
+    "//components/test/data/update_client/binary_bsdiff_patch.bin",
+    "//components/test/data/update_client/binary_courgette_patch.bin",
+    "//components/test/data/update_client/binary_input.bin",
+    "//components/test/data/update_client/binary_output.bin",
+    "//components/test/data/update_client/ihfokbkgjpifnbbojhneepfflplebdkc_1.crx",
+    "//components/test/data/update_client/ihfokbkgjpifnbbojhneepfflplebdkc_1to2.crx",
+    "//components/test/data/update_client/ihfokbkgjpifnbbojhneepfflplebdkc_2.crx",
+    "//components/test/data/update_client/jebgalgnebhfojomionfpkfelancnnkf.crx",
+    "//components/test/data/update_client/runaction_test_win.crx3",
+    "//components/test/data/update_client/updatecheck_reply_1.xml",
+    "//components/test/data/update_client/updatecheck_reply_4.xml",
+    "//components/test/data/update_client/updatecheck_reply_noupdate.xml",
+  ]
+  outputs = [
+    "{{bundle_resources_dir}}/" +
+        "{{source_root_relative_dir}}/{{source_file_part}}",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "component_patcher_unittest.cc",
+    "component_patcher_unittest.h",
+    "component_unpacker_unittest.cc",
+    "persisted_data_unittest.cc",
+    "ping_manager_unittest.cc",
+    "protocol_builder_unittest.cc",
+    "protocol_parser_unittest.cc",
+    "request_sender_unittest.cc",
+    "update_checker_unittest.cc",
+    "update_client_unittest.cc",
+    "update_query_params_unittest.cc",
+    "updater_state_unittest.cc",
+    "utils_unittest.cc",
+  ]
+
+  if (!disable_file_support) {
+    sources += [ "crx_downloader_unittest.cc" ]
+  }
+
+  deps = [
+    ":test_support",
+    ":unit_tests_bundle_data",
+    ":update_client",
+    "//base",
+    "//components/crx_file",
+    "//components/patch_service:lib",
+    "//components/prefs",
+    "//components/prefs:test_support",
+    "//components/version_info:version_info",
+    "//courgette:courgette_lib",
+    "//net:test_support",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/cpp/test:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//third_party/libxml",
+  ]
+}

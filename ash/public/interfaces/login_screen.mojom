@@ -1,0 +1,133 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module ash.mojom;
+
+import "ash/public/interfaces/login_user_info.mojom";
+import "components/proximity_auth/public/interfaces/auth_type.mojom";
+import "components/signin/public/interfaces/account_id.mojom";
+import "mojo/common/string16.mojom";
+
+// Allows clients (e.g. Chrome browser) to control the ash login/lock/user-add
+// screens.
+interface LoginScreen {
+  // Sets the client interface.
+  SetClient(LoginScreenClient client);
+
+  // Displays the lock screen. |did_show| is true iff the lock UI was
+  // successfully displayed.
+  ShowLockScreen() => (bool did_show);
+
+  // Requests to show error message in the ash lock screen.
+  // TODO(xiaoyinh): login_attempts is probabaly not needed from chrome,
+  // remove it when we start to count the login attempts in ash lock screen.
+  // |login_attempts|: The number of the login authentication attempts.
+  // |error_text|:     The error text to be shown in lock screen.
+  // |help_link_text|: The help link to be shown in lock screen.
+  // |help_topic_id|:  The id of the help app topic regarding this error.
+  ShowErrorMessage(int32 login_attempts,
+                   string error_text,
+                   string help_link_text,
+                   int32 help_topic_id);
+
+  // Requests to close any displayed error messages in ash lock screen.
+  ClearErrors();
+
+  // Requests to show the custom icon in the user pod.
+  // |account_id|:  The account id of the user in the user pod.
+  // |icon|:        Information regarding the icon.
+  ShowUserPodCustomIcon(signin.mojom.AccountId account_id,
+                        EasyUnlockIconOptions icon);
+
+  // Requests to hide the custom icon in the user pod.
+  // |account_id|:  The account id of the user in the user pod.
+  HideUserPodCustomIcon(signin.mojom.AccountId account_id);
+
+  // Requests to set the authentication type.
+  // |account_id|:    The account id of the user in the user pod.
+  // |auth_type|:     Authentication type.
+  // |initial_value|: A message shown in the password field of the user pod.
+  SetAuthType(signin.mojom.AccountId account_id,
+              proximity_auth.mojom.AuthType auth_type,
+              mojo.common.mojom.String16 initial_value);
+
+  // Requests to load users in the lock screen.
+  // |users|:      A list of users who can unlock the device.
+  // |show_guest|: Whether to show guest session button.
+  LoadUsers(array<LoginUserInfo> users, bool show_guest);
+
+  // Notification if pin is enabled or disabled for the given user.
+  // |account_id|:   The account id of the user in the user pod.
+  // |is_enabled|:   True if pin unlock is enabled.
+  SetPinEnabledForUser(signin.mojom.AccountId account_id, bool is_enabled);
+
+  // Called when focus is reported to be leaving a lock screen app window.
+  // Requests focus to be handed off to the next suitable widget.
+  // |reverse|:   Whether the tab order is reversed.
+  HandleFocusLeavingLockScreenApps(bool reverse);
+
+  // Called when the info shown for dev and canary channels are changed.
+  // |os_version_label_text|: The OS version.
+  // |enterprise_info_text|:  The enterprise info.
+  // |bluetooth_name|:        The name of the bluetooth adapter.
+  SetDevChannelInfo(string os_version_label_text,
+                    string enterprise_info_text,
+                    string bluetooth_name);
+};
+
+// Allows ash lock screen to control a client (e.g. Chrome browser). Requests
+// often involve preferences or talk to cryptohome that is not available to ash.
+interface LoginScreenClient {
+  // Request user authentication in chrome.
+  // If auth succeeds:
+  // chrome will hide the lock screen and clear any displayed error messages.
+  // If auth fails:
+  // chrome will request lock screen to show error messages.
+  // |account_id|:           The account id of the user we are authenticating.
+  // |hashed_password|:      The hashed password of the user.
+  // |authenticated_by_pin|: True if we are using pin to authenticate.
+  //
+  // The result will be set to true if auth was successful, false if not.
+  AuthenticateUser(signin.mojom.AccountId account_id,
+                   string hashed_password,
+                   bool authenticated_by_pin) => (bool auth_success);
+
+  // Request to attempt easy unlock in chrome.
+  // |account_id|:   The account id of the user we are authenticating.
+  AttemptUnlock(signin.mojom.AccountId account_id);
+
+  // Request to hard lock the user pod.
+  // |account_id|:    The account id of the user in the user pod.
+  HardlockPod(signin.mojom.AccountId account_id);
+
+  // Record clicks on the lock icon in the user pod.
+  // |account_id|:    The account id of the user in the user pod.
+  RecordClickOnLockIcon(signin.mojom.AccountId account_id);
+
+  // Focus user pod of user with |account_id|.
+  OnFocusPod(signin.mojom.AccountId account_id);
+
+  // Notify that no user pod is focused.
+  OnNoPodFocused();
+
+  // Load wallpaper of user with |account_id|.
+  LoadWallpaper(signin.mojom.AccountId account_id);
+
+  // Sign out current user.
+  SignOutUser();
+
+  // Close add user screen.
+  CancelAddUser();
+
+  // User with |account_id| has reached maximum incorrect password attempts.
+  OnMaxIncorrectPasswordAttempted(signin.mojom.AccountId account_id);
+
+  // Should pass the focus to the active lock screen app window, if there is
+  // one. This is called when a lock screen app is reported to be active (using
+  // tray_action mojo interface), and is next in the tab order.
+  // |HandleFocusLeavingLockScreenApps| should be called to return focus to the
+  // lock screen.
+  // |reverse|:   Whether the tab order is reversed.
+  FocusLockScreenApps(bool reverse);
+};

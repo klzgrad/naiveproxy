@@ -1,0 +1,42 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module blink.mojom;
+
+import "third_party/WebKit/common/blob/blob.mojom";
+
+// A MessagePort is represented as a raw mojo message pipe, as such no interface
+// definition exists for it here. Messages on this pipe are serialized versions
+// of the TransferableMessage struct defined below.
+// TODO(crbug.com/750468): Consider using an actual Mojo interface for message
+// ports.
+
+// This struct represents the cloneable part of messages that are sent across
+// postMessage style APIs. In particular this is used for BroadcastChannel.
+struct CloneableMessage {
+  array<uint8> encoded_message;
+  // Blob handles for any blobs being sent in this message.
+  array<SerializedBlob> blobs;
+};
+
+// This struct combines the cloneable part of a message with the parts of the
+// message that are merely transferable. In particular that includes ports that
+// are transfered. This struct is used for most postMessage style APIs,
+// including messages posted on MessagePorts themselves.
+struct TransferableMessage {
+  CloneableMessage message;
+  // Any ports being transfered as part of this message.
+  array<handle<message_pipe>> ports;
+};
+
+// Struct wrapping a Blob interface pointer.
+// TODO(mek): Once https://crbug.com/696107 is implemented all usage of this
+// struct can be replaced with a simple Blob interface pointer with handle
+// properties for the other attributes.
+struct SerializedBlob {
+  string uuid;
+  string content_type;
+  uint64 size;
+  Blob blob;
+};

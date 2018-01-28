@@ -1,0 +1,150 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/dcheck_always_on.gni")
+
+# Used to produce a Service Manifest for a Service.
+#
+# Service manifests may be subsequently aggregated into one or more catalog
+# manifests (see //services/catalog/public/tools/catalog.gni). A catalog
+# manifest provides the Service Manager at runtime with a static service layout
+# configuration to dictate which services are supported by the runtime
+# environment as well as how individual services may be launched and
+# interconnected.
+#
+# Note that this target may be used to produce partial manifests, and partial
+# manifests may be aggregated by using one service_manifest target as the
+# |source_manifest| of another (see below.)
+#
+# Parameters:
+#
+#   source (optional**)
+#       The manifest template for this service. Must be the name of a valid JSON
+#       file.
+#
+#   source_manifest (optional**)
+#       The manifest template for this service. Must be the name of another
+#       service_manifest target.
+#
+#       ** NOTE: Either |source| OR |source_manifest| MUST be specified.
+#
+#   name (optional)
+#       The name of the service whose manifest is to be generated. A script
+#       validates that the value of this parameter matches the name set in the
+#       source manifest and raises an error if it does not match.
+#
+#   overlays (optional)
+#       A list of other manifest targets whose outputs should be overlayed onto
+#       the source manifest before emitting the final output. Overlays are
+#       applied in-order as the last step of output generation, after any
+#       |packaged_services| manifests are embedded.
+#
+#   packaged_services (optional)
+#       A list of other manifest targets whose outputs should be packaged
+#       within this output manifest, specifically within a toplevel "services"
+#       list.
+#
+# Outputs:
+#
+#   An instantiation of this template produces a meta manifest from the source
+#   template and the output manifests of all its |overlay| and
+#   |packaged_services|dependencies. The output file is always
+#   "$target_gen_dir/${target_name}.json".
+#
+template("service_manifest") {
+  assert(
+      defined(invoker.source) || defined(invoker.source_manifest),
+      "\"source\" or \"source_manifest\" must be defined for the $target_name target")
+  assert(
+      !defined(invoker.source) || !defined(invoker.source_manifest),
+      "Only one of \"source\" or \"source_manifest\" must be defined for the $target_name target")
+
+  action(target_name) {
+    script =
+        "//services/service_manager/public/tools/manifest/manifest_collator.py"
+
+    deps = []
+    if (defined(invoker.deps)) {
+      deps += invoker.deps
+    }
+
+    if (defined(invoker.source)) {
+      source = invoker.source
+    } else {
+      source_target_dir =
+          get_label_info(invoker.source_manifest, "target_gen_dir")
+      source_target_name = get_label_info(invoker.source_manifest, "name")
+      source = "$source_target_dir/${source_target_name}.json"
+      deps += [ invoker.source_manifest ]
+    }
+    inputs = [
+      source,
+    ]
+
+    output = "$target_gen_dir/${target_name}.json"
+    outputs = [
+      output,
+    ]
+
+    rebase_parent = rebase_path(source, root_build_dir)
+    rebase_output = rebase_path(output, root_build_dir)
+
+    args = [
+      "--parent=$rebase_parent",
+      "--output=$rebase_output",
+    ]
+
+    if (defined(invoker.name)) {
+      args += [
+        "--name",
+        invoker.name,
+      ]
+    }
+
+    if (is_debug || dcheck_always_on) {
+      args += [ "--pretty" ]
+    }
+
+    if (defined(invoker.overlays)) {
+      args += [ "--overlays" ]
+      foreach(manifest_target, invoker.overlays) {
+        manifest_target_dir = get_label_info(manifest_target, "target_gen_dir")
+        manifest_target_name = get_label_info(manifest_target, "name")
+        manifest_filename = "$manifest_target_dir/${manifest_target_name}.json"
+
+        inputs += [ manifest_filename ]
+        deps += [ manifest_target ]
+        args += [ rebase_path(manifest_filename, root_build_dir) ]
+
+        # Ensure that each entry does in fact reference a manifest rule.
+        label_no_toolchain =
+            get_label_info(manifest_target, "label_no_toolchain")
+        toolchain = get_label_info(manifest_target, "toolchain")
+        deps += [ "${label_no_toolchain}__is_service_manifest(${toolchain})" ]
+      }
+    }
+
+    if (defined(invoker.packaged_services)) {
+      args += [ "--packaged-services" ]
+      foreach(manifest_target, invoker.packaged_services) {
+        manifest_target_dir = get_label_info(manifest_target, "target_gen_dir")
+        manifest_target_name = get_label_info(manifest_target, "name")
+        manifest_filename = "$manifest_target_dir/${manifest_target_name}.json"
+
+        inputs += [ manifest_filename ]
+        deps += [ manifest_target ]
+        args += [ rebase_path(manifest_filename, root_build_dir) ]
+
+        # Ensure that each entry does in fact reference a manifest rule.
+        label_no_toolchain =
+            get_label_info(manifest_target, "label_no_toolchain")
+        toolchain = get_label_info(manifest_target, "toolchain")
+        deps += [ "${label_no_toolchain}__is_service_manifest(${toolchain})" ]
+      }
+    }
+  }
+
+  group("${target_name}__is_service_manifest") {
+  }
+}

@@ -1,0 +1,94 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//testing/test.gni")
+
+component("tracing") {
+  sources = [
+    "child/child_trace_message_filter.cc",
+    "child/child_trace_message_filter.h",
+    "common/graphics_memory_dump_provider_android.cc",
+    "common/graphics_memory_dump_provider_android.h",
+    "common/tracing_messages.cc",
+    "common/tracing_messages.h",
+    "tracing_export.h",
+  ]
+
+  defines = [ "TRACING_IMPLEMENTATION" ]
+
+  deps = [
+    "//base",
+    "//ipc",
+  ]
+}
+
+component("startup_tracing") {
+  sources = [
+    "common/trace_config_file.cc",
+    "common/trace_config_file.h",
+    "common/trace_startup.cc",
+    "common/trace_startup.h",
+    "common/trace_to_console.cc",
+    "common/trace_to_console.h",
+    "common/tracing_switches.cc",
+    "common/tracing_switches.h",
+    "tracing_export.h",
+  ]
+
+  defines = [ "TRACING_IMPLEMENTATION" ]
+
+  deps = [
+    "//base",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+
+  sources = [
+    "child/child_trace_message_filter_unittest.cc",
+    "common/graphics_memory_dump_provider_android_unittest.cc",
+  ]
+
+  deps = [
+    ":tracing",
+    "//base/test:test_support",
+    "//ipc",
+    "//testing/gmock:gmock",
+    "//testing/gtest",
+  ]
+
+  if (!is_android) {
+    sources += [ "common/trace_config_file_unittest.cc" ]
+    deps += [ ":startup_tracing" ]
+  }
+}
+
+test("tracing_perftests") {
+  sources = [
+    "test/heap_profiler_perftest.cc",
+    "test/perf_test_helpers.cc",
+    "test/perf_test_helpers.h",
+    "test/trace_event_perftest.cc",
+  ]
+  deps = [
+    "//base:base",
+    "//base/test:test_support",
+    "//base/test:test_support_perf",
+    "//testing/gtest",
+    "//testing/perf",
+  ]
+
+  data = [
+    # Needed for isolate script to execute.
+    "//testing/scripts/common.py",
+    "//testing/xvfb.py",
+    "//testing/scripts/run_gtest_perf_test.py",
+    "//tools/perf/generate_legacy_perf_dashboard_json.py",
+  ]
+
+  if (is_android) {
+    deps += [ "//testing/android/native_test:native_test_native_code" ]
+  }
+}

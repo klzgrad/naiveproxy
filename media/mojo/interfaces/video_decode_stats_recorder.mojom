@@ -1,0 +1,32 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module media.mojom;
+
+import "media/mojo/interfaces/media_types.mojom";
+import "ui/gfx/geometry/mojo/geometry.mojom";
+import "url/mojo/origin.mojom";
+
+// Interface for media players in the renderer to send decode stats to the
+// browser process. Each player will have its own recorder instance.
+interface VideoDecodeStatsRecorder {
+  // Provide the origin of the top frame of the page hosting the video. Privacy
+  // team requires we use only the top-frame origin. |is_top_frame| signals
+  // whether the video is hosted in the top frame vs some inner frame to help
+  // interpret the origin.
+  // TODO(crbug.com/787209): Stop getting origin from the renderer.
+  SetPageInfo(url.mojom.Origin untrusted_top_frame_origin, bool is_top_frame);
+
+  // Will finalize any ongoing record and begin a new record with the given
+  // properties.
+  StartNewRecord(VideoCodecProfile profile, gfx.mojom.Size video_size,
+                 int32 frames_per_sec);
+
+  // Update stats values for the current record. Each update overrides the
+  // previous values. Values should only be considered final when a new
+  // record is started or upon IPC disconnect.
+  UpdateRecord(uint32 frames_decoded,
+               uint32 frames_dropped,
+               uint32 frames_decoded_power_efficient);
+};

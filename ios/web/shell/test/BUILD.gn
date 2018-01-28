@@ -1,0 +1,112 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//ios/build/config.gni")
+import("//ios/third_party/earl_grey/ios_eg_test.gni")
+
+group("all_tests") {
+  testonly = true
+  deps = [
+    ":ios_web_shell_egtests",
+  ]
+}
+
+ios_eg_test("ios_web_shell_egtests") {
+  info_plist = "//ios/web/shell/Info.plist"
+  sources = [
+    "context_menu_egtest.mm",
+    "meta_tags_egtest.mm",
+    "navigation_egtest.mm",
+    "page_state_egtest.mm",
+    "pdf_egtest.mm",
+    "plugin_placeholder_egtest.mm",
+    "redirect_egtest.mm",
+    "service_manager_egtest.mm",
+  ]
+
+  deps = [
+    ":earl_grey_test_support",
+    "//base",
+    "//base/test:test_support",
+    "//ios/testing:ios_test_support",
+    "//ios/testing/earl_grey:earl_grey_support",
+    "//ios/web",
+    "//ios/web:earl_grey_test_support",
+    "//ios/web/public/test",
+    "//ios/web/public/test/fakes",
+    "//ios/web/public/test/http_server",
+    "//ios/web/shell",
+    "//ios/web/shell:shell_interfaces",
+    "//net",
+    "//services/service_manager/public/cpp",
+    "//services/test/echo/public/interfaces",
+    "//services/test/user_id/public/interfaces",
+    "//url",
+
+    # All shared libraries must have the sanitizer deps to properly link in
+    # asan mode (this target will be empty in other cases).
+    "//build/config:exe_and_shlib_deps",
+  ]
+
+  bundle_deps = [ ":bundle" ]
+
+  configs += [ "//build/config/compiler:enable_arc" ]
+
+  assert_no_deps = ios_assert_no_deps
+}
+
+source_set("earl_grey_test_support") {
+  testonly = true
+
+  deps = [
+    "//base",
+    "//base/test:test_support",
+    "//ios/testing:ios_test_support",
+    "//ios/testing/earl_grey:earl_grey_support",
+    "//ios/third_party/earl_grey:earl_grey+link",
+    "//ios/web",
+    "//ios/web:earl_grey_test_support",
+    "//ios/web/public/test",
+    "//ios/web/public/test/http_server",
+    "//ios/web/shell",
+    "//testing/gtest:gtest",
+    "//url",
+  ]
+
+  public_deps = [
+    "//build/config/ios:xctest",
+  ]
+
+  sources = [
+    "app/navigation_test_util.h",
+    "app/navigation_test_util.mm",
+    "app/web_shell_test_util.h",
+    "app/web_shell_test_util.mm",
+    "app/web_view_interaction_test_util.h",
+    "app/web_view_interaction_test_util.mm",
+    "earl_grey/shell_actions.h",
+    "earl_grey/shell_actions.mm",
+    "earl_grey/shell_earl_grey.h",
+    "earl_grey/shell_earl_grey.mm",
+    "earl_grey/shell_matchers.h",
+    "earl_grey/shell_matchers.mm",
+    "earl_grey/web_shell_test_case.h",
+    "earl_grey/web_shell_test_case.mm",
+  ]
+
+  configs += [ "//build/config/compiler:enable_arc" ]
+}
+
+bundle_data("bundle") {
+  visibility = [ ":ios_web_shell_egtests" ]
+  sources = [
+    "http_server_files/basic_navigation_test.html",
+    "http_server_files/tall_page.html",
+    "http_server_files/testpage.pdf",
+  ]
+  outputs = [
+    "{{bundle_resources_dir}}/{{source_root_relative_dir}}/" +
+        "{{source_file_part}}",
+  ]
+}

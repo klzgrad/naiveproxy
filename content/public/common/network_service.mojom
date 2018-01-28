@@ -1,0 +1,155 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module content.mojom;
+
+import "mojo/common/file_path.mojom";
+import "mojo/common/time.mojom";
+import "resource_type.mojom";
+import "url_loader.mojom";
+import "url_loader_factory.mojom";
+import "url/mojo/url.mojom";
+import "services/network/public/interfaces/cookie_manager.mojom";
+import "services/network/public/interfaces/network_change_manager.mojom";
+import "services/network/public/interfaces/restricted_cookie_manager.mojom";
+
+[Native]
+struct SSLInfo;
+
+// Parameters for constructing a network context.
+struct NetworkContextParams {
+  // Name used by memory tools to identify the context.
+  string? context_name;
+
+  // Whether Brotli content-encoding should be enabled for HTTPS responses.
+  bool enable_brotli = true;
+
+  // QUIC user agent.
+  string quic_user_agent_id;
+
+  // Points to the cookie file. Currently ignored. An in-memory cookie store is
+  // always used instead.
+  // TODO(mmenke): Respect this parameter.
+  mojo.common.mojom.FilePath? cookie_path;
+
+  // True if an HTTP cache should be used.
+  bool http_cache_enabled = true;
+  // Maximum size of the HTTP cache. 0 means to use the default size.
+  // Ignored if the cache is disabled.
+  int32 http_cache_max_size = 0;
+  // Points to the HTTP cache directory. Ignored if the cache is disabled.
+  // If null and the cache is enabled, an in-memory database is used.
+  mojo.common.mojom.FilePath? http_cache_path;
+
+  // The file to store cached server properties (Like HTTP2 and QUIC support).
+  // This information is used as a performance optimization in connection
+  // logic. If null, an in-memory cache will be used instead.
+  mojo.common.mojom.FilePath? http_server_properties_path;
+
+  // Enabled protocols. Note that these apply to all fetches, including those
+  // used to fetch PAC scripts.
+
+  // True if data URLs should be supported.
+  bool enable_data_url_support = false;
+  // True if file URLs should be supported.
+  // Must be false if built without file support.
+  bool enable_file_url_support = false;
+  // True if ftp URLs should be supported.
+  // Must be false if built without FTP support.
+  bool enable_ftp_url_support = false;
+
+  // Enables HTTP/0.9 on ports other than 80 for HTTP and 443 for HTTPS.
+  bool http_09_on_non_default_ports_enabled = false;
+};
+
+struct NetworkConditions {
+  // If set, the offline state is simulated and other fields are ignored.
+  bool offline;
+
+  // Channel round-trip latency, i.e. minimum time between request sent and
+  // response received.
+  mojo.common.mojom.TimeDelta latency;
+
+  // Maximal aggregated download throughput (bytes/sec). 0 disables download throttling.
+  double download_throughput;
+
+  // Maximal aggregated upload throughput (bytes/sec). 0 disables upload throttling.
+  double upload_throughput;
+};
+
+// Represents a distinct context for making network requests, with its own
+// storage (e.g. cookies and cache).
+interface NetworkContext {
+  // |process_id| is 0 for requests initiated in the browser process, otherwise
+  // it's the child process ID.
+  CreateURLLoaderFactory(URLLoaderFactory& url_loader_factory,
+                         uint32 process_id);
+
+  // Handles a request to display cache data to the user. |url| is parsed to
+  // display different parts of the cache.
+  HandleViewCacheRequest(url.mojom.Url url,
+                         URLLoaderClient client);
+
+  // Gets the CookieManager associated with this network context.
+  GetCookieManager(network.mojom.CookieManager& cookie_manager);
+
+  // TODO(crbug.com/729800): Switch from {process,frame}_id to the network
+  //                         service's representation of security principals.
+  GetRestrictedCookieManager(
+      network.mojom.RestrictedCookieManager& restricted_cookie_manager,
+      int32 render_process_id, int32 render_frame_id);
+
+  // Clears network objects with implicit URL history information. Data related
+  // to events that happened prior to |start_time| may be retained. Only applies
+  // to network objects without more specific methods (Channel ID, Cookies,
+  // and the cache have, or will have, their own clearing APIs). This currently
+  // only covers server properties and transport security state.
+  //
+  // The callback will be invoked once the data has been deleted.
+  ClearNetworkingHistorySince(mojo.common.mojom.Time start_time) => ();
+
+  // Configures network conditions for the specified throttling profile.
+  // The throttling will be applied only to requests that have
+  // X-DevTools-Emulate-Network-Conditions-Client-Id: <profile_id>
+  // header with matching <profile_id>.
+  // Passing null NetworkConditions disables the throttling.
+  // TODO(caseq): get rid of header, make profile_id part of ResourceRequest.
+  SetNetworkConditions(string profile_id, NetworkConditions? conditions);
+};
+
+// Network service interface to the browser.
+interface NetworkServiceClient {
+  // Called when an SSL certificate is encountered.
+  // The callback argument is a net::ERROR value. If it's net::OK, then the
+  // request is resumed. Otherwise it's cancelled with the given error.
+  OnSSLCertificateError(ResourceType resource_type,
+                        url.mojom.Url url,
+                        uint32 process_id,
+                        uint32 routing_id,
+                        SSLInfo ssl_info,
+                        bool fatal) => (int32 net_error);
+};
+
+// Browser interface to the network service.
+interface NetworkService {
+  SetClient(NetworkServiceClient client);
+
+  // Creates a new network context with the given parameters.
+  CreateNetworkContext(NetworkContext& context,
+                       NetworkContextParams params);
+
+  // Disables QUIC for the NetworkService. Affects all existing NetworkContexts,
+  // and all new ones that are created. Once called, QUIC cannot be re-enabled.
+  DisableQuic();
+
+  // Specifies whether requests for raw headers coming through URLLoaderFactory
+  // associated with the specified process will be granted. Granting such a
+  // permission increases risks in case the child process becomes compromised,
+  // so this should be done only in specific cases (e.g. DevTools attached).
+  SetRawHeadersAccess(uint32 process_id, bool allow);
+
+  // Gets the NetworkChangeManager.
+  GetNetworkChangeManager(
+      network.mojom.NetworkChangeManager& network_change_manager);
+};

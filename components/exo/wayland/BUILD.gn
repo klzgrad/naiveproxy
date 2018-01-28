@@ -1,0 +1,400 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/linux/pkg_config.gni")
+import("//build/config/ui.gni")
+import("//ui/base/ui_features.gni")
+import("//ui/ozone/ozone.gni")
+import("//testing/test.gni")
+
+declare_args() {
+  # Enable experimental vulkan wayland client.
+  enable_vulkan_wayland_client = false
+}
+
+if (use_xkbcommon) {
+  pkg_config("xkbcommon") {
+    packages = [ "xkbcommon" ]
+  }
+}
+
+if (use_ozone) {
+  pkg_config("libdrm") {
+    packages = [ "libdrm" ]
+  }
+  if (enable_vulkan_wayland_client) {
+    pkg_config("vulkan") {
+      packages = [ "vulkan" ]
+    }
+  }
+}
+
+config("aura_shell_protocol_config") {
+  include_dirs = [ "." ]
+}
+
+source_set("aura_shell_protocol") {
+  sources = [
+    "aura-shell-client-protocol.h",
+    "aura-shell-protocol.c",
+    "aura-shell-server-protocol.h",
+  ]
+
+  deps = [
+    "//third_party/wayland:wayland_util",
+  ]
+
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [ "//build/config/compiler:no_chromium_code" ]
+
+  public_configs = [ ":aura_shell_protocol_config" ]
+}
+
+source_set("wayland") {
+  sources = [
+    "scoped_wl.cc",
+    "scoped_wl.h",
+    "server.cc",
+    "server.h",
+  ]
+
+  defines = [ "EXO_IMPLEMENTATION" ]
+
+  deps = [
+    ":aura_shell_protocol",
+    "//ash/public/cpp",
+    "//base",
+    "//components/exo",
+    "//device/gamepad",
+    "//services/viz/public/interfaces",
+    "//skia",
+    "//third_party/wayland:wayland_server",
+    "//third_party/wayland-protocols:alpha_compositing_protocol",
+    "//third_party/wayland-protocols:gaming_input_protocol",
+    "//third_party/wayland-protocols:keyboard_configuration_protocol",
+    "//third_party/wayland-protocols:keyboard_extension_protocol",
+    "//third_party/wayland-protocols:pointer_gestures_protocol",
+    "//third_party/wayland-protocols:presentation_time_protocol",
+    "//third_party/wayland-protocols:remote_shell_protocol",
+    "//third_party/wayland-protocols:secure_output_protocol",
+    "//third_party/wayland-protocols:stylus_protocol",
+    "//third_party/wayland-protocols:stylus_tools_protocol",
+    "//third_party/wayland-protocols:viewporter_protocol",
+    "//third_party/wayland-protocols:vsync_feedback_protocol",
+    "//third_party/wayland-protocols:xdg_shell_protocol",
+    "//ui/aura",
+    "//ui/base",
+    "//ui/display/manager",
+    "//ui/events:dom_keycode_converter",
+    "//ui/events:events_base",
+    "//ui/views",
+    "//ui/wm:wm",
+    "//ui/wm/public",
+  ]
+
+  if (use_ozone) {
+    deps += [ "//third_party/wayland-protocols:linux_dmabuf_protocol" ]
+    configs += [ ":libdrm" ]
+
+    if (is_chromeos) {
+      deps += [ "//ui/events/ozone:events_ozone_layout" ]
+    }
+  }
+
+  if (use_xkbcommon) {
+    configs += [ ":xkbcommon" ]
+    deps += [ "//ui/events/keycodes:xkb" ]
+  }
+}
+
+source_set("unit_tests") {
+  testonly = true
+
+  sources = [
+    "server_unittest.cc",
+  ]
+
+  deps = [
+    ":wayland",
+    "//base",
+    "//components/exo",
+    "//components/exo:test_support",
+    "//skia",
+    "//testing/gtest",
+    "//third_party/wayland:wayland_client",
+  ]
+}
+
+config("client_support_config") {
+  if (ozone_platform_gbm) {
+    defines = [ "USE_GBM" ]
+    if (enable_vulkan_wayland_client) {
+      defines += [ "USE_VULKAN" ]
+    }
+  }
+}
+
+source_set("client_support") {
+  sources = [
+    "clients/client_base.cc",
+    "clients/client_base.h",
+    "clients/client_helper.cc",
+    "clients/client_helper.h",
+  ]
+
+  deps = [
+    ":aura_shell_protocol",
+    "//base",
+    "//ui/gl",
+    "//ui/gl/init",
+  ]
+
+  public_deps = [
+    "//skia",
+    "//third_party/wayland:wayland_client",
+    "//third_party/wayland-protocols:linux_dmabuf_protocol",
+    "//third_party/wayland-protocols:presentation_time_protocol",
+  ]
+
+  if (ozone_platform_gbm) {
+    configs += [
+      ":libdrm",
+      "//ui/gl:gl_config",
+    ]
+    if (enable_vulkan_wayland_client) {
+      configs += [ ":vulkan" ]
+    }
+    deps += [ "//ui/ozone" ]
+    public_deps += [ "//third_party/minigbm" ]
+  }
+
+  public_configs = [ ":client_support_config" ]
+}
+
+executable("wayland_rects_client") {
+  sources = [
+    "clients/rects.cc",
+  ]
+
+  deps = [
+    ":client_support",
+    "//base",
+    "//build/config:exe_and_shlib_deps",
+    "//skia",
+    "//third_party/wayland:wayland_client",
+    "//third_party/wayland-protocols:linux_dmabuf_protocol",
+    "//third_party/wayland-protocols:presentation_time_protocol",
+    "//ui/gfx/geometry",
+    "//ui/gl",
+  ]
+
+  if (ozone_platform_gbm) {
+    configs += [
+      ":libdrm",
+      "//ui/gl:gl_config",
+    ]
+    defines = [ "USE_GBM" ]
+    deps += [ "//third_party/minigbm" ]
+  }
+}
+
+source_set("simple") {
+  sources = [
+    "clients/simple.cc",
+    "clients/simple.h",
+  ]
+
+  deps = [
+    ":client_support",
+    "//base",
+    "//skia",
+    "//third_party/wayland:wayland_client",
+    "//third_party/wayland-protocols:linux_dmabuf_protocol",
+    "//third_party/wayland-protocols:presentation_time_protocol",
+    "//ui/gfx/geometry",
+    "//ui/gl",
+  ]
+
+  if (ozone_platform_gbm) {
+    configs += [
+      ":libdrm",
+      "//ui/gl:gl_config",
+    ]
+  }
+}
+
+executable("wayland_simple_client") {
+  sources = [
+    "clients/simple_main.cc",
+  ]
+  deps = [
+    ":client_support",
+    ":simple",
+    "//base",
+    "//build/config:exe_and_shlib_deps",
+  ]
+}
+
+executable("wayland_subsurface_client") {
+  sources = [
+    "clients/subsurface.cc",
+  ]
+
+  deps = [
+    ":client_support",
+    "//base",
+    "//build/config:exe_and_shlib_deps",
+    "//skia",
+    "//third_party/wayland:wayland_client",
+    "//third_party/wayland-protocols:linux_dmabuf_protocol",
+    "//third_party/wayland-protocols:presentation_time_protocol",
+    "//ui/gfx/geometry",
+    "//ui/gl",
+  ]
+
+  if (ozone_platform_gbm) {
+    configs += [
+      ":libdrm",
+      "//ui/gl:gl_config",
+    ]
+  }
+}
+
+source_set("blur") {
+  sources = [
+    "clients/blur.cc",
+    "clients/blur.h",
+  ]
+
+  deps = [
+    ":client_support",
+    "//base",
+    "//skia",
+    "//third_party/wayland:wayland_client",
+    "//ui/gfx/geometry",
+    "//ui/gl",
+  ]
+
+  if (ozone_platform_gbm) {
+    configs += [
+      ":libdrm",
+      "//ui/gl:gl_config",
+    ]
+  }
+}
+
+executable("wayland_blur_client") {
+  sources = [
+    "clients/blur_main.cc",
+  ]
+  deps = [
+    ":blur",
+    ":client_support",
+    "//base",
+    "//build/config:exe_and_shlib_deps",
+  ]
+}
+
+executable("wayland_info_client") {
+  sources = [
+    "clients/info.cc",
+  ]
+
+  deps = [
+    ":client_support",
+    "//base",
+    "//build/config:exe_and_shlib_deps",
+    "//third_party/wayland:wayland_client",
+    "//ui/gfx/geometry",
+  ]
+}
+
+test("wayland_client_perftests") {
+  sources = [
+    "../../../ash/test/ash_test_suite.cc",
+    "../../../ash/test/ash_test_suite.h",
+    "clients/perftests.cc",
+    "clients/test/run_all_client_perftests.cc",
+    "clients/test/wayland_client_test.cc",
+    "clients/test/wayland_client_test.h",
+  ]
+
+  deps = [
+    ":blur",
+    ":client_support",
+    ":simple",
+    ":wayland",
+    "//ash",
+    "//ash:test_support_without_content",
+    "//ash/public/cpp",
+    "//base",
+    "//base/test:test_support",
+    "//cc:test_support",
+    "//components/exo",
+    "//components/viz/test:test_support",
+    "//mojo/edk/embedder:headers",
+    "//testing/perf",
+    "//ui/aura",
+    "//ui/aura:test_support",
+    "//ui/base",
+    "//ui/compositor:test_support",
+    "//ui/events:gesture_detection",
+    "//ui/gl:test_support",
+    "//ui/wm",
+  ]
+
+  data_deps = [
+    "//ash/strings:ash_test_strings",
+    "//ash/resources:ash_test_resources_100_percent",
+    "//ash/resources:ash_test_resources_200_percent",
+  ]
+}
+
+if (ozone_platform_gbm) {
+  executable("wayland_yuv_client") {
+    sources = [
+      "clients/yuv.cc",
+    ]
+
+    deps = [
+      ":client_support",
+      "//base",
+      "//build/config:exe_and_shlib_deps",
+      "//skia",
+      "//third_party/wayland:wayland_client",
+      "//third_party/wayland-protocols:linux_dmabuf_protocol",
+      "//third_party/wayland-protocols:presentation_time_protocol",
+      "//ui/gfx/geometry",
+    ]
+
+    configs += [
+      ":libdrm",
+      "//ui/gl:gl_config",
+    ]
+    deps += [ "//third_party/minigbm" ]
+  }
+  if (enable_vulkan_wayland_client) {
+    executable("wayland_vulkan_client") {
+      sources = [
+        "clients/vulkan.cc",
+      ]
+
+      deps = [
+        ":client_support",
+        "//base",
+        "//skia",
+        "//third_party/wayland:wayland_client",
+        "//third_party/wayland-protocols:linux_dmabuf_protocol",
+        "//third_party/wayland-protocols:presentation_time_protocol",
+        "//ui/gfx/geometry",
+      ]
+
+      configs += [
+        ":libdrm",
+        "//ui/gl:gl_config",
+      ]
+      deps += [ "//third_party/minigbm" ]
+    }
+  }
+}

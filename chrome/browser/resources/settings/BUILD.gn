@@ -1,0 +1,53 @@
+import("../optimize_webui.gni")
+import("//tools/grit/grit_rule.gni")
+import("//chrome/common/features.gni")
+
+settings_pak_file = "settings_resources.pak"
+unpak_folder = "settings_resources.unpak"
+
+optimize_webui("build") {
+  host = "settings"
+  html_in_files = [
+    "settings.html",
+    "lazy_load.html",
+  ]
+  html_out_files = [
+    "vulcanized.html",
+    "lazy_load.vulcanized.html",
+  ]
+  insert_in_head = "<base href=\"chrome://settings\">"
+  input = rebase_path("$target_gen_dir/$unpak_folder", root_build_dir)
+  js_out_files = [
+    "crisper.js",
+    "lazy_load.crisper.js",
+  ]
+
+  deps = [
+    ":unpak",
+  ]
+}
+
+unpak("unpak") {
+  pak_file = settings_pak_file
+  out_folder = unpak_folder
+
+  deps = [
+    ":flattened_resources",
+  ]
+}
+
+grit("flattened_resources") {
+  source = "settings_resources.grd"
+
+  # The .grd contains references to generated files.
+  source_is_generated = true
+
+  defines = chrome_grit_defines
+  outputs = [
+    "grit/settings_resources.h",
+    "grit/settings_resources_map.cc",
+    "grit/settings_resources_map.h",
+    settings_pak_file,
+  ]
+  output_dir = "$root_gen_dir/chrome/browser/resources/settings"
+}

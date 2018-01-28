@@ -1,0 +1,154 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/android/rules.gni")
+
+group("android") {
+  testonly = true
+  deps = [
+    ":mojo_javatests",
+    ":mojo_test_apk",
+    ":system_java",
+  ]
+}
+
+generate_jni("jni_headers") {
+  sources = [
+    "javatests/src/org/chromium/mojo/MojoTestRule.java",
+    "javatests/src/org/chromium/mojo/bindings/ValidationTestUtil.java",
+  ]
+  public_deps = [
+    ":system_java_jni_headers",
+  ]
+
+  jni_package = "mojo"
+}
+
+generate_jni("system_java_jni_headers") {
+  sources = [
+    "system/src/org/chromium/mojo/system/impl/BaseRunLoop.java",
+    "system/src/org/chromium/mojo/system/impl/CoreImpl.java",
+    "system/src/org/chromium/mojo/system/impl/WatcherImpl.java",
+  ]
+
+  jni_package = "mojo"
+}
+
+source_set("libsystem_java") {
+  sources = [
+    "system/base_run_loop.cc",
+    "system/core_impl.cc",
+    "system/watcher_impl.cc",
+  ]
+
+  deps = [
+    ":system_java_jni_headers",
+    "//base",
+    "//mojo/public/c/system",
+    "//mojo/public/cpp/system",
+  ]
+}
+
+android_library("system_java") {
+  java_files = [
+    "system/src/org/chromium/mojo/system/impl/BaseRunLoop.java",
+    "system/src/org/chromium/mojo/system/impl/CoreImpl.java",
+    "system/src/org/chromium/mojo/system/impl/DataPipeConsumerHandleImpl.java",
+    "system/src/org/chromium/mojo/system/impl/DataPipeProducerHandleImpl.java",
+    "system/src/org/chromium/mojo/system/impl/HandleBase.java",
+    "system/src/org/chromium/mojo/system/impl/MessagePipeHandleImpl.java",
+    "system/src/org/chromium/mojo/system/impl/SharedBufferHandleImpl.java",
+    "system/src/org/chromium/mojo/system/impl/UntypedHandleImpl.java",
+    "system/src/org/chromium/mojo/system/impl/WatcherImpl.java",
+  ]
+
+  deps = [
+    "//base:base_java",
+    "//mojo/public/java:system_java",
+  ]
+}
+
+android_library("mojo_javatests") {
+  testonly = true
+  java_files = [
+    "javatests/src/org/chromium/mojo/HandleMock.java",
+    "javatests/src/org/chromium/mojo/MojoTestRule.java",
+    "javatests/src/org/chromium/mojo/TestUtils.java",
+    "javatests/src/org/chromium/mojo/bindings/BindingsHelperTest.java",
+    "javatests/src/org/chromium/mojo/bindings/BindingsTest.java",
+    "javatests/src/org/chromium/mojo/bindings/BindingsTestUtils.java",
+    "javatests/src/org/chromium/mojo/bindings/BindingsVersioningTest.java",
+    "javatests/src/org/chromium/mojo/bindings/CallbacksTest.java",
+    "javatests/src/org/chromium/mojo/bindings/ConnectorTest.java",
+    "javatests/src/org/chromium/mojo/bindings/ExecutorFactoryTest.java",
+    "javatests/src/org/chromium/mojo/bindings/InterfacesTest.java",
+    "javatests/src/org/chromium/mojo/bindings/MessageHeaderTest.java",
+    "javatests/src/org/chromium/mojo/bindings/NameGeneratorTest.java",
+    "javatests/src/org/chromium/mojo/bindings/ReadAndDispatchMessageTest.java",
+    "javatests/src/org/chromium/mojo/bindings/RouterTest.java",
+    "javatests/src/org/chromium/mojo/bindings/SerializationTest.java",
+    "javatests/src/org/chromium/mojo/bindings/test/mojom/mojo/IntegrationTestInterfaceTestHelper.java",
+    "javatests/src/org/chromium/mojo/bindings/ValidationTest.java",
+    "javatests/src/org/chromium/mojo/bindings/ValidationTestUtil.java",
+    "javatests/src/org/chromium/mojo/bindings/ValidationTestUtilTest.java",
+    "javatests/src/org/chromium/mojo/system/impl/CoreImplTest.java",
+    "javatests/src/org/chromium/mojo/system/impl/WatcherImplTest.java",
+  ]
+
+  deps = [
+    ":system_java",
+    "//base:base_java",
+    "//base:base_java_test_support",
+    "//mojo/public/interfaces/bindings/tests:test_interfaces_java",
+    "//mojo/public/interfaces/bindings/tests:test_mojom_import2_java",
+    "//mojo/public/interfaces/bindings/tests:test_mojom_import_java",
+    "//mojo/public/java:bindings_java",
+    "//mojo/public/java:system_java",
+    "//third_party/android_support_test_runner:runner_java",
+    "//third_party/junit",
+  ]
+
+  data = [
+    "//mojo/public/interfaces/bindings/tests/data/validation/",
+  ]
+}
+
+shared_library("mojo_java_unittests") {
+  testonly = true
+
+  sources = [
+    "javatests/init_library.cc",
+    "javatests/mojo_test_rule.cc",
+    "javatests/validation_test_util.cc",
+  ]
+
+  deps = [
+    ":jni_headers",
+    ":libsystem_java",
+    ":system_java_jni_headers",
+    "//base",
+    "//base/test:test_support",
+    "//build/config:exe_and_shlib_deps",
+    "//mojo/edk/system",
+    "//mojo/public/cpp/bindings/tests:mojo_public_bindings_test_utils",
+    "//mojo/public/cpp/test_support:test_utils",
+  ]
+  defines = [ "UNIT_TEST" ]
+  configs -= [ "//build/config/android:hide_all_but_jni_onload" ]
+  configs += [ "//build/config/android:hide_all_but_jni" ]
+}
+
+instrumentation_test_apk("mojo_test_apk") {
+  deps = [
+    ":mojo_javatests",
+    ":system_java",
+    "//base:base_java",
+    "//mojo/public/interfaces/bindings/tests:test_interfaces",
+    "//mojo/public/java:bindings_java",
+    "//third_party/android_support_test_runner:runner_java",
+  ]
+  shared_libraries = [ ":mojo_java_unittests" ]
+  apk_name = "MojoTest"
+  android_manifest = "javatests/AndroidManifest.xml"
+}

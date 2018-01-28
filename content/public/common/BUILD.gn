@@ -1,0 +1,393 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/buildflag_header.gni")
+import("//build/config/chromecast_build.gni")
+import("//build/config/features.gni")
+import("//build/config/ui.gni")
+import("//media/media_options.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
+import("//ppapi/features/features.gni")
+import("//third_party/webrtc/webrtc.gni")
+
+# See //content/BUILD.gn for how this works.
+group("common") {
+  if (is_component_build) {
+    public_deps = [
+      "//content",
+    ]
+  } else {
+    public_deps = [
+      ":common_sources",
+    ]
+  }
+}
+
+# This target allows other targets to depend on result_codes.h which is a
+# header-only dependency, without bringing in all of content.
+source_set("result_codes") {
+  sources = [
+    "result_codes.h",
+  ]
+}
+
+# This target allows other targets to depend on content_descriptors.h which is
+# a header-only dependency, without bringing in all of content.
+source_set("content_descriptors") {
+  sources = [
+    "content_descriptors.h",
+  ]
+
+  # The header uses V8_USE_EXTERNAL_STARTUP_DATA.
+  public_configs = [ "//v8:external_startup_data" ]
+
+  deps = [
+    "//ipc",
+  ]
+}
+
+source_set("content_descriptor_keys") {
+  sources = [
+    "content_descriptor_keys.cc",
+    "content_descriptor_keys.h",
+  ]
+}
+
+# Forces static linking for targets using the static_switches constants, even
+# in the component build. This config makes it impossible to use the static
+# switches target and use the rest of content at the same time, because the
+# component export flags won't be consistent.
+config("static_switches_defines") {
+  defines = [ "COMPILE_CONTENT_STATICALLY" ]
+}
+
+# This target allows you to use the content_switches constants and statically
+# link to it, without depending on the rest of content. This is only for use
+# without content, or you will get multiply defined symbols.
+source_set("static_switches") {
+  public = [
+    "content_switches.h",
+    "mojo_channel_switches.h",
+  ]
+  sources = [
+    "//content/common/content_export.h",
+    "content_switches.cc",
+    "mojo_channel_switches.cc",
+  ]
+
+  public_configs = [ ":static_switches_defines" ]
+
+  # Deps required by the above headers.
+  deps = [
+    "//media:media_features",
+  ]
+}
+
+# This target allows you to use the content_features constants and statically
+# link to it, without depending on the rest of content. This is only for use
+# without content, or you will get multiply defined symbols.
+source_set("static_features") {
+  public = [
+    "content_features.h",
+  ]
+  sources = [
+    "//content/common/content_export.h",
+    "content_features.cc",
+  ]
+  public_deps = [
+    "//base",
+  ]
+
+  public_configs = [ ":static_switches_defines" ]
+}
+
+source_set("common_sources") {
+  # External code should depend on via ":common" above.
+  visibility = [ "//content/*" ]
+
+  sources = [
+    "appcache_info.h",
+    "bind_interface_helpers.h",
+    "bindings_policy.h",
+    "browser_controls_state.h",
+    "browser_side_navigation_policy.cc",
+    "browser_side_navigation_policy.h",
+    "cdm_info.h",
+    "child_process_host.h",
+    "child_process_host_delegate.cc",
+    "child_process_host_delegate.h",
+    "color_suggestion.cc",
+    "color_suggestion.h",
+    "common_param_traits.cc",
+    "common_param_traits.h",
+    "common_param_traits_macros.h",
+    "common_sandbox_support_linux.h",
+    "connection_filter.h",
+    "console_message_level.h",
+    "content_client.cc",
+    "content_client.h",
+    "content_constants.cc",
+    "content_constants.h",
+    "content_descriptors.h",
+    "content_features.cc",
+    "content_features.h",
+    "content_ipc_logging.h",
+    "content_paths.h",
+    "content_switches.cc",
+    "content_switches.h",
+    "context_menu_params.cc",
+    "context_menu_params.h",
+    "cursor_info.h",
+    "drop_data.cc",
+    "drop_data.h",
+    "favicon_url.cc",
+    "favicon_url.h",
+    "file_chooser_file_info.cc",
+    "file_chooser_file_info.h",
+    "file_chooser_params.cc",
+    "file_chooser_params.h",
+    "frame_navigate_params.cc",
+    "frame_navigate_params.h",
+    "injection_test_mac.h",
+    "injection_test_win.h",
+    "input_event_ack_source.h",
+    "input_event_ack_state.h",
+    "isolated_world_ids.h",
+    "javascript_dialog_type.h",
+    "main_function_params.h",
+    "manifest.cc",
+    "manifest.h",
+    "manifest_util.cc",
+    "manifest_util.h",
+    "media_metadata.cc",
+    "media_metadata.h",
+    "media_stream_request.cc",
+    "media_stream_request.h",
+    "menu_item.cc",
+    "menu_item.h",
+    "mhtml_generation_params.cc",
+    "mhtml_generation_params.h",
+    "mojo_channel_switches.cc",
+    "mojo_channel_switches.h",
+    "network_connection_tracker.cc",
+    "network_connection_tracker.h",
+    "notification_resources.cc",
+    "notification_resources.h",
+    "origin_trial_policy.cc",
+    "origin_trial_policy.h",
+    "origin_util.h",
+    "page_importance_signals.h",
+    "page_state.cc",
+    "page_state.h",
+    "page_type.h",
+    "page_zoom.h",
+    "pepper_plugin_info.cc",
+    "pepper_plugin_info.h",
+    "persistent_notification_status.h",
+    "platform_notification_data.cc",
+    "platform_notification_data.h",
+    "presentation_connection_message.cc",
+    "presentation_connection_message.h",
+    "presentation_info.cc",
+    "presentation_info.h",
+    "previews_state.h",
+    "process_type.h",
+    "push_event_payload.h",
+    "push_subscription_options.h",
+    "quarantine.h",
+    "referrer.cc",
+    "referrer.h",
+    "renderer_preferences.cc",
+    "renderer_preferences.h",
+    "request_context_frame_type.h",
+    "request_context_type.h",
+    "resource_devtools_info.cc",
+    "resource_devtools_info.h",
+    "resource_request.cc",
+    "resource_request.h",
+    "resource_request_body.cc",
+    "resource_request_body.h",
+    "resource_response.cc",
+    "resource_response.h",
+    "resource_response_info.cc",
+    "resource_response_info.h",
+    "resource_type.cc",
+    "resource_type.h",
+    "result_codes.h",
+    "sandbox_init.h",
+    "sandboxed_process_launcher_delegate.cc",
+    "sandboxed_process_launcher_delegate.h",
+    "screen_info.cc",
+    "screen_info.h",
+    "screen_orientation_values.h",
+    "send_zygote_child_ping_linux.h",
+    "service_manager_connection.h",
+    "service_worker_modes.h",
+    "simple_connection_filter.cc",
+    "simple_connection_filter.h",
+    "simple_url_loader.cc",
+    "simple_url_loader.h",
+    "socket_permission_request.h",
+    "speech_recognition_error.h",
+    "speech_recognition_grammar.h",
+    "speech_recognition_result.cc",
+    "speech_recognition_result.h",
+    "stop_find_action.h",
+    "storage_quota_params.h",
+    "three_d_api_types.h",
+    "url_constants.cc",
+    "url_constants.h",
+    "url_fetcher.h",
+    "url_loader_throttle.cc",
+    "url_loader_throttle.h",
+    "url_utils.cc",
+    "url_utils.h",
+    "user_agent.h",
+    "web_preferences.cc",
+    "web_preferences.h",
+    "webplugininfo.cc",
+    "webplugininfo.h",
+    "webplugininfo_param_traits.h",
+    "zygote_fork_delegate_linux.h",
+    "zygote_handle.h",
+  ]
+
+  configs += [
+    "//build/config:precompiled_headers",
+    "//content:content_implementation",
+  ]
+
+  public_configs = [ "//v8:external_startup_data" ]
+
+  public_deps = [
+    ":interfaces",
+    ":service_names",
+    "//content/common",
+    "//ipc",
+    "//mojo/edk/system",
+    "//mojo/public/cpp/bindings",
+    "//net",
+    "//services/service_manager/embedder",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/interfaces",
+    "//third_party/WebKit/public:blink_headers",
+    "//third_party/WebKit/public:mojo_bindings",
+    "//ui/accessibility",
+    "//ui/surface",
+    "//url/ipc:url_ipc",
+  ]
+  deps = [
+    ":content_descriptor_keys",
+
+    # This looks needless as we have //content/common in public_deps, but it's
+    # needed because of allow_circular_includes_from.
+    "//content/common:mojo_bindings",
+    "//media",
+    "//mojo/common",
+    "//ppapi/c",
+    "//ppapi/features",
+    "//services/network/public/interfaces:interfaces",
+    "//services/service_manager/public/cpp",
+    "//skia",
+    "//storage/common",
+    "//third_party/WebKit/common:blink_common",
+    "//third_party/icu",
+    "//ui/accessibility",
+    "//ui/base",
+    "//ui/gfx",
+    "//ui/gfx/ipc",
+    "//ui/gfx/ipc/color",
+    "//ui/gfx/ipc/geometry",
+    "//ui/gfx/ipc/skia",
+  ]
+
+  if (use_aura) {
+    deps += [ "//ui/aura" ]
+  }
+
+  # //content/common needs to include public headers.
+  allow_circular_includes_from = [
+    ":interfaces",
+    "//content/common",
+    "//content/common:mojo_bindings",
+  ]
+
+  if (!enable_plugins) {
+    sources -= [
+      "pepper_plugin_info.cc",
+      "pepper_plugin_info.h",
+    ]
+  }
+
+  if (enable_webrtc) {
+    sources += [
+      "webrtc_ip_handling_policy.cc",
+      "webrtc_ip_handling_policy.h",
+    ]
+  }
+}
+
+buildflag_header("features") {
+  header = "features.h"
+
+  flags = [ "RTC_USE_H264=$rtc_use_h264" ]
+}
+
+source_set("feature_h264_with_openh264_ffmpeg") {
+  deps = [
+    ":features",
+    "//base",
+  ]
+  sources = [
+    "feature_h264_with_openh264_ffmpeg.cc",
+    "feature_h264_with_openh264_ffmpeg.h",
+  ]
+}
+
+mojom("interfaces") {
+  # Must depend on //content/public/common/ instead, for component build.
+  visibility = [
+    ":common_sources",
+    "//content/common/*",
+    "//chrome/common:mojo_bindings",
+    "//chrome/common:mojo_bindings_blink",
+  ]
+
+  sources = [
+    "appcache_info.mojom",
+    "download_stream.mojom",
+    "network_service.mojom",
+    "network_service_test.mojom",
+    "push_messaging_status.mojom",
+    "url_loader.mojom",
+    "url_loader_factory.mojom",
+    "webplugininfo.mojom",
+    "window_container_type.mojom",
+  ]
+
+  public_deps = [
+    ":resource_type_bindings",
+    "//mojo/common:common_custom_types",
+    "//services/network/public/interfaces",
+    "//url/mojo:url_mojom_gurl",
+    "//url/mojo:url_mojom_origin",
+  ]
+
+  component_output_prefix = "content_public_common_mojo_bindings"
+  export_class_attribute = "CONTENT_EXPORT"
+  export_define = "CONTENT_IMPLEMENTATION=1"
+  export_header = "content/common/content_export.h"
+}
+
+mojom("service_names") {
+  sources = [
+    "service_names.mojom",
+  ]
+}
+
+mojom("resource_type_bindings") {
+  sources = [
+    "resource_type.mojom",
+  ]
+}

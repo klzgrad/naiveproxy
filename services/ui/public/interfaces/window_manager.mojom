@@ -1,0 +1,400 @@
+// Copyright 2015 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module ui.mojom;
+
+import "gpu/ipc/common/surface_handle.mojom";
+import "services/ui/public/interfaces/cursor/cursor.mojom";
+import "services/ui/public/interfaces/event_matcher.mojom";
+import "services/ui/public/interfaces/window_manager_constants.mojom";
+import "services/ui/public/interfaces/window_tree_constants.mojom";
+import "services/viz/public/interfaces/compositing/frame_sink_id.mojom";
+import "services/viz/public/interfaces/compositing/local_surface_id.mojom";
+import "skia/public/interfaces/bitmap.mojom";
+import "ui/base/mojo/ui_base_types.mojom";
+import "ui/display/mojo/display.mojom";
+import "ui/events/mojo/event.mojom";
+import "ui/events/mojo/event_constants.mojom";
+import "ui/gfx/geometry/mojo/geometry.mojom";
+import "ui/display/mojo/display.mojom";
+
+// WindowManager is used when a WindowTreeClient attempts to modify
+// a property of the embed root. When this happens WindowTree calls the
+// appropriate function on WindowManager. For example, if a
+// WindowTreeClient calls SetWindowBounds() on its embed root, WindowTree
+// calls WmSetBounds(). WindowManager can then decide if it wants to
+// change the bounds or not.
+//
+// This interface is only used as an associated interface and is associated
+// with WindowTreeClient, further WindowTree requests this interface from
+// WindowTreeClient supplied at the time the WindowTreeHost is created.
+interface WindowManager {
+  // WindowManager defines two sets of distinct properties.
+  // . Properties that are used at creation time only and not persisted.
+  // . Long lived properties. These properties may be changed at any time and
+  //   are mapped to aura::Window properties. aura::PropertyConverter defines
+  //   the mapping between the property defined here and the corresonding
+  //   aura property. For properties defined in PropertyConverter any change to
+  //   to the aura property is mapped to the property defined here and sent to
+  //   all clients that know about the window (which is generally just the owner
+  //   and the window-manager).
+
+  // Properties used only during creation time. --------------------------------
+
+  // Whether the window should be initially focusable or not. Type: bool.
+  const string kFocusable_InitProperty = "init:focusable";
+
+  // Whether the window should be opaque.
+  const string kTranslucent_InitProperty = "init:translucent";
+
+  // Initial bounds to create the window at. If empty the WindowManager decides
+  // the initial bounds. Type: gfx::Rect.
+  const string kBounds_InitProperty = "init:bounds";
+
+  // The window manager will place the window in this container when the window
+  // is created. If not set a container is selected based on the window type.
+  // Type: int32_t.
+  const string kContainerId_InitProperty = "init:container_id";
+
+  // Disables the window manager from handling immersive fullscreen for the
+  // window. This is typically done if the client wants to handle immersive
+  // themselves. Type: bool.
+  const string kDisableImmersive_InitProperty = "init:disable_immersive";
+
+  // The id of the display (display::Display::id()) to create the window on.
+  // Type: int64.
+  const string kDisplayId_InitProperty = "init:display_id";
+
+  // Specifies that the system default caption and icon should not be rendered,
+  // and the client area should be equivalent to the window area. Type: bool
+  const string kRemoveStandardFrame_InitProperty = "init:remove-standard-frame";
+
+  // A flag controlling the window's presence on the mash shelf. Type: bool
+  const string kWindowIgnoredByShelf_InitProperty =
+      "init:window-ignored-by-shelf";
+
+  // The window type. This maps to aura::client::kWindowTypeKey as well as
+  // Window::type(). This mapping is only done for top-level windows that are
+  // created by the window manager at the request of a client.
+  // Type: mojom::WindowType (int32_t).
+  const string kWindowType_InitProperty = "init:window-type";
+
+  // End properties used only during creation time. ----------------------------
+
+  // Long lived properties. ----------------------------------------------------
+
+  // All primitive properties are transported as
+  // aura::PropertyConverter::PrimitiveType.
+
+  // Whether the window is always on top. Maps to aura::client::kAlwaysOnTopKey.
+  // Type: bool.
+  const string kAlwaysOnTop_Property = "prop:always_on_top";
+
+  // The application icon; typically larger for shelf icons, etc. Type: SkBitmap
+  const string kAppIcon_Property = "prop:app-icon";
+
+  // Whether the window is trying to draw attention to itself (e.g. pulsing its
+  // shelf icon). Type: bool.
+  const string kDrawAttention_Property = "prop:draw-attention";
+
+  // Used to explicitly control whether a window appears in the most recently
+  // used list of windows. Maps to aura::client::kExcludeFromMruKey. Type: bool.
+  const string kExcludeFromMru_Property = "prop:exclude_from_mru";
+
+  // If true, when a window is in in fullscreen mode, the user cannot reveal
+  // the top portion of the window through a touch / mouse gesture.
+  // Type: bool.
+  const string kImmersiveFullscreen_Property = "prop:immersive-fullscreen";
+
+  // The window's minimum size as defined by its content. Maps to
+  // aura::client::kMinimumSize_Property. Type: gfx::Size.
+  const string kMinimumSize_Property = "prop:minimum-size";
+
+  // Internal window name. Useful for debugging. Maps to aura::client::kNameKey.
+  // Type: mojom::String
+  const string kName_Property = "prop:name";
+
+  // If true (and the window is a panel), it's attached to its shelf item.
+  const string kPanelAttached_Property = "prop:panel-attached";
+
+  // The window's preferred size as defined by its content. Maps to
+  // aura::client::kPreferredSize_Property. Type: gfx::Size.
+  const string kPreferredSize_Property = "prop:preferred-size";
+
+  // If true the window manager renders the title area (including frame
+  // decorations) of the parent window in this window. This is only checked
+  // at the time the window is added to its parent, which must be a top level
+  // window (created by way of WindowTree::NewTopLevelWindow()). This is not
+  // mapped by default, it's up to the window manager (such as ash) to decide
+  // how to handle this. Type: bool.
+  const string kRenderParentTitleArea_Property =
+      "render-parent-non-client-area";
+
+  // The window's resize behavior. Maps to aura::client::kResizeBehaviorKey.
+  // Type: ResizeBehavior.
+  const string kResizeBehavior_Property = "prop:resize-behavior";
+
+  // Bounds the window is restored to. Maps to client::kRestoreBoundsKey.
+  // Type: gfx::Rect.
+  const string kRestoreBounds_Property = "prop:restore-bounds";
+
+  // See ShadowElevation for details. Type: wm::ShadowElevation.
+  const string kShadowElevation_Property = "prop:shadow-elevation";
+
+  // The serialized shelf id. Maps to ash::kShelfIDKey. Type: mojom::String.
+  const string kShelfID_Property = "prop:shelf-id";
+
+  // The type of item to be shown on the shelf for this window. Type: int
+  // A few ash::ShelfItemType values are supported; TYPE_UNKNOWN means no item.
+  const string kShelfItemType_Property = "prop:shelf-item-type";
+
+  // The window's show state. Maps to aura::client::kShowStateKey.
+  // Type: ShowState.
+  const string kShowState_Property = "prop:show-state";
+
+  // The window icon; typically 16x16 for titlebars. Type: SkBitmap
+  const string kWindowIcon_Property = "prop:window-icon";
+
+  // The window's title. Maps to aura::client::kTitleKey. Type: mojom::String
+  const string kWindowTitle_Property = "prop:window-title";
+
+  // End long lived properties. ------------------------------------------------
+
+  // Called immediately when the WindowManager is obtained.
+  OnConnect();
+
+  // Called to notify about the real AcceleratedWidget associated with a
+  // display. This is called only when mus is not hosting viz, and requires the
+  // window manager to instead host viz.
+  WmOnAcceleratedWidgetForDisplay(int64 display_id,
+                                  gpu.mojom.SurfaceHandle surface_handle);
+
+  // Called when a new display is added. |root| gives the root window specific
+  // to this WindowManager for |display|. |local_surface_id| identifies the ID
+  // to use to submit CompositorFrames.
+  WmNewDisplayAdded(display.mojom.Display display,
+                    WindowData root,
+                    bool parent_drawn,
+                    viz.mojom.LocalSurfaceId? local_surface_id);
+
+  // Called when a display is removed. The root of the specified display is
+  // still valid. It is expected the client calls DeleteWindow() shortly after
+  // this with the root.
+  WmDisplayRemoved(int64 display_id);
+
+  // Called when a display is modified. The root of the specified display will
+  // be resized by the WindowServer after this.
+  WmDisplayModified(display.mojom.Display display);
+
+  // When the WindowManager completes a request it must call back to
+  // WindowManagerClient::WmResponse().
+  WmSetBounds(uint32 change_id, uint32 window_id, gfx.mojom.Rect bounds);
+  WmSetProperty(uint32 change_id,
+                uint32 window_id,
+                string name,
+                array<uint8>? value);
+
+  WmSetModalType(uint32 window_id, ModalType type);
+  WmSetCanFocus(uint32 window_id, bool can_focus);
+
+  // Asks the WindowManager to create a new window.
+  // |frame_sink_id| is the FrameSinkId for the new window. Window manager
+  // tracks top level windows by client with |frame_sink_id|.client_id().
+  WmCreateTopLevelWindow(uint32 change_id,
+                         viz.mojom.FrameSinkId frame_sink_id,
+                         map<string, array<uint8>> properties);
+
+  // A WindowTreeClient is considered "janky" by Mus when it stops ACK'ing input
+  // events within a reasonable timeframe. When a client enters or exits this
+  // state, Mus will tell the window manager about it so that the window manager
+  // can update the UI for the janky windows.
+  WmClientJankinessChanged(uint16 client_id, bool janky);
+
+  // Asks the WindowManager to create a drag representation window: a window
+  // which contains a single image representation.
+  //
+  // TODO(erg): SkBitmap is the wrong data type for the drag image; we should
+  // be passing ImageSkias once http://crbug.com/655874 is implemented.
+  WmBuildDragImage(gfx.mojom.Point screen_location,
+                   skia.mojom.Bitmap? drag_image,
+                   gfx.mojom.Vector2d drag_image_offset,
+                   PointerKind source);
+
+  // Moves the drag representation image to |screen_location|. The window server
+  // queues further drags locally until they receive the callback.
+  WmMoveDragImage(gfx.mojom.Point screen_location) => ();
+
+  // Called when the drag image is no longer needed.
+  WmDestroyDragImage();
+
+  // Asks the WindowManager to interactively move the window. This will return
+  // whether this completed successfully or not through the client's
+  // OnWmMoveLoopCompleted().
+  WmPerformMoveLoop(uint32 change_id, uint32 window_id,
+                    MoveLoopSource source,
+                    gfx.mojom.Point cursor_location);
+
+  // Asks the WindowManager to cancel any outstanding move loop on |change_id|.
+  WmCancelMoveLoop(uint32 change_id);
+
+  // Asks the WindowManager to change the activation from the current window
+  // to the next. The window manager may completely ignore this message.
+  WmDeactivateWindow(uint32 window_id);
+
+  // Asks the WindowMangaer to stack |above_id| in front of |below_id|.
+  WmStackAbove(uint32 change_id, uint32 above_id, uint32 below_id);
+
+  // Asks the WindowManager to stack |window_id| as the first child of its
+  // window manager owned parent.
+  WmStackAtTop(uint32 change_id, uint32 window_id);
+
+  // Asks the WindowManager to perform |action| on |window_id|.
+  WmPerformWmAction(uint32 window_id, string action);
+
+  // An accelerator registered via AddAccelerator() has been triggered. If
+  // |ack_id| is non-zero the accelerator matches a PRE_TARGET and must be
+  // acknowledged by WindowManagerClient::OnAcceleratorAck().
+  OnAccelerator(uint32 ack_id, uint32 accelerator_id, ui.mojom.Event event);
+
+  // Whenever the visibility of the mouse cursor changes due to touch on the
+  // server, the window manager gets notified of the change.
+  OnCursorTouchVisibleChanged(bool enabled);
+
+  // Called when a pointer down event occurs on a window and the event is
+  // blocked by a modal window.
+  OnEventBlockedByModalWindow(uint32 window_id);
+};
+
+struct WmAccelerator {
+  uint32 id;
+  EventMatcher event_matcher;
+};
+
+// This interface is only used as an associated interface and is associated
+// with WindowTree.
+interface WindowManagerClient {
+  // Enables (or disables) child windows of |window_id| to be activated.
+  AddActivationParent(uint32 window_id);
+  RemoveActivationParent(uint32 window_id);
+
+  // Extends the hit area for children of |window_id| by the specified amount.
+  // |mouse_insets| is used for mouse events, and |touch_insets| for touch
+  // events. NOTE: the insets are expected to be negative (or zero). If one
+  // of the sizes of an inset is a positive value the call is ignored.
+  SetExtendedHitRegionForChildren(uint32 window_id,
+                                  gfx.mojom.Insets mouse_insets,
+                                  gfx.mojom.Insets touch_insets);
+
+  // Add and remove accelerators. When accelerators are registered the
+  // WindowManager receives the event via OnAccelerator() rather than the
+  // target window. The id is defined by the client and can be used to more
+  // easily identify the accelerator's action.
+  // Accelerator ids 1 << 31 and above are reserved for internal use.
+
+  // See WindowTree for details on event dispatch.
+  // This ignores any accelerators already defined with the same id or matcher.
+  // Returns true if all accelerators were added successfully.
+  AddAccelerators(array<WmAccelerator> accelerators) => (bool success);
+  RemoveAccelerator(uint32 id);
+
+  // Some platforms want to hide the cursor when the user presses a key, but
+  // only on certain keys. When |dont_hide_cursor_list| is non-empty, the window
+  // server will attempt to match all keys being dispatched to windows to this
+  // list. If there is no match, the window server will hide the cursor. (The
+  // list of keys to *not* hide on is much shorter than the list of all keys.)
+  // The cursor will automatically be unhidden on the next mouse event.
+  SetKeyEventsThatDontHideCursor(array<EventMatcher> dont_hide_cursor_list);
+
+  // Sets the root window for a new |display|. This is only applicable if the
+  // WindowTree does not |automatically_create_display_roots| (see
+  // WindowManagerWindowTreeFactory::CreateWindowTree() for details).
+  // This may also be called to move an existing root window to a new display.
+  // |mirrors| contains a list of physical displays presenting contents mirrored
+  // from another physical display, or from part of a virtual unified display.
+  SetDisplayRoot(display.mojom.Display display,
+                 WmViewportMetrics viewport_metrics,
+                 bool is_primary_display,
+                 uint32 window_id,
+                 array<display.mojom.Display> mirrors) => (bool success);
+
+  // Configures metrics for the displays and notifies observers. This is only
+  // applicable if the WindowTree does not |automatically_create_display_roots|.
+  // This *must* be called after any display related changes to inform
+  // observers, for example, after calling SetDisplayRoot() this must be called
+  // to inform observers of the display changes.
+  // |mirrors| contains a list of physical displays presenting contents mirrored
+  // from another physical display, or from part of a virtual unified display.
+  SetDisplayConfiguration(
+      array<display.mojom.Display> displays,
+      array<WmViewportMetrics> viewport_metrics,
+      int64 primary_display_id,
+      int64 internal_display_id,
+      array<display.mojom.Display> mirrors) => (bool success);
+
+  // Swaps the display roots of the two displays.
+  SwapDisplayRoots(int64 display_id1, int64 display_id2) => (bool success);
+
+  // Sets the BlockingContainers; one per display. This should be called any
+  // time displays are added or removed. See description of BlockingContainers
+  // for details on what this does.
+  SetBlockingContainers(array<BlockingContainers> blocking_containers) =>
+      (bool success);
+
+  // The window manager has completed a request with the specific change id.
+  WmResponse(uint32 change_id, bool response);
+
+  // The window manager has completed a SetBounds request with the specified
+  // change id
+  WmSetBoundsResponse(uint32 change_id);
+
+  // Calls WindowTreeClient::RequestClose() on the embedded app at the
+  // specified window.
+  WmRequestClose(uint32 window_id);
+
+  // Sets the frame decoration constants of the display the window manager is
+  // associated with.
+  WmSetFrameDecorationValues(FrameDecorationValues values);
+
+  // Sets the cursor that the non-client areas of the window should use.
+  WmSetNonClientCursor(uint32 window_id, CursorData cursor);
+
+  // Locks and unlocks the cursor globally. Used during window management tasks
+  // where the cursor shouldn't change.
+  WmLockCursor();
+  WmUnlockCursor();
+
+  // Shows and hides the cursor globally. Used during window management tasks.
+  WmSetCursorVisible(bool visible);
+
+  // Sets whether we're using normal or large cursors.
+  WmSetCursorSize(CursorSize cursor_size);
+
+  // Sets a global cursor which overrides per-window cursors. Pass null to
+  // clear.
+  WmSetGlobalOverrideCursor(CursorData? cursor);
+
+  // Moves the cursor to the given location on the given display.
+  WmMoveCursorToDisplayLocation(gfx.mojom.Point display_pixels,
+                                int64 display_id);
+
+  // Confines the cursor to a rectangle in pixels on |display_id|.
+  WmConfineCursorToBounds(gfx.mojom.Rect bounds_in_pixels,
+                          int64 display_id);
+
+  // The cursor is hidden and shown by touch events naturally, but the
+  // window manager also can manually show/hide it for features.
+  WmSetCursorTouchVisible(bool enabled);
+
+  // Response from WmCreateTopLevelWindow() informing the client of the id for
+  // the new window.
+  OnWmCreatedTopLevelWindow(uint32 change_id, uint32 window_id);
+
+  // See description in WindowManager::OnAccelerator(). |ack_id| is the value
+  // that was passed to OnAccelerator(). If the accelerator is a pre-target
+  // handler and |event_result| is UNHANDLED, then |properties| is added to
+  // the KeyEvent that is dispatched to the client with the focused window.
+  OnAcceleratorAck(uint32 ack_id,
+                   EventResult event_result,
+                   map<string, array<uint8>> properties);
+};

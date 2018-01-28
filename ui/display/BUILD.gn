@@ -1,0 +1,195 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ui.gni")
+import("//testing/test.gni")
+
+component("display") {
+  sources = [
+    "display.cc",
+    "display.h",
+    "display_change_notifier.cc",
+    "display_change_notifier.h",
+    "display_export.h",
+    "display_finder.cc",
+    "display_finder.h",
+    "display_layout.cc",
+    "display_layout.h",
+    "display_layout_builder.cc",
+    "display_layout_builder.h",
+    "display_list.cc",
+    "display_list.h",
+    "display_observer.cc",
+    "display_observer.h",
+    "display_switches.cc",
+    "display_switches.h",
+    "ios/screen_ios.mm",
+    "mac/screen_mac.mm",
+    "screen.cc",
+    "screen.h",
+    "screen_android.cc",
+    "screen_aura.cc",
+    "screen_base.cc",
+    "screen_base.h",
+    "unified_desktop_utils.cc",
+    "unified_desktop_utils.h",
+    "win/color_profile_reader.cc",
+    "win/color_profile_reader.h",
+    "win/display_info.cc",
+    "win/display_info.h",
+    "win/dpi.cc",
+    "win/dpi.h",
+    "win/scaling_util.cc",
+    "win/scaling_util.h",
+    "win/screen_win.cc",
+    "win/screen_win.h",
+    "win/screen_win_display.cc",
+    "win/screen_win_display.h",
+  ]
+
+  defines = [ "DISPLAY_IMPLEMENTATION" ]
+
+  public_deps = [
+    "//ui/display/types",
+    "//ui/gfx:gfx",
+  ]
+
+  deps = [
+    "//base",
+    "//mojo/public/cpp/bindings:struct_traits",
+    "//ui/display/util",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+  ]
+
+  if (!use_aura) {
+    sources -= [ "screen_aura.cc" ]
+  }
+
+  if (is_mac) {
+    libs = [
+      "AppKit.framework",
+      "CoreGraphics.framework",
+    ]
+  }
+}
+
+component("display_manager_test_api") {
+  testonly = true
+  sources = [
+    "test/display_manager_test_api.cc",
+    "test/display_manager_test_api.h",
+  ]
+
+  defines = [ "DISPLAY_IMPLEMENTATION" ]
+
+  public_deps = [
+    "//ui/display/manager",
+  ]
+
+  deps = [
+    "//base",
+    "//ui/display",
+    "//ui/display/types",
+  ]
+}
+
+static_library("test_support") {
+  testonly = true
+  sources = [
+    "manager/chromeos/test/action_logger.cc",
+    "manager/chromeos/test/action_logger.h",
+    "manager/chromeos/test/action_logger_util.cc",
+    "manager/chromeos/test/action_logger_util.h",
+    "manager/chromeos/test/test_display_layout_manager.cc",
+    "manager/chromeos/test/test_display_layout_manager.h",
+    "manager/chromeos/test/test_native_display_delegate.cc",
+    "manager/chromeos/test/test_native_display_delegate.h",
+    "manager/chromeos/test/touch_device_manager_test_api.cc",
+    "manager/chromeos/test/touch_device_manager_test_api.h",
+    "manager/chromeos/test/touch_transform_controller_test_api.cc",
+    "manager/chromeos/test/touch_transform_controller_test_api.h",
+    "test/display_matchers.cc",
+    "test/display_matchers.h",
+    "test/display_test_util.h",
+    "test/test_screen.cc",
+    "test/test_screen.h",
+    "win/test/screen_util_win.cc",
+    "win/test/screen_util_win.h",
+  ]
+
+  public_deps = [
+    ":display",
+    "//ui/display/manager",
+  ]
+  deps = [
+    "//base",
+    "//testing/gmock",
+    "//ui/display/types",
+    "//ui/events/devices",
+    "//ui/gfx",
+    "//ui/gfx:test_support",
+    "//ui/gfx/geometry",
+  ]
+}
+
+# This test covers all testable components in display.
+test("display_unittests") {
+  sources = [
+    "display_change_notifier_unittest.cc",
+    "display_layout_builder_unittest.cc",
+    "display_layout_unittest.cc",
+    "display_list_unittest.cc",
+    "display_unittest.cc",
+    "manager/chromeos/apply_content_protection_task_unittest.cc",
+    "manager/chromeos/configure_displays_task_unittest.cc",
+    "manager/chromeos/display_change_observer_unittest.cc",
+    "manager/chromeos/display_configurator_unittest.cc",
+    "manager/chromeos/query_content_protection_task_unittest.cc",
+    "manager/chromeos/touch_device_manager_unittest.cc",
+    "manager/chromeos/touch_transform_controller_unittest.cc",
+    "manager/chromeos/update_display_configuration_task_unittest.cc",
+    "manager/display_manager_utilities_unittest.cc",
+    "manager/fake_display_snapshot_unittest.cc",
+    "manager/json_converter_unittest.cc",
+    "manager/managed_display_info_unittest.cc",
+    "mojo/display_struct_traits_unittest.cc",
+    "screen_unittest.cc",
+    "unified_desktop_utils_unittests.cc",
+    "util/display_util_unittest.cc",
+    "util/edid_parser_unittest.cc",
+    "win/scaling_util_unittest.cc",
+    "win/screen_win_unittest.cc",
+  ]
+
+  deps = [
+    ":display",
+    ":display_manager_test_api",
+    ":test_support",
+    "//base",
+    "//base/test:test_support",
+    "//cc/base",
+    "//mojo/edk/test:run_all_unittests",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//ui/display/manager",
+    "//ui/display/mojo:interfaces",
+    "//ui/display/types",
+    "//ui/display/util",
+    "//ui/events:test_support",
+    "//ui/events/devices",
+    "//ui/gfx:test_support",
+    "//ui/gfx/geometry",
+  ]
+
+  if (is_android) {
+    # Do not run display_change_notifier_unittest.cc on Android because it
+    # does not compile display_observer.cc
+    sources -= [ "display_change_notifier_unittest.cc" ]
+  }
+
+  if (is_chromeos) {
+    deps += [ "//chromeos" ]
+  }
+}

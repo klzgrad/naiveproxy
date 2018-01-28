@@ -1,0 +1,203 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//testing/test.gni")
+import("//build/config/ui.gni")
+if (is_mac) {
+  import("//build/config/mac/mac_sdk.gni")
+}
+
+group("service") {
+  if (is_component_build) {
+    public_deps = [
+      "//gpu",
+    ]
+  } else {
+    public_deps = [
+      ":ipc_service_sources",
+    ]
+  }
+}
+
+if (is_component_build) {
+  link_target_type = "source_set"
+} else {
+  link_target_type = "static_library"
+}
+target(link_target_type, "ipc_service_sources") {
+  visibility = [ "//gpu/*" ]
+  sources = [
+    "gpu_channel.cc",
+    "gpu_channel.h",
+    "gpu_channel_manager.cc",
+    "gpu_channel_manager.h",
+    "gpu_channel_manager_delegate.h",
+    "gpu_command_buffer_stub.cc",
+    "gpu_command_buffer_stub.h",
+    "gpu_config.h",
+    "gpu_init.cc",
+    "gpu_init.h",
+    "gpu_memory_buffer_factory.cc",
+    "gpu_memory_buffer_factory.h",
+    "gpu_memory_manager.cc",
+    "gpu_memory_manager.h",
+    "gpu_memory_tracking.cc",
+    "gpu_memory_tracking.h",
+    "gpu_vsync_provider_win.cc",
+    "gpu_vsync_provider_win.h",
+    "gpu_watchdog_thread.cc",
+    "gpu_watchdog_thread.h",
+    "image_transport_surface.h",
+    "image_transport_surface_delegate.cc",
+    "image_transport_surface_delegate.h",
+    "pass_through_image_transport_surface.cc",
+    "pass_through_image_transport_surface.h",
+    "switches.cc",
+    "switches.h",
+  ]
+  configs += [ "//gpu:gpu_implementation" ]
+  public_deps = [
+    "//base",
+    "//ipc",
+    "//ui/base",
+    "//ui/display",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+    "//ui/gl",
+    "//ui/gl/init",
+    "//url",
+  ]
+  deps = [
+    "//base/third_party/dynamic_annotations",
+    "//gpu/command_buffer/common:common_sources",
+    "//gpu/command_buffer/service:service_sources",
+    "//gpu/config:config_sources",
+    "//gpu/config:crash_keys",
+    "//gpu/ipc/common:ipc_common_sources",
+  ]
+  libs = []
+  ldflags = []
+  if (is_win) {
+    sources += [
+      "child_window_win.cc",
+      "child_window_win.h",
+      "direct_composition_child_surface_win.cc",
+      "direct_composition_child_surface_win.h",
+      "direct_composition_surface_win.cc",
+      "direct_composition_surface_win.h",
+      "gpu_memory_buffer_factory_dxgi.cc",
+      "gpu_memory_buffer_factory_dxgi.h",
+      "image_transport_surface_win.cc",
+    ]
+    libs += [
+      "dxgi.lib",
+      "dwmapi.lib",
+    ]
+    ldflags += [ "/DELAYLOAD:dxgi.dll" ]
+  }
+  if (is_mac) {
+    sources += [
+      "gpu_memory_buffer_factory_io_surface.cc",
+      "gpu_memory_buffer_factory_io_surface.h",
+      "image_transport_surface_mac.mm",
+      "image_transport_surface_overlay_mac.h",
+      "image_transport_surface_overlay_mac.mm",
+    ]
+    deps += [ "//ui/accelerated_widget_mac" ]
+    lib_dirs = [ "$mac_sdk_path/usr/lib" ]
+    libs += [
+      "QuartzCore.framework",
+      "CoreGraphics.framework",
+    ]
+  }
+  if (is_android) {
+    sources += [
+      "gpu_memory_buffer_factory_android_hardware_buffer.cc",
+      "gpu_memory_buffer_factory_android_hardware_buffer.h",
+      "image_transport_surface_android.cc",
+      "stream_texture_android.cc",
+      "stream_texture_android.h",
+    ]
+    libs += [ "android" ]
+  }
+  if (is_linux) {
+    sources += [
+      "gpu_memory_buffer_factory_native_pixmap.cc",
+      "gpu_memory_buffer_factory_native_pixmap.h",
+      "image_transport_surface_linux.cc",
+    ]
+  }
+  if (use_x11) {
+    sources += [ "x_util.h" ]
+  }
+  if (use_ozone) {
+    deps += [ "//ui/ozone" ]
+  }
+  if (is_fuchsia) {
+    sources += [ "image_transport_surface_fuchsia.cc" ]
+  }
+}
+
+source_set("test_support") {
+  testonly = true
+  sources = [
+    "gpu_memory_buffer_factory_test_template.h",
+  ]
+  public_deps = [
+    ":service",
+    "//testing/gtest:gtest",
+  ]
+  deps = [
+    "//gpu/ipc/common",
+    "//ui/gl:test_support",
+  ]
+}
+
+test("gpu_ipc_service_unittests") {
+  configs += [ "//build/config:precompiled_headers" ]
+  sources = [
+    "gpu_channel_manager_unittest.cc",
+    "gpu_channel_test_common.cc",
+    "gpu_channel_test_common.h",
+    "gpu_channel_unittest.cc",
+    "gpu_vsync_provider_unittest_win.cc",
+  ]
+  deps = [
+    ":service",
+    ":test_support",
+    "//base",
+    "//base/test:test_support",
+    "//gpu/command_buffer/common",
+    "//gpu/command_buffer/common:gles2_utils",
+    "//gpu/command_buffer/service",
+    "//gpu/config",
+    "//gpu/ipc/common",
+    "//ipc:run_all_unittests",
+    "//ipc:test_support",
+    "//skia",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//third_party/mesa:mesa_headers",
+    "//ui/gfx:test_support",
+    "//ui/gl:gl_unittest_utils",
+    "//ui/gl:test_support",
+    "//url",
+  ]
+  libs = []
+  if (is_android) {
+    deps += [ "//ui/android:ui_java" ]
+  }
+  if (is_mac) {
+    sources += [ "gpu_memory_buffer_factory_io_surface_unittest.cc" ]
+  }
+  if (is_linux) {
+    sources += [ "gpu_memory_buffer_factory_native_pixmap_unittest.cc" ]
+  }
+  if (is_win) {
+    sources += [ "gpu_memory_buffer_factory_dxgi_unittest.cc" ]
+  }
+  if (use_ozone) {
+    deps += [ "//ui/ozone" ]
+  }
+}

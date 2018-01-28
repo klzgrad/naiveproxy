@@ -1,0 +1,170 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("features/features.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
+
+if (is_android) {
+  import("//build/config/android/rules.gni")  # For generate_jni().
+}
+
+if (enable_vr) {
+  component("vr") {
+    output_name = "device_vr"
+
+    sources = [
+      "vr_export.h",
+    ]
+    defines = [ "DEVICE_VR_IMPLEMENTATION" ]
+    deps = [
+      ":mojo_bindings",
+      "features",
+    ]
+    sources += [
+      "vr_device.h",
+      "vr_device_base.cc",
+      "vr_device_base.h",
+      "vr_device_provider.h",
+      "vr_display_impl.cc",
+      "vr_display_impl.h",
+    ]
+
+    deps += [
+      "//base",
+      "//gpu/ipc/common:interfaces",
+      "//mojo/public/cpp/bindings",
+      "//ui/gfx",
+    ]
+
+    if (enable_gvr_services) {
+      sources += [
+        "android/gvr/cardboard_gamepad_data_fetcher.cc",
+        "android/gvr/cardboard_gamepad_data_fetcher.h",
+        "android/gvr/cardboard_gamepad_data_provider.h",
+        "android/gvr/gvr_delegate.cc",
+        "android/gvr/gvr_delegate.h",
+        "android/gvr/gvr_delegate_provider.h",
+        "android/gvr/gvr_delegate_provider_factory.cc",
+        "android/gvr/gvr_delegate_provider_factory.h",
+        "android/gvr/gvr_device.cc",
+        "android/gvr/gvr_device.h",
+        "android/gvr/gvr_device_provider.cc",
+        "android/gvr/gvr_device_provider.h",
+        "android/gvr/gvr_gamepad_data_fetcher.cc",
+        "android/gvr/gvr_gamepad_data_fetcher.h",
+        "android/gvr/gvr_gamepad_data_provider.h",
+      ]
+
+      deps += [
+        ":jni_headers",
+        "//device/gamepad",
+        "//device/gamepad/public/cpp:shared_with_blink",
+        "//third_party/WebKit/public:blink_headers",
+      ]
+      ldflags = [ "-landroid" ]
+      libs = [ "//third_party/gvr-android-sdk/libgvr_shim_static_${current_cpu}.a" ]
+      configs += [ "//third_party/gvr-android-sdk:libgvr_config" ]
+    }
+
+    if (enable_openvr) {
+      deps += [
+        "//device/gamepad",
+        "//device/gamepad/public/cpp:shared_with_blink",
+        "//third_party/openvr:openvr",
+      ]
+      sources += [
+        "openvr/openvr_device.cc",
+        "openvr/openvr_device.h",
+        "openvr/openvr_device_provider.cc",
+        "openvr/openvr_device_provider.h",
+        "openvr/openvr_gamepad_data_fetcher.cc",
+        "openvr/openvr_gamepad_data_fetcher.h",
+        "openvr/openvr_render_loop.cc",
+        "openvr/openvr_render_loop.h",
+        "openvr/openvr_type_converters.cc",
+        "openvr/openvr_type_converters.h",
+      ]
+    }
+
+    if (is_win && enable_openvr) {
+      libs = [ "d3d11.lib" ]
+      sources += [
+        "windows/d3d11_texture_helper.cc",
+        "windows/d3d11_texture_helper.h",
+        "windows/flip_pixel_shader.h",
+        "windows/flip_vertex_shader.h",
+      ]
+    }
+  }
+
+  static_library("fakes") {
+    testonly = true
+
+    defines = [ "DEVICE_VR_IMPLEMENTATION" ]
+
+    sources = [
+      "test/fake_vr_device.cc",
+      "test/fake_vr_device.h",
+      "test/fake_vr_device_provider.cc",
+      "test/fake_vr_device_provider.h",
+      "test/fake_vr_display_impl_client.cc",
+      "test/fake_vr_display_impl_client.h",
+      "test/fake_vr_service_client.cc",
+      "test/fake_vr_service_client.h",
+      "test/mock_vr_display_impl.cc",
+      "test/mock_vr_display_impl.h",
+      "vr_export.h",
+    ]
+
+    public_deps = [
+      ":mojo_bindings",
+      ":vr",
+      "//base",
+      "//mojo/public/cpp/bindings",
+      "//testing/gmock",
+    ]
+  }
+} else {
+  source_set("vr") {
+    # We need to include an empty .cc file so that mac and windows don't fall over when trying to
+    # compile this when webvr is disabled.
+    sources = [
+      "empty.cc",
+    ]
+  }
+}
+
+if (enable_gvr_services) {
+  java_sources_needing_jni =
+      [ "android/java/src/org/chromium/device/vr/NonPresentingGvrContext.java" ]
+
+  generate_jni("jni_headers") {
+    sources = java_sources_needing_jni
+    jni_package = "device"
+  }
+
+  android_library("java") {
+    java_files = java_sources_needing_jni
+    deps = [
+      "//base:base_java",
+      "//third_party/gvr-android-sdk:gvr_common_java",
+      "//ui/android:ui_java",
+    ]
+  }
+}
+
+mojom_component("mojo_bindings") {
+  output_prefix = "device_vr_mojo_bindings"
+  macro_prefix = "DEVICE_VR_MOJO_BINDINGS"
+
+  sources = [
+    "vr_service.mojom",
+  ]
+
+  public_deps = [
+    "//gpu/ipc/common:interfaces",
+    "//mojo/common:common_custom_types",
+    "//ui/gfx/geometry/mojo",
+  ]
+}

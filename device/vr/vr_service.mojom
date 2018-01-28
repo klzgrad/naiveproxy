@@ -1,0 +1,150 @@
+// Copyright 2015 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module device.mojom;
+
+import "mojo/common/time.mojom";
+import "gpu/ipc/common/mailbox_holder.mojom";
+import "gpu/ipc/common/sync_token.mojom";
+import "ui/gfx/geometry/mojo/geometry.mojom";
+
+// A field of view, given by 4 degrees describing the view from a center point.
+struct VRFieldOfView {
+  float upDegrees;
+  float downDegrees;
+  float leftDegrees;
+  float rightDegrees;
+};
+
+// A display's position, orientation, velocity, and acceleration state at the
+// given timestamp.
+struct VRPose {
+  array<float, 4>? orientation;
+  array<float, 3>? position;
+  array<float, 3>? angularVelocity;
+  array<float, 3>? linearVelocity;
+  array<float, 3>? angularAcceleration;
+  array<float, 3>? linearAcceleration;
+};
+
+struct VRDisplayCapabilities {
+  bool hasPosition;
+  bool hasExternalDisplay;
+  bool canPresent;
+};
+
+// Information about the optical properties for an eye in a VRDisplay.
+struct VREyeParameters {
+  VRFieldOfView fieldOfView;
+  array<float, 3> offset;
+  uint32 renderWidth;
+  uint32 renderHeight;
+};
+
+struct VRStageParameters {
+  array<float, 16> standingTransform;
+  float sizeX;
+  float sizeZ;
+};
+
+struct VRDisplayInfo {
+  uint32 index;
+  string displayName;
+  VRDisplayCapabilities capabilities;
+  VRStageParameters? stageParameters;
+  VREyeParameters leftEye;
+  VREyeParameters rightEye;
+};
+
+enum VRDisplayEventReason {
+  NONE = 0,
+  NAVIGATION = 1,
+  MOUNTED = 2,
+  UNMOUNTED = 3
+};
+
+// TODO(shaobo.yan@intel.com) : Add comments to describe these interfaces about
+// how to use and where they live.
+interface VRService {
+  // TODO(shaobo.yan@intel.com, crbug/701027): Use a factory function which
+  // takes a VRServiceClient so we will never have a half-initialized VRService.
+  SetClient(VRServiceClient client) => ();
+  // Inform the service that the page is listening for vrdisplayactivate events.
+  // TODO(mthiesse): Move SetListeningForActivate onto VRDisplay.
+  SetListeningForActivate(bool listening);
+};
+
+interface VRServiceClient {
+  OnDisplayConnected(VRMagicWindowProvider magic_window_provider,
+                     VRDisplayHost display, VRDisplayClient& request,
+                     VRDisplayInfo display_info);
+};
+
+// After submitting a frame, the VRPresentationProvider will notify the client
+// about several stages of the render pipeline.  This allows pipelining
+// efficiency.  Following VRPresentationProvider::Submit*, the submitted frame
+// will be transferred (read from, perhaps copied to another texture), and then
+// rendered (submitted to the underlying VR API).
+// The client lives in the render process, implemented by VRDisplay.
+interface VRSubmitFrameClient {
+  // The VRPresentationProvider calls this to indicate that the submitted frame
+  // has been transferred, so the backing data (mailbox or GpuMemoryBuffer) can
+  // be reused or discarded.  Note that this is a convenience/optimization
+  // feature, not a security feature - if a site discards the data early we may
+  // drop a frame, but nothing will otherwise misbehave.
+  // When the frame wasn't successfully transferred, the client should create a
+  // new mailbox/GpuMemoryBuffer rather than reusing an existing one to recover
+  // for subsequent frames.
+  OnSubmitFrameTransferred(bool success);
+
+  // The VRPresentationProvider calls this after the frame was handed off to the
+  // underlying VR API. This allows some pipelining of CPU/GPU work, while
+  // delaying expensive tasks for a subsequent frame until the current frame has
+  // completed.
+  OnSubmitFrameRendered();
+};
+
+// Provides a communication channel from the renderer to the browser-side host
+// of a (device/) VrDisplayImpl.
+interface VRDisplayHost {
+  RequestPresent(VRSubmitFrameClient client,
+                 VRPresentationProvider& request) => (bool success);
+  ExitPresent();
+};
+
+// Provides the necessary functionality for a non-presenting WebVR page to draw
+// magic window content.
+interface VRMagicWindowProvider {
+  GetPose() => (VRPose? pose);
+};
+
+// Provides the necessary functionality for a presenting WebVR page to draw
+// frames for a VrDisplay.
+// This interface is hosted in the Browser process, but will move to a sandboxed
+// utility process on Windows.  The render process communicates with it.
+interface VRPresentationProvider {
+  enum VSyncStatus { SUCCESS, CLOSING };
+
+  // The frameId maps a VSync to a frame arriving from the compositor. IDs will
+  // be reused after the frame arrives from the compositor. Negative IDs imply
+  // no mapping.
+  GetVSync() => (VRPose? pose, mojo.common.mojom.TimeDelta time, int16 frame_id,
+                 VSyncStatus status);
+  SubmitFrame(int16 frame_id, gpu.mojom.MailboxHolder mailbox_holder);
+
+  // TODO(https://crbug.com/676224): Support preprocessing of mojom files, since
+  // this is Windows only.
+  SubmitFrameWithTextureHandle(int16 frameId, handle texture);
+  UpdateLayerBounds(int16 frame_id, gfx.mojom.RectF left_bounds,
+                    gfx.mojom.RectF right_bounds, gfx.mojom.Size source_size);
+};
+
+interface VRDisplayClient {
+  OnChanged(VRDisplayInfo display);
+  OnExitPresent();
+  OnBlur();
+  OnFocus();
+  OnActivate(VRDisplayEventReason reason) => (bool will_not_present);
+  OnDeactivate(VRDisplayEventReason reason);
+};

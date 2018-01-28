@@ -1,0 +1,163 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module ash.mojom;
+
+import "ash/public/interfaces/user_info.mojom";
+import "components/signin/public/interfaces/account_id.mojom";
+import "mojo/common/file_path.mojom";
+import "mojo/common/time.mojom";
+import "skia/public/interfaces/bitmap.mojom";
+import "url/mojo/url.mojom";
+
+// These values match wallpaper::WallpaperLayout.
+enum WallpaperLayout {
+  CENTER,
+  CENTER_CROPPED,
+  STRETCH,
+  TILE,
+};
+
+// These values match wallpaper::WallpaperType.
+enum WallpaperType {
+  DAILY,
+  CUSTOMIZED,
+  DEFAULT,
+  ONLINE,
+  POLICY,
+  THIRDPARTY,
+  DEVICE,
+};
+
+// TODO(crbug.com/776464): Remove this after WallpaperManager is removed.
+// WallpaperInfo will be an internal concept within WallpaperController.
+//
+// This corresponds to wallpaper::WallpaperInfo.
+struct WallpaperInfo {
+  string location;
+  WallpaperLayout layout;
+  WallpaperType type;
+  mojo.common.mojom.Time date;
+};
+
+// User info needed to set wallpapers. Clients must specify the user because
+// it's not always the same with the active user, e.g., when showing wallpapers
+// for different user pods at login screen, or setting wallpapers selectively
+// for primary user and active user during a multi-profile session.
+struct WallpaperUserInfo {
+  // The user's account id.
+  signin.mojom.AccountId account_id;
+
+  // The user type. Matches user_manager::UserType.
+  UserType type;
+
+  // True if the user's non-cryptohome data (wallpaper, avatar etc.) is
+  // ephemeral. See |UserManager::IsCurrentUserNonCryptohomeDataEphemeral| for
+  // more details.
+  bool is_ephemeral;
+
+  // True if the user has gaia account.
+  bool has_gaia_account;
+};
+
+// Used by Chrome to set the wallpaper displayed by ash.
+interface WallpaperController {
+  // Sets the client interface.
+  SetClient(WallpaperControllerClient client);
+
+  // Sets wallpaper from policy or from a local file. Saves the custom wallpaper
+  // to file, posts task to generate thumbnail and updates local state.
+  // |user_info|: The user's information related to wallpaper.
+  // |wallpaper_files_id|: The unique id of each wallpaper file.
+  // |file_name|: The name of the wallpaper file.
+  // |layout|: The layout of the wallpaper, used for wallpaper resizing.
+  // |type|: The type of the wallpaper, e.g., default, policy etc.
+  // |image|: The wallpaper image.
+  // |show_wallpaper|: If false, don't show the new wallpaper now but only
+  //                   update cache.
+  SetCustomWallpaper(WallpaperUserInfo user_info,
+                     string wallpaper_files_id,
+                     string file_name,
+                     WallpaperLayout layout,
+                     WallpaperType type,
+                     skia.mojom.Bitmap image,
+                     bool show_wallpaper);
+
+  // Sets wallpaper from the wallpaper picker selection, i.e., the wallpaper
+  // type is ONLINE.
+  // |user_info|: The user's information related to wallpaper.
+  // |image|: The wallpaper image.
+  // |url|: The url corresponding to this wallpaper. Used as a placeholder for
+  //        the location in WallpaperInfo.
+  // |layout|: The layout of the wallpaper, used for wallpaper resizing.
+  // |show_wallpaper|: If false, don't show the new wallpaper now but only
+  //                   update cache.
+  SetOnlineWallpaper(WallpaperUserInfo user_info,
+                     skia.mojom.Bitmap image,
+                     string url,
+                     WallpaperLayout layout,
+                     bool show_wallpaper);
+
+  // Sets the user's wallpaper to be the default wallpaper. Note: different user
+  // types may have different default wallpapers. If |show_wallpaper| is false,
+  // don't show the default wallpaper now.
+  SetDefaultWallpaper(WallpaperUserInfo user_info, bool show_wallpaper);
+
+  // Sets a customized default wallpaper to be used wherever a default wallpaper
+  // is needed. Note: it doesn't change the default wallpaper for guest and
+  // child accounts.
+  // |wallpaper_url|: The url corresponding to this wallpaper.
+  // |file_path|: The path of the wallpaper file.
+  // |resized_directory|: The directory where resized versions are stored. Must
+  //                      be writable.
+  SetCustomizedDefaultWallpaper(url.mojom.Url wallpaper_url,
+                                mojo.common.mojom.FilePath file_path,
+                                mojo.common.mojom.FilePath resized_directory);
+
+  // Shows the user's wallpaper, which is determined in the following order:
+  // 1) Use device policy wallpaper if it exists AND we are at the login screen.
+  // 2) Use user policy wallpaper if it exists.
+  // 3) Use the wallpaper set by the user (either by |SetOnlineWallpaper| or
+  //    |SetCustomWallpaper|), if any.
+  // 4) Use the default wallpaper of this user.
+  ShowUserWallpaper(WallpaperUserInfo user_info);
+
+  // Used by the gaia-signin UI. Signin wallpaper is considered either as the
+  // device policy wallpaper or the default wallpaper.
+  ShowSigninWallpaper();
+
+  // Removes all of the user's saved wallpapers and related info.
+  RemoveUserWallpaper(WallpaperUserInfo user_info);
+
+  // TODO(crbug.com/776464): This is only used by WallpaperManager. Remove this
+  // after WallpaperManager is removed.
+  //
+  // Set the wallpaper bitmap and info used for the ash desktop background.
+  // A null or empty |wallpaper| bitmap is treated as a no-op.
+  // TODO(crbug.com/655875): Optimize ash wallpaper transport; avoid sending
+  // large bitmaps over Mojo; use shared memory like BitmapUploader, etc.
+  SetWallpaper(skia.mojom.Bitmap? wallpaper, WallpaperInfo info);
+
+  // Calling this method triggers an initial notification of the wallpaper
+  // state. Observers are automatically removed as their connections are closed.
+  AddObserver(associated WallpaperObserver observer);
+
+  // Runs to get wallpaper prominent colors.
+  GetWallpaperColors() => (array<uint32> prominent_colors);
+};
+
+// Used by ash to control a Chrome client.
+interface WallpaperControllerClient {
+  // Opens the wallpaper picker window.
+  OpenWallpaperPicker();
+};
+
+// Used to listen for wallpaper state changed.
+interface WallpaperObserver {
+  // Called when the colors extracted from the current wallpaper change. May
+  // be called as a side effect of changing the wallpaper on the
+  // WallpaperController, e.g. WallpaperController::SetWallpaperImage().
+  // Colors are ordered and are referenced in wallpaper::ColorProfileType.
+  OnWallpaperColorsChanged(array<uint32> prominent_colors);
+};

@@ -1,0 +1,68 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+if (!is_android) {
+  source_set("profiling_browsertests") {
+    testonly = true
+
+    sources = [
+      "memlog_browsertest.cc",
+      "profiling_test_driver.cc",
+      "profiling_test_driver.h",
+    ]
+
+    defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+
+    deps = [
+      "//base",
+      "//base/allocator:features",
+      "//chrome/test:test_support_ui",
+      "//testing/gmock",
+      "//testing/gtest",
+    ]
+  }
+} else {
+  import("//build/config/android/rules.gni")
+
+  # In-process browser tests aren't supported on Android.
+  group("profiling_browsertests") {
+  }
+
+  generate_jni("jni_headers") {
+    sources = [
+      "../../android/javatests/src/org/chromium/chrome/browser/profiling_host/TestAndroidShim.java",
+    ]
+    jni_package = "chrome_profiling_host"
+  }
+
+  # This library must be included by the apk_under_test in order for the JNI
+  # shim to function correctly.
+  android_library("profiling_host_java_test_support") {
+    testonly = true
+    java_files = [ "../../android/javatests/src/org/chromium/chrome/browser/profiling_host/TestAndroidShim.java" ]
+    deps = [
+      "//base:base_java",
+    ]
+  }
+
+  # This library must be included by the instrumentation_test. It must not be
+  # included by the apk_under_test, since in debug builds, java classes that
+  # appear in the apk_under_test are stripped from the instrumentation_test.
+  # This library contains dependencies that must not be stripped from the
+  # instrumentation_test.
+  android_library("profiling_host_javatests") {
+    testonly = true
+    java_files = [ "../../android/javatests/src/org/chromium/chrome/browser/profiling_host/ProfilingProcessHostAndroidTest.java" ]
+    deps = [
+      ":profiling_host_java_test_support",
+      "//base:base_java",
+      "//base:base_java_test_support",
+      "//chrome/android:chrome_java",
+      "//chrome/test/android:chrome_java_test_support",
+      "//third_party/android_support_test_runner:rules_java",
+      "//third_party/android_support_test_runner:runner_java",
+      "//third_party/junit",
+    ]
+  }
+}

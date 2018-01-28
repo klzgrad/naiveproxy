@@ -1,0 +1,46 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+declare_args() {
+  # Allow widevinecdmadapter to be built in Chromium.
+  enable_widevine = false
+}
+
+template("widevine_sign_file") {
+  # For official builds, generate a signature file for |file| which will
+  # be used by Widevine. If |signature_file| is not specified, the signature
+  # file will be in the same directory as |file|.
+  action(target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "file",
+                             "signature_file",
+                             "flags",
+                             "deps",
+                           ])
+    assert(defined(file), "File to be signed must be specified.")
+    if (!defined(signature_file)) {
+      signature_file = "$file.sig"
+    }
+    if (!defined(flags)) {
+      flags = 0
+    }
+
+    script = "//third_party/widevine/scripts/signature_generator.py"
+    sources = [
+      "$file",
+    ]
+    outputs = [
+      "$signature_file",
+    ]
+    args = [
+      "--input_file",
+      rebase_path("$file", root_build_dir),
+      "--output_file",
+      rebase_path("$signature_file", root_build_dir),
+      "--flags",
+      "$flags",
+    ]
+  }
+}

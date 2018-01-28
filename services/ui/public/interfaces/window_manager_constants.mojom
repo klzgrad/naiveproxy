@@ -1,0 +1,93 @@
+// Copyright 2015 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module ui.mojom;
+
+import "ui/display/mojo/display.mojom";
+import "ui/gfx/geometry/mojo/geometry.mojom";
+
+enum WindowManagerErrorCode {
+  SUCCESS,
+  ACCESS_DENIED
+};
+
+// TODO(sky): seems like this should not be defined in mus, rather in mash.
+// Only thing mus cares about is minimized and that should be expressed
+// differently.
+enum ShowState {
+  DEFAULT,
+  NORMAL,
+  MINIMIZED,
+  MAXIMIZED,
+  INACTIVE,
+  FULLSCREEN,
+};
+
+const int32 kResizeBehaviorNone = 0;
+const int32 kResizeBehaviorCanResize = 1;
+const int32 kResizeBehaviorCanMaximize = 2;
+const int32 kResizeBehaviorCanMinimize = 4;
+
+struct FrameDecorationValues {
+  gfx.mojom.Insets normal_client_area_insets;
+  gfx.mojom.Insets maximized_client_area_insets;
+  // Max width needed to display the buttons on the title bar. The buttons are
+  // aligned to the trailing edge of the titlebar.
+  // TODO(sky): this API is very narrow, and assumes a particular config.
+  uint32 max_title_bar_button_width;
+};
+
+struct WsDisplay {
+  display.mojom.Display display;
+  FrameDecorationValues frame_decoration_values;
+};
+
+// Whether a client initiated move loop was started with a mouse event or a
+// touch event.
+enum MoveLoopSource {
+  MOUSE,
+  TOUCH
+};
+
+enum WindowType {
+  // These constants come from Widget::InitParams. See it for details.
+  // TODO: see if we can reduce this set. For example, why do we need both
+  // BUBBLE and POPUP.
+  WINDOW,
+  PANEL,
+  WINDOW_FRAMELESS,
+  CONTROL,
+  POPUP,
+  MENU,
+  TOOLTIP,
+  BUBBLE,
+  DRAG,
+  UNKNOWN,
+};
+
+// Used when the window manager explicitly adds a new display.
+struct WmViewportMetrics {
+  gfx.mojom.Rect bounds_in_pixels;
+  float device_scale_factor;
+  float ui_scale_factor;
+};
+
+// Scale factor applied to cursor movement on external displays.
+// TODO(sky): remove this once classic ash is removed.
+const float kCursorMultiplierForExternalDisplays = 1.2;
+
+// Used to specify containers (windows) that may block events. There is a pair
+// of these per display.
+struct BlockingContainers {
+  // Specifies the window that system modal windows are children of. If there a
+  // system modal window in this container, then only events targetted at the
+  // system modal window or one if its descendants (including transient windows)
+  // are delivered. All others are eaten.
+  uint32 system_modal_container_id;
+
+  // If there is no system modal window in |system_modal_container_id|, and
+  // this identifies a valid window, then events that fall behind
+  // |min_container_id| are ignored.
+  uint32 min_container_id;
+};

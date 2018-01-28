@@ -1,0 +1,57 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+{
+  'targets': [
+    {
+      'target_name': 'bookmark_manager',
+      'variables': {
+        'script_args': ['--custom_sources'],
+        'source_files': [
+          '<(DEPTH)/third_party/jstemplate/util.js',
+          '<(DEPTH)/ui/webui/resources/js/assert.js',
+          '<(DEPTH)/third_party/jstemplate/jsevalcontext.js',
+          '<(DEPTH)/third_party/jstemplate/jstemplate.js',
+          '<(DEPTH)/ui/webui/resources/js/cr.js',
+          '<(DEPTH)/ui/webui/resources/js/cr/event_target.js',
+          '<(DEPTH)/ui/webui/resources/js/cr/link_controller.js',
+          '<(DEPTH)/ui/webui/resources/js/cr/ui.js',
+          '<(DEPTH)/ui/webui/resources/js/cr/ui/array_data_model.js',
+          '<(DEPTH)/ui/webui/resources/js/cr/ui/command.js',
+          '<(DEPTH)/ui/webui/resources/js/cr/ui/context_menu_button.js',
+          '<(DEPTH)/ui/webui/resources/js/cr/ui/context_menu_handler.js',
+          '<(DEPTH)/ui/webui/resources/js/cr/ui/focus_outline_manager.js',
+          '<(DEPTH)/ui/webui/resources/js/cr/ui/list.js',
+          '<(DEPTH)/ui/webui/resources/js/cr/ui/list_item.js',
+          '<(DEPTH)/ui/webui/resources/js/cr/ui/list_selection_controller.js',
+          '<(DEPTH)/ui/webui/resources/js/cr/ui/list_selection_model.js',
+          '<(DEPTH)/ui/webui/resources/js/cr/ui/menu.js',
+          '<(DEPTH)/ui/webui/resources/js/cr/ui/menu_button.js',
+          '<(DEPTH)/ui/webui/resources/js/cr/ui/menu_item.js',
+          '<(DEPTH)/ui/webui/resources/js/cr/ui/position_util.js',
+          '<(DEPTH)/ui/webui/resources/js/cr/ui/splitter.js',
+          '<(DEPTH)/ui/webui/resources/js/cr/ui/touch_handler.js',
+          '<(DEPTH)/ui/webui/resources/js/cr/ui/tree.js',
+          '<(DEPTH)/ui/webui/resources/js/event_tracker.js',
+          '<(DEPTH)/ui/webui/resources/js/i18n_template_no_process.js',
+          '<(DEPTH)/ui/webui/resources/js/load_time_data.js',
+          '<(DEPTH)/ui/webui/resources/js/promise_resolver.js',
+          '<(DEPTH)/ui/webui/resources/js/util.js',
+          '<(DEPTH)/ui/webui/resources/js/icon.js',
+          '<(DEPTH)/chrome/browser/resources/bookmark_manager/js/bmm.js',
+          '<(DEPTH)/chrome/browser/resources/bookmark_manager/js/bmm/bookmark_list.js',
+          '<(DEPTH)/chrome/browser/resources/bookmark_manager/js/bmm/bookmark_tree.js',
+          '<(DEPTH)/chrome/browser/resources/bookmark_manager/js/dnd.js',
+          '<(DEPTH)/chrome/browser/resources/bookmark_manager/js/main.js',
+          '<(DEPTH)/third_party/closure_compiler/externs/bookmark_manager_private.js',
+          '<(DEPTH)/third_party/closure_compiler/externs//chrome_send.js',
+          '<(DEPTH)/third_party/closure_compiler/externs//chrome_extensions.js',
+          '<(DEPTH)/third_party/closure_compiler/externs//metrics_private.js',
+          '<(DEPTH)/third_party/closure_compiler/externs//system_private.js',
+          '<(DEPTH)/ui/webui/resources/js/template_data_externs.js',
+        ],
+      },
+      'includes': ['../../../../../third_party/closure_compiler/compile_js2.gypi'],
+    }
+  ],
+}

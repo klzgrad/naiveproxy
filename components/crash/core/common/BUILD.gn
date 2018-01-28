@@ -1,0 +1,104 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+group("common") {
+  public_deps = [
+    ":crash_key",
+    ":crash_key_utils",
+  ]
+
+  if (is_mac || is_ios) {
+    public_deps += [ ":zombies" ]
+  }
+}
+
+static_library("crash_key") {
+  sources = [
+    "crash_key.cc",
+    "crash_key.h",
+    "crash_key_base_support.cc",
+    "crash_key_base_support.h",
+  ]
+
+  deps = [
+    "//base",
+  ]
+
+  if (is_mac || is_win) {
+    sources += [ "crash_key_crashpad.cc" ]
+    deps += [ "//third_party/crashpad/crashpad/client" ]
+  } else if (is_fuchsia) {
+    sources += [ "crash_key_stubs.cc" ]
+  } else {
+    include_dirs = [ "//third_party/breakpad/breakpad/src/" ]
+
+    sources += [
+      "crash_key_breakpad.cc",
+      "crash_key_internal.h",
+    ]
+
+    deps += [ "//third_party/breakpad:client" ]
+  }
+}
+
+static_library("crash_key_utils") {
+  visibility = [ ":*" ]
+
+  sources = [
+    "crash_keys.cc",
+    "crash_keys.h",
+  ]
+
+  deps = [
+    ":crash_key",
+    "//base",
+  ]
+}
+
+if (is_mac || is_ios) {
+  component("zombies") {
+    visibility = [ ":common" ]
+
+    sources = [
+      "objc_zombie.h",
+      "objc_zombie.mm",
+    ]
+
+    defines = [ "CRASH_CORE_COMMON_IMPLEMENTATION" ]
+
+    deps = [
+      ":crash_key",
+      "//base",
+    ]
+
+    libs = [ "Foundation.framework" ]
+  }
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "crash_key_unittest.cc",
+    "crash_keys_unittest.cc",
+  ]
+
+  deps = [
+    ":common",
+    "//base",
+    "//testing/gtest",
+  ]
+
+  if (is_mac || is_ios) {
+    sources += [ "objc_zombie_unittest.mm" ]
+  }
+
+  if (!is_mac && !is_win && !is_fuchsia) {
+    include_dirs = [ "//third_party/breakpad/breakpad/src/" ]
+    sources += [ "crash_key_breakpad_unittest.cc" ]
+  }
+
+  if (is_fuchsia) {
+    sources -= [ "crash_key_unittest.cc" ]
+  }
+}
