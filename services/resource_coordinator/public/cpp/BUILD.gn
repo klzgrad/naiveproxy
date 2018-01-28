@@ -1,0 +1,79 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+component("resource_coordinator_cpp") {
+  sources = [
+    "coordination_unit_id.cc",
+    "coordination_unit_id.h",
+    "coordination_unit_types.h",
+    "memory_instrumentation/client_process_impl.cc",
+    "memory_instrumentation/client_process_impl.h",
+    "memory_instrumentation/coordinator.h",
+    "memory_instrumentation/memory_instrumentation.cc",
+    "memory_instrumentation/memory_instrumentation.h",
+    "memory_instrumentation/os_metrics.cc",
+    "memory_instrumentation/os_metrics.h",
+    "memory_instrumentation/os_metrics_linux.cc",
+    "memory_instrumentation/os_metrics_mac.cc",
+    "memory_instrumentation/os_metrics_win.cc",
+    "memory_instrumentation/tracing_observer.cc",
+    "memory_instrumentation/tracing_observer.h",
+    "resource_coordinator_features.cc",
+    "resource_coordinator_features.h",
+    "resource_coordinator_interface.cc",
+    "resource_coordinator_interface.h",
+    "tracing/chrome_trace_event_agent.cc",
+    "tracing/chrome_trace_event_agent.h",
+  ]
+
+  if (is_android) {
+    set_sources_assignment_filter([])
+    sources += [ "memory_instrumentation/os_metrics_linux.cc" ]
+    set_sources_assignment_filter(sources_assignment_filter)
+  }
+
+  if (is_fuchsia) {
+    sources += [ "memory_instrumentation/os_metrics_fuchsia.cc" ]
+  }
+
+  defines = [ "SERVICES_RESOURCE_COORDINATOR_PUBLIC_CPP_IMPLEMENTATION" ]
+
+  deps = [
+    ":struct_traits",
+  ]
+
+  if (is_win) {
+    deps += [ "//base/win:pe_image" ]
+  }
+
+  public_deps = [
+    "//base",
+    "//mojo/public/cpp/bindings",
+    "//services/resource_coordinator/public/interfaces:interfaces_internal",
+    "//services/resource_coordinator/public/interfaces:interfaces_internal_blink",
+    "//services/service_manager/public/cpp",
+    "//third_party/smhasher:cityhash",
+  ]
+
+  allow_circular_includes_from = [
+    "//services/resource_coordinator/public/interfaces:interfaces_internal",
+    "//services/resource_coordinator/public/interfaces:interfaces_internal_blink",
+  ]
+}
+
+source_set("struct_traits") {
+  sources = [
+    "coordination_unit_struct_traits.cc",
+    "coordination_unit_struct_traits.h",
+    "memory_instrumentation/memory_instrumentation_struct_traits.cc",
+    "memory_instrumentation/memory_instrumentation_struct_traits.h",
+  ]
+
+  defines = [ "SERVICES_RESOURCE_COORDINATOR_PUBLIC_CPP_IMPLEMENTATION" ]
+
+  public_deps = [
+    "//base",
+    "//services/resource_coordinator/public/interfaces:interfaces_internal",
+  ]
+}

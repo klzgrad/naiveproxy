@@ -1,0 +1,99 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module blink.mojom;
+
+import "device/screen_orientation/public/interfaces/screen_orientation_lock_types.mojom";
+import "mojo/common/string16.mojom";
+import "third_party/WebKit/public/platform/display_mode.mojom";
+import "ui/gfx/geometry/mojo/geometry.mojom";
+import "url/mojo/url.mojom";
+
+
+// The Manifest structure is an internal representation of the Manifest file
+// described in the "Manifest for Web Application" document:
+// http://w3c.github.io/manifest/
+struct Manifest {
+  mojo.common.mojom.String16? name;
+
+  mojo.common.mojom.String16? short_name;
+
+  url.mojom.Url? start_url;
+
+  DisplayMode display;
+
+  device.mojom.ScreenOrientationLockType orientation;
+
+  array<ManifestIcon>? icons;
+
+  // TODO(constantina): This field is non-standard and part of a Chrome
+  // experiment. See:
+  // https://github.com/WICG/web-share-target/blob/master/docs/interface.md
+  // As such, this field should not be exposed to the drive-by web.
+  ManifestShareTarget? share_target;
+
+  array<ManifestRelatedApplication>? related_applications;
+
+  // A boolean that is used as a hint for the user agent to say that related
+  // applications should be preferred over the web application. False if missing
+  // or there is a parsing failure.
+  bool prefer_related_applications;
+
+  // A 32 bit color value or kInvalidOrMissingColor if not set.
+  int64 theme_color;
+
+  // A 32 bit color value or kInvalidOrMissingColor if not set.
+  int64 background_color;
+
+  mojo.common.mojom.String16? gcm_sender_id;
+
+  url.mojom.Url? scope;
+};
+
+// Structure representing an icon as per the Manifest specification, see:
+// http://w3c.github.io/manifest/#dfn-icon-object
+struct ManifestIcon {
+  enum Purpose {
+    ANY = 0,
+    BADGE,
+  };
+
+  // MUST be a valid url. If an icon doesn't have a valid URL, it will not be
+  // successfully parsed, thus will not be represented in the Manifest.
+  url.mojom.Url src;
+
+  // The type can be any string and doesn't have to be a valid image MIME type
+  // at this point. It is up to the consumer of the object to check if the type
+  // matches a supported type.
+  mojo.common.mojom.String16? type;
+
+  // The special value "any" is represented by gfx::Size(0, 0).
+  array<gfx.mojom.Size> sizes;
+
+  // Defaults to a vector with a single value, IconPurpose::ANY, for all other
+  // parsing exceptions.
+  array<Purpose> purpose;
+};
+
+// Structure representing a related application.
+struct ManifestRelatedApplication {
+  // The platform on which the application can be found. This can be any
+  // string, and is interpreted by the consumer of the object.
+  mojo.common.mojom.String16? platform;
+
+  // URL at which the application can be found. One of |url| or |id| must be
+  // present.
+  url.mojom.Url? url;
+
+  // An id which is used to represent the application on the platform. One of
+  // |url| or |id| must be present.
+  mojo.common.mojom.String16? id;
+};
+
+// Structure representing how a Web Share target handles an incoming share.
+struct ManifestShareTarget {
+  // The URL template that contains placeholders to be replaced with shared
+  // data. Null if the parsing failed.
+  mojo.common.mojom.String16? url_template;
+};

@@ -1,0 +1,43 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module content.mojom;
+
+import "mojo/common/time.mojom";
+import "content/common/service_worker/service_worker_fetch_response_callback.mojom";
+import "third_party/WebKit/public/platform/modules/fetch/fetch_api_request.mojom";
+import "third_party/WebKit/public/platform/modules/serviceworker/service_worker_event_status.mojom";
+
+// S13nServiceWorker:
+// Represents a service worker that is a controller.  One of its Mojo end
+// points (i.e. the caller end) is passed to the controllee in the renderer
+// process, and used from there.  Its other Mojo end point (i.e. the destination
+// of the events) is currently implemented by BrowserSideControllerServiceWorker
+// in the browser-process, but eventually this should be implemented by the
+// controller service worker in the renderer-process so that the events
+// dispatched by the controllees can be directly sent there.
+//
+// The controllees use this interface to directly talk to the controller. This
+// implements a small subset of ServiceWorkerEventDispatcher, namely dispatch
+// methods for Fetch and PostMessage, because ordering must be preserved
+// between them: controller.postMessage(...), controller.fetch(‘...’); from
+// the page must result in a message event then fetch event dispatched to the
+// service worker. They are believed to be the only events whose ordering
+// guarantee is observable from the page context.
+//
+interface ControllerServiceWorker {
+  // Dispatches Fetch event for sub-resources. (Fetch for main resource is
+  // handled by ServiceWorkerEventDispatcher, as the fetch is initiated
+  // in the browser-process during the navigation)
+  // The callback is called once the event finishes, which means the event
+  // handler ran and all outstanding respondWith() and waitUntil() promises have
+  // settled. |response_callback| is called once the promise to respondWith()
+  // settles, or when the event handler ran without calling respondWith().
+  DispatchFetchEvent(blink.mojom.FetchAPIRequest request,
+                     ServiceWorkerFetchResponseCallback response_callback)
+      => (blink.mojom.ServiceWorkerEventStatus status,
+          mojo.common.mojom.Time dispatch_event_time);
+
+  // TODO(kinuko): Add DispatchExtendableMessageEvent() as well.
+};

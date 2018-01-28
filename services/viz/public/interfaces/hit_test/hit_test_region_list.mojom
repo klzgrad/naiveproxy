@@ -1,0 +1,66 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module viz.mojom;
+
+import "services/viz/public/interfaces/compositing/frame_sink_id.mojom";
+import "services/viz/public/interfaces/compositing/local_surface_id.mojom";
+import "services/viz/public/interfaces/compositing/surface_id.mojom";
+import "ui/gfx/geometry/mojo/geometry.mojom";
+import "ui/gfx/mojo/transform.mojom";
+
+// Region maps to this surface (me).
+const uint32 kHitTestMine = 0x01;
+
+// Region ignored for hit testing (transparent backgrounds & hover:none).
+const uint32 kHitTestIgnore = 0x02;
+
+// Region maps to child surface (OOPIF).
+const uint32 kHitTestChildSurface = 0x04;
+
+// Irregular boundary - send HitTestRequest to resolve.
+const uint32 kHitTestAsk = 0x08;
+
+// TODO(varkha): Add other kHitTest* flags as necessary for other event sources
+// such as mouse-wheel, stylus or perhaps even mouse-move.
+// Hit-testing for mouse events.
+const uint32 kHitTestMouse = 0x10;
+
+// Hit-testing for touch events.
+const uint32 kHitTestTouch = 0x20;
+
+struct HitTestRegion {
+  // Flags to indicate the type of HitTestRegion.
+  uint32 flags;
+
+  // FrameSinkId of this region.
+  FrameSinkId frame_sink_id;
+
+  // LocalSurfaceId is required when flags include kHitTestChildSurface.
+  LocalSurfaceId? local_surface_id;
+
+  // The rect of the region in the coordinate space of the embedder.
+  gfx.mojom.Rect rect;
+
+  // The transform of the region.  The transform applied to the rect
+  // defines the space occupied by this region in the coordinate space of
+  // the embedder.
+  gfx.mojom.Transform transform;
+};
+
+struct HitTestRegionList {
+  // Flags indicate how to handle events that match no sub-regions.
+  // kHitTestMine routes un-matched events to this surface (opaque).
+  // kHitTestIgnore keeps previous match in the parent (transparent).
+  uint32 flags;
+
+  // The bounds of the surface.
+  gfx.mojom.Rect bounds;
+
+  // The transform applied to all regions in this surface.
+  gfx.mojom.Transform transform;
+
+  // The list of sub-regions in front to back order.
+  array<HitTestRegion> regions;
+};

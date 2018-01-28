@@ -1,0 +1,93 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+group("media_router_perf_tests") {
+  testonly = true
+  data = [
+    "$root_out_dir/media_router/test_extension/",
+    "$root_out_dir/mr_extension/release/",
+    "internal/",
+    "telemetry/",
+  ]
+  deps = [
+    ":test_extension_resource_files",
+    "//tools/perf:perf",
+  ]
+}
+
+group("media_router_tests") {
+  testonly = true
+  data_deps = [
+    "//chrome/test:browser_tests",
+  ]
+  data = [
+    "$root_out_dir/mr_extension/",
+    "internal/",
+    "../../../media/test/data/player.html",
+    "../../../media/test/data/bear-vp9.webm",
+  ]
+}
+
+# Browser test resource files.
+media_router_integration_test_resources = [
+  "resources/basic_test.html",
+  "resources/close_route_with_error_on_send.json",
+  "resources/common.js",
+  "resources/fail_create_route.json",
+  "resources/fail_reconnect_session.html",
+  "resources/fail_reconnect_session.json",
+  "resources/local_media_sink.json",
+  "resources/no_provider.json",
+  "resources/no_sinks.json",
+  "resources/no_supported_sinks.json",
+  "resources/presentation_receiver.html",
+  "resources/route_creation_timed_out.json",
+]
+
+media_router_test_extension_resources = [
+  "telemetry/extension/manifest.json",
+  "telemetry/extension/script.js",
+]
+
+copy("test_extension_resource_files") {
+  sources = media_router_test_extension_resources
+  outputs = [
+    "$root_out_dir/media_router/test_extension/{{source_file_part}}",
+  ]
+}
+
+copy("browser_tests_resource_files") {
+  sources = media_router_integration_test_resources
+  outputs = [
+    "$root_out_dir/media_router/browser_test_resources/{{source_file_part}}",
+  ]
+}
+
+source_set("media_router_browsertests") {
+  testonly = true
+  defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+  sources = [
+    "media_router_base_browsertest.cc",
+    "media_router_base_browsertest.h",
+    "media_router_e2e_browsertest.cc",
+    "media_router_e2e_browsertest.h",
+    "media_router_e2e_ui_browsertest.cc",
+    "media_router_integration_browsertest.cc",
+    "media_router_integration_browsertest.h",
+    "media_router_integration_ui_browsertest.cc",
+    "media_router_one_ua_integration_browsertest.cc",
+    "test_media_sinks_observer.cc",
+    "test_media_sinks_observer.h",
+  ]
+  deps = [
+    ":browser_tests_resource_files",
+    "//chrome/browser/media/router:test_support",
+    "//chrome/test:test_support",
+    "//chrome/test:test_support_ui",
+    "//extensions/browser",
+    "//media:test_support",
+    "//skia",
+    "//testing/gtest",
+  ]
+}

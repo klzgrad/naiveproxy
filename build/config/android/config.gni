@@ -1,0 +1,385 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# This file contains common system config stuff for the Android build.
+
+if (is_android) {
+  import("//build_overrides/build.gni")
+
+  has_chrome_android_internal =
+      exec_script("//build/dir_exists.py",
+                  [ rebase_path("//clank", root_build_dir) ],
+                  "string") == "True"
+
+  # We are using a separate declare_args block for only this argument so that
+  # we can decide if we have to pull in definitions from the internal config
+  # early.
+  declare_args() {
+    # Enables using the internal Chrome for Android repository. The default
+    # value depends on whether the repository is available, and if it's not but
+    # this argument is manually set to True, the generation will fail.
+    # The main purpose of this argument is to avoid having to maintain 2
+    # repositories to support both public only and internal builds.
+    enable_chrome_android_internal = has_chrome_android_internal
+  }
+
+  if (enable_chrome_android_internal) {
+    import("//clank/config.gni")
+  }
+
+  if (!defined(extra_chrome_shared_library_configs)) {
+    extra_chrome_shared_library_configs = []
+  }
+
+  if (!defined(default_android_ndk_root)) {
+    default_android_ndk_root = "//third_party/android_tools/ndk"
+    default_android_ndk_version = "r12b"
+    default_android_ndk_major_version = 12
+  } else {
+    assert(defined(default_android_ndk_version))
+    assert(defined(default_android_ndk_major_version))
+  }
+
+  if (!defined(default_android_sdk_root)) {
+    default_android_sdk_root = "//third_party/android_tools/sdk"
+    default_android_sdk_version = "26"
+    default_android_sdk_build_tools_version = "26.0.0"
+    default_android_sdk_tools_version_suffix = "-25.3.2"
+  }
+
+  if (!defined(default_lint_android_sdk_root)) {
+    # Purposefully repeated so that downstream can change
+    # default_android_sdk_root without changing lint version.
+    default_lint_android_sdk_root = "//third_party/android_tools/sdk"
+    default_lint_android_sdk_version = "26"
+  }
+
+  if (!defined(default_extras_android_sdk_root)) {
+    # Purposefully repeated so that downstream can change
+    # default_android_sdk_root without changing where we load the SDK extras
+    # from. (Google Play services, etc.)
+    default_extras_android_sdk_root = "//third_party/android_tools/sdk"
+  }
+
+  if (!defined(default_android_keystore_path)) {
+    default_android_keystore_path =
+        "//build/android/ant/chromium-debug.keystore"
+    default_android_keystore_name = "chromiumdebugkey"
+    default_android_keystore_password = "chromium"
+  }
+
+  # google_play_services_package contains the path where individual client
+  # targets (e.g. google_play_services_base_java) are located.
+  if (!defined(google_play_services_package)) {
+    google_play_services_package = "//third_party/android_tools"
+  }
+
+  if (!defined(android_support_library_package)) {
+    android_support_library_package = "//third_party/android_tools/support"
+  }
+
+  if (!defined(system_webview_apk_target)) {
+    system_webview_apk_target = "//android_webview:system_webview_apk"
+  }
+
+  webview_public_framework_jar =
+      "//third_party/android_system_sdk/android_system.jar"
+  if (!defined(webview_framework_jar)) {
+    webview_framework_jar = webview_public_framework_jar
+  }
+
+  declare_args() {
+    android_ndk_root = default_android_ndk_root
+    android_ndk_version = default_android_ndk_version
+    android_ndk_major_version = default_android_ndk_major_version
+
+    android_sdk_root = default_android_sdk_root
+    android_sdk_version = default_android_sdk_version
+    android_sdk_build_tools_version = default_android_sdk_build_tools_version
+    android_sdk_tools_version_suffix = default_android_sdk_tools_version_suffix
+
+    lint_android_sdk_root = default_lint_android_sdk_root
+    lint_android_sdk_version = default_lint_android_sdk_version
+
+    # Libc++ library directory. Override to use a custom libc++ binary.
+    android_libcpp_lib_dir = ""
+
+    # Android versionCode for android_apk()s that don't explicitly set one.
+    android_default_version_code = "1"
+
+    # Android versionName for android_apk()s that don't explicitly set one.
+    android_default_version_name = "Developer Build"
+
+    # The path to the keystore to use for signing builds.
+    android_keystore_path = default_android_keystore_path
+
+    # The name of the keystore to use for signing builds.
+    android_keystore_name = default_android_keystore_name
+
+    # The password for the keystore to use for signing builds.
+    android_keystore_password = default_android_keystore_password
+
+    # Set to true to run findbugs on JAR targets.
+    run_findbugs = false
+
+    # Set to true to enable verbose findbugs logging. This does nothing if
+    # run_findbugs is false.
+    findbugs_verbose = false
+
+    # Enables verbose proguard output (summaries and unfiltered output).
+    proguard_verbose = false
+
+    # Java debug on Android. Having this on enables multidexing, and turning it
+    # off will enable proguard.
+    is_java_debug = is_debug
+
+    # Mark APKs as android:debuggable="true".
+    debuggable_apks = !is_official_build
+
+    # Set to false to disable the Errorprone compiler
+    use_errorprone_java_compiler = true
+
+    # Enables EMMA Java code coverage. Instruments classes during build to
+    # produce .ec files during runtime
+    emma_coverage = false
+
+    # EMMA filter string consisting of a list of inclusion/exclusion patterns
+    # separated with whitespace and/or comma. Only has effect if
+    # emma_coverage==true
+    emma_filter = ""
+
+    # Disables process isolation when building _incremental targets.
+    # Required for Android M+ due to SELinux policies (stronger sandboxing).
+    disable_incremental_isolated_processes = false
+
+    # Speeds up incremental compiles by compiling only changed files.
+    enable_incremental_javac = false
+
+    # Adds intrumentation to each function. Writes a file with the order that
+    # functions are called at startup.
+    use_order_profiling = false
+
+    # Builds secondary abi for APKs, supports build 32-bit arch as secondary
+    # abi in 64-bit Monochrome and WebView.
+    build_apk_secondary_abi = true
+
+    # Build incremental targets whenever possible.
+    # Ex. with this arg set to true, the chrome_public_apk target result in
+    # chrome_public_apk_incremental being built.
+    incremental_apk_by_default = false
+
+    # When true, updates all android_aar_prebuilt() .info files during gn gen.
+    # Refer to android_aar_prebuilt() for more details.
+    update_android_aar_prebuilts = false
+  }
+
+  # We need a second declare_args block to make sure we are using the overridden
+  # value of the arguments set above.
+  declare_args() {
+    if (defined(default_android_sdk_platform_version)) {
+      android_sdk_platform_version = default_android_sdk_platform_version
+    } else {
+      android_sdk_platform_version = android_sdk_version
+    }
+
+    # Speed up dexing using dx --incremental.
+    enable_incremental_dx = is_java_debug
+  }
+
+  # Neither of these should ever be used for release builds since they are
+  # somewhat experimental and dx --incremental is known to not produce
+  # byte-for-byte identical output.
+  assert(!(enable_incremental_dx && !is_java_debug))
+  assert(!(enable_incremental_javac && !is_java_debug))
+
+  # Path to where selected build variables are written to.
+  android_build_vars = "$root_build_dir/build_vars.txt"
+
+  # Host stuff -----------------------------------------------------------------
+
+  # Defines the name the Android build gives to the current host CPU
+  # architecture, which is different than the names GN uses.
+  if (host_cpu == "x64") {
+    android_host_arch = "x86_64"
+  } else if (host_cpu == "x86") {
+    android_host_arch = "x86"
+  } else {
+    assert(false, "Need Android toolchain support for your build CPU arch.")
+  }
+
+  # Defines the name the Android build gives to the current host CPU
+  # architecture, which is different than the names GN uses.
+  if (host_os == "linux") {
+    android_host_os = "linux"
+  } else if (host_os == "mac") {
+    android_host_os = "darwin"
+  } else {
+    assert(false, "Need Android toolchain support for your build OS.")
+  }
+
+  # Directories and files ------------------------------------------------------
+  #
+  # We define may of the dirs strings here for each output architecture (rather
+  # than just the current one) since these are needed by the Android toolchain
+  # file to define toolchains for all possible targets in one pass.
+
+  android_sdk =
+      "${android_sdk_root}/platforms/android-${android_sdk_platform_version}"
+
+  # Path to the Android NDK and SDK.
+  android_ndk_include_dir = "$android_ndk_root/usr/include"
+
+  android_sdk_tools = "${android_sdk_root}/tools"
+  android_sdk_build_tools =
+      "${android_sdk_root}/build-tools/$android_sdk_build_tools_version"
+
+  # Path to the SDK's android.jar
+  android_sdk_jar = "$android_sdk/android.jar"
+
+  zipalign_path = "$android_sdk_build_tools/zipalign"
+
+  # Subdirectories inside android_ndk_root that contain the sysroot for the
+  # associated platform.
+  # If you raise this, reevaluate the snprintf=snprintf in ./BUILD.gn.
+  _android_api_level = 16
+  x86_android_sysroot_subdir =
+      "platforms/android-${_android_api_level}/arch-x86"
+  arm_android_sysroot_subdir =
+      "platforms/android-${_android_api_level}/arch-arm"
+  mips_android_sysroot_subdir =
+      "platforms/android-${_android_api_level}/arch-mips"
+
+  # If you raise this, reevaluate the snprintf=snprintf in ./BUILD.gn.
+  _android64_api_level = 21
+  x86_64_android_sysroot_subdir =
+      "platforms/android-${_android64_api_level}/arch-x86_64"
+  arm64_android_sysroot_subdir =
+      "platforms/android-${_android64_api_level}/arch-arm64"
+  mips64_android_sysroot_subdir =
+      "platforms/android-${_android64_api_level}/arch-mips64"
+
+  # Toolchain root directory for each build. The actual binaries are inside
+  # a "bin" directory inside of these.
+  _android_toolchain_version = "4.9"
+  _android_toolchain_detailed_version = "4.9.x"
+  x86_android_toolchain_root = "$android_ndk_root/toolchains/x86-${_android_toolchain_version}/prebuilt/${android_host_os}-${android_host_arch}"
+  arm_android_toolchain_root = "$android_ndk_root/toolchains/arm-linux-androideabi-${_android_toolchain_version}/prebuilt/${android_host_os}-${android_host_arch}"
+  mips_android_toolchain_root = "$android_ndk_root/toolchains/mipsel-linux-android-${_android_toolchain_version}/prebuilt/${android_host_os}-${android_host_arch}"
+  x86_64_android_toolchain_root = "$android_ndk_root/toolchains/x86_64-${_android_toolchain_version}/prebuilt/${android_host_os}-${android_host_arch}"
+  arm64_android_toolchain_root = "$android_ndk_root/toolchains/aarch64-linux-android-${_android_toolchain_version}/prebuilt/${android_host_os}-${android_host_arch}"
+  mips64_android_toolchain_root = "$android_ndk_root/toolchains/mips64el-linux-android-${_android_toolchain_version}/prebuilt/${android_host_os}-${android_host_arch}"
+
+  # Location of libgcc. This is only needed for the current GN toolchain, so we
+  # only need to define the current one, rather than one for every platform
+  # like the toolchain roots.
+  if (current_cpu == "x86") {
+    android_prebuilt_arch = "android-x86"
+    _binary_prefix = "i686-linux-android"
+    android_toolchain_root = "$x86_android_toolchain_root"
+    android_libgcc_file = "$android_toolchain_root/lib/gcc/i686-linux-android/${_android_toolchain_detailed_version}/libgcc.a"
+  } else if (current_cpu == "arm") {
+    android_prebuilt_arch = "android-arm"
+    _binary_prefix = "arm-linux-androideabi"
+    android_toolchain_root = "$arm_android_toolchain_root"
+    android_libgcc_file = "$android_toolchain_root/lib/gcc/arm-linux-androideabi/${_android_toolchain_detailed_version}/libgcc.a"
+  } else if (current_cpu == "mipsel") {
+    android_prebuilt_arch = "android-mips"
+    _binary_prefix = "mipsel-linux-android"
+    android_toolchain_root = "$mips_android_toolchain_root"
+    android_libgcc_file = "$android_toolchain_root/lib/gcc/mipsel-linux-android/${_android_toolchain_detailed_version}/libgcc.a"
+  } else if (current_cpu == "x64") {
+    android_prebuilt_arch = "android-x86_64"
+    _binary_prefix = "x86_64-linux-android"
+    android_toolchain_root = "$x86_64_android_toolchain_root"
+    android_libgcc_file = "$android_toolchain_root/lib/gcc/x86_64-linux-android/${_android_toolchain_detailed_version}/libgcc.a"
+  } else if (current_cpu == "arm64") {
+    android_prebuilt_arch = "android-arm64"
+    _binary_prefix = "aarch64-linux-android"
+    android_toolchain_root = "$arm64_android_toolchain_root"
+    android_libgcc_file = "$android_toolchain_root/lib/gcc/aarch64-linux-android/${_android_toolchain_detailed_version}/libgcc.a"
+  } else if (current_cpu == "mips64el") {
+    android_prebuilt_arch = "android-mips64"
+    _binary_prefix = "mips64el-linux-android"
+    android_toolchain_root = "$mips64_android_toolchain_root"
+    android_libgcc_file = "$android_toolchain_root/lib/gcc/mips64el-linux-android/${_android_toolchain_detailed_version}/libgcc.a"
+  } else {
+    assert(false, "Need android libgcc support for your target arch.")
+  }
+
+  android_tool_prefix = "$android_toolchain_root/bin/$_binary_prefix-"
+  android_readelf = "${android_tool_prefix}readelf"
+  android_objcopy = "${android_tool_prefix}objcopy"
+  android_gdbserver =
+      "$android_ndk_root/prebuilt/$android_prebuilt_arch/gdbserver/gdbserver"
+
+  # Toolchain stuff ------------------------------------------------------------
+
+  android_libcpp_root = "$android_ndk_root/sources/cxx-stl/llvm-libc++"
+
+  # ABI ------------------------------------------------------------------------
+
+  if (current_cpu == "x86") {
+    android_app_abi = "x86"
+  } else if (current_cpu == "arm") {
+    import("//build/config/arm.gni")
+    if (arm_version < 7) {
+      android_app_abi = "armeabi"
+    } else {
+      android_app_abi = "armeabi-v7a"
+    }
+  } else if (current_cpu == "mipsel") {
+    android_app_abi = "mips"
+  } else if (current_cpu == "x64") {
+    android_app_abi = "x86_64"
+  } else if (current_cpu == "arm64") {
+    android_app_abi = "arm64-v8a"
+  } else if (current_cpu == "mips64el") {
+    android_app_abi = "mips64"
+  } else {
+    assert(false, "Unknown Android ABI: " + current_cpu)
+  }
+
+  if (android_libcpp_lib_dir == "") {
+    android_libcpp_lib_dir = "${android_libcpp_root}/libs/${android_app_abi}"
+  }
+
+  # Secondary ABI -------------------------------------------------------------
+  if (target_cpu == "arm64" || target_cpu == "x64" || target_cpu == "mips64el") {
+    android_64bit_target_cpu = true
+  } else if (target_cpu == "arm" || target_cpu == "x86" ||
+             target_cpu == "mipsel") {
+    android_64bit_target_cpu = false
+  } else {
+    assert(false, "Unknown target CPU: $target_cpu")
+  }
+
+  # Intentionally do not define android_app_secondary_abi_cpu and
+  # android_app_secondary_abi for 32-bit target_cpu, since they are not used.
+  if (target_cpu == "arm64") {
+    android_secondary_abi_cpu = "arm"
+    android_app_secondary_abi = "armeabi-v7a"
+  } else if (target_cpu == "x64") {
+    android_secondary_abi_cpu = "x86"
+    android_app_secondary_abi = "x86"
+  } else if (target_cpu == "mips64el") {
+    android_secondary_abi_cpu = "mipsel"
+    android_app_secondary_abi = "mips"
+  }
+
+  if (defined(android_secondary_abi_cpu)) {
+    if (is_clang) {
+      android_secondary_abi_toolchain =
+          "//build/toolchain/android:android_clang_${android_secondary_abi_cpu}"
+    } else {
+      android_secondary_abi_toolchain =
+          "//build/toolchain/android:android_${android_secondary_abi_cpu}"
+    }
+  }
+}
+
+declare_args() {
+  # Enables used resource whitelist generation. Set for official builds only
+  # as a large amount of build output is generated.
+  enable_resource_whitelist_generation = is_android && is_official_build
+}

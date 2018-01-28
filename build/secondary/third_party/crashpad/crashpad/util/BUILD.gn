@@ -1,0 +1,289 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/toolchain/toolchain.gni")
+
+if (is_mac) {
+  import("//build/config/sysroot.gni")
+}
+
+# Allows the source set to inject ldflags for targets that link to it.
+config("util_link_config") {
+  if (is_mac) {
+    libs = [ "bsm" ]
+  }
+}
+
+if (is_mac) {
+  action_foreach("mig") {
+    script = "mach/mig.py"
+    sources = [
+      "$sysroot/usr/include/mach/exc.defs",
+      "$sysroot/usr/include/mach/mach_exc.defs",
+      "$sysroot/usr/include/mach/notify.defs",
+      "mach/child_port.defs",
+    ]
+
+    outputs = [
+      "$target_gen_dir/mach/{{source_name_part}}User.c",
+      "$target_gen_dir/mach/{{source_name_part}}Server.c",
+      "$target_gen_dir/mach/{{source_name_part}}.h",
+      "$target_gen_dir/mach/{{source_name_part}}Server.h",
+    ]
+
+    args = [ "{{source}}" ]
+    args += rebase_path(outputs, root_build_dir)
+    if (!use_system_xcode) {
+      args += [
+        "--developer-dir",
+        hermetic_xcode_path,
+      ]
+    }
+    args += [
+      "--sdk",
+      mac_sdk_path,
+      "--include",
+      rebase_path("../compat/mac", root_build_dir),
+    ]
+  }
+}
+
+static_library("util") {
+  sources = [
+    "file/delimited_file_reader.cc",
+    "file/delimited_file_reader.h",
+    "file/file_io.cc",
+    "file/file_io.h",
+    "file/file_io_posix.cc",
+    "file/file_io_win.cc",
+    "file/file_reader.cc",
+    "file/file_reader.h",
+    "file/file_seeker.cc",
+    "file/file_seeker.h",
+    "file/file_writer.cc",
+    "file/file_writer.h",
+    "file/string_file.cc",
+    "file/string_file.h",
+    "mac/checked_mach_address_range.h",
+    "mac/launchd.h",
+    "mac/launchd.mm",
+    "mac/mac_util.cc",
+    "mac/mac_util.h",
+    "mac/service_management.cc",
+    "mac/service_management.h",
+    "mac/xattr.cc",
+    "mac/xattr.h",
+    "misc/address_sanitizer.h",
+    "misc/arraysize_unsafe.h",
+    "misc/clock.h",
+    "misc/clock_mac.cc",
+    "misc/clock_posix.cc",
+    "misc/clock_win.cc",
+    "misc/from_pointer_cast.h",
+    "misc/implicit_cast.h",
+    "misc/initialization_state.h",
+    "misc/initialization_state_dcheck.cc",
+    "misc/initialization_state_dcheck.h",
+    "misc/lexing.cc",
+    "misc/lexing.h",
+    "misc/metrics.cc",
+    "misc/metrics.h",
+    "misc/paths.h",
+    "misc/paths_mac.cc",
+    "misc/paths_win.cc",
+    "misc/pdb_structures.cc",
+    "misc/pdb_structures.h",
+    "misc/random_string.cc",
+    "misc/random_string.h",
+    "misc/reinterpret_bytes.cc",
+    "misc/reinterpret_bytes.h",
+    "misc/scoped_forbid_return.cc",
+    "misc/scoped_forbid_return.h",
+    "misc/symbolic_constants_common.h",
+    "misc/tri_state.h",
+    "misc/uuid.cc",
+    "misc/uuid.h",
+    "misc/zlib.cc",
+    "misc/zlib.h",
+    "net/http_body.cc",
+    "net/http_body.h",
+    "net/http_body_gzip.cc",
+    "net/http_body_gzip.h",
+    "net/http_headers.h",
+    "net/http_multipart_builder.cc",
+    "net/http_multipart_builder.h",
+    "net/http_transport.cc",
+    "net/http_transport.h",
+    "net/http_transport_mac.mm",
+    "net/http_transport_win.cc",
+    "numeric/checked_address_range.cc",
+    "numeric/checked_address_range.h",
+    "numeric/checked_range.h",
+    "numeric/in_range_cast.h",
+    "numeric/int128.h",
+    "numeric/safe_assignment.h",
+    "posix/close_multiple.cc",
+    "posix/close_multiple.h",
+    "posix/close_stdio.cc",
+    "posix/close_stdio.h",
+    "posix/drop_privileges.cc",
+    "posix/drop_privileges.h",
+    "posix/process_info.h",
+    "posix/process_info_mac.cc",
+    "posix/scoped_dir.cc",
+    "posix/scoped_dir.h",
+    "posix/scoped_mmap.cc",
+    "posix/scoped_mmap.h",
+    "posix/signals.cc",
+    "posix/signals.h",
+    "posix/symbolic_constants_posix.cc",
+    "posix/symbolic_constants_posix.h",
+    "stdlib/aligned_allocator.cc",
+    "stdlib/aligned_allocator.h",
+    "stdlib/cxx.h",
+    "stdlib/map_insert.h",
+    "stdlib/objc.h",
+    "stdlib/pointer_container.h",
+    "stdlib/string_number_conversion.cc",
+    "stdlib/string_number_conversion.h",
+    "stdlib/strlcpy.cc",
+    "stdlib/strlcpy.h",
+    "stdlib/strnlen.cc",
+    "stdlib/strnlen.h",
+    "stdlib/thread_safe_vector.h",
+    "string/split_string.cc",
+    "string/split_string.h",
+    "synchronization/semaphore.h",
+    "synchronization/semaphore_mac.cc",
+    "synchronization/semaphore_posix.cc",
+    "synchronization/semaphore_win.cc",
+    "thread/thread.cc",
+    "thread/thread.h",
+    "thread/thread_log_messages.cc",
+    "thread/thread_log_messages.h",
+    "thread/thread_posix.cc",
+    "thread/thread_win.cc",
+    "thread/worker_thread.cc",
+    "thread/worker_thread.h",
+    "win/address_types.h",
+    "win/capture_context.asm",
+    "win/capture_context.h",
+    "win/checked_win_address_range.h",
+    "win/command_line.cc",
+    "win/command_line.h",
+    "win/critical_section_with_debug_info.cc",
+    "win/critical_section_with_debug_info.h",
+    "win/exception_handler_server.cc",
+    "win/exception_handler_server.h",
+    "win/get_function.cc",
+    "win/get_function.h",
+    "win/get_module_information.cc",
+    "win/get_module_information.h",
+    "win/handle.cc",
+    "win/handle.h",
+    "win/initial_client_data.cc",
+    "win/initial_client_data.h",
+    "win/module_version.cc",
+    "win/module_version.h",
+    "win/nt_internals.cc",
+    "win/nt_internals.h",
+    "win/ntstatus_logging.cc",
+    "win/ntstatus_logging.h",
+    "win/process_info.cc",
+    "win/process_info.h",
+    "win/process_structs.h",
+    "win/registration_protocol_win.cc",
+    "win/registration_protocol_win.h",
+    "win/safe_terminate_process.asm",
+    "win/safe_terminate_process.h",
+    "win/scoped_handle.cc",
+    "win/scoped_handle.h",
+    "win/scoped_local_alloc.cc",
+    "win/scoped_local_alloc.h",
+    "win/scoped_process_suspend.cc",
+    "win/scoped_process_suspend.h",
+    "win/session_end_watcher.cc",
+    "win/session_end_watcher.h",
+    "win/termination_codes.h",
+    "win/time.cc",
+    "win/time.h",
+    "win/xp_compat.h",
+  ]
+
+  if (is_mac) {
+    # mach/ are not globally filtered.
+    sources += [
+      "mach/child_port_handshake.cc",
+      "mach/child_port_handshake.h",
+      "mach/child_port_server.cc",
+      "mach/child_port_server.h",
+      "mach/child_port_types.h",
+      "mach/composite_mach_message_server.cc",
+      "mach/composite_mach_message_server.h",
+      "mach/exc_client_variants.cc",
+      "mach/exc_client_variants.h",
+      "mach/exc_server_variants.cc",
+      "mach/exc_server_variants.h",
+      "mach/exception_behaviors.cc",
+      "mach/exception_behaviors.h",
+      "mach/exception_ports.cc",
+      "mach/exception_ports.h",
+      "mach/exception_types.cc",
+      "mach/exception_types.h",
+      "mach/mach_extensions.cc",
+      "mach/mach_extensions.h",
+      "mach/mach_message.cc",
+      "mach/mach_message.h",
+      "mach/mach_message_server.cc",
+      "mach/mach_message_server.h",
+      "mach/notify_server.cc",
+      "mach/notify_server.h",
+      "mach/scoped_task_suspend.cc",
+      "mach/scoped_task_suspend.h",
+      "mach/symbolic_constants_mach.cc",
+      "mach/symbolic_constants_mach.h",
+      "mach/task_for_pid.cc",
+      "mach/task_for_pid.h",
+      "mach/task_memory.cc",
+      "mach/task_memory.h",
+    ]
+  }
+
+  # Include files from here and generated files starting with "util".
+  include_dirs = [
+    "..",
+    "$root_gen_dir/third_party/crashpad/crashpad",
+  ]
+
+  all_dependent_configs = [ ":util_link_config" ]
+
+  deps = [
+    "//base",
+    "//third_party/crashpad/crashpad/third_party/zlib",
+  ]
+
+  public_deps = [
+    "//third_party/crashpad/crashpad/compat",
+  ]
+
+  if (is_win) {
+    libs = [ "winhttp.lib" ]
+    cflags = [
+      "/wd4201",  # nonstandard extension used : nameless struct/union.
+      "/wd4577",  # 'noexcept' used with no exception handling mode specified.
+    ]
+
+    if (current_cpu == "x86") {
+      asmflags = [ "/safeseh" ]
+    }
+  } else if (is_mac) {
+    sources += get_target_outputs(":mig")
+    deps += [ ":mig" ]
+    libs = [
+      "CoreFoundation.framework",
+      "Foundation.framework",
+      "IOKit.framework",
+    ]
+  }
+}

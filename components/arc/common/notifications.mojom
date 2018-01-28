@@ -1,0 +1,185 @@
+// Copyright 2015 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+//
+// Next MinVersion: 11
+
+module arc.mojom;
+
+import "bitmap.mojom";
+
+// These values must be matched with the NOTIFICATION_EVENT_* constants in
+// com.android.server.ArcNotificationListenerService.
+[Extensible]
+enum ArcNotificationEvent {
+  BODY_CLICKED = 0,
+  CLOSED = 1,
+  // Five buttons at maximum (message_center::kNotificationMaximumItems = 5).
+  BUTTON_1_CLICKED = 2,
+  BUTTON_2_CLICKED = 3,
+  BUTTON_3_CLICKED = 4,
+  BUTTON_4_CLICKED = 5,
+  BUTTON_5_CLICKED = 6,
+  // expand/collapse the bundled notification
+  [MinVersion=10] TOGGLE_EXPANSION = 7,
+};
+
+// These values must be matched with the NOTIFICATION_TYPE_* constants in
+// com.android.server.ArcNotificationListenerService.
+enum ArcNotificationType {
+  BASIC = 0,
+  IMAGE = 1,
+  PROGRESS = 2,
+  LIST = 3,
+};
+
+// These values are corresponding to the priorities of Android notification.
+[Extensible]
+enum ArcNotificationPriority {
+  MIN = -2,  // same value as Notification.PRIORITY_MIN
+  LOW = -1,  // same value as Notification.PRIORITY_LOW
+  DEFAULT = 0,  // same value as Notification.PRIORITY_DEFAULT
+  HIGH = 1,  // same value as Notification.PRIORITY_HIGH
+  MAX = 2,  // same value as Notification.PRIORITY_MAX
+};
+
+struct ArcNotificationButton {
+  // Title
+  string label;
+};
+
+[Extensible, MinVersion=10]
+enum ArcNotificationExpandState {
+  FIXED_SIZE = 0,
+  COLLAPSED = 1,
+  EXPANDED = 2,
+};
+
+// These values represent what shows in an ARC custom notification.
+[Extensible, MinVersion=11]
+enum ArcNotificationShownContents {
+  // The normal notification contents are shown.
+  CONTENTS_SHOWN = 0,
+  // The notification settings view is shown.
+  SETTINGS_SHOWN = 1,
+};
+
+struct ArcNotificationData {
+  // Identifier of notification
+  string key;
+  // Type of notification
+  ArcNotificationType type;
+  // Body message of notification
+  string message;
+  // Title of notification
+  string title;
+  // Mimetype of |icon_data|
+  string icon_mimetype;
+  // Binary data of the icon
+  array<uint8> icon_data;
+  // Priority of notification
+  ArcNotificationPriority priority;
+  // Timestamp related to the notification
+  int64 time;
+  // The current value of progress, must be [0, progress_max].
+  int32 progress_current;
+  // The maximum value of progress.
+  int32 progress_max;
+  // Action buttons
+  array<ArcNotificationButton> buttons;
+  // Flag if the notification has FLAG_NO_CLEAR.
+  [MinVersion=1]
+  bool no_clear;
+  // Flag if the notification has FLAG_ONGOING_EVENT.
+  [MinVersion=1]
+  bool ongoing_event;
+  // Subtexts for list notifications.
+  [MinVersion=3]
+  array<string>? texts;
+  // Image for image notifications.
+  [MinVersion=3]
+  ArcBitmap? big_picture;
+  // Flag if a notification is a custom notification backed by a notification
+  // surface. Note the flag is only used on creation. Change of the flag
+  // on notification update is ignored.
+  [MinVersion=5]
+  bool use_custom_notification;
+  [MinVersion=6]
+  ArcBitmap? small_icon;
+  // A snapshot image to show before the notification window is created.
+  [MinVersion=7]
+  ArcBitmap? snapshot_image;
+  [MinVersion=7]
+  float snapshot_image_scale;
+  // Accessibility text
+  [MinVersion=8]
+  string? accessible_name;
+  // Flag if the notification is expandable
+  [MinVersion=10]
+  ArcNotificationExpandState expand_state;
+  // Flag for what shows in a notification.
+  [MinVersion=11]
+  ArcNotificationShownContents shown_contents;
+};
+
+[MinVersion=2]
+struct ArcToastData {
+  // Unique identifier
+  string id;
+  // Toast text.
+  string? text;
+  // Toast duration in milliseconds. If -1, the toast will be displayed until
+  // the dismiss button is clicked.
+  int32 duration;
+  // Toast dismiss button label, if set. Otherwise, default label is used for
+  // the dismiss button.
+  [MinVersion=4]
+  string? dismiss_text;
+};
+
+interface NotificationsHost {
+  // Tells the Chrome that a notification is posted (created or updated) on
+  // Android.
+  // |notification_data| is the data of notification (id, texts, icon and ...).
+  OnNotificationPosted@0(ArcNotificationData notification_data);
+
+  // Notifies that a notification is removed on Android.
+  // |key| is the identifier of the notification.
+  OnNotificationRemoved@1(string key);
+
+  [MinVersion=2]
+  // Shows a toast, or queues it if another toast is visible.
+  OnToastPosted@2(ArcToastData data);
+
+  [MinVersion=2]
+  // Hides the visible toast immediately, or cancels the scheduled one.
+  OnToastCancelled@3(ArcToastData data);
+};
+
+// TODO(lhchavez): Migrate all request/response messages to Mojo.
+interface NotificationsInstance {
+  // Establishes full-duplex communication with the host.
+  Init@0(NotificationsHost host_ptr);
+
+  // Sends an event from Chrome notification UI to Android.
+  // |event| is a type of occured event.
+  SendNotificationEventToAndroid@1(string key, ArcNotificationEvent event);
+
+  // Requests to Android side to create the notification window.
+  // |key| is the identifier of the notification which is generated by Android
+  // side.
+  [MinVersion=7]
+  CreateNotificationWindow@2(string key);
+
+  // Requests to Android side to close the notification window.
+  // |key| is the identifier of the notification which is generated by Android
+  // side.
+  [MinVersion=7]
+  CloseNotificationWindow@3(string key);
+
+  // Requests to Android side to open notification settings.
+  // |key| is the identifier of the notification which is generated by Android
+  // side.
+  [MinVersion=9]
+  OpenNotificationSettings@4(string key);
+};

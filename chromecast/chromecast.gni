@@ -1,0 +1,121 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/chromecast_build.gni")
+import("//build/config/locales.gni")
+
+# This args block should contain arguments used within the //chromecast
+# directory. Arguments which are used in other Chrome components should
+# be instead declared in //build/config/chromecast_build.gni.
+declare_args() {
+  # chromecast_branding is used to include or exclude Google-branded components.
+  # Set it to "public" for a Chromium build.
+  chromecast_branding = "public"
+
+  # The incremental build number. The Cast automated builders will set this
+  # value to indicate the buildset. Note: The default value should be greater
+  # than any value the builder may assign to prevent attempted automatic updates
+  # when the default value is used.
+  cast_build_incremental = "999999"
+
+  # If true, IS_CAST_DEBUG_BUILD() will evaluate to 1 in version.h. Otherwise,
+  # it will evaluate to 0. Overriding this when is_debug=false is useful for
+  # doing engineering builds.
+  cast_is_debug = is_debug
+
+  if (is_android) {
+    # If true, run receiver apps in an Android service instead of an activity.
+    display_web_contents_in_service = is_cast_audio_only
+  }
+
+  # If true, Chromecast WebUI resources are included in a build.
+  # TODO(antz): default to false for audio-only builds, might need further
+  # clean up (b/27119303)
+  enable_chromecast_webui = !is_cast_audio_only && !is_android
+
+  # Set true to enable assistant features.
+  enable_assistant = false
+
+  # Set to true on devices that support multizone. Only indicates that the
+  # device supports multizone. The command line flag --enable-multizone must
+  # still be used to enable multizone.
+  supports_multizone = is_cast_audio_only && !is_cast_desktop_build
+
+  # Set to true for builds targeting ARC.
+  is_android_arc = false
+
+  # Set true for builds targeting Android Things.
+  is_android_things = false
+
+  # Set to true to start music apps in headless mode.
+  enable_headless_music_mode = false
+}
+
+declare_args() {
+  # Currently android things libraries live in internal.
+  # TODO(njeff): change this when Android Things API is moved to public.
+  enable_athings_loopback = is_android_things && chromecast_branding != "public"
+  enable_volume_tables_access =
+      is_android_things && chromecast_branding != "public"
+}
+
+declare_args() {
+  # Use Playready CDMs for internal non-desktop builds.
+  use_playready = !is_cast_desktop_build && chromecast_branding != "public"
+}
+
+# This is the release version, which takes the form <major>.<minor>. Internal
+# builds will read the value from an internal file containing this value as a
+# string. Public builds, lacking this file, will set a dummy value.
+if (chromecast_branding == "public") {
+  cast_build_release = "eng." + getenv("USER")
+} else {
+  cast_build_release =
+      read_file("//chromecast/internal/build/cast_build_release", "trim string")
+}
+
+# All locales supported by Cast builds. This provides a single point of
+# reference for all GN files referencing a locales list. |locales| is declared
+# in //build/config/locales.gni.
+cast_locales = locales
+
+# These templates are a temporary fix fo link libc++ into shared libraries and
+# executables. These should be removed as soon as crbug.com/746091 is resolved.
+foreach(target_type,
+        [
+          "executable",
+          "shared_library",
+          "loadable_module",
+        ]) {
+  template("cast_${target_type}") {
+    target(target_type, target_name) {
+      forward_variables_from(invoker, "*")
+      if (!defined(deps)) {
+        deps = []
+      }
+      deps += [ "//build/config:exe_and_shlib_deps" ]
+    }
+  }
+}
+
+# Set the defaults for each target. The defaults for these target wrappers
+# should match their unwrapped counterparts in BUILDCONFIG.gn. The variables
+# referenced below are declared in BUILDCONFIG.gn.
+set_defaults("cast_executable") {
+  configs = default_executable_configs
+}
+
+set_defaults("cast_shared_library") {
+  configs = default_shared_library_configs
+  if (is_android) {
+    configs -= [ "//build/config/android:hide_all_but_jni_onload" ]
+  }
+}
+
+set_defaults("cast_loadable_module") {
+  configs = default_shared_library_configs
+  if (is_android) {
+    configs -= [ "//build/config/android:hide_all_but_jni_onload" ]
+  }
+}

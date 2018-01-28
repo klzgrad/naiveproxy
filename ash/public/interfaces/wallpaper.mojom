@@ -1,0 +1,69 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module ash.mojom;
+
+import "mojo/common/time.mojom";
+import "skia/public/interfaces/bitmap.mojom";
+
+// These values match wallpaper::WallpaperLayout.
+enum WallpaperLayout {
+  CENTER,
+  CENTER_CROPPED,
+  STRETCH,
+  TILE,
+};
+
+// These values match wallpaper::WallpaperType.
+enum WallpaperType {
+  DAILY,
+  CUSTOMIZED,
+  DEFAULT,
+  ONLINE,
+  POLICY,
+  THIRDPARTY,
+  DEVICE,
+};
+
+// This corresponds to wallpaper::WallpaperInfo.
+struct WallpaperInfo {
+  string location;
+  WallpaperLayout layout;
+  WallpaperType type;
+  mojo.common.mojom.Time date;
+};
+
+// Used by Chrome to set the wallpaper displayed by ash.
+interface WallpaperController {
+  // Calling this method triggers an initial notification of the wallpaper
+  // state. Observers are automatically removed as their connections are closed.
+  AddObserver(associated WallpaperObserver observer);
+
+  // Set the wallpaper picker interface, to let ash trigger Chrome's picker.
+  SetWallpaperPicker(WallpaperPicker picker);
+
+  // Set the wallpaper bitmap and info used for the ash desktop background.
+  // A null or empty |wallpaper| bitmap is treated as a no-op.
+  // TODO(crbug.com/655875): Optimize ash wallpaper transport; avoid sending
+  // large bitmaps over Mojo; use shared memory like BitmapUploader, etc.
+  SetWallpaper(skia.mojom.Bitmap? wallpaper, WallpaperInfo info);
+
+  // Runs to get wallpaper prominent colors.
+  GetWallpaperColors() => (array<uint32> prominent_colors);
+};
+
+// Used to listen for wallpaper state changed.
+interface WallpaperObserver {
+  // Called when the colors extracted from the current wallpaper change. May
+  // be called as a side effect of changing the wallpaper on the
+  // WallpaperController, e.g. WallpaperController::SetWallpaperImage().
+  // Colors are ordered and are referenced in wallpaper::ColorProfileType.
+  OnWallpaperColorsChanged(array<uint32> prominent_colors);
+};
+
+// Used by ash to trigger Chrome's wallpaper picker functionality.
+interface WallpaperPicker {
+  // Open the wallpaper picker window.
+  Open();
+};

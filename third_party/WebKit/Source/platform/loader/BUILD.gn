@@ -1,0 +1,181 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/jumbo.gni")
+import("//third_party/WebKit/Source/build/scripts/scripts.gni")
+import("//third_party/WebKit/Source/platform/platform_generated.gni")
+
+make_names("make_platform_loader_generated_fetch_initiator_type_names") {
+  in_files = [ "fetch/fetch_initiator_type_names.json5" ]
+  output_dir = "$blink_platform_output_dir/loader/fetch"
+}
+
+jumbo_source_set("loader") {
+  # This target is a logical part of the platform and only the platform target
+  # should depend on it.
+  visibility = [ "//third_party/WebKit/Source/platform" ]
+
+  sources = [
+    "LinkHeader.cpp",
+    "LinkHeader.h",
+    "SubresourceIntegrity.cpp",
+    "SubresourceIntegrity.h",
+    "fetch/AccessControlStatus.h",
+    "fetch/BufferingDataPipeWriter.cpp",
+    "fetch/BufferingDataPipeWriter.h",
+    "fetch/CachedMetadata.cpp",
+    "fetch/CachedMetadata.h",
+    "fetch/CachedMetadataHandler.h",
+    "fetch/ClientHintsPreferences.cpp",
+    "fetch/ClientHintsPreferences.h",
+    "fetch/FetchContext.cpp",
+    "fetch/FetchContext.h",
+    "fetch/FetchInitiatorInfo.h",
+    "fetch/FetchParameters.cpp",
+    "fetch/FetchParameters.h",
+    "fetch/FetchUtils.cpp",
+    "fetch/FetchUtils.h",
+    "fetch/IntegrityMetadata.cpp",
+    "fetch/IntegrityMetadata.h",
+    "fetch/MemoryCache.cpp",
+    "fetch/MemoryCache.h",
+    "fetch/PreloadKey.h",
+    "fetch/RawResource.cpp",
+    "fetch/RawResource.h",
+    "fetch/Resource.cpp",
+    "fetch/Resource.h",
+    "fetch/ResourceClient.h",
+    "fetch/ResourceClientWalker.h",
+    "fetch/ResourceError.cpp",
+    "fetch/ResourceError.h",
+    "fetch/ResourceFetcher.cpp",
+    "fetch/ResourceFetcher.h",
+    "fetch/ResourceFinishObserver.h",
+    "fetch/ResourceLoadInfo.h",
+    "fetch/ResourceLoadPriority.h",
+    "fetch/ResourceLoadScheduler.cpp",
+    "fetch/ResourceLoadScheduler.h",
+    "fetch/ResourceLoadTiming.cpp",
+    "fetch/ResourceLoadTiming.h",
+    "fetch/ResourceLoader.cpp",
+    "fetch/ResourceLoader.h",
+    "fetch/ResourceLoaderOptions.h",
+    "fetch/ResourceLoadingLog.h",
+    "fetch/ResourceOwner.h",
+    "fetch/ResourceRequest.cpp",
+    "fetch/ResourceRequest.h",
+    "fetch/ResourceResponse.cpp",
+    "fetch/ResourceResponse.h",
+    "fetch/ResourceStatus.h",
+    "fetch/ResourceTimingInfo.cpp",
+    "fetch/ResourceTimingInfo.h",
+    "fetch/SubstituteData.h",
+    "fetch/TextResourceDecoderOptions.cpp",
+    "fetch/TextResourceDecoderOptions.h",
+    "fetch/UniqueIdentifier.cpp",
+    "fetch/UniqueIdentifier.h",
+  ]
+
+  sources += get_target_outputs(
+          ":make_platform_loader_generated_fetch_initiator_type_names")
+
+  configs += [
+    "//third_party/WebKit/Source:config",
+    "//third_party/WebKit/Source:non_test_config",
+    "//third_party/WebKit/Source:inside_blink",
+    "//third_party/WebKit/Source/platform:blink_platform_implementation",
+
+    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+    "//build/config/compiler:no_size_t_to_int_warning",
+  ]
+
+  deps = [
+    ":make_platform_loader_generated_fetch_initiator_type_names",
+    "//components/link_header_util:link_header_util",
+    "//mojo/public/cpp/system:system",
+
+    # "//services/network/public/interfaces:interfaces_blink" is included in
+    # "//third_party/WebKit/Source/platform", which will contain this source set
+    "//storage/public/interfaces:interfaces_blink",
+    "//third_party/WebKit/Source/platform:make_platform_generated",
+    "//third_party/WebKit/common:blink_common",
+    "//third_party/WebKit/public:mojo_bindings_blink",
+  ]
+
+  public_deps = [
+    "//base",
+    "//net",
+    "//third_party/icu",
+    "//v8",
+  ]
+}
+
+jumbo_source_set("unit_tests") {
+  # This target defines test files for blink_platform_unittests and only the
+  # blink_platform_unittests target should depend on it.
+  visibility = [ "//third_party/WebKit/Source/platform:*" ]
+  testonly = true
+
+  # Source files for blink_platform_unittests.
+  sources = [
+    "LinkHeaderTest.cpp",
+    "SubresourceIntegrityTest.cpp",
+    "fetch/BufferingDataPipeWriterTest.cpp",
+    "fetch/ClientHintsPreferencesTest.cpp",
+    "fetch/FetchUtilsTest.cpp",
+    "fetch/MemoryCacheCorrectnessTest.cpp",
+    "fetch/MemoryCacheTest.cpp",
+    "fetch/RawResourceTest.cpp",
+    "fetch/ResourceFetcherTest.cpp",
+    "fetch/ResourceLoadSchedulerTest.cpp",
+    "fetch/ResourceLoaderOptionsTest.cpp",
+    "fetch/ResourceLoaderTest.cpp",
+    "fetch/ResourceRequestTest.cpp",
+    "fetch/ResourceTest.cpp",
+  ]
+
+  defines = [ "INSIDE_BLINK" ]
+
+  configs += [
+    "//third_party/WebKit/Source/platform/wtf:wtf_config",
+    "//third_party/WebKit/Source:config",
+  ]
+
+  deps = [
+    "//testing/gmock",
+    "//testing/gtest",
+    "//third_party/WebKit/Source/platform",
+  ]
+}
+
+jumbo_source_set("test_support") {
+  # This target defines test files for platform:test_support that
+  # blink_platform_unittests and webkit_unit_tests can use.
+  visibility = [ "//third_party/WebKit/Source/platform:test_support" ]
+  testonly = true
+
+  # Source files that can be called from blink_platform_unittests and
+  # webkit_unit_tests.
+  sources = [
+    "testing/CryptoTestingPlatformSupport.h",
+    "testing/FetchTestingPlatformSupport.cpp",
+    "testing/FetchTestingPlatformSupport.h",
+    "testing/MockFetchContext.h",
+    "testing/MockResource.cpp",
+    "testing/MockResource.h",
+    "testing/MockResourceClient.cpp",
+    "testing/MockResourceClient.h",
+  ]
+
+  defines = [ "INSIDE_BLINK" ]
+
+  configs += [
+    "//third_party/WebKit/Source/platform/wtf:wtf_config",
+    "//third_party/WebKit/Source:config",
+  ]
+
+  deps = [
+    "//third_party/WebKit/Source/platform",
+  ]
+}

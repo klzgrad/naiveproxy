@@ -1,0 +1,247 @@
+# This file is used by the GN meta build system to find the root of the source
+# tree and to set startup options. For documentation on the values set in this
+# file, run "gn help dotfile" at the command line.
+
+import("//build/dotfile_settings.gni")
+
+# The location of the build configuration file.
+buildconfig = "//build/config/BUILDCONFIG.gn"
+
+# The secondary source root is a parallel directory tree where
+# GN build files are placed when they can not be placed directly
+# in the source tree, e.g. for third party source trees.
+secondary_source = "//build/secondary/"
+
+# These arguments override the default values for items in a declare_args
+# block. "gn args" in turn can override these.
+#
+# In general the value for a build arg in the declare_args block should be the
+# default. In some cases, a DEPS-ed in project will want different defaults for
+# being built as part of Chrome vs. being built standalone. In this case, the
+# Chrome defaults should go here. There should be no overrides here for
+# values declared in the main Chrome repository.
+#
+# Important note for defining defaults: This file is executed before the
+# BUILDCONFIG.gn file. That file sets up the global variables like "is_ios".
+# This means that the default_args can not depend on the platform,
+# architecture, or other build parameters. If you really need that, the other
+# repo should define a flag that toggles on a behavior that implements the
+# additional logic required by Chrome to set the variables.
+default_args = {
+  # TODO(brettw) bug 684096: Chrome on iOS does not build v8, so "gn gen" prints
+  # a warning that "Build argument has no effect". When adding a v8 variable, it
+  # also needs to be defined to src/ios/BUILD.gn (respectively removed from both
+  # location when it is removed).
+
+  v8_extra_library_files = [
+    # Dependencies used by the extra libraries. Putting them here causes them
+    # to be executed first during snapshot creation.
+    "//third_party/WebKit/Source/core/streams/CommonOperations.js",
+    "//third_party/WebKit/Source/core/streams/CommonStrings.js",
+    "//third_party/WebKit/Source/core/streams/SimpleQueue.js",
+
+    # Extra libraries.
+    "//third_party/WebKit/Source/core/streams/ByteLengthQueuingStrategy.js",
+    "//third_party/WebKit/Source/core/streams/CountQueuingStrategy.js",
+    "//third_party/WebKit/Source/core/streams/ReadableStream.js",
+    "//third_party/WebKit/Source/core/streams/WritableStream.js",
+  ]
+  v8_experimental_extra_library_files = []
+  v8_enable_gdbjit = false
+  v8_imminent_deprecation_warnings = false
+
+  # TODO(jochen): Remove this. http://crbug.com/v8/5830,
+  # http://crbug.com/728583.
+  v8_check_microtasks_scopes_consistency = false
+}
+
+# These are the targets to check headers for by default. The files in targets
+# matching these patterns (see "gn help label_pattern" for format) will have
+# their includes checked for proper dependencies when you run either
+# "gn check" or "gn gen --check".
+check_targets = [
+  #"//apps/*",  # Medium-hard.
+  "//ash/*",
+  "//base/*",
+  "//blink/*",
+  "//build/*",
+  "//cc/*",
+
+  #"//chrome/*",  # Epic number of errors.
+  "//chrome/app/*",
+  "//chrome/app_shim/*",
+  "//chrome/browser/chromeos/*",
+  "//chrome/browser/extensions/*",
+  "//chrome/browser/ui/*",
+  "//chrome/common/*",
+  "//chrome/installer/*",
+  "//chrome/profiling",
+  "//chrome/third_party/mozilla_security_manager/*",
+  "//chrome/tools/*",
+  "//chrome/utility/*",
+  "//chromecast/*",
+  "//chromeos/*",
+  "//chrome_elf/*",
+  "//cloud_print/*",
+  "//components/*",
+  "//content/*",
+  "//courgette/*",
+  "//crypto/*",
+  "//data/*",
+  "//dbus/*",
+  "//device/*",
+
+  #"//extensions/*",  # Lots of errors.
+  "//extensions:extensions_unittests",
+  "//extensions/browser:browser_tests",
+  "//extensions/browser:unit_tests",
+  "//extensions/common:unit_tests",
+  "//extensions/renderer:unit_tests",
+  "//extensions/shell:browser_tests",
+  "//extensions/shell:unit_tests",
+  "//extensions/utility:unit_tests",
+  "//gin/*",
+  "//google_apis/*",
+  "//google_update/*",
+  "//gpu/*",
+
+  "//ios/*",
+  "//ios_internal/*",
+  "//ipc/*",
+
+  #"//jingle/*",
+  "//mash/*",
+
+  "//media/*",
+  "//mojo/*",
+
+  #"//native_client/*",
+  "//net/*",
+
+  #"//pdf/*",  # Medium-hard.
+  #"//ppapi/*",  # Lots of errors.
+  "//ppapi/examples/*",
+  "//printing/*",
+
+  #"//remoting/*",  # Medium-hard.
+  "//rlz/*",
+
+  #"//sandbox/*",  # Medium-hard.
+  "//services/*",
+  "//skia/*",
+  "//sql/*",
+  "//storage/*",
+  "//testing/*",
+
+  #"//third_party/*",  # May not ever want this.
+  "//third_party/breakpad/*",
+  "//third_party/brotli/*",
+  "//third_party/hunspell/*",
+  "//third_party/leveldatabase/*",
+  "//third_party/libaddressinput/*",
+  "//third_party/libphonenumber/*",
+  "//third_party/libwebp/*",
+  "//third_party/snappy/*",
+  "//third_party/WebKit/*",
+  "//tools/*",
+
+  "//ui/*",
+  "//url/*",
+  "//v8/*",
+  "//win8/*",
+]
+
+# These are the list of GN files that run exec_script. This whitelist exists
+# to force additional review for new uses of exec_script, which is strongly
+# discouraged.
+#
+# GYPI_TO_GN
+#
+# Some of these entries are for legacy gypi_to_gn calls. We should not be
+# adding new calls to this script in the build (see //build/gypi_to_gn.py for
+# detailed advice). The only time you should be editing this list for
+# gypi_to_gn purposes is when moving an existing call to a different place.
+#
+# PLEASE READ
+#
+# You should almost never need to add new exec_script calls. exec_script is
+# slow, especially on Windows, and can cause confusing effects. Although
+# individually each call isn't slow or necessarily very confusing, at the scale
+# of our repo things get out of hand quickly. By strongly pushing back on all
+# additions, we keep the build fast and clean. If you think you need to add a
+# new call, please consider:
+#
+# - Do not use a script to check for the existance of a file or directory to
+#   enable a different mode. Instead, use GN build args to enable or disable
+#   functionality and set options. An example is checking for a file in the
+#   src-internal repo to see if the corresponding src-internal feature should
+#   be enabled. There are several things that can go wrong with this:
+#
+#    - It's mysterious what causes some things to happen. Although in many cases
+#      such behavior can be conveniently automatic, GN optimizes for explicit
+#      and obvious behavior so people can more easily diagnose problems.
+#
+#    - The user can't enable a mode for one build and not another. With GN build
+#      args, the user can choose the exact configuration of multiple builds
+#      using one checkout. But implicitly basing flags on the state of the
+#      checkout, this functionality is broken.
+#
+#    - It's easy to get stale files. If for example the user edits the gclient
+#      to stop checking out src-internal (or any other optional thing), it's
+#      easy to end up with stale files still mysteriously triggering build
+#      conditions that are no longer appropriate (yes, this happens in real
+#      life).
+#
+# - Do not use a script to iterate files in a directory (glob):
+#
+#    - This has the same "stale file" problem as the above discussion. Various
+#      operations can leave untracked files in the source tree which can cause
+#      surprising effects.
+#
+#    - It becomes impossible to use "git grep" to find where a certain file is
+#      referenced. This operation is very common and people really do get
+#      confused when things aren't listed.
+#
+#    - It's easy to screw up. One common case is a build-time script that packs
+#      up a directory. The author notices that the script isn't re-run when the
+#      directory is updated, so adds a glob so all the files are listed as
+#      inputs. This seems to work great... until a file is deleted. When a
+#      file is deleted, all the inputs the glob lists will still be up to date
+#      and no command-lines will have been changed. The action will not be
+#      re-run and the build will be broken. It is possible to get this correct
+#      using glob, and it's possible to mess it up without glob, but globs make
+#      this situation much easier to create. if the build always lists the
+#      files and passes them to a script, it will always be correct.
+
+exec_script_whitelist =
+    build_dotfile_settings.exec_script_whitelist + [
+      # Whitelist entries for //build should go into
+      # //build/dotfile_settings.gni instead, so that they can be shared
+      # with other repos. The entries in this list should be only for files
+      # in the Chromium repo outside of //build.
+      "//build_overrides/build.gni",
+
+      # TODO(dgn): Layer violation but breaks the build otherwise, see
+      # https://crbug.com/474506.
+      "//clank/java/BUILD.gn",
+      "//clank/native/BUILD.gn",
+
+      "//remoting/host/installer/linux/BUILD.gn",
+      "//remoting/remoting_version.gni",
+      "//remoting/host/installer/win/generate_clsids.gni",
+
+      # TODO(dpranke): Get these from the appropriate repos instead.
+      "//third_party/angle/BUILD.gn",
+      "//third_party/angle/src/tests/BUILD.gn",
+      "//third_party/angle/src/vulkan_support/BUILD.gn",
+      "//third_party/catapult/tracing/BUILD.gn",
+      "//third_party/google_input_tools/inputview.gni",
+
+      # CLD2 should be removed soon, delete this when we do.
+      "//third_party/cld_2/BUILD.gn",
+      "//tools/grit/grit_rule.gni",
+
+      # Not gypi-to-gn.
+      "//google_apis/BUILD.gn",
+      "//printing/BUILD.gn",
+    ]

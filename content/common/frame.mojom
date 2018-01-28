@@ -1,0 +1,117 @@
+// Copyright 2014 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module content.mojom;
+
+import "content/public/common/window_container_type.mojom";
+import "services/service_manager/public/interfaces/interface_provider.mojom";
+import "third_party/WebKit/public/platform/referrer.mojom";
+import "third_party/WebKit/public/web/window_features.mojom";
+import "ui/base/mojo/window_open_disposition.mojom";
+import "url/mojo/url.mojom";
+
+// The name of the InterfaceProviderSpec in service manifests used by the
+// frame tree to expose frame-specific interfaces between renderer and browser.
+const string kNavigation_FrameSpec = "navigation:frame";
+
+// Implemented by the frame provider (e.g. renderer processes).
+interface Frame {
+  GetInterfaceProvider(service_manager.mojom.InterfaceProvider& interfaces);
+};
+
+// Implemented by the frame (e.g. renderer processes).
+// Instances of this interface must be associated with (i.e., FIFO with) the
+// legacy IPC channel.
+interface FrameBindingsControl {
+  // Used to tell a render frame whether it should expose various bindings
+  // that allow JS content extended privileges. See BindingsPolicy for valid
+  // flag values.
+  AllowBindings(int32 enabled_bindings_flags);
+};
+
+// Implemented by the frame server (i.e. the browser process).
+interface FrameHostInterfaceBroker {
+  GetInterfaceProvider(service_manager.mojom.InterfaceProvider& interfaces);
+};
+
+// Implemented by a service that provides implementations of the Frame
+// interface. (e.g. renderer processes).
+interface FrameFactory {
+  CreateFrame(int32 frame_routing_id, Frame& frame, FrameHostInterfaceBroker host);
+};
+
+struct CreateNewWindowParams {
+  // True if this open request came in the context of a user gesture.
+  bool user_gesture;
+
+  // Type of window requested.
+  WindowContainerType window_container_type;
+
+  // The session storage namespace ID this window should use.
+  int64 session_storage_namespace_id;
+
+  // The name of the resulting frame that should be created (empty if none
+  // has been specified). UTF8 encoded string.
+  string frame_name;
+
+  // Whether the opener will be suppressed in the new window, in which case
+  // scripting the new window is not allowed.
+  bool opener_suppressed;
+
+  // Whether the window should be opened in the foreground, background, etc.
+  ui.mojom.WindowOpenDisposition disposition;
+
+  // The URL that will be loaded in the new window (empty if none has been
+  // specified).
+  url.mojom.Url target_url;
+
+  // The referrer that will be used to load |target_url| (empty if none has
+  // been specified).
+  blink.mojom.Referrer referrer;
+
+  // The window features to use for the new window.
+  blink.mojom.WindowFeatures features;
+};
+
+struct CreateNewWindowReply {
+  // The ID of the view to be created. If the ID is MSG_ROUTING_NONE, then the
+  // opener RenderFrame should not create a RenderView in its process.
+  // MSG_ROUTING_NONE does not necessarily indicate failure; it may also occur
+  // in cases where a window was created, but the opener relationship is
+  // severed.
+  int32 route_id;
+
+  // The ID of the main frame hosted in the view.
+  int32 main_frame_route_id;
+
+  // The ID of the widget for the main frame.
+  int32 main_frame_widget_route_id;
+
+  // Duplicated from CreateNewWindowParams because legacy code.
+  int64 cloned_session_storage_namespace_id;
+};
+
+// An opaque handle that keeps alive the associated render process even after
+// the frame is detached. Used by resource requests with "keepalive" specified.
+interface KeepAliveHandle {};
+
+[Native]
+struct DidCommitProvisionalLoadParams;
+
+// Implemented by the frame server (i.e. the browser process). For messages that
+// must be associated with the IPC channel.
+interface FrameHost {
+  // Sent by the renderer when it is creating a new window.  The browser creates
+  // a tab for it.  If |reply.route_id| is MSG_ROUTING_NONE, the window couldn't
+  // be created.
+  [Sync] CreateNewWindow(CreateNewWindowParams params)
+      => (CreateNewWindowReply reply);
+
+  // Creates and returns a KeepAliveHandle.
+  IssueKeepAliveHandle(KeepAliveHandle& keep_alive_handle);
+
+  // Sent by the renderer when a navigation commits in the frame.
+  DidCommitProvisionalLoad(
+      DidCommitProvisionalLoadParams params);
+};

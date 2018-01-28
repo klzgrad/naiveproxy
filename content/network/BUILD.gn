@@ -1,0 +1,83 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//services/service_manager/public/service_manifest.gni")
+
+group("network") {
+  visibility = [ "//content/*" ]  # This is an internal content API.
+
+  if (is_component_build) {
+    public_deps = [
+      "//content",
+    ]
+  } else {
+    public_deps = [
+      ":network_sources",
+    ]
+  }
+}
+
+source_set("network_sources") {
+  # Depend on via ":network above.
+  visibility = [
+    ":network",
+    "//content",  # For the component build.
+    "//content/app:*",
+    "//content/public/network/*",
+    "//content/utility:utility",
+
+    # For use by StoragePartition.
+    # TODO(mmenke): Remove when network service ships.
+    "//content/browser",
+  ]
+
+  sources = [
+    "cache_url_loader.cc",
+    "cache_url_loader.h",
+    "cookie_manager_impl.cc",
+    "cookie_manager_impl.h",
+    "http_server_properties_pref_delegate.cc",
+    "http_server_properties_pref_delegate.h",
+    "network_context.cc",
+    "network_context.h",
+    "network_service_impl.cc",
+    "network_service_impl.h",
+    "network_service_url_loader_factory_impl.cc",
+    "network_service_url_loader_factory_impl.h",
+    "proxy_resolver_factory_mojo.cc",
+    "proxy_resolver_factory_mojo.h",
+    "proxy_service_mojo.cc",
+    "proxy_service_mojo.h",
+    "restricted_cookie_manager_impl.cc",
+    "restricted_cookie_manager_impl.h",
+    "url_loader_impl.cc",
+    "url_loader_impl.h",
+  ]
+
+  configs += [ "//content:content_implementation" ]
+
+  deps = [
+    "//base",
+    "//components/network_session_configurator/browser",
+    "//components/network_session_configurator/common",
+    "//components/prefs",
+    "//content:export",
+    "//content/common",
+    "//content/common:mojo_bindings",
+    "//content/public/common:common_sources",
+    "//content/public/network:network_sources",
+    "//mojo/public/cpp/bindings",
+    "//net",
+    "//net:net_browser_services",
+    "//services/network/public/cpp",
+    "//services/proxy_resolver/public/interfaces",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/interfaces",
+  ]
+}
+
+service_manifest("manifest") {
+  name = "network"
+  source = "manifest.json"
+}

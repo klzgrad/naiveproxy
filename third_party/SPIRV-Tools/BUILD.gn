@@ -1,0 +1,276 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//testing/test.gni")
+
+template("core_tables") {
+  assert(defined(invoker.version), "Need version in $target_name generation.")
+
+  action(target_name) {
+    script = "src/utils/generate_grammar_tables.py"
+
+    version = invoker.version
+    core_json_file = "src/source/spirv-${version}.core.grammar.json"
+    core_insts_file = "${target_gen_dir}/core.insts-${version}.inc"
+    operands_kinds_file = "${target_gen_dir}/operand.kinds-${version}.inc"
+
+    args = [
+      "--spirv-core-grammar",
+      rebase_path(core_json_file, root_build_dir),
+      "--core-insts-output",
+      rebase_path(core_insts_file, root_build_dir),
+      "--operand-kinds-output",
+      rebase_path(operands_kinds_file, root_build_dir),
+    ]
+    inputs = [
+      core_json_file,
+    ]
+    outputs = [
+      core_insts_file,
+      operands_kinds_file,
+    ]
+  }
+}
+
+template("glsl_tables") {
+  assert(defined(invoker.version), "Need version in $target_name generation.")
+
+  action(target_name) {
+    script = "src/utils/generate_grammar_tables.py"
+
+    version = invoker.version
+    core_json_file = "src/source/spirv-${version}.core.grammar.json"
+    glsl_json_file = "src/source/extinst-${version}.glsl.std.450.grammar.json"
+    glsl_insts_file = "${target_gen_dir}/glsl.std.450.insts-${version}.inc"
+
+    args = [
+      "--spirv-core-grammar",
+      rebase_path(core_json_file, root_build_dir),
+      "--extinst-glsl-grammar",
+      rebase_path(glsl_json_file, root_build_dir),
+      "--glsl-insts-output",
+      rebase_path(glsl_insts_file, root_build_dir),
+    ]
+    inputs = [
+      core_json_file,
+      glsl_json_file,
+    ]
+    outputs = [
+      glsl_insts_file,
+    ]
+  }
+}
+
+template("opencl_tables") {
+  assert(defined(invoker.version), "Need version in $target_name generation.")
+
+  action(target_name) {
+    script = "src/utils/generate_grammar_tables.py"
+
+    version = invoker.version
+    core_json_file = "src/source/spirv-${version}.core.grammar.json"
+    opengl_json_file = "src/source/extinst-${version}.opencl.std.grammar.json"
+    opencl_insts_file = "${target_gen_dir}/opencl.std.insts-${version}.inc"
+
+    args = [
+      "--spirv-core-grammar",
+      rebase_path(core_json_file, root_build_dir),
+      "--extinst-opencl-grammar",
+      rebase_path(opengl_json_file, root_build_dir),
+      "--opencl-insts-output",
+      rebase_path(opencl_insts_file, root_build_dir),
+    ]
+    inputs = [
+      core_json_file,
+      opengl_json_file,
+    ]
+    outputs = [
+      opencl_insts_file,
+    ]
+  }
+}
+
+core_tables("core_tables_1-0") {
+  version = "1-0"
+}
+core_tables("core_tables_1-1") {
+  version = "1-1"
+}
+glsl_tables("glsl_tables_1-0") {
+  version = "1-0"
+}
+opencl_tables("opencl_tables_1-0") {
+  version = "1-0"
+}
+
+action("build_version_inc") {
+  script = "src/utils/update_build_version.py"
+
+  build_version_inc = "${target_gen_dir}/build-version.inc"
+
+  args = [
+    rebase_path("src", root_build_dir),
+    rebase_path(build_version_inc, root_build_dir),
+  ]
+  inputs = [
+    "src/CHANGES",
+  ]
+  outputs = [
+    build_version_inc,
+  ]
+}
+
+config("SPIRV-Tools_config") {
+  include_dirs = [ "src/include" ]
+
+  defines = []
+  if (is_linux) {
+    defines += [ "SPIRV_LINUX" ]
+  } else if (is_win) {
+    defines += [ "SPIRV_WINDOWS" ]
+  } else if (is_mac) {
+    defines += [ "SPIRV_MAC" ]
+  } else if (is_android) {
+    defines += [ "SPIRV_ANDROID" ]
+  } else {
+    assert(false, "Unsupported platform.")
+  }
+}
+
+static_library("SPIRV-Tools") {
+  sources = [
+    "src/include/spirv-tools/libspirv.h",
+    "src/include/spirv/GLSL.std.450.h",
+    "src/include/spirv/OpenCL.std.h",
+    "src/include/spirv/spirv.h",
+    "src/source/assembly_grammar.cpp",
+    "src/source/assembly_grammar.h",
+    "src/source/binary.cpp",
+    "src/source/binary.h",
+    "src/source/diagnostic.cpp",
+    "src/source/diagnostic.h",
+    "src/source/disassemble.cpp",
+    "src/source/ext_inst.cpp",
+    "src/source/ext_inst.h",
+    "src/source/instruction.cpp",
+    "src/source/instruction.h",
+    "src/source/opcode.cpp",
+    "src/source/opcode.h",
+    "src/source/operand.cpp",
+    "src/source/operand.h",
+    "src/source/print.cpp",
+    "src/source/print.h",
+    "src/source/software_version.cpp",
+    "src/source/spirv_constant.h",
+    "src/source/spirv_definition.h",
+    "src/source/spirv_endian.cpp",
+    "src/source/spirv_endian.h",
+    "src/source/spirv_target_env.cpp",
+    "src/source/table.cpp",
+    "src/source/table.h",
+    "src/source/text.cpp",
+    "src/source/text.h",
+    "src/source/text_handler.cpp",
+    "src/source/text_handler.h",
+    "src/source/util/bitutils.h",
+    "src/source/util/hex_float.h",
+    "src/source/validate.cpp",
+    "src/source/validate.h",
+    "src/source/validate_cfg.cpp",
+    "src/source/validate_id.cpp",
+    "src/source/validate_instruction.cpp",
+    "src/source/validate_layout.cpp",
+    "src/source/validate_ssa.cpp",
+    "src/source/validate_types.cpp",
+  ]
+
+  include_dirs = [ target_gen_dir ]
+
+  all_dependent_configs = [ ":SPIRV-Tools_config" ]
+
+  deps = [
+    ":build_version_inc",
+    ":core_tables_1-0",
+    ":core_tables_1-1",
+    ":glsl_tables_1-0",
+    ":opencl_tables_1-0",
+  ]
+}
+
+test("SPIRV-Tools_test") {
+  sources = [
+    "src/test/AssemblyContext.cpp",
+    "src/test/AssemblyFormat.cpp",
+    "src/test/BinaryDestroy.cpp",
+    "src/test/BinaryEndianness.cpp",
+    "src/test/BinaryHeaderGet.cpp",
+    "src/test/BinaryParse.cpp",
+    "src/test/BinaryToText.Literal.cpp",
+    "src/test/BinaryToText.cpp",
+    "src/test/Comment.cpp",
+    "src/test/DiagnosticDestroy.cpp",
+    "src/test/DiagnosticPrint.cpp",
+    "src/test/DiagnosticStream.cpp",
+    "src/test/ExtInst.OpenCL.std.cpp",
+    "src/test/ExtInstGLSLstd450.cpp",
+    "src/test/FixWord.cpp",
+    "src/test/GeneratorMagicNumber.cpp",
+    "src/test/HexFloat.cpp",
+    "src/test/ImmediateInt.cpp",
+    "src/test/LibspirvMacros.cpp",
+    "src/test/NamedId.cpp",
+    "src/test/OpcodeMake.cpp",
+    "src/test/OpcodeRequiresCapabilities.cpp",
+    "src/test/OpcodeSplit.cpp",
+    "src/test/OpcodeTableGet.cpp",
+    "src/test/Operand.cpp",
+    "src/test/OperandCapabilities.cpp",
+    "src/test/OperandPattern.cpp",
+    "src/test/SoftwareVersion.cpp",
+    "src/test/TestFixture.h",
+    "src/test/TextAdvance.cpp",
+    "src/test/TextDestroy.cpp",
+    "src/test/TextLiteral.cpp",
+    "src/test/TextStartsNewInst.cpp",
+    "src/test/TextToBinary.Annotation.cpp",
+    "src/test/TextToBinary.Barrier.cpp",
+    "src/test/TextToBinary.Constant.cpp",
+    "src/test/TextToBinary.ControlFlow.cpp",
+    "src/test/TextToBinary.Debug.cpp",
+    "src/test/TextToBinary.DeviceSideEnqueue.cpp",
+    "src/test/TextToBinary.Extension.cpp",
+    "src/test/TextToBinary.Function.cpp",
+    "src/test/TextToBinary.Group.cpp",
+    "src/test/TextToBinary.Image.cpp",
+    "src/test/TextToBinary.Literal.cpp",
+    "src/test/TextToBinary.Memory.cpp",
+    "src/test/TextToBinary.Miscellaneous.cpp",
+    "src/test/TextToBinary.ModeSetting.cpp",
+    "src/test/TextToBinary.SubgroupDispatch.cpp",
+    "src/test/TextToBinary.TypeDeclaration.cpp",
+    "src/test/TextToBinary.cpp",
+    "src/test/TextWordGet.cpp",
+    "src/test/UnitSPIRV.cpp",
+    "src/test/UnitSPIRV.h",
+    "src/test/Validate.SSA.cpp",
+
+    # TODO(dyen): Look into why these 2 files have gtest compilation errors.
+    #"src/test/Validate.Capability.cpp",
+    #"src/test/Validate.Layout.cpp",
+    "src/test/Validate.Storage.cpp",
+    "src/test/ValidateFixtures.cpp",
+    "src/test/ValidateID.cpp",
+    "src/test/ValidationState.cpp",
+    "src/test/main.cpp",
+  ]
+
+  include_dirs = [ "src" ]
+
+  deps = [
+    ":SPIRV-Tools",
+    "//base/test:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+}

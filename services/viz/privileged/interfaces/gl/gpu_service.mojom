@@ -1,0 +1,72 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module viz.mojom;
+
+import "gpu/ipc/common/gpu_info.mojom";
+import "gpu/ipc/common/memory_stats.mojom";
+import "gpu/ipc/common/surface_handle.mojom";
+import "gpu/ipc/common/sync_token.mojom";
+import "media/gpu/mojo/jpeg_decoder.mojom";
+import "media/mojo/interfaces/video_encode_accelerator.mojom";
+import "ui/gfx/geometry/mojo/geometry.mojom";
+import "ui/gfx/mojo/buffer_types.mojom";
+
+interface GpuService {
+  // Tells the GPU service to create a new channel for communication with a
+  // client. The GPU service responds with an IPC handle.
+  EstablishGpuChannel(int32 client_id,
+                      uint64 client_tracing_id,
+                      bool is_gpu_host)
+      => (handle<message_pipe>? channel_handle);
+
+  // Tells the GPU process to close the channel identified by |client_id|.
+  // If no channel can be identified, do nothing.
+  CloseChannel(int32 client_id);
+
+  // Creates a new JpegDecodeAccelerator and binds it to |jda|.
+  CreateJpegDecodeAccelerator(media.mojom.GpuJpegDecodeAccelerator& jda);
+
+  // Creates a VideoEncodeAcceleratorProvider and binds it to |vea_provider|.
+  CreateVideoEncodeAcceleratorProvider(
+      media.mojom.VideoEncodeAcceleratorProvider& vea_provider);
+
+  CreateGpuMemoryBuffer(gfx.mojom.GpuMemoryBufferId id,
+                        gfx.mojom.Size size,
+                        gfx.mojom.BufferFormat format,
+                        gfx.mojom.BufferUsage usage,
+                        int32 client_id,
+                        gpu.mojom.SurfaceHandle surface_handle)
+      => (gfx.mojom.GpuMemoryBufferHandle buffer_handle);
+
+  DestroyGpuMemoryBuffer(gfx.mojom.GpuMemoryBufferId id,
+                         int32 client_id,
+                         gpu.mojom.SyncToken sync_token);
+
+  GetVideoMemoryUsageStats() => (gpu.mojom.VideoMemoryUsageStats stats);
+
+  RequestCompleteGpuInfo() => (gpu.mojom.GpuInfo gpu_info);
+
+  // Notify GPU that a shader program was loaded from disk. Key is an
+  // SHA-1 hash, and data a binary blob with serialized program info.
+  // Note that this method is used only from a trusted process.
+  LoadedShader(string key, string data);
+
+  // Tells GPU to release the surface because it's being destroyed.
+  DestroyingVideoSurface(int32 surface_id) => ();
+
+  // Tells GPU to wake up the GPU because we're about to draw.
+  WakeUpGpu();
+
+  // Tells GPU that host has seen a GPU switch. This can happen when the display
+  // is reconfigured, for example.
+  GpuSwitched();
+
+  DestroyAllChannels();
+
+  Crash();
+  Hang();
+  ThrowJavaException();
+  Stop() => ();
+};

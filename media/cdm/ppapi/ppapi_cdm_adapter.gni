@@ -1,0 +1,69 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# This template defines a CDM adapter target. Just use this as you would a
+# normal target and everything should work correctly.
+template("ppapi_cdm_adapter") {
+  if (is_mac || is_linux) {
+    _target_type = "loadable_module"
+  } else {
+    _target_type = "shared_library"
+  }
+
+  target(_target_type, target_name) {
+    # Don't filter sources list again.
+    set_sources_assignment_filter([])
+    cflags = []
+    sources = []
+    ldflags = []
+    libs = []
+    forward_variables_from(invoker, "*")
+
+    defines += [ "USE_PPAPI_CDM_ADAPTER" ]
+    deps += [
+      "//build/config:exe_and_shlib_deps",
+      "//media/cdm:cdm_api",
+      "//ppapi/cpp",
+    ]
+    sources += [
+      "//media/cdm/cdm_helpers.cc",
+      "//media/cdm/cdm_helpers.h",
+      "//media/cdm/cdm_wrapper.h",
+      "//media/cdm/ppapi/cdm_file_io_impl.cc",
+      "//media/cdm/ppapi/cdm_file_io_impl.h",
+      "//media/cdm/ppapi/cdm_logging.cc",
+      "//media/cdm/ppapi/cdm_logging.h",
+      "//media/cdm/ppapi/linked_ptr.h",
+      "//media/cdm/ppapi/ppapi_cdm_adapter.cc",
+      "//media/cdm/ppapi/ppapi_cdm_adapter.h",
+      "//media/cdm/ppapi/ppapi_cdm_buffer.cc",
+      "//media/cdm/ppapi/ppapi_cdm_buffer.h",
+      "//media/cdm/supported_cdm_versions.cc",
+      "//media/cdm/supported_cdm_versions.h",
+    ]
+    if (is_mac) {
+      ldflags += [
+        # Not to strip important symbols by -Wl,-dead_strip.
+        "-Wl,-exported_symbol,_PPP_GetInterface",
+        "-Wl,-exported_symbol,_PPP_InitializeModule",
+        "-Wl,-exported_symbol,_PPP_ShutdownModule",
+      ]
+
+      output_extension = "plugin"
+    } else if (is_posix) {
+      cflags += [ "-fvisibility=hidden" ]
+
+      # Required for clock_gettime()
+      libs += [ "rt" ]
+    }
+
+    if (is_linux) {
+      # CDM adapter depends on a CDM in component and non-component builds.
+      configs += [ "//build/config/gcc:rpath_for_built_shared_libraries" ]
+    }
+
+    # TODO(jschuh) crbug.com/167187
+    configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+  }
+}

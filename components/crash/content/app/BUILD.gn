@@ -1,0 +1,310 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# TODO(crbug.com/753619): Enable crash reporting on Fuchsia.
+assert(!is_ios && !is_fuchsia)
+
+if (is_android) {
+  import("//build/config/android/config.gni")
+}
+
+source_set("lib") {
+  sources = [
+    "crash_keys_win.cc",
+    "crash_keys_win.h",
+    "crash_reporter_client.cc",
+    "crash_reporter_client.h",
+  ]
+
+  include_dirs = [ "../../../../third_party/breakpad/breakpad/src" ]
+
+  deps = [
+    "//base",
+  ]
+
+  if (is_win) {
+    deps += [ "//third_party/breakpad:breakpad_handler" ]
+  }
+}
+
+static_library("app") {
+  sources = [
+    "crash_export_thunks.h",
+    "crash_switches.cc",
+    "crash_switches.h",
+    "crashpad.h",
+    "crashpad_mac.mm",
+    "crashpad_win.cc",
+  ]
+
+  if (is_mac || is_win) {
+    sources += [ "crashpad.cc" ]
+  }
+
+  defines = [ "CRASH_IMPLEMENTATION" ]
+
+  public_deps = [
+    ":app_non_mac_win",
+    ":lib",
+  ]
+  deps = [
+    "//base",
+  ]
+
+  if (is_mac || is_win) {
+    deps += [
+      "//third_party/crashpad/crashpad/client",
+      "//third_party/crashpad/crashpad/snapshot:snapshot_api",
+    ]
+  }
+  if (is_win) {
+    deps += [ "//third_party/crashpad/crashpad/handler:handler_lib" ]
+  }
+}
+
+if (is_win) {
+  static_library("run_as_crashpad_handler") {
+    sources = [
+      "crash_switches.cc",
+      "crash_switches.h",
+      "fallback_crash_handler_launcher_win.cc",
+      "fallback_crash_handler_launcher_win.h",
+      "fallback_crash_handler_win.cc",
+      "fallback_crash_handler_win.h",
+      "fallback_crash_handling_win.cc",
+      "fallback_crash_handling_win.h",
+      "run_as_crashpad_handler_win.cc",
+      "run_as_crashpad_handler_win.h",
+    ]
+
+    deps = [
+      "//base",
+      "//components/browser_watcher:crash_stability",
+      "//third_party/crashpad/crashpad/client",
+      "//third_party/crashpad/crashpad/handler:handler_lib",
+      "//third_party/crashpad/crashpad/minidump",
+    ]
+  }
+
+  # This source set contains the include file that declares the export thunks.
+  # Any target that gets compiled into both test and release code needs to
+  # depend on this for the include alone. The binary it's linked into then needs
+  # to depend on either :crash_export_thunks or :test_support, or in the case of
+  # release binaries, on //chrome_elf, which re-exports the thunks.
+  source_set("crash_export_thunk_include") {
+    sources = [
+      "crash_export_thunks.h",
+    ]
+  }
+
+  # This source set contains a set of functions that allow using the crashpad
+  # handler across a module boundary. The intent is for these functions to be
+  # built into a dynamic library, which the user of the crashpad handler then
+  # has a link-time dependency on. This will result in an import dependency
+  # from the user to the dynamic library that will be bound at load time.
+  # In a single-module project, this source set can alternatively be included in
+  # the sole module, in which case the implementation will be bound at link
+  # time.
+  source_set("crash_export_thunks") {
+    sources = [
+      "crash_export_thunks.cc",
+      "crash_export_thunks.h",
+    ]
+
+    deps = [
+      ":app",
+      "//base",
+      "//third_party/crashpad/crashpad/client",
+    ]
+  }
+
+  # This source set contains a set of test stubs for the functions above.
+  # time.
+  source_set("crash_export_stubs") {
+    testonly = true
+
+    sources = [
+      "crash_export_stubs.cc",
+      "crash_export_thunks.h",
+    ]
+
+    deps = [
+      ":app",
+      "//base",
+    ]
+  }
+}
+
+# This source set provides the functionality required for tests, which on Windows
+# link the export thunks directly into the test binary.
+source_set("test_support") {
+  testonly = true
+
+  deps = [
+    ":lib",
+  ]
+
+  if (is_win) {
+    deps += [ ":crash_export_stubs" ]
+  }
+}
+
+# TODO(mark): https://crbug.com/466890: merge this target with
+# crash_component.
+#
+# This is a temporary base target that is depended on by both
+# crash_component and crash_component_breakpad_mac_to_be_deleted. It
+# provides everything common to both of those targets. For a short period,
+# there are two Mac crash component implementations. The new one uses a
+# Crashpad implementation and is used by Chrome. The old one uses a
+# Breakpad implementation and is used by content_shell. Consumers should
+# depend on the desired target. All three targets behave identically on
+# non-Mac. When content_shell and any other consumers are migrated to the
+# Crashpad implementation on Mac, crash_component will merge back into
+# this target, crash_component_non_mac, which will be renamed
+# crash_component. crash_component_breakpad_mac_to_be_deleted will be
+# deleted.
+#
+# While this situation exists:
+#
+# Do not depend on this target directly! Depend on
+# crash_component_breakpad_mac_to_be_deleted for old Breakpad behavior on
+# all platforms, or preferably, depend on crash_component to get Breakpad
+# everywhere except for Mac, where you will get Crashpad.
+source_set("app_non_mac_win") {
+  visibility = [
+    ":*",
+    "//components/crash/content/browser",
+  ]
+
+  sources = [
+    "breakpad_linux_impl.h",
+    "hard_error_handler_win.cc",
+    "hard_error_handler_win.h",
+  ]
+
+  if (is_android) {
+    libs = [ "log" ]
+  }
+
+  if (is_android || is_linux) {
+    # Want these files on both Linux and Android.
+    set_sources_assignment_filter([])
+    sources += [
+      "breakpad_linux.cc",
+      "breakpad_linux.h",
+    ]
+  }
+
+  defines = [ "CRASH_IMPLEMENTATION" ]
+
+  deps = [
+    ":lib",
+    "//base",
+    "//base:base_static",
+    "//components/crash/core/common",
+    "//content/public/common:content_descriptors",
+    "//content/public/common:result_codes",
+  ]
+
+  # Clang's -mstackrealign doesn't work well with
+  # linux_syscall_support.h hand written asm syscalls.
+  # See https://crbug.com/556393
+  configs -= [ "//build/config/compiler:clang_stackrealign" ]
+
+  if (is_win) {
+    deps += [
+      "//sandbox",
+      "//third_party/breakpad:breakpad_handler",
+    ]
+  } else if (is_posix && !is_ios) {
+    deps += [ "//third_party/breakpad:client" ]
+  }
+}
+
+# TODO(mark): https://crbug.com/466890: remove this target.
+#
+# This is a temporary target provided for Mac Breakpad users that have not
+# yet migrated to Crashpad (namely content_shell). This target will be
+# removed shortly and all consumers will be expected to use Crashpad as
+# the Mac crash-reporting client. See the comment in the
+# crash_component_non_mac target for more details.
+static_library("app_breakpad_mac_win_to_be_deleted") {
+  deps = [
+    ":app_non_mac_win",
+  ]
+
+  if (is_mac || is_win) {
+    sources = [
+      "breakpad_mac.h",
+      "breakpad_mac.mm",
+      "breakpad_win.cc",
+      "breakpad_win.h",
+    ]
+
+    defines = [ "CRASH_IMPLEMENTATION" ]
+
+    public_deps = [
+      ":lib",
+    ]
+    deps += [
+      "//base",
+      "//base:base_static",
+      "//components/crash/core/common",
+      "//content/public/common:result_codes",
+      "//sandbox",
+      "//third_party/breakpad:client",
+    ]
+
+    if (is_mac) {
+      deps += [ "//third_party/breakpad" ]
+    }
+
+    if (is_win) {
+      deps += [ "//third_party/breakpad:breakpad_handler" ]
+      libs = [ "userenv.lib" ]
+    }
+  }
+}
+
+if (is_mac) {
+  static_library("breakpad_stubs") {
+    sources = [
+      "breakpad_mac.h",
+      "breakpad_mac_stubs.mm",
+      "crash_reporter_client.cc",
+      "crash_reporter_client.h",
+    ]
+    deps = [
+      "//base",
+    ]
+  }
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "crash_keys_win_unittest.cc",
+    "fallback_crash_handler_launcher_win_unittest.cc",
+    "fallback_crash_handler_win_unittest.cc",
+    "fallback_crash_handling_win_unittest.cc",
+  ]
+  deps = [
+    ":lib",
+    "//base",
+    "//base/test:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+
+  if (is_win) {
+    deps += [
+      ":run_as_crashpad_handler",
+      "//third_party/breakpad:client",
+      "//third_party/crashpad/crashpad/client:client",
+      "//third_party/crashpad/crashpad/snapshot:snapshot",
+      "//third_party/crashpad/crashpad/util",
+    ]
+  }
+}

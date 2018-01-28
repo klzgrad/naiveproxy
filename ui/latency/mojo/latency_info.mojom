@@ -1,0 +1,122 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module ui.mojom;
+
+import "mojo/common/time.mojom";
+import "ui/gfx/geometry/mojo/geometry.mojom";
+
+enum LatencyComponentType {
+  // ---------------------------BEGIN COMPONENT-------------------------------
+  // BEGIN COMPONENT is when we show the latency begin in chrome://tracing.
+  // Timestamp when the input event is sent from RenderWidgetHost to renderer.
+  INPUT_EVENT_LATENCY_BEGIN_RWH_COMPONENT,
+  // In threaded scrolling, main thread scroll listener update is async to
+  // scroll processing in impl thread. This is the timestamp when we consider
+  // the main thread scroll listener update is begun.
+  LATENCY_BEGIN_SCROLL_LISTENER_UPDATE_MAIN_COMPONENT,
+  // ---------------------------NORMAL COMPONENT-------------------------------
+  // The original timestamp of the touch event which converts to scroll update.
+  INPUT_EVENT_LATENCY_SCROLL_UPDATE_ORIGINAL_COMPONENT,
+  // The original timestamp of the touch event which converts to the *first*
+  // scroll update in a scroll gesture sequence.
+  INPUT_EVENT_LATENCY_FIRST_SCROLL_UPDATE_ORIGINAL_COMPONENT,
+  // Original timestamp for input event (e.g. timestamp from kernel).
+  INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT,
+  // Timestamp when the UI event is created.
+  INPUT_EVENT_LATENCY_UI_COMPONENT,
+  // Timestamp when the event is dispatched on the main thread of the renderer.
+  INPUT_EVENT_LATENCY_RENDERER_MAIN_COMPONENT,
+  // This is special component indicating there is rendering scheduled for
+  // the event associated with this LatencyInfo on main thread.
+  INPUT_EVENT_LATENCY_RENDERING_SCHEDULED_MAIN_COMPONENT,
+  // This is special component indicating there is rendering scheduled for
+  // the event associated with this LatencyInfo on impl thread.
+  INPUT_EVENT_LATENCY_RENDERING_SCHEDULED_IMPL_COMPONENT,
+  // Timestamp when a scroll update is forwarded to the main thread.
+  INPUT_EVENT_LATENCY_FORWARD_SCROLL_UPDATE_TO_MAIN_COMPONENT,
+  // Timestamp when the event's ack is received by the RWH.
+  INPUT_EVENT_LATENCY_ACK_RWH_COMPONENT,
+  // Frame number when a window snapshot was requested. The snapshot
+  // is taken when the rendering results actually reach the screen.
+  WINDOW_SNAPSHOT_FRAME_NUMBER_COMPONENT,
+  // Timestamp when a tab is requested to be shown.
+  TAB_SHOW_COMPONENT,
+  // Timestamp when the frame is swapped in renderer.
+  INPUT_EVENT_LATENCY_RENDERER_SWAP_COMPONENT,
+  // Timestamp of when the display compositor receives a compositor frame.
+  // Display compositor can be either in the browser process or in Mus.
+  DISPLAY_COMPOSITOR_RECEIVED_FRAME_COMPONENT,
+  // Timestamp of when the gpu service began swap buffers, unlike
+  // INPUT_EVENT_LATENCY_TERMINATED_FRAME_SWAP_COMPONENT which measures after.
+  INPUT_EVENT_GPU_SWAP_BUFFER_COMPONENT,
+  // Timestamp of when the gesture scroll update is generated from a mouse wheel
+  // event.
+  INPUT_EVENT_LATENCY_GENERATE_SCROLL_UPDATE_FROM_MOUSE_WHEEL,
+  // ---------------------------TERMINAL COMPONENT-----------------------------
+  // TERMINAL COMPONENT is when we show the latency end in chrome://tracing.
+  // Timestamp when the event is acked from renderer when it does not
+  // cause any rendering to be scheduled.
+  INPUT_EVENT_LATENCY_TERMINATED_NO_SWAP_COMPONENT,
+  // Timestamp when the frame is swapped (i.e. when the rendering caused by
+  // input event actually takes effect).
+  INPUT_EVENT_LATENCY_TERMINATED_FRAME_SWAP_COMPONENT,
+  // This component indicates that the input causes a commit to be scheduled
+  // but the commit failed.
+  INPUT_EVENT_LATENCY_TERMINATED_COMMIT_FAILED_COMPONENT,
+  // This component indicates that the input causes a commit to be scheduled
+  // but the commit was aborted since it carried no new information.
+  INPUT_EVENT_LATENCY_TERMINATED_COMMIT_NO_UPDATE_COMPONENT,
+  // This component indicates that the input causes a swap to be scheduled
+  // but the swap failed.
+  INPUT_EVENT_LATENCY_TERMINATED_SWAP_FAILED_COMPONENT,
+  LATENCY_COMPONENT_TYPE_LAST =
+      INPUT_EVENT_LATENCY_TERMINATED_SWAP_FAILED_COMPONENT,
+};
+
+enum SourceEventType {
+  UNKNOWN,
+  WHEEL,
+  TOUCH,
+  KEY_PRESS,
+  OTHER,
+  SOURCE_EVENT_TYPE_LAST = OTHER,
+};
+
+struct LatencyComponentId {
+  LatencyComponentType type;
+  int64 id;
+};
+
+struct LatencyComponent {
+  // Nondecreasing number that can be used to determine what events happened
+  // in the component at the time this struct was sent on to the next
+  // component.
+  int64 sequence_number;
+  // Average time of events that happened in this component.
+  mojo.common.mojom.TimeTicks event_time;
+  // Count of events that happened in this component
+  uint32 event_count;
+  // Time of the oldest event that happened in this component.
+  mojo.common.mojom.TimeTicks first_event_time;
+  // Time of the most recent event that happened in this component.
+  mojo.common.mojom.TimeTicks last_event_time;
+};
+
+struct LatencyComponentPair {
+  LatencyComponentId key;
+  LatencyComponent value;
+};
+
+// See ui/latency/latency_info.h
+struct LatencyInfo {
+  string trace_name;
+  array<LatencyComponentPair> latency_components;
+  int64 trace_id;
+  bool coalesced;
+  bool began;
+  bool terminated;
+  SourceEventType source_event_type;
+  mojo.common.mojom.TimeDelta expected_queueing_time_on_dispatch;
+};

@@ -1,0 +1,29 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module resource_coordinator.mojom;
+
+import "services/metrics/public/interfaces/ukm_interface.mojom";
+
+// This class is intended to provide an interface to register mojo interfaces
+// that are not currently accessible to the resource_coordinator service. For
+// example (and the reason for this interface), the UKM mojo interface is
+// accessible to the resource_coordinator code, as its in //components/,
+// but it's bound within the content_browser service. Therefore, the
+// content_browser service needs to bind to it and pass the message pointer
+// (i.e. message pipe) to the resource_coordinator service. As a result, the
+// ServiceCallbacks interface is strategically called within content_browser
+// to pass in the initialized UkmRecorderInterfacePtr to the
+// resource_coordinator.
+interface ServiceCallbacks {
+  // Checks to see if the resource_coordinator service is already active. Any
+  // call to EnsureUkmRecorderInterface should enclosed in the passed callback
+  // and called only when active == true to avoid creating an unecessary
+  // UkmRecorderInterface mojo connections as resource_coordinator will ignore
+  // the UkmRecorderInterface passed into EnsureUkmRecorderInterface if it is
+  // already active.
+  IsUkmRecorderInterfaceInitialized() => (bool ukm_recorder_already_initialized);
+
+  SetUkmRecorderInterface(ukm.mojom.UkmRecorderInterface ukm_recorder_interface);
+};

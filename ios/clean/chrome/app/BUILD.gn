@@ -1,0 +1,134 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ios/rules.gni")
+import("//build/config/mac/base_rules.gni")
+import("//build/mac/tweak_info_plist.gni")
+import("//ios/build/chrome_build.gni")
+import("//ios/public/provider/chrome/browser/build_config.gni")
+
+tweak_info_plist("info_plist") {
+  info_plists = [
+    "//ios/chrome/app/resources/Info.plist",
+    "//ios/chrome/app/resources/ChromeAddition+Info.plist",
+  ]
+  if (ios_chrome_info_plist_additions != []) {
+    info_plists += ios_chrome_info_plist_additions
+  }
+  if (ios_encryption_export_compliance_code != "") {
+    info_plists +=
+        [ "//ios/chrome/app/resources/EncryptionExportCompliance+Info.plist" ]
+  }
+  args = [
+    "--breakpad=$breakpad_enabled_as_int",
+    "--breakpad_staging",
+    "--branding=CS$chromium_short_name",
+  ]
+}
+
+compile_entitlements("entitlements") {
+  entitlements_templates = [ "resources/Chrome.entitlements" ]
+  if (ios_chrome_entitlements_additions != []) {
+    # TODO(crbug.com/707206): Allow additional entitlements once the CSChromium
+    # mobile provisioning profiles have been updated.
+    # entitlements_templates += ios_chrome_entitlements_additions
+  }
+  substitutions = [ "IOS_BUNDLE_ID_PREFIX=$ios_app_bundle_id_prefix" ]
+  output_name = "$target_gen_dir/$chromium_short_name.entitlements"
+}
+
+ios_app_bundle("chrome_clean_skeleton") {
+  output_name = "CSChromium"
+
+  entitlements_target = ":entitlements"
+  info_plist_target = ":info_plist"
+
+  deps = [
+    ":main",
+    "//ios/chrome/app:tests_fake_hook",
+  ]
+
+  bundle_deps = [
+    "//ios/chrome/app/resources",
+    ios_application_icons_target,
+  ]
+
+  extra_substitutions = [
+    "CONTENT_WIDGET_EXTENSION_BUNDLE_ID=$chromium_bundle_id.ContentTodayExtension",
+    "CHROMIUM_BUNDLE_ID=$output_name",
+    "CHROMIUM_HANDOFF_ID=$chromium_handoff_id",
+    "CHROMIUM_SHORT_NAME=$output_name",
+    "CHROMIUM_URL_SCHEME_1=$url_unsecure_scheme",
+    "CHROMIUM_URL_SCHEME_2=$url_secure_scheme",
+    "CHROMIUM_URL_SCHEME_3=$url_x_callback_scheme",
+    "CHROMIUM_URL_CHANNEL_SCHEME=$url_channel_scheme",
+    "IOS_BUNDLE_ID_PREFIX=$ios_app_bundle_id_prefix",
+    "SSOAUTH_URL_SCHEME=$url_ssoauth_scheme",
+  ]
+
+  if (ios_encryption_export_compliance_code != "") {
+    extra_substitutions += [ "ENCRYPTION_EXPORT_COMPLIANCE_CODE=" +
+                             ios_encryption_export_compliance_code ]
+  }
+}
+
+source_set("main") {
+  sources = [
+    "main.mm",
+  ]
+
+  deps = [
+    ":app",
+    "//base",
+    "//components/crash/core/common",
+    "//ios/chrome/app/startup",
+    "//ios/chrome/app/startup:startup_basic",
+    "//ios/chrome/browser",
+    "//ios/chrome/browser:browser_internal",
+    "//ios/chrome/browser/crash_report",
+    "//ios/chrome/common",
+    "//ios/testing/perf:startup",
+    "//third_party/google_toolbox_for_mac",
+  ]
+
+  configs += [ "//build/config/compiler:enable_arc" ]
+}
+
+source_set("application_state") {
+  sources = [
+    "application_phase.h",
+    "application_state.h",
+    "application_state.mm",
+  ]
+
+  configs += [ "//build/config/compiler:enable_arc" ]
+
+  deps = [
+    "//base",
+    "//ios/chrome/browser/ui/coordinators",
+    "//ios/clean/chrome/app/steps:step_runner",
+    "//ios/clean/chrome/app/steps:steps",
+    "//ios/testing/perf:startup",
+  ]
+}
+
+source_set("app") {
+  sources = [
+    "app_delegate.h",
+    "app_delegate.mm",
+  ]
+
+  configs += [ "//build/config/compiler:enable_arc" ]
+
+  deps = [
+    ":application_state",
+    "//base",
+    "//ios/chrome/app/startup",
+    "//ios/clean/chrome/app/steps:step_runner",
+    "//ios/clean/chrome/app/steps:steps",
+    "//ios/clean/chrome/browser",
+    "//ios/testing/perf:startup",
+    "//net",
+  ]
+}

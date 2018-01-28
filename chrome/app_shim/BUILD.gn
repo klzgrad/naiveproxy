@@ -1,0 +1,57 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/mac/rules.gni")
+import("//build/mac/tweak_info_plist.gni")
+import("//build/util/branding.gni")
+
+# This is the part of the shim process compiled into Chrome. It runs only
+# in the shim process, after the shim finds and loads the Chrome
+# Framework bundle.
+source_set("app_shim") {
+  sources = [
+    "chrome_main_app_mode_mac.mm",
+  ]
+
+  deps = [
+    "//chrome:strings",
+    "//chrome/common",
+    "//ipc",
+    "//mojo/edk/embedder:headers",
+    "//ui/base",
+  ]
+}
+
+tweak_info_plist("app_mode_loader_plist") {
+  info_plist = "app_mode-Info.plist"
+  args = [
+    "--breakpad=0",
+    "--keystone=0",
+    "--scm=0",
+  ]
+}
+
+mac_app_bundle("app_mode_loader") {
+  extra_configs = [ "//build/config/compiler:wexit_time_destructors" ]
+
+  info_plist_target = ":app_mode_loader_plist"
+  extra_substitutions = [ "APP_MODE_APP_BUNDLE_ID=$chrome_mac_bundle_id.app.@APP_MODE_SHORTCUT_ID@" ]
+
+  sources = [
+    "app_mode_loader_mac.mm",
+  ]
+
+  deps = [
+    "//base",
+    "//chrome/common:app_mode_app_support",
+    "//chrome/common:constants",
+    "//chrome/common:non_code_constants",
+  ]
+
+  libs = [
+    "AppKit.framework",
+    "CoreFoundation.framework",
+    "Foundation.framework",
+  ]
+}

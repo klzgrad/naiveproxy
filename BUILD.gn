@@ -1,0 +1,1151 @@
+# Copyright (c) 2013 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# This is the root build file for GN. GN will start processing by loading this
+# file, and recursively load all dependencies until all dependencies are either
+# resolved or known not to exist (which will cause the build to fail). So if
+# you add a new build file, there must be some path of dependencies from this
+# file to your new one or GN won't know about it.
+
+import("//build/config/compiler/compiler.gni")
+import("//build/config/features.gni")
+import("//build/config/sanitizers/sanitizers.gni")
+import("//build/config/ui.gni")
+import("//components/nacl/features.gni")
+import("//device/vr/features/features.gni")
+import("//extensions/features/features.gni")
+import("//media/media_options.gni")
+import("//media/gpu/args.gni")
+import("//remoting/remoting_enable.gni")
+import("//third_party/openh264/openh264_args.gni")
+import("//tools/ipc_fuzzer/ipc_fuzzer.gni")
+import("//ui/base/ui_features.gni")
+import("//ui/ozone/ozone.gni")
+import("//v8/gni/v8.gni")
+import("//v8/snapshot_toolchain.gni")
+
+if (is_android) {
+  import("//build/config/android/config.gni")
+}
+
+declare_args() {
+  # A list of extra dependencies to add to the root target. This allows a
+  # checkout to add additional targets without explicitly changing any checked-
+  # in files.
+  root_extra_deps = []
+}
+
+if (is_official_build) {
+  # An official (maximally optimized!) component (optimized for build times)
+  # build doesn't make sense and usually doesn't work.
+  assert(!is_component_build)
+}
+
+# This file defines the following three main targets:
+#
+# "gn_all" should (transitively) cause everything to be built; if you run
+# 'ninja gn_all' and then 'ninja all', the second build should do no work.
+#
+# "gn_visibility": targets that are normally not visible to top-level targets,
+# but are built anyway by "all". Since we don't want any such targets, we have
+# this placeholder to make sure hidden targets that aren't otherwise depended
+# on yet are accounted for.
+#
+# "All" is an alias for "gn_all". It exists for bot compatibility w/ GYP for
+# the iOS bots and the official builders, but should not be generally used
+# during the GYP->GN migration.  We cannot guarantee that GN's "All" builds the
+# same set of targets as GYP's "All" does, because GYP's "All" supports
+# wildcards.
+#
+# Lastly, none of these targets are guaranteed to be the same as what ninja
+# will build with "all". For more on how "all" works and how GN determines
+# "all", see crbug.com/503241.
+#
+# TODO(GYP_GONE): crbug.com/481694. Make sure that the above is true and there
+# are scripts run on the bots that enforce this. Once the GYP migration is
+# over, we can collapse all of these targets as desired.
+
+group("gn_all") {
+  testonly = true
+
+  deps = [
+    ":gn_visibility",
+    "//base:base_perftests",
+    "//base:base_unittests",
+    "//chrome/installer",
+    "//net:net_unittests",
+    "//skia:skia_unittests",
+    "//sql:sql_unittests",
+    "//tools/ipc_fuzzer:ipc_fuzzer_all",
+    "//ui/base:ui_base_unittests",
+    "//url:url_unittests",
+  ]
+
+  if (!is_android && !is_chromecast) {
+    deps += [
+      "//crypto:crypto_unittests",
+      "//google_apis/gcm:gcm_unit_tests",
+    ]
+  }
+
+  if (!is_fuchsia) {
+    deps += [
+      "//components:components_unittests",
+      "//services:services_unittests",
+      "//services/service_manager/public/cpp",
+      "//tools/metrics:metrics_metadata",
+      "//ui/gfx:gfx_unittests",
+    ]
+  }
+
+  if (!is_ios && !is_android && !is_chromecast && !is_fuchsia) {
+    deps += [
+      "//chrome",
+      "//chrome/installer/zucchini:zucchini",
+      "//chrome/installer/zucchini:zucchini_unittests",
+      "//chrome/test:browser_tests",
+      "//chrome/test:interactive_ui_tests",
+      "//chrome/test:sync_integration_tests",
+      "//chrome/test/chromedriver:chromedriver_unittests",
+      "//components/sync/tools:sync_client",
+      "//components/sync/tools:sync_listen_notifications",
+      "//gpu/gles2_conform_support:gles2_conform_test",
+      "//gpu/khronos_glcts_support:khronos_glcts_test",
+      "//jingle:jingle_unittests",
+      "//net:hpack_example_generator",
+      "//ppapi:ppapi_unittests",
+      "//ppapi/examples/2d",
+      "//ppapi/examples/audio",
+      "//ppapi/examples/audio_input",
+      "//ppapi/examples/compositor",
+      "//ppapi/examples/crxfs",
+      "//ppapi/examples/enumerate_devices",
+      "//ppapi/examples/file_chooser",
+      "//ppapi/examples/flash_topmost",
+      "//ppapi/examples/font",
+      "//ppapi/examples/gamepad",
+      "//ppapi/examples/gles2",
+      "//ppapi/examples/gles2_spinning_cube",
+      "//ppapi/examples/ime",
+      "//ppapi/examples/input",
+      "//ppapi/examples/media_stream_audio",
+      "//ppapi/examples/media_stream_video",
+      "//ppapi/examples/mouse_cursor",
+      "//ppapi/examples/mouse_lock",
+      "//ppapi/examples/printing",
+      "//ppapi/examples/scaling",
+      "//ppapi/examples/scripting",
+      "//ppapi/examples/stub",
+      "//ppapi/examples/threading",
+      "//ppapi/examples/url_loader",
+      "//ppapi/examples/video_capture",
+      "//ppapi/examples/video_decode",
+      "//ppapi/examples/video_effects",
+      "//ppapi/examples/video_encode",
+      "//printing:printing_unittests",
+      "//third_party/cacheinvalidation:cacheinvalidation_unittests",
+      "//third_party/pdfium/samples:pdfium_test",
+      "//third_party/webrtc/rtc_tools:frame_analyzer",
+      "//tools/battor_agent",
+      "//tools/battor_agent:battor_agent_unittests",
+      "//tools/perf/clear_system_cache",
+      "//tools/traffic_annotation/auditor:traffic_annotation_auditor",
+      "//tools/traffic_annotation/auditor:traffic_annotation_auditor_unittests",
+      "//ui/accessibility:accessibility_unittests",
+      "//ui/accessibility/extensions",
+    ]
+  }
+
+  if (!is_ios) {
+    deps += [
+      "//media:media_unittests",
+      "//mojo",
+      "//mojo/common:mojo_common_unittests",
+      "//mojo/edk/system:mojo_system_unittests",
+      "//mojo/edk/test:mojo_public_bindings_unittests",
+      "//mojo/edk/test:mojo_public_system_unittests",
+      "//ui/gl:gl_unittests",
+    ]
+  }
+
+  if (!is_ios && !is_android && !is_chromecast) {
+    deps += [
+      "//tools/gn",
+      "//tools/gn:gn_unittests",
+    ]
+  }
+
+  if (!is_ios && !is_fuchsia) {
+    deps += [
+      "//cc:cc_unittests",
+      "//chrome/test:telemetry_perf_unittests",
+      "//chrome/test:unit_tests",
+      "//components:components_browsertests",
+      "//components/policy:policy_templates",
+      "//components/viz:viz_perftests",
+      "//components/viz:viz_unittests",
+      "//components/viz/common:viz_benchmark",
+      "//content/shell:content_shell",
+      "//content/test:content_browsertests",
+      "//content/test:content_perftests",
+      "//content/test:content_unittests",
+      "//device:device_unittests",
+      "//google_apis/gcm:mcs_probe",
+      "//gpu:gpu_unittests",
+      "//gpu/ipc/service:gpu_ipc_service_unittests",
+      "//ipc:ipc_tests",
+      "//media/capture:capture_unittests",
+      "//media/cast:cast_unittests",
+      "//media/midi:midi_unittests",
+      "//media/mojo:media_mojo_unittests",
+      "//mojo",
+      "//mojo/common:mojo_common_unittests",
+      "//mojo/edk/system:mojo_system_unittests",
+      "//mojo/edk/test:mojo_public_bindings_unittests",
+      "//mojo/edk/test:mojo_public_system_unittests",
+      "//net:net_perftests",
+      "//storage:storage_unittests",
+      "//third_party/WebKit/Source/controller:webkit_unit_tests",
+      "//third_party/WebKit/Source/platform:blink_platform_unittests",
+      "//third_party/WebKit/Source/platform/heap:blink_heap_unittests",
+      "//third_party/WebKit/Source/platform/wtf:wtf_unittests",
+      "//third_party/angle/src/tests:angle_end2end_tests",
+      "//third_party/angle/src/tests:angle_unittests",
+      "//third_party/angle/src/tests:angle_white_box_tests",
+      "//third_party/catapult/telemetry:bitmaptools($host_toolchain)",
+      "//third_party/smhasher:pmurhash",
+      "//tools/imagediff($host_toolchain)",
+      "//ui/display:display_unittests",
+      "//ui/events:events_unittests",
+      "//ui/latency:latency_unittests",
+      "//ui/touch_selection:ui_touch_selection_unittests",
+      "//url/ipc:url_ipc_unittests",
+      "//v8:gn_all",
+    ]
+  } else if (is_ios) {
+    deps += [ "//ios:all" ]
+  } else if (is_fuchsia) {
+    deps += [ ":d8_fuchsia" ]
+  }
+
+  deps += root_extra_deps
+
+  if (enable_extensions) {
+    deps += [
+      "//extensions:extensions_browsertests",
+      "//extensions:extensions_unittests",
+      "//extensions/shell:app_shell_unittests",
+    ]
+  }
+
+  if (enable_remoting) {
+    deps += [ "//remoting:remoting_all" ]
+  }
+
+  if (toolkit_views) {
+    deps += [
+      "//ui/views:views_unittests",
+      "//ui/views/examples:views_examples_exe",
+      "//ui/views/examples:views_examples_with_content_exe",
+    ]
+  }
+
+  if (use_ash) {
+    deps += [
+      "//ash:ash_content_unittests",
+      "//ash:ash_shell_with_content",
+      "//ash:ash_unittests",
+    ]
+  }
+
+  if (use_aura) {
+    deps += [
+      "//ui/aura:aura_unittests",
+      "//ui/aura:demo",
+      "//ui/wm:wm_unittests",
+    ]
+  }
+
+  if (use_ozone) {
+    deps += [
+      "//ui/ozone",
+      "//ui/ozone:ozone_unittests",
+      "//ui/ozone/demo",
+      "//ui/ozone/gl:ozone_gl_unittests",
+    ]
+  }
+
+  if (use_x11 || ozone_platform_x11) {
+    deps += [ "//tools/xdisplaycheck" ]
+  }
+
+  if (is_win) {
+    deps += [
+      "//chrome/installer/gcapi",
+      "//chrome/tools/build/win/syzygy:chrome_dll_syzygy",
+    ]
+  }
+
+  if (is_mac) {
+    deps += [ "//chrome/installer/gcapi_mac:gcapi_example" ]
+  }
+
+  if (is_android) {
+    deps += [
+      "//base:base_junit_tests",
+      "//base/android/jni_generator:jni_generator_tests",
+      "//base/android/linker:chromium_android_linker",
+      "//build/android/gyp/test:hello_world",
+      "//build/android/gyp/test:hello_world",
+      "//build/android/stacktrace:java_deobfuscate",
+      "//chrome/android/webapk/shell_apk:webapk",
+      "//chrome/test/vr/perf:motopho_latency_test",
+      "//components/invalidation/impl:components_invalidation_impl_junit_tests",
+      "//components/policy/android:components_policy_junit_tests",
+      "//content/public/android:content_junit_tests",
+      "//content/shell/android:content_shell_apk",
+      "//device:device_junit_tests",
+      "//media/gpu:video_decode_accelerator_unittest",
+      "//net/android:net_junit_tests",
+      "//services:service_junit_tests",
+      "//testing/android/junit:junit_unit_tests",
+      "//third_party/android_async_task:android_async_task_java",
+      "//third_party/catapult/devil",
+      "//third_party/errorprone:chromium_errorprone",
+      "//third_party/smhasher:murmurhash3",
+      "//tools/android:android_tools",
+      "//tools/android:memconsumer",
+      "//tools/android:push_apps_to_background",
+      "//tools/android/audio_focus_grabber:audio_focus_grabber_apk",
+      "//tools/android/customtabs_benchmark:customtabs_benchmark_apk",
+      "//tools/android/kerberos/SpnegoAuthenticator:spnego_authenticator_apk",
+      "//tools/cygprofile:cygprofile_unittests",
+      "//ui/android:ui_junit_tests",
+    ]
+    deps -= [
+      "//net:net_perftests",
+      "//url:url_unittests",
+    ]
+
+    if (!is_component_build) {
+      deps += [
+        "//components/cronet/android:cronet_package",
+        "//components/cronet/android:cronet_perf_test_apk",
+        "//components/cronet/android:cronet_sample_apk",
+        "//components/cronet/android:cronet_sample_test_apk",
+        "//components/cronet/android:cronet_test_apk",
+        "//components/cronet/android:cronet_test_instrumentation_apk",
+        "//components/cronet/android:cronet_unittests",
+      ]
+    }
+
+    if (!is_chromecast) {
+      deps += [
+        "//android_webview",
+        "//android_webview/test",
+        "//android_webview/tools/automated_ui_tests:webview_ui_test_app",
+        "//android_webview/tools/system_webview_shell",
+        "//chrome/android:chrome_junit_tests",
+        "//chrome/android:chrome_public_apk",
+        "//chrome/android:chrome_public_test_apk",
+        "//chrome/android:chrome_sync_shell_test_apk",
+        "//chrome/test/chromedriver/test/webview_shell:chromedriver_webview_shell_apk",
+        "//content/shell/android:content_shell_test_apk",
+        "//third_party/custom_tabs_client:custom_tabs_client_example_apk",
+      ]
+    }
+
+    if (target_cpu != "x64") {
+      deps += [
+        "//content/shell/android:chromium_linker_test_apk",
+        "//third_party/android_platform:android_relocation_packer_unittests($host_toolchain)",
+      ]
+    }
+
+    if (enable_chrome_android_internal) {
+      deps += [ "//clank" ]
+    }
+  }
+
+  if (is_linux || is_android) {
+    deps += [
+      "//third_party/breakpad:breakpad_unittests",
+      "//third_party/breakpad:core-2-minidump",
+      "//third_party/breakpad:generate_test_dump",
+      "//third_party/breakpad:minidump-2-core",
+    ]
+  }
+
+  if (is_chromeos) {
+    deps += [
+      "//chromeos:chromeos_unittests",
+      "//chromeos/components:chromeos_components_unittests",
+      "//components/session_manager/core",
+      "//ui/app_list:app_list_unittests",
+      "//ui/app_list/presenter:app_list_presenter_unittests",
+      "//ui/arc:ui_arc_unittests",
+      "//ui/chromeos:ui_chromeos_unittests",
+    ]
+  }
+
+  if (is_chromeos || is_mac || is_win) {
+    deps += [
+      "//rlz:rlz_id",
+      "//rlz:rlz_lib",
+      "//rlz:rlz_unittests",
+    ]
+  }
+
+  if (is_win || is_mac) {
+    deps += [ "//tools/accessibility/inspect:ax_dump_events" ]
+  }
+
+  if (is_linux) {
+    # The following are definitely linux-only.
+    deps += [
+      "//chrome:xdg_mime",
+      "//net:disk_cache_memory_test",
+      "//net:quic_client",
+      "//net:quic_server",
+      "//sandbox/linux:chrome_sandbox",
+      "//sandbox/linux:sandbox_linux_unittests",
+    ]
+
+    if (use_dbus) {
+      deps += [
+        "//dbus:dbus_test_server",
+        "//dbus:dbus_unittests",
+      ]
+    }
+
+    if (is_chrome_branded && is_official_build) {
+      # TODO(dpranke): add the linux_dump_symbols flag?
+      deps += [ "//chrome:linux_symbols" ]
+    }
+  }
+
+  if (is_ios || is_win || (is_linux && !is_chromeos)) {
+    deps += [
+      "//base:base_i18n_perftests",
+      "//google_apis:google_apis_unittests",
+    ]
+  }
+
+  if ((is_win || is_mac || is_linux || is_chromeos) &&
+      (target_cpu == "x86" || target_cpu == "x64")) {
+    deps += [ "//third_party/swiftshader" ]
+  }
+
+  # TODO(GYP): Figure out which of these should (and can) build
+  # for chromeos/ios.
+  if (!is_chromeos && !is_ios && !is_fuchsia) {
+    deps += [
+      "//base:build_utf8_validator_tables",
+      "//base:check_example",
+      "//cc:cc_perftests",
+      "//cc/blink:cc_blink_unittests",
+      "//components:components_perftests",
+      "//device:device_unittests",
+      "//gin:gin_shell",
+      "//gin:gin_unittests",
+      "//gpu:gl_tests",
+      "//gpu:gpu_perftests",
+      "//ipc:ipc_perftests",
+      "//media:media_perftests",
+      "//net:dump_cache",
+      "//third_party/libphonenumber:libphonenumber_unittests",
+      "//ui/compositor:compositor_unittests",
+    ]
+
+    if (!is_android) {
+      deps += [
+        "//chrome/test:load_library_perf_tests",
+        "//chrome/test:sync_performance_tests",
+        "//chrome/test/chromedriver:chromedriver",
+        "//chrome/test/chromedriver:chromedriver_tests",
+        "//components/sync:run_sync_testserver",
+        "//courgette:courgette",
+        "//courgette:courgette_fuzz",
+        "//courgette:courgette_minimal_tool",
+        "//courgette:courgette_unittests",
+        "//media/cast:generate_barcode_video",
+        "//media/cast:generate_timecode_audio",
+        "//net:crash_cache",
+        "//net:crl_set_dump",
+        "//net:dns_fuzz_stub",
+        "//net:gdig",
+        "//net:get_server_time",
+        "//net:net_watcher",  # TODO(GYP): This should be conditional on use_v8_in_net
+        "//net:run_testserver",
+        "//net:stress_cache",
+        "//net:tld_cleanup",
+        "//ppapi:pepper_hash_for_uma",
+        "//ppapi:ppapi_perftests",
+        "//third_party/leveldatabase:env_chromium_unittests",
+        "//third_party/libaddressinput:libaddressinput_unittests",
+      ]
+    }
+
+    if (enable_extensions) {
+      deps += [
+        "//extensions/shell:app_shell",
+        "//extensions/shell/installer:app_shell_installer",
+      ]
+    }
+
+    if (enable_nacl) {
+      deps += [ "//components/nacl/loader:nacl_loader_unittests" ]
+
+      if (is_linux) {
+        # TODO(dpranke): Figure out what platforms should actually have this.
+        deps += [ "//components/nacl/loader:nacl_helper" ]
+
+        if (enable_nacl_nonsfi) {
+          deps += [
+            "//components/nacl/loader:helper_nonsfi",
+            "//components/nacl/loader:nacl_helper_nonsfi_unittests",
+          ]
+        }
+      }
+    }
+
+    if (media_use_ffmpeg && !is_android) {
+      deps += [ "//media:ffmpeg_regression_tests" ]
+    }
+  }
+
+  if (is_android || (is_linux && !is_chromeos)) {
+    deps += [
+      "//components/network_hints/browser",
+      "//content/public/app:browser",
+      "//content/public/app:child",
+      "//mojo/edk/test:mojo_public_system_perftests",
+      "//services/service_manager/public/cpp",
+      "//testing/gmock:gmock_main",
+      "//third_party/breakpad:dump_syms($host_toolchain)",
+      "//third_party/breakpad:microdump_stackwalk($host_toolchain)",
+      "//third_party/breakpad:minidump_dump($host_toolchain)",
+      "//third_party/breakpad:minidump_stackwalk($host_toolchain)",
+    ]
+
+    if (!is_android) {
+      deps += [
+        "//chrome/test:chrome_app_unittests",
+        "//gpu/khronos_glcts_support:khronos_glcts_test",
+        "//media/cast:cast_benchmarks",
+        "//media/cast:tap_proxy",
+        "//skia:filter_fuzz_stub",
+        "//skia:image_operations_bench",
+        "//third_party/sqlite:sqlite_shell",
+        "//ui/keyboard:keyboard_unittests",
+        "//ui/snapshot:snapshot_unittests",
+      ]
+
+      if (!is_debug && !is_component_build) {
+        deps += [ "//chrome/tools/service_discovery_sniffer" ]
+      }
+    }
+
+    if (use_x11) {
+      if (target_cpu != "arm") {
+        deps += [ "//gpu/tools/compositor_model_bench" ]
+      }
+    }
+  }
+
+  if (is_mac) {
+    deps += [
+      "//third_party/apple_sample_code",
+      "//third_party/breakpad:crash_inspector",
+      "//third_party/breakpad:dump_syms",
+      "//third_party/molokocacao",
+    ]
+    deps -= [
+      # Mojo in GN contains some things which are never compiled in GYP on Mac,
+      # so compilation fails on Mac. They need porting.
+      "//mojo",
+    ]
+  }
+
+  if (is_win) {
+    deps += [
+      "//base:pe_image_test",
+      "//chrome/install_static:install_static_unittests",
+      "//chrome/installer/setup:setup_unittests",
+      "//chrome_elf:chrome_elf_import_unittests",
+      "//chrome_elf:chrome_elf_unittests",
+      "//chrome_elf:dll_hash_main",
+      "//cloud_print:cloud_print_unittests",
+      "//components/wifi:wifi_test",
+      "//net:quic_client",
+      "//net:quic_server",
+      "//sandbox/win:pocdll",
+      "//sandbox/win:sandbox_poc",
+      "//sandbox/win:sbox_integration_tests",
+      "//sandbox/win:sbox_unittests",
+      "//sandbox/win:sbox_validation_tests",
+      "//testing/gtest:gtest_main",
+      "//third_party/tcmalloc:addr2line-pdb",
+      "//tools/win/chromeexts:chromeexts",
+    ]
+
+    if (!(is_component_build && is_debug && target_cpu == "x86")) {
+      deps +=
+          [ "//chrome/installer/mini_installer:next_version_mini_installer" ]
+    }
+  } else if (!is_android && !is_ios && !is_fuchsia) {
+    deps += [ "//third_party/breakpad:symupload($host_toolchain)" ]
+  }
+
+  if (is_chromecast) {
+    deps += [ "//chromecast:cast_shell" ]
+  }
+
+  if (is_mac || is_win) {
+    deps += [
+      "//third_party/crashpad/crashpad/handler:crashpad_handler",
+      "//third_party/crashpad/crashpad/tools:crashpad_database_util",
+    ]
+  }
+
+  if (use_openh264) {
+    deps += [
+      "//third_party/openh264:common",
+      "//third_party/openh264:encoder",
+      "//third_party/openh264:processing",
+    ]
+  }
+
+  if (enable_message_center) {
+    deps += [ "//ui/message_center:message_center_unittests" ]
+  }
+
+  if (!is_android && !is_ios && !is_fuchsia) {
+    deps += [ "//content/browser/bluetooth/tools:bluetooth_metrics_hash" ]
+  }
+
+  if (!is_android && !is_ios && !is_chromeos && !is_fuchsia) {
+    deps += [ "//components/proximity_auth:proximity_auth_unittests" ]
+  }
+
+  if (is_win || is_linux) {
+    deps += [
+      "//mash:all",
+      "//media/mojo/services:media_service_unittests",
+      "//mojo",
+      "//services/ui/demo",
+      "//services/ui/ws:tests",
+      "//ui/views/mus:views_mus_interactive_ui_tests",
+      "//ui/views/mus:views_mus_unittests",
+    ]
+
+    # crbug.com/676055: media_service_unittests fails to link under Windows
+    # component builds, due to duplicate symbol definitions.
+    if (is_win && is_component_build) {
+      deps -= [ "//media/mojo/services:media_service_unittests" ]
+    }
+  }
+
+  if (is_linux && !is_chromeos && !is_chromecast) {
+    # TODO(GYP): Figure out if any of these should be in gn_all
+    # and figure out how cross-platform they are
+    deps += [
+      "//chrome/installer/util:strings",
+      "//chrome/tools/convert_dict",
+      "//components/constrained_window:unit_tests",
+      "//components/filesystem:filesystem_service_unittests",
+      "//components/leveldb:leveldb_service_unittests",
+      "//components/metrics:serialization",
+      "//components/password_manager/content/renderer:browser_tests",
+      "//components/rappor:unit_tests",
+      "//components/sessions:unit_tests",
+      "//media/blink:media_blink_unittests",
+      "//media/cast:udp_proxy",
+      "//storage/browser:dump_file_system",
+      "//third_party/angle:libANGLE",
+      "//third_party/angle:libEGL",
+      "//third_party/angle:libGLESv2",
+      "//third_party/leveldatabase:leveldb_test_targets",
+      "//third_party/libjpeg_turbo:simd",
+      "//third_party/opus:opus_compare",
+      "//third_party/opus:opus_demo",
+      "//third_party/opus:test_opus_api",
+      "//third_party/opus:test_opus_decode",
+      "//third_party/opus:test_opus_encode",
+      "//third_party/opus:test_opus_padding",
+      "//third_party/webrtc/system_wrappers:field_trial_default",
+      "//third_party/webrtc/system_wrappers:metrics_default",
+      "//ui/display/types",
+      "//ui/shell_dialogs:shell_dialogs_unittests",
+    ]
+
+    if (enable_nacl) {
+      deps += [ "//native_client/src/trusted/debug_stub:gdb_rsp_unittest" ]
+    }
+
+    if (target_cpu == "x86" || target_cpu == "x64") {
+      if (!is_android) {
+        deps += [ "//chrome/test:load_library_perf_tests" ]
+      }
+      deps += [
+        "//native_client/src/trusted/platform_qualify:vcpuid",
+        "//third_party/libjpeg_turbo:simd_asm",
+      ]
+    }
+    if (is_linux && current_toolchain == host_toolchain) {
+      deps += [ "//v8:v8_shell" ]
+    }
+  }
+
+  if ((is_linux && !is_chromeos && !is_chromecast) || (is_win && use_drfuzz) ||
+      (use_libfuzzer && is_mac)) {
+    deps += [
+      "//testing/libfuzzer/fuzzers",
+      "//testing/libfuzzer/tests:libfuzzer_tests",
+      "//third_party/icu/fuzzers",
+      "//third_party/qcms:fuzzers",
+    ]
+  }
+
+  if (enable_nacl) {
+    deps += [ "//native_client_sdk/src:nacl_core_sdk" ]
+  }
+
+  if (is_linux && use_ozone) {
+    deps += [
+      "//headless",
+      "//headless:headless_tests",
+    ]
+  }
+
+  if (enable_vr) {
+    deps += [ "//chrome/browser/vr:vr_common_unittests" ]
+    if (is_linux && use_ozone) {
+      deps += [ "//chrome/browser/vr/testapp:vr_testapp" ]
+    }
+    if (is_android) {
+      deps += [ "//tools/perf/contrib/vr_benchmarks:vr_perf_tests" ]
+    }
+  }
+
+  if (is_fuchsia) {
+    deps += [ "//headless" ]
+  }
+}
+
+# TODO(GYP_GONE): This target exists for compatibility with GYP, specifically
+# for the iOS bots and the official builders.
+group("All") {
+  testonly = true
+
+  deps = [
+    ":gn_all",
+  ]
+}
+
+if (is_fuchsia) {
+  # TODO(https://crbug.com/731217): This can't practically be in //v8 without
+  # duplicating all the Fuchsia running infrastructure there.
+  fuchsia_executable_runner("d8_fuchsia") {
+    exe_target = "//v8:d8"
+  }
+}
+
+# TODO(GYP_GONE): Figure out if we really need this target or if there's
+# some better way to specify things.
+if (is_win) {
+  group("chrome_official_builder_no_unittests") {
+    deps = [
+      "//chrome/common/win:eventlog_provider",
+      "//chrome/installer/gcapi",
+      "//chrome/installer/mini_installer",
+      "//cloud_print",
+      "//cloud_print/virtual_driver/win/port_monitor:copy_gcp_portmon_binaries",
+      "//components/policy:pack_policy_templates",
+      "//courgette",
+      "//courgette:copy_courgette_binaries",
+      "//remoting/webapp",
+      "//tools/metrics:metrics_metadata",
+    ]
+
+    if (target_cpu == "x86") {
+      if (is_clang) {
+        deps += [ "//courgette(//build/toolchain/win:win_clang_x64)" ]
+      } else {
+        deps += [ "//courgette(//build/toolchain/win:x64)" ]
+      }
+    }
+    if (is_chrome_branded) {
+      deps += [ "//remoting/host:remoting_host_installation" ]
+    }
+  }
+
+  group("chrome_official_builder") {
+    testonly = true
+
+    deps = [
+      ":chrome_official_builder_no_unittests",
+      "//base:base_unittests",
+      "//chrome/test:browser_tests",
+      "//ipc:ipc_tests",
+      "//media:media_unittests",
+      "//media/midi:midi_unittests",
+      "//net:net_unittests",
+      "//printing:printing_unittests",
+      "//sql:sql_unittests",
+      "//ui/base:ui_base_unittests",
+      "//ui/gfx:gfx_unittests",
+      "//ui/touch_selection:ui_touch_selection_unittests",
+      "//ui/views:views_unittests",
+      "//url:url_unittests",
+    ]
+  }
+
+  group("All_syzygy") {
+    if (is_syzyasan) {
+      deps = [
+        "//chrome/installer/mini_installer:mini_installer",
+        "//chrome/installer/mini_installer:mini_installer_syzygy",
+      ]
+    }
+  }
+
+  if (is_syzyasan) {
+    group("chrome_official_syzyasan_builder") {
+      deps = [
+        ":All_syzygy",
+        ":chrome_official_builder_no_unittests",
+      ]
+    }
+  }
+}
+
+if (is_chromeos) {
+  group("chromiumos_preflight") {
+    testonly = true
+    deps = [
+      "//chrome",
+      "//chrome/test/chromedriver",
+      "//media:media_unittests",
+      "//ppapi/examples/video_decode",
+      "//sandbox/linux:chrome_sandbox",
+      "//sandbox/linux:sandbox_linux_unittests",
+      "//third_party/breakpad:minidump_stackwalk($host_toolchain)",
+
+      # Blocked on https://github.com/catapult-project/catapult/issues/2297
+      #"//third_party/catapult/telemetry:bitmaptools",
+      "//tools/perf/clear_system_cache",
+    ]
+
+    if (use_v4l2_codec || use_vaapi) {
+      deps += [
+        "//media/gpu:video_decode_accelerator_unittest",
+        "//media/gpu:video_encode_accelerator_unittest",
+      ]
+    }
+  }
+}
+
+group("gn_visibility") {
+  deps = [
+    "//build/config/sanitizers:options_sources",
+    # "//third_party/pdfium:pdfium_embeddertests",  # TODO(GYP): visibility?
+    # "//third_party/pdfium:pdfium_unittests",  # TODO(GYP): visibility?
+  ]
+
+  if (!is_ios) {
+    deps += [
+      "//v8:postmortem-metadata",
+      "//v8:v8_snapshot",
+    ]
+  }
+}
+
+if (!is_ios && !is_fuchsia) {
+  # This group includes all of the targets needed to build and test Blink,
+  # including running the layout tests (see below).
+  group("blink_tests") {
+    testonly = true
+
+    deps = [
+      ":webkit_layout_tests",
+      "//third_party/WebKit/public:all_blink",
+    ]
+  }
+
+  # Layout tests runner
+  # third_party/WebKit/Tools/Scripts/run-webkit-tests
+  group("run_webkit_tests") {
+    testonly = true
+    deps = [
+      ":webkit_layout_tests",
+    ]
+  }
+
+  # https://www.chromium.org/developers/testing/webkit-layout-tests
+
+  # The _exparchive at the end of the name indicates to the isolate recipe
+  # that the isolate should be archived separately using the `exparchive`
+  # command, rather than as part of the normal `batcharchive` command.
+  group("webkit_layout_tests_exparchive") {
+    testonly = true
+    deps = [
+      ":webkit_layout_tests",
+    ]
+    data_deps = [
+      ":webkit_layout_tests",
+    ]
+  }
+
+  # This target contains only a small subset of the layout tests,
+  # and is useful for testing with the regular isolate mechanism.
+  # To run the full layout test suite you need to use
+  # :webkit_layout_tests_exparchive, above, instead.
+  group("webkit_layout_tests") {
+    testonly = true
+    data_deps = [
+      ":layout_test_data_mojo_bindings",
+      "//content/shell:content_shell",
+      "//content/test:mojo_layouttest_bindings_js_data_deps",
+      "//device/bluetooth/public/interfaces:fake_bluetooth_interfaces_js_data_deps",
+      "//device/geolocation/public/interfaces:interfaces_js_data_deps",
+      "//device/usb/public/interfaces:interfaces_js_data_deps",
+      "//device/vr:mojo_bindings_js_data_deps",
+      "//media/capture/mojo:image_capture_js_data_deps",
+      "//mojo/public/interfaces/bindings/tests:test_data_deps",
+      "//services/device/public/interfaces:interfaces_js_data_deps",
+      "//services/device/public/interfaces:generic_sensor_js_data_deps",
+      "//services/shape_detection/public/interfaces:interfaces_js_data_deps",
+      "//third_party/WebKit/public:blink_devtools_frontend_resources_files",
+      "//third_party/WebKit/public:mojo_bindings_js_data_deps",
+      "//third_party/mesa:osmesa",
+      "//tools/imagediff",
+    ]
+
+    if (is_android) {
+      data_deps += [
+        "//third_party/breakpad:breakpad_unittests",
+        "//third_party/breakpad:dump_syms",
+        "//third_party/breakpad:microdump_stackwalk",
+        "//third_party/breakpad:minidump_dump",
+        "//third_party/breakpad:minidump_stackwalk",
+        "//third_party/breakpad:symupload",
+        "//tools/android/forwarder2",
+      ]
+    }
+
+    if (is_win) {
+      data_deps += [ "//content/shell:content_shell_crash_service" ]
+    }
+
+    if (!is_win && !is_android) {
+      data_deps +=
+          [ "//third_party/breakpad:minidump_stackwalk($host_toolchain)" ]
+    }
+
+    if (is_mac) {
+      data_deps += [ "//third_party/breakpad:dump_syms($host_toolchain)" ]
+    }
+
+    if (is_linux) {
+      data_deps += [ "//third_party/breakpad:dump_syms($host_toolchain)" ]
+    }
+
+    data = [
+      "$root_build_dir/resources/inspector/",
+      "//testing/scripts/common.py",
+      "//testing/scripts/run_isolated_script_test.py",
+      "//testing/xvfb.py",
+      "//third_party/WebKit/LayoutTests/",
+      "//third_party/WebKit/PerformanceTests/",
+      "//third_party/WebKit/Tools/Scripts/",
+    ]
+
+    if (is_win) {
+      data += [
+        "//third_party/apache-win32/",
+        "//third_party/perl/",
+      ]
+    }
+
+    if (is_android) {
+      data += [
+        "//third_party/catapult/",
+        "//build/android/",
+      ]
+    }
+  }
+
+  copy("layout_test_data_mojo_bindings") {
+    testonly = true
+
+    sources = [
+      "$root_gen_dir/mojo/public/js/mojo_bindings.js",
+    ]
+
+    outputs = [
+      "$root_gen_dir/layout_test_data/mojo/public/js/mojo_bindings.js",
+    ]
+
+    deps = [
+      "//mojo/public/js:new_bindings",
+    ]
+  }
+
+  group("webkit_python_tests") {
+    data = [
+      "//build/android/",
+      "//components/crash/content/tools/generate_breakpad_symbols.py",
+      "//testing/scripts/common.py",
+      "//testing/scripts/run_isolated_script_test.py",
+      "//testing/test_env.py",
+      "//testing/xvfb.py",
+      "//third_party/WebKit/LayoutTests/ASANExpectations",
+      "//third_party/WebKit/LayoutTests/LeakExpectations",
+      "//third_party/WebKit/LayoutTests/MSANExpectations",
+      "//third_party/WebKit/LayoutTests/NeverFixTests",
+      "//third_party/WebKit/LayoutTests/StaleTestExpectations",
+      "//third_party/WebKit/LayoutTests/SlowTests",
+      "//third_party/WebKit/LayoutTests/TestExpectations",
+      "//third_party/WebKit/LayoutTests/VirtualTestSuites",
+      "//third_party/WebKit/Source/bindings/scripts/",
+      "//third_party/WebKit/Tools/Scripts/",
+      "//third_party/blink/tools/",
+      "//third_party/catapult/common/py_utils/",
+      "//third_party/catapult/devil/",
+      "//third_party/catapult/dependency_manager/",
+      "//third_party/catapult/third_party/zipfile/",
+      "//third_party/depot_tools/pylint.py",
+      "//third_party/depot_tools/pylintrc",
+      "//third_party/depot_tools/third_party/logilab/",
+      "//third_party/depot_tools/third_party/pylint/",
+      "//third_party/depot_tools/third_party/pylint.py",
+      "//third_party/ply/",
+      "//third_party/pymock/",
+      "//third_party/typ/",
+      "//tools/idl_parser/",
+    ]
+  }
+}
+
+group("chromium_builder_perf") {
+  testonly = true
+
+  if (!is_ios && !is_android && !is_chromecast && !is_fuchsia) {
+    data_deps = [
+      "//cc:cc_perftests",
+      "//chrome/test:load_library_perf_tests",
+      "//chrome/test:telemetry_perf_tests",
+      "//components/tracing:tracing_perftests",
+      "//gpu:gpu_perftests",
+      "//media:media_perftests",
+      "//tools/perf/chrome_telemetry_build:telemetry_chrome_test",
+    ]
+
+    if (is_android) {
+      data += [ "//third_party/android_tools/sdk/platform-tools/adb" ]
+    }
+
+    if (!is_chromeos) {
+      data_deps += [ "//chrome/test:performance_browser_tests" ]
+    }
+    if (is_linux && !is_chromeos) {
+      if (is_official_build) {
+        # In GN builds, this is controlled by the 'linux_dump_symbols'
+        # flag, which defaults to 1 for official builds. For now,
+        # we skip the separate flag and just key off of is_official_build.
+        data_deps += [ "//chrome:linux_symbols" ]
+      }
+
+      data_deps += [ "//tools/perf/clear_system_cache" ]
+    }
+
+    if (is_win) {
+      data_deps += [
+        "//chrome/installer/mini_installer:mini_installer",
+        "//chrome/test:angle_perftests",
+      ]
+    } else {
+      data_deps +=
+          [ "//third_party/breakpad:minidump_stackwalk($host_toolchain)" ]
+    }
+  }
+}
+
+if (!is_ios && !is_android && !is_chromecast && !is_fuchsia) {
+  group("chromium_builder_asan") {
+    testonly = true
+
+    deps = [
+      "//chrome:chrome",
+      "//content/shell:content_shell",
+      "//v8:d8",
+    ]
+    if (!is_win) {
+      deps += [
+        "//net:dns_fuzz_stub",
+        "//skia:filter_fuzz_stub",
+      ]
+    }
+    if (enable_ipc_fuzzer && !is_component_build) {
+      deps += [ "//tools/ipc_fuzzer:ipc_fuzzer_all" ]
+    }
+    if (!is_chromeos) {
+      deps += [
+        "//third_party/pdfium/samples:pdfium_test",
+        "//v8:v8_shell($v8_snapshot_toolchain)",
+      ]
+    }
+    if (is_win && symbol_level == 2 && target_cpu == "x86" && is_syzyasan) {
+      deps += [
+        "//chrome/tools/build/win/syzygy:chrome_dll_syzygy",
+        "//content/shell:content_shell_syzyasan",
+      ]
+    }
+  }
+}
+
+if (is_android) {
+  group("optimize_gn_gen") {
+    deps = [
+      # These run expensive scripts in non-default toolchains. Generally, host
+      # toolchain targets are loaded in the later part of the run, and the
+      # result is they push out the end of generation. By preloading these, the
+      # scripts can be parallelized with the rest of the load.
+      "//build/config/linux(//build/toolchain/linux:clang_x64)",
+      "//build/config/posix(//build/toolchain/linux:clang_x64)",
+
+      # Include x86 toolchains as well since V8 uses them for 32-bit snapshot
+      # generation.
+      "//build/config/linux(//build/toolchain/linux:clang_x86)",
+      "//build/config/posix(//build/toolchain/linux:clang_x86)",
+    ]
+  }
+}
+
+# Because of the source assignment filter, many targets end up over-filtering
+# their sources if the output directory contains a platform name. Assert that
+# this doesn't happen. http://crbug.com/548283
+template("assert_valid_out_dir") {
+  # List copied from //build/config/BUILDCONFIG.gn.
+  set_sources_assignment_filter([
+                                  "*\bandroid/*",
+                                  "*\bchromeos/*",
+                                  "*\bcocoa/*",
+                                  "*\bios/*",
+                                  "*\blinux/*",
+                                  "*\bmac/*",
+                                  "*\bposix/*",
+                                  "*\bwin/*",
+                                ])
+  assert(target_name != "")  # Mark as used.
+  sources = invoker.actual_sources
+  assert(
+      sources == invoker.actual_sources,
+      "Do not use a platform name in your output directory (found \"$root_build_dir\"). http://crbug.com/548283")
+}
+
+assert_valid_out_dir("_unused") {
+  actual_sources = [ "$root_build_dir/foo" ]
+}

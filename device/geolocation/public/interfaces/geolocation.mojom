@@ -1,0 +1,31 @@
+// Copyright 2014 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module device.mojom;
+
+import "device/geolocation/public/interfaces/geoposition.mojom";
+
+// Geolocation provides updates on the device's location. By default, it
+// provides updates with low accuracy, but |SetHighAccuracy()| may be called
+// to change this.
+interface Geolocation {
+  SetHighAccuracy(bool high_accuracy);
+
+  // Position is reported once it changes or immediately (to report the initial
+  // position) if this is the first call to QueryNextPosition on this instance.
+  // Position updates may be throttled by the service. Overlapping calls to
+  // this method are prohibited and will be treated as a connection error.
+  QueryNextPosition() => (Geoposition geoposition);
+};
+
+// GeolocationService provides a Geolocation. It exists in order to examine the
+// environment (permissions, etc.) before creating a Geolocation.
+// There should only be one GeolocationService instance that creates many
+// Geolocation instances.  There is one GeolocationService per RenderFrameHost.
+interface GeolocationService {
+  // Creates a Geolocation.
+  // This may not be called a second time until the Geolocation instance has
+  // been created.
+  CreateGeolocation(Geolocation& request, bool user_gesture);
+};

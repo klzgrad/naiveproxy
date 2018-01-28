@@ -1,0 +1,46 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//services/catalog/public/tools/catalog.gni")
+import("//testing/test.gni")
+
+# Generates a unittest binary with a baked-in Service Manager catalog manifest.
+#
+# Parameters:
+#
+#   catalog
+#       The catalog target whose output should be used as the static catalog
+#       manifest for this test binary.
+#
+template("service_test") {
+  assert(defined(invoker.catalog), "service_test must specify a catalog")
+
+  catalog_source_target = "${target_name}__catalog_source"
+
+  test(target_name) {
+    forward_variables_from(invoker,
+                           "*",
+                           [
+                             "catalog",
+                             "test_runner",
+                           ])
+
+    if (!defined(deps)) {
+      deps = []
+    }
+    deps += [ ":$catalog_source_target" ]
+    if (defined(invoker.test_runner)) {
+      deps += [ invoker.test_runner ]
+    } else {
+      deps +=
+          [ "//services/service_manager/public/cpp/test:run_all_service_tests" ]
+    }
+  }
+
+  catalog_cpp_source(catalog_source_target) {
+    testonly = true
+    catalog = invoker.catalog
+    generated_function_name = "service_manager::test::CreateTestCatalog"
+  }
+}

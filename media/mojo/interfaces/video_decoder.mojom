@@ -1,0 +1,104 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module media.mojom;
+
+import "gpu/ipc/common/sync_token.mojom";
+import "media/mojo/interfaces/media_log.mojom";
+import "media/mojo/interfaces/media_types.mojom";
+import "mojo/common/unguessable_token.mojom";
+
+// Identifies a GpuCommandBufferStub. MediaGpuChannelManager is responsible
+// for minting |channel_token| objects.
+struct CommandBufferId {
+  mojo.common.mojom.UnguessableToken channel_token;
+  int32 route_id;
+};
+
+[Native]
+struct OverlayInfo;
+
+interface VideoDecoder {
+  // Initialize the decoder. This must be called before any other method.
+  //
+  // |command_buffer_id|, when present, identifies a GpuCommandBufferStub that
+  // the decoder can use for GL operations. Implementations that require GL will
+  // fail Initialize() if |command_buffer_id| is not provided.
+  //
+  // |decoder_buffer_pipe| will be used to transfer encoded data for each
+  // DecoderBuffer.
+  //
+  // TODO(sandersd): Rename to Initialize() if/when
+  // media::VideoDecoder::Initialize() is renamed to Configure().
+  Construct(associated VideoDecoderClient client,
+            associated MediaLog media_log,
+            handle<data_pipe_consumer> decoder_buffer_pipe,
+            CommandBufferId? command_buffer_id);
+
+  // Configure (or reconfigure) the decoder. This must be called before decoding
+  // any frames, and must not be called while there are pending Initialize(),
+  // Decode(), or Reset() requests.
+  //
+  // If |low_delay| is true, the decoder must output frames as soon as possible;
+  // in particular, it must not wait for another Decode() request, except as
+  // required for frame reordering. Implementations must fail initialization if
+  // they cannot satisfy this requirement.
+  //
+  // On completion, the callback also includes |needs_bitstream_conversion|,
+  // indicating whether decode buffers need bitstream conversion, and
+  // |max_decode_requests|, the maximum number of concurrent Decode() requests
+  // the implementation supports.
+  Initialize(VideoDecoderConfig config, bool low_delay) =>
+      (bool success, bool needs_bitstream_conversion,
+       int32 max_decode_requests);
+
+  // Request decoding of exactly one frame or an EOS buffer. This must not be
+  // called while there are pending Initialize(), Reset(), or Decode(EOS)
+  // requests.
+  //
+  // Implementations must eventually execute the callback, even if Decode() is
+  // not called again. It is not required that the decode status match the
+  // actual result of decoding the buffer, only that decode errors are
+  // eventually reported (such as at EOS).
+  //
+  // If |buffer| is an EOS buffer, implementations must execute all other
+  // pending Decode() callbacks and output all pending frames before executing
+  // the Decode(EOS) callback. (That is, they must flush.)
+  Decode(DecoderBuffer buffer) => (DecodeStatus status);
+
+  // Reset the decoder. All ongoing Decode() requests must be completed or
+  // aborted before executing the callback. This must not be called while there
+  // is a pending Initialize() request.
+  Reset() => ();
+
+  // Inform the decoder that the client is finished with a frame.
+  // |release_sync_token| is a (possibly empty) sync point after which the
+  // frame's backing textures will be safe to overwrite.
+  OnReleaseMailbox(mojo.common.mojom.UnguessableToken release_token,
+                   gpu.mojom.SyncToken release_sync_token);
+
+  // Inform the decoder that new OverlayInfo is available.
+  OnOverlayInfoChanged(OverlayInfo overlay_info);
+};
+
+interface VideoDecoderClient {
+  // Output a decoded frame. Frames must be output in presentation order.
+  //
+  // When |can_read_without_stalling| is false, preroll is disabled. This is
+  // necessary if the decoder cannot guarantee that it can output another frame,
+  // for example if output buffers are limited or configuration changes require
+  // the return of all outstanding frames.
+  //
+  // If |release_token| is provided, the client shall call OnReleaseMailbox()
+  // when it is finished using the frame.
+  OnVideoFrameDecoded(VideoFrame frame,
+                      bool can_read_without_stalling,
+                      mojo.common.mojom.UnguessableToken? release_token);
+
+  // Request to be notified when the current OverlayInfo changes. This results
+  // in at least one call to OnOverlayInfoChanged() for the initial OverlayInfo.
+  // |restart_for_transitions| sets whether the decoder should be restarted on
+  // overlay transitions instead of receiving a call to OnOverlayInfoChanged().
+  RequestOverlayInfo(bool restart_for_transitions);
+};

@@ -1,0 +1,154 @@
+# Copyright (c) 2014 The WebRTC project authors. All Rights Reserved.
+#
+# Use of this source code is governed by a BSD-style license
+# that can be found in the LICENSE file in the root of the source
+# tree. An additional intellectual property rights grant can be found
+# in the file PATENTS.  All contributing project authors may
+# be found in the AUTHORS file in the root of the source tree.
+
+import("../webrtc.gni")
+
+rtc_static_library("voice_engine") {
+  sources = [
+    "channel.cc",
+    "channel.h",
+    "channel_manager.cc",
+    "channel_manager.h",
+    "channel_proxy.cc",
+    "channel_proxy.h",
+    "include/voe_base.h",
+    "include/voe_errors.h",
+    "shared_data.cc",
+    "shared_data.h",
+    "transmit_mixer.cc",
+    "transmit_mixer.h",
+    "transport_feedback_packet_loss_tracker.cc",
+    "transport_feedback_packet_loss_tracker.h",
+    "utility.cc",
+    "utility.h",
+    "voe_base_impl.cc",
+    "voe_base_impl.h",
+    "voice_engine_defines.h",
+    "voice_engine_impl.cc",
+    "voice_engine_impl.h",
+  ]
+
+  if (is_win) {
+    defines = [ "WEBRTC_DRIFT_COMPENSATION_SUPPORTED" ]
+
+    cflags = [
+      # TODO(kjellander): Bug 261: fix this warning.
+      "/wd4373",  # Virtual function override.
+    ]
+  }
+
+  if (!build_with_chromium && is_clang) {
+    # Suppress warnings from the Chromium Clang plugin (bugs.webrtc.org/163).
+    suppressed_configs += [ "//build/config/clang:find_bad_constructs" ]
+  }
+
+  public_deps = [
+    "../modules/audio_coding",
+  ]
+  deps = [
+    ":audio_level",
+    "..:webrtc_common",
+    "../api:array_view",
+    "../api:audio_mixer_api",
+    "../api:call_api",
+    "../api:libjingle_peerconnection_api",
+    "../api:optional",
+    "../api:transport_api",
+    "../api/audio_codecs:audio_codecs_api",
+    "../api/audio_codecs:builtin_audio_decoder_factory",
+    "../api/audio_codecs:builtin_audio_encoder_factory",
+    "../audio/utility:audio_frame_operations",
+    "../call:rtp_interfaces",
+    "../common_audio",
+    "../logging:rtc_event_log_api",
+    "../modules:module_api",
+    "../modules/audio_coding:audio_format_conversion",
+    "../modules/audio_coding:audio_network_adaptor_config",
+    "../modules/audio_coding:rent_a_codec",
+    "../modules/audio_device",
+    "../modules/audio_processing",
+    "../modules/bitrate_controller",
+    "../modules/media_file",
+    "../modules/pacing",
+    "../modules/rtp_rtcp",
+    "../modules/utility",
+    "../rtc_base:rtc_base_approved",
+    "../rtc_base:rtc_task_queue",
+    "../system_wrappers",
+  ]
+}
+
+rtc_static_library("audio_level") {
+  sources = [
+    "audio_level.cc",
+    "audio_level.h",
+  ]
+
+  deps = [
+    "..:webrtc_common",
+    "../common_audio",
+    "../modules:module_api",
+    "../rtc_base:rtc_base_approved",
+  ]
+}
+
+if (rtc_include_tests) {
+  rtc_test("voice_engine_unittests") {
+    deps = [
+      ":voice_engine",
+      "../common_audio",
+      "../modules:module_api",
+      "../modules/audio_coding",
+      "../modules/audio_device",
+      "../modules/audio_processing",
+      "../modules/media_file",
+      "../modules/rtp_rtcp",
+      "../modules/utility",
+      "../modules/video_capture:video_capture",
+      "../rtc_base:rtc_base_approved",
+      "../rtc_base:rtc_base_tests_utils",
+      "../system_wrappers",
+      "../test:test_common",
+      "../test:test_main",
+      "../test:video_test_common",
+      "//testing/gmock",
+      "//testing/gtest",
+    ]
+
+    if (is_android) {
+      deps += [ "//testing/android/native_test:native_test_native_code" ]
+      shard_timeout = 900
+    }
+
+    sources = [
+      "channel_unittest.cc",
+      "transport_feedback_packet_loss_tracker_unittest.cc",
+      "utility_unittest.cc",
+      "voe_base_unittest.cc",
+    ]
+
+    data = [
+      "../resources/utility/encapsulated_pcm16b_8khz.wav",
+      "../resources/utility/encapsulated_pcmu_8khz.wav",
+    ]
+
+    if (is_win) {
+      defines = [ "WEBRTC_DRIFT_COMPENSATION_SUPPORTED" ]
+
+      cflags = [
+        # TODO(kjellander): Bug 261: fix this warning.
+        "/wd4373",  # Virtual function override.
+      ]
+    }
+
+    if (!build_with_chromium && is_clang) {
+      # Suppress warnings from the Chromium Clang plugin (bugs.webrtc.org/163).
+      suppressed_configs += [ "//build/config/clang:find_bad_constructs" ]
+    }
+  }
+}

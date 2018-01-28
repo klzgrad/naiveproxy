@@ -1,0 +1,52 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+{
+  'targets': [
+    {
+      'target_name': 'apps_page',
+      'variables': {
+        'script_args': ['--custom_sources'],
+        'source_files': [
+          '<(DEPTH)/third_party/closure_compiler/externs/chrome_send.js',
+          '<(DEPTH)/third_party/jstemplate/util.js',
+          '<(DEPTH)/third_party/jstemplate/jsevalcontext.js',
+          '<(DEPTH)/third_party/jstemplate/jstemplate.js',
+          '<(DEPTH)/ui/webui/resources/js/action_link.js',
+          '<(DEPTH)/ui/webui/resources/js/assert.js',
+          '<(DEPTH)/ui/webui/resources/js/cr.js',
+          '<(DEPTH)/ui/webui/resources/js/event_tracker.js',
+          '<(DEPTH)/ui/webui/resources/js/load_time_data.js',
+          '<(DEPTH)/ui/webui/resources/js/parse_html_subset.js',
+          '<(DEPTH)/ui/webui/resources/js/promise_resolver.js',
+          '<(DEPTH)/ui/webui/resources/js/util.js',
+          '<(DEPTH)/ui/webui/resources/js/cr/event_target.js',
+          '<(DEPTH)/ui/webui/resources/js/cr/ui.js',
+          '<(DEPTH)/ui/webui/resources/js/cr/ui/bubble.js',
+          '<(DEPTH)/ui/webui/resources/js/cr/ui/card_slider.js',
+          '<(DEPTH)/ui/webui/resources/js/cr/ui/command.js',
+          '<(DEPTH)/ui/webui/resources/js/cr/ui/context_menu_handler.js',
+          '<(DEPTH)/ui/webui/resources/js/cr/ui/drag_wrapper.js',
+          '<(DEPTH)/ui/webui/resources/js/cr/ui/expandable_bubble.js',
+          '<(DEPTH)/ui/webui/resources/js/cr/ui/focus_manager.js',
+          '<(DEPTH)/ui/webui/resources/js/cr/ui/menu.js',
+          '<(DEPTH)/ui/webui/resources/js/cr/ui/menu_item.js',
+          '<(DEPTH)/ui/webui/resources/js/cr/ui/position_util.js',
+          '<(DEPTH)/ui/webui/resources/js/cr/ui/menu_button.js',
+          '<(DEPTH)/ui/webui/resources/js/cr/ui/context_menu_button.js',
+          '<(DEPTH)/ui/webui/resources/js/cr/ui/touch_handler.js',
+          'logging.js',
+          'tile_page.js',
+          'dot_list.js',
+          'trash.js',
+          'page_switcher.js',
+          'page_list_view.js',
+          'nav_dot.js',
+          'new_tab.js',
+          'apps_page.js',
+        ],
+      },
+      'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+  ],
+}

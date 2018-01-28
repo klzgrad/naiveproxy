@@ -1,0 +1,67 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+static_library("handler_lib") {
+  sources = [
+    "crash_report_upload_thread.cc",
+    "crash_report_upload_thread.h",
+    "handler_main.cc",
+    "handler_main.h",
+    "mac/crash_report_exception_handler.cc",
+    "mac/crash_report_exception_handler.h",
+    "mac/exception_handler_server.cc",
+    "mac/exception_handler_server.h",
+    "mac/file_limit_annotation.cc",
+    "mac/file_limit_annotation.h",
+    "prune_crash_reports_thread.cc",
+    "prune_crash_reports_thread.h",
+    "user_stream_data_source.cc",
+    "user_stream_data_source.h",
+    "win/crash_report_exception_handler.cc",
+    "win/crash_report_exception_handler.h",
+  ]
+
+  include_dirs = [ ".." ]
+
+  deps = [
+    "../compat",
+    "../minidump",
+    "../snapshot",
+    "../tools:tool_support",
+    "//base",
+  ]
+
+  if (is_win) {
+    cflags = [ "/wd4201" ]
+  }
+}
+
+executable("crashpad_handler") {
+  sources = [
+    "main.cc",
+  ]
+
+  include_dirs = [ ".." ]
+
+  deps = [
+    ":handler_lib",
+    "../compat",
+    "//base",
+    "//build/win:default_exe_manifest",
+  ]
+
+  if (is_mac && is_component_build) {
+    # The handler is in Chromium.app/Contents/Versions/X/Chromium Framework.framework/Versions/A/Helpers/
+    # so set rpath up to the base.
+    ldflags = [
+      "-rpath",
+      "@loader_path/../../../../../../../..",
+    ]
+  }
+
+  if (is_win) {
+    configs -= [ "//build/config/win:console" ]
+    configs += [ "//build/config/win:windowed" ]
+  }
+}

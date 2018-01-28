@@ -1,0 +1,155 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//base/android/linker/config.gni")
+import("//build/config/android/rules.gni")
+import("//build/config/locales.gni")
+import("//chrome/common/features.gni")
+import("//third_party/leakcanary/config.gni")
+import("channel.gni")
+
+declare_args() {
+  # Whether chrome_public_apk should use the crazy linker.
+  chrome_public_apk_use_chromium_linker = chromium_linker_supported
+
+  # Whether chrome_public_apk should use the relocation packer.
+  chrome_public_apk_use_relocation_packer = chromium_linker_supported
+
+  # Whether native libraries should be loaded from within the apk.
+  # Only attempt loading the library from the APK for 64 bit devices
+  # until the number of 32 bit devices which don't support this
+  # approach falls to a minimal level -  http://crbug.com/390618.
+  chrome_public_apk_load_library_from_apk =
+      chromium_linker_supported &&
+      (current_cpu == "arm64" || current_cpu == "x64")
+
+  # Enables ProGuard obfuscation of Chromium packages.
+  enable_proguard_obfuscation = false
+
+  # Enable multidex in release builds.
+  multidex_in_release = false
+}
+
+default_chrome_public_jinja_variables = [
+  "channel=$android_channel",
+  "enable_leakcanary=$enable_leakcanary",
+  "enable_vr=$enable_vr",
+]
+
+if (use_order_profiling) {
+  default_chrome_public_jinja_variables += [ "use_order_profiling=1" ]
+}
+
+template("chrome_public_apk_tmpl") {
+  android_apk(target_name) {
+    forward_variables_from(invoker, "*")
+    exclude_xxxhdpi = true
+
+    # Whitelist rationale in https://crbug.com/691733.
+    xxxhdpi_whitelist = [
+      "*shadow*",  # Combination of gradient & transparency cause pixelation.
+      "*.9.*",  # Most nine-patches contain shadows.
+      "*ic_file_download_white*",  # Bottom edge seems misaligned.
+      "*ic_lock.*",  # Bottom edge seems misaligned.
+    ]
+    _native_lib_file =
+        rebase_path("$root_gen_dir/CHROME_VERSION.json", root_out_dir)
+    native_lib_version_arg = "@FileArg($_native_lib_file:full-quoted)"
+    native_lib_version_rule = "//build/util:chrome_version_json"
+    if (!defined(aapt_locale_whitelist)) {
+      aapt_locale_whitelist = locales - android_chrome_omitted_locales
+    }
+
+    if (is_java_debug || multidex_in_release) {
+      enable_multidex = true
+    }
+    if (!is_java_debug) {
+      proguard_enabled = true
+      if (!defined(proguard_configs)) {
+        proguard_configs = []
+      }
+      proguard_configs += [
+        "//chrome/android/java/proguard.flags",
+        "//base/android/proguard/chromium_apk.flags",
+        "//base/android/proguard/chromium_code.flags",
+      ]
+      if (enable_proguard_obfuscation) {
+        proguard_configs +=
+            [ "//base/android/proguard/enable_obfuscation.flags" ]
+      } else {
+        proguard_configs +=
+            [ "//base/android/proguard/disable_chromium_obfuscation.flags" ]
+      }
+    }
+
+    if (!defined(use_chromium_linker)) {
+      use_chromium_linker = chrome_public_apk_use_chromium_linker
+    }
+
+    if (use_chromium_linker) {
+      if (!defined(load_library_from_apk)) {
+        load_library_from_apk = chrome_public_apk_load_library_from_apk
+      }
+
+      if (!defined(enable_relocation_packing)) {
+        enable_relocation_packing = chrome_public_apk_use_relocation_packer
+      }
+    }
+    command_line_flags_file = "chrome-command-line"
+  }
+}
+
+template("monochrome_public_apk_tmpl") {
+  chrome_public_apk_tmpl(target_name) {
+    # Always build 64-bit //android_webview:monochrome because Chrome runs
+    # in 32-bit mode.
+    if (android_64bit_target_cpu) {
+      shared_libraries = [ "//android_webview:monochrome" ]
+    } else {
+      shared_libraries = [ "//chrome/android:monochrome" ]
+    }
+    if (android_64bit_target_cpu && build_apk_secondary_abi) {
+      secondary_abi_shared_libraries =
+          [ "//chrome/android:monochrome_secondary_abi_lib" ]
+    }
+
+    alternative_android_sdk_jar = webview_framework_jar
+    app_as_shared_lib = true
+    use_chromium_linker = false
+    requires_sdk_api_level_23 = true
+    enable_relocation_packing = true
+    extensions_to_not_compress = ".lpak,.pak,.bin,.dat"
+
+    # Webview supports all locales (has no omitted ones).
+    aapt_locale_whitelist = locales
+
+    # Incremental install doesn't work for monochrome. See crbug.com/663492.
+    never_incremental = true
+
+    # Configrations to make android load shared library from APK.
+    uncompress_shared_libraries = true
+
+    forward_variables_from(invoker, "*")
+
+    if (!defined(deps)) {
+      deps = []
+    }
+    deps += [
+      "//android_webview:monochrome_webview_assets",
+      "//android_webview/apk:webview_license_activity_java",
+      "//android_webview/glue",
+      "//chrome/android:chrome_public_non_pak_assets",
+      "//chrome/android:monochrome_pak_assets",
+      "//chrome/android/monochrome:monochrome_license_provider_java",
+    ]
+
+    if (!is_java_debug) {
+      if (!defined(proguard_configs)) {
+        proguard_configs = []
+      }
+      proguard_configs += [ "//android_webview/apk/java/proguard.flags" ]
+      png_to_webp = true
+    }
+  }
+}

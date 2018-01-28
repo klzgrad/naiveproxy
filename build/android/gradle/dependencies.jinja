@@ -1,0 +1,32 @@
+{# Copyright 2016 The Chromium Authors. All rights reserved. #}
+{# Use of this source code is governed by a BSD-style license that can be #}
+{# found in the LICENSE file. #}
+{% macro expand_deps(variables, prefix) %}
+{% if variables is defined %}
+{% if variables.prebuilts is defined %}
+{% for path in variables.prebuilts %}
+    {{ prefix }} files("{{ path }}")
+{% endfor %}
+{% endif %}
+{% if variables.java_project_deps is defined %}
+{% for proj in variables.java_project_deps %}
+    {{ prefix }} project(":{{ proj }}")
+{% endfor %}
+{% endif %}
+{% if variables.android_project_deps is defined %}
+{% for proj in variables.android_project_deps %}
+{% if canary %}
+    {{ prefix }} project(path: ":{{ proj }}")
+{% else %}
+    {{ prefix }} project(path: ":{{ proj }}", configuration: "debug")
+{% endif %}
+{% endfor %}
+{% endif %}
+{% endif %}
+{% endmacro %}
+
+dependencies {
+{{ expand_deps(main, 'compile') }}
+{{ expand_deps(test, 'testCompile') }}
+{{ expand_deps(android_test, 'androidTestCompile') }}
+}

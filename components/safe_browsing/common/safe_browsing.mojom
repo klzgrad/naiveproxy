@@ -1,0 +1,65 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module safe_browsing.mojom;
+
+import "content/public/common/resource_type.mojom";
+import "services/network/public/interfaces/http_request_headers.mojom";
+import "url/mojo/url.mojom";
+
+// Provided by the browser and used by renderers to perform SafeBrowsing URL
+// checks.
+interface SafeBrowsing {
+  // Queries SafeBrowsing whether |url| is safe to load, and creates a
+  // SafeBrowsingUrlChecker interface.
+  //
+  // The check and (subsequent checks performed using SafeBrowsingUrlChecker)
+  // checks against SafeBrowsing's Malware, Phishing, and UwS blacklists.
+  //
+  // The SafeBrowsingUrlChecker interface should be used (and only used) for
+  // subsequent checks of redirects, so that the server side could keep track of
+  // the redirect chain. Disconnecting the checker interface cancels on-going
+  // URL checks. Please note that in that case if the check started by this
+  // method hasn't completed yet, it will also be canceled and the callback is
+  // ran with |proceed == true| and |showed_interstitial == false| as if the URL
+  // is safe.
+  //
+  // If |slow_check_notifier| is a valid interface request, it indicates that
+  // the URL may be unsafe and a more time-consuming process is required to get
+  // the final result. In that case, the rest of the callback arguments should
+  // be ignored. The result will be reported using the UrlCheckNotifier
+  // interface. Receiving a valid |slow_check_notifier| could be considered as
+  // a singal that the resource should be handled with more caution until the
+  // final result is obtained. For example, the network service may want to
+  // pause reading the response body for MIME sniffing.
+  //
+  // |proceed| indicates whether it is okay to proceed with loading the URL.
+  // |showed_interstitial| indicates whether the SafeBrowsing interstitial page
+  // has been shown to the user.
+  CreateCheckerAndCheck(
+      int32 render_frame_id,
+      SafeBrowsingUrlChecker& request,
+      url.mojom.Url url,
+      string method,
+      network.mojom.HttpRequestHeaders headers,
+      int32 load_flags,
+      content.mojom.ResourceType resource_type,
+      bool has_user_gesture) => (UrlCheckNotifier&? slow_check_notifier,
+                                 bool proceed,
+                                 bool showed_interstitial);
+
+  // Bind an additional pipe to this instance of the SafeBrowsing interface.
+  Clone(SafeBrowsing& request);
+};
+
+interface SafeBrowsingUrlChecker {
+  CheckUrl(url.mojom.Url url, string method)
+      => (UrlCheckNotifier&? slow_check_notifier,
+          bool proceed,
+          bool showed_interstitial);
+};
+
+interface UrlCheckNotifier {
+  OnCompleteCheck(bool proceed, bool showed_interstitial);
+};

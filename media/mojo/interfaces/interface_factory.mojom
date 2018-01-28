@@ -1,0 +1,30 @@
+// Copyright 2015 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module media.mojom;
+
+import "media/mojo/interfaces/audio_decoder.mojom";
+import "media/mojo/interfaces/content_decryption_module.mojom";
+import "media/mojo/interfaces/renderer.mojom";
+import "media/mojo/interfaces/video_decoder.mojom";
+
+// A factory for creating media mojo interfaces. Renderers can only access
+// ContentDecryptionModules created with the same factory.
+interface InterfaceFactory {
+  CreateAudioDecoder(AudioDecoder& audio_decoder);
+  CreateVideoDecoder(VideoDecoder& video_decoder);
+
+  // Creates a Renderer.
+  // The audio stream will be played on |audio_device_id|, which is defined in
+  // media/audio/audio_device_description.h. If |audio_device_id| is empty,
+  // kDefaultDeviceId will be used.
+  CreateRenderer(string audio_device_id, Renderer& renderer);
+
+  // Creates a CDM based on the |key_system| provided. A |key_system| is a
+  // generic term for a decryption mechanism and/or content protection provider.
+  // It should be a reverse domain name, e.g. "com.example.somesystem". However,
+  // this call may be initiated by an untrusted process (e.g. renderer), so the
+  // implementation must fully validate |key_system| before creating the CDM.
+  CreateCdm(string key_system, ContentDecryptionModule& cdm);
+};

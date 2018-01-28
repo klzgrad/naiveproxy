@@ -1,0 +1,49 @@
+# Copyright (c) 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/features.gni")
+import("//build/config/freetype/freetype.gni")
+import("//build/config/linux/pkg_config.gni")
+
+if (use_gio) {
+  pkg_config("gio_config") {
+    packages = [ "gio-2.0" ]
+
+    # glib >=2.40 deprecate g_settings_list_schemas in favor of
+    # g_settings_schema_source_list_schemas. This function is not available on
+    # earlier versions that we still need to support (specifically, 2.32), so
+    # disable the warning with the GLIB_DISABLE_DEPRECATION_WARNINGS define.
+    # TODO(mgiuca): Remove this suppression when we drop support for Ubuntu
+    # 13.10 (saucy) and earlier. Update the code to use
+    # g_settings_schema_source_list_schemas instead.
+    defines = [
+      "USE_GIO",
+      "GLIB_DISABLE_DEPRECATION_WARNINGS",
+    ]
+
+    # TODO(brettw) Theoretically I think ignore_libs should be set so that we
+    # don't link directly to GIO and use the loader generated below. But the
+    # gio target in GYP doesn't make any sense to me and appears to link
+    # directly to GIO in addition to making a loader. This this uncommented,
+    # the link in component build fails, so I think this is closer to the
+    # GYP build.
+    #ignore_libs = true  # Loader generated below.
+  }
+}
+
+# Looking for libspeechd? Use //third_party/speech-dispatcher
+
+if (use_system_freetype) {
+  assert(!is_chromecast)
+
+  # Only provided for distributions which prefer to keep linking to FreeType on
+  # the system, use with caution,for details see build/config/freetype/BUILD.gn.
+  pkg_config("freetype_from_pkgconfig") {
+    visibility = [
+      "//third_party:freetype_harfbuzz",
+      "//third_party/harfbuzz-ng:harfbuzz_source",
+    ]
+    packages = [ "freetype2" ]
+  }
+}

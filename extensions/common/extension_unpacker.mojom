@@ -1,0 +1,48 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// Safe chrome extension unpacker service provided by the utility process
+// and exposed by mojo policy to the chrome browser process.
+
+module extensions.mojom;
+
+import "mojo/common/file_path.mojom";
+import "mojo/common/string16.mojom";
+import "mojo/common/values.mojom";
+
+interface ExtensionUnpacker {
+  // Unzip |file| into the directory |path|.
+  Unzip(mojo.common.mojom.FilePath file,
+        mojo.common.mojom.FilePath path) => (bool success);
+
+  // Unpack and sanitize the extension in directory |path|, and return its
+  // parsed manifest.json file in |manifest| and its parsed JSON ruleset for
+  // the Declarative Net Request API in |json_ruleset|. The supplied |location|,
+  // and the |creation_flags| defined by Extension::InitFromValueFlags are
+  // passed into Extension::Create() when unpacking the extension. Decoded
+  // image and message catalog data from the extension is written to files
+  // kDecodedImagesFilename and kDecodedMessageCatalogsFilename in |path|.
+  // If Unpack() fails for any reason, |error| contains a user-displayable
+  // explanation of what went wrong.
+  // |channel| and |type| are needed to initialize the global state of the
+  // extension system, which is needed while creating the Extension object.
+  Unpack(FeatureChannel channel,
+         FeatureSessionType type,
+         mojo.common.mojom.FilePath path,
+         string extension_id,
+         ManifestLocation location,
+         int32 creation_flags)
+      => (mojo.common.mojom.String16 error,
+          mojo.common.mojom.DictionaryValue? manifest,
+          mojo.common.mojom.ListValue? json_ruleset);
+};
+
+[Native]
+enum ManifestLocation;
+
+[Native]
+enum FeatureChannel;
+
+[Native]
+enum FeatureSessionType;

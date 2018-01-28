@@ -1,0 +1,270 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/features.gni")
+import("//build/config/ui.gni")
+import("//components/vector_icons/vector_icons.gni")
+import("//testing/test.gni")
+import("//ui/base/ui_features.gni")
+
+aggregate_vector_icons("message_center_vector_icons") {
+  icon_directory = "vector_icons"
+
+  icons = [
+    "notification_close_button.1x.icon",
+    "notification_close_button.icon",
+    "notification_expand_less.icon",
+    "notification_expand_more.icon",
+    "notification_settings_button.1x.icon",
+    "notification_settings_button.icon",
+    "product.icon",
+  ]
+}
+
+# TODO(msw|mukai|dewittj): Move ash-specific files: crbug.com/585175
+component("message_center") {
+  deps = [
+    "//base",
+    "//ui/base",
+    "//ui/message_center/public/cpp",
+    "//ui/strings",
+    "//url",
+  ]
+
+  defines = [ "MESSAGE_CENTER_IMPLEMENTATION" ]
+
+  if (enable_message_center) {
+    deps += [
+      ":message_center_vector_icons",
+      "//base:i18n",
+      "//base/third_party/dynamic_annotations",
+      "//components/url_formatter",
+      "//skia",
+      "//ui/accessibility",
+      "//ui/display",
+      "//ui/events",
+      "//ui/gfx",
+      "//ui/gfx/geometry",
+      "//ui/native_theme",
+      "//ui/resources",
+    ]
+
+    configs += [
+      "//build/config:precompiled_headers",
+
+      # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+      "//build/config/compiler:no_size_t_to_int_warning",
+    ]
+    sources = [
+      "cocoa/notification_controller.h",
+      "cocoa/notification_controller.mm",
+      "cocoa/opaque_views.h",
+      "cocoa/opaque_views.mm",
+      "cocoa/popup_collection.h",
+      "cocoa/popup_collection.mm",
+      "cocoa/popup_controller.h",
+      "cocoa/popup_controller.mm",
+      "message_center.cc",
+      "message_center.h",
+      "message_center_export.h",
+      "message_center_impl.cc",
+      "message_center_impl.h",
+      "message_center_observer.h",
+      "message_center_style.cc",
+      "message_center_style.h",
+      "message_center_tray.cc",
+      "message_center_tray.h",
+      "message_center_tray_delegate.h",
+      "message_center_types.h",
+      "notification.cc",
+      "notification.h",
+      "notification_blocker.cc",
+      "notification_blocker.h",
+      "notification_delegate.cc",
+      "notification_delegate.h",
+      "notification_list.cc",
+      "notification_list.h",
+      "notification_types.cc",
+      "notification_types.h",
+      "notifier_settings.cc",
+      "notifier_settings.h",
+      "popup_timer.cc",
+      "popup_timer.h",
+      "popup_timers_controller.cc",
+      "popup_timers_controller.h",
+    ]
+
+    sources += get_target_outputs(":message_center_vector_icons")
+
+    if (is_win) {
+      deps += [
+        "//ui/aura",
+        "//ui/wm/public",
+      ]
+    }
+
+    if (is_mac) {
+      libs = [
+        "AppKit.framework",
+        "Foundation.framework",
+      ]
+    }
+
+    # On Mac, toolkit-views builds still use the Cocoa UI. Keep this in sync
+    # with message_center_unittests below.
+    if (toolkit_views && !is_mac) {
+      sources += [
+        "notification_delegate_views.cc",
+        "views/bounded_label.cc",
+        "views/bounded_label.h",
+        "views/constants.h",
+        "views/desktop_popup_alignment_delegate.cc",
+        "views/desktop_popup_alignment_delegate.h",
+        "views/message_center_controller.h",
+        "views/message_popup_collection.cc",
+        "views/message_popup_collection.h",
+        "views/message_view.cc",
+        "views/message_view.h",
+        "views/message_view_context_menu_controller.cc",
+        "views/message_view_context_menu_controller.h",
+        "views/message_view_factory.cc",
+        "views/message_view_factory.h",
+        "views/notification_button.cc",
+        "views/notification_button.h",
+        "views/notification_control_buttons_view.cc",
+        "views/notification_control_buttons_view.h",
+        "views/notification_header_view.cc",
+        "views/notification_header_view.h",
+        "views/notification_view.cc",
+        "views/notification_view.h",
+        "views/notification_view_md.cc",
+        "views/notification_view_md.h",
+        "views/padded_button.cc",
+        "views/padded_button.h",
+        "views/popup_alignment_delegate.cc",
+        "views/popup_alignment_delegate.h",
+        "views/proportional_image_view.cc",
+        "views/proportional_image_view.h",
+        "views/slide_out_controller.cc",
+        "views/slide_out_controller.h",
+        "views/toast_contents_view.cc",
+        "views/toast_contents_view.h",
+      ]
+      deps += [
+        "//ui/compositor",
+        "//ui/events",
+        "//ui/views",
+      ]
+    }
+  } else {
+    # Notification service disabled.
+    sources = [
+      "dummy_message_center.cc",
+      "notification_delegate.cc",
+      "notification_delegate.h",
+    ]
+
+    # Android implements its own notification UI manager instead of deferring to
+    # the message center (when notifications are enabled). Include a minimal
+    # set of files required for notifications on Android.
+    if (is_android) {
+      sources += [
+        "notification.cc",
+        "notification.h",
+        "notifier_settings.cc",
+        "notifier_settings.h",
+      ]
+    }
+  }
+}
+
+if (enable_message_center) {
+  static_library("test_support") {
+    testonly = true
+
+    sources = [
+      "fake_message_center.cc",
+      "fake_message_center.h",
+      "fake_message_center_tray_delegate.cc",
+      "fake_message_center_tray_delegate.h",
+    ]
+
+    deps = [
+      "//base",
+      "//base/test:test_support",
+      "//skia",
+      "//ui/gfx",
+      "//ui/gfx/geometry",
+    ]
+
+    public_deps = [
+      ":message_center",
+    ]
+  }
+
+  test("message_center_unittests") {
+    sources = [
+      "cocoa/notification_controller_unittest.mm",
+      "cocoa/popup_collection_unittest.mm",
+      "cocoa/popup_controller_unittest.mm",
+      "message_center_impl_unittest.cc",
+      "message_center_tray_unittest.cc",
+      "mojo/struct_traits_unittest.cc",
+      "notification_delegate_unittest.cc",
+      "notification_list_unittest.cc",
+      "test/run_all_unittests.cc",
+    ]
+
+    deps = [
+      ":message_center",
+      ":test_support",
+      "//base",
+      "//base/test:test_support",
+      "//mojo/edk/system",
+      "//skia",
+      "//testing/gmock",
+      "//testing/gtest",
+      "//ui/base",
+      "//ui/base:test_support",
+      "//ui/events",
+      "//ui/events:test_support",
+      "//ui/gfx",
+      "//ui/gfx:test_support",
+      "//ui/gfx/geometry",
+      "//ui/gl",
+      "//ui/gl:test_support",
+      "//ui/message_center/mojo:test_interfaces",
+      "//ui/message_center/public/cpp",
+      "//ui/resources",
+      "//ui/resources:ui_test_pak",
+      "//url",
+    ]
+
+    data_deps = [
+      "//third_party/mesa:osmesa",
+      "//ui/resources:ui_test_pak_data",
+    ]
+
+    if (is_mac) {
+      deps += [ "//ui/gfx:test_support" ]
+    }
+
+    if (toolkit_views && !is_mac) {
+      sources += [
+        "views/bounded_label_unittest.cc",
+        "views/message_popup_collection_unittest.cc",
+        "views/notification_view_md_unittest.cc",
+        "views/notification_view_unittest.cc",
+      ]
+      deps += [
+        # Compositor is needed by message_center_view_unittest.cc and for the
+        # fonts used by bounded_label_unittest.cc.
+        "//ui/compositor",
+        "//ui/display",
+        "//ui/views",
+        "//ui/views:test_support",
+      ]
+    }
+  }
+}

@@ -1,0 +1,124 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/features.gni")
+
+declare_args() {
+  if (is_android || is_ios) {
+    cld2_table_size = 0  # Small, accurate tables
+  } else {
+    cld2_table_size = 2  # Larger, more accurate tables
+  }
+}
+
+config("cld2_data_warnings") {
+  visibility = [ ":*" ]
+  if (is_clang) {
+    # The generated files don't have braces around subobject initializers.
+    cflags = [ "-Wno-missing-braces" ]
+  }
+}
+
+static_library("cld2_data") {
+  sources = [
+    "src/internal/cld2_generated_cjk_compatible.cc",
+    "src/internal/cld2_generated_deltaoctachrome.cc",
+    "src/internal/cld2_generated_distinctoctachrome.cc",
+    "src/internal/cld_generated_cjk_delta_bi_4.cc",
+    "src/internal/cld_generated_cjk_uni_prop_80.cc",
+    "src/internal/cld_generated_score_quad_octa_2.cc",
+    "src/internal/generated_distinct_bi_0.cc",
+  ]
+
+  if (cld2_table_size == 0) {
+    sources += [ "src/internal/cld2_generated_quadchrome_16.cc" ]
+  } else if (cld2_table_size == 2) {
+    sources += [ "src/internal/cld2_generated_quadchrome_2.cc" ]
+  }
+
+  include_dirs = [
+    "src/internal",
+    "src/public",
+  ]
+
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [
+    "//build/config/compiler:no_chromium_code",
+
+    # Must be after no_chromium_code for warning flags to be ordered correctly.
+    ":cld2_data_warnings",
+  ]
+}
+
+config("cld2_warnings") {
+  if (is_clang) {
+    cflags = [
+      # cld_2 contains unused private fields.
+      # https://code.google.com/p/cld2/issues/detail?id=37
+      "-Wno-unused-private-field",
+
+      # offsetmap.cc uses a char as a subscript.
+      "-Wno-char-subscripts",
+    ]
+  }
+}
+
+static_library("cld_2") {
+  sources = [
+    "src/internal/cld2tablesummary.h",
+    "src/internal/cldutil.cc",
+    "src/internal/cldutil.h",
+    "src/internal/cldutil_shared.cc",
+    "src/internal/cldutil_shared.h",
+    "src/internal/compact_lang_det.cc",
+    "src/internal/compact_lang_det_hint_code.cc",
+    "src/internal/compact_lang_det_hint_code.h",
+    "src/internal/compact_lang_det_impl.cc",
+    "src/internal/compact_lang_det_impl.h",
+    "src/internal/debug.h",
+    "src/internal/debug_empty.cc",
+    "src/internal/fixunicodevalue.cc",
+    "src/internal/fixunicodevalue.h",
+    "src/internal/generated_entities.cc",
+    "src/internal/generated_language.cc",
+    "src/internal/generated_language.h",
+    "src/internal/generated_ulscript.cc",
+    "src/internal/generated_ulscript.h",
+    "src/internal/getonescriptspan.cc",
+    "src/internal/getonescriptspan.h",
+    "src/internal/integral_types.h",
+    "src/internal/lang_script.cc",
+    "src/internal/lang_script.h",
+    "src/internal/langspan.h",
+    "src/internal/offsetmap.cc",
+    "src/internal/offsetmap.h",
+    "src/internal/port.h",
+    "src/internal/scoreonescriptspan.cc",
+    "src/internal/scoreonescriptspan.h",
+    "src/internal/stringpiece.h",
+    "src/internal/tote.cc",
+    "src/internal/tote.h",
+    "src/internal/utf8prop_lettermarkscriptnum.h",
+    "src/internal/utf8repl_lettermarklower.h",
+    "src/internal/utf8scannot_lettermarkspecial.h",
+    "src/internal/utf8statetable.cc",
+    "src/internal/utf8statetable.h",
+    "src/public/compact_lang_det.h",
+    "src/public/encodings.h",
+  ]
+
+  include_dirs = [
+    "src/internal",
+    "src/public",
+  ]
+
+  public_deps = [
+    ":cld2_data",
+  ]
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [
+    "//build/config/compiler:no_chromium_code",
+    ":cld2_warnings",
+  ]
+}

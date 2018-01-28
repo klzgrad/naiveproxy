@@ -1,0 +1,101 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+config("google_toolbox_for_mac_public_config") {
+  include_dirs = [
+    ".",
+    "src",
+    "src/AppKit",
+    "src/DebugUtils",
+    "src/Foundation",
+  ]
+}
+
+component("google_toolbox_for_mac") {
+  sources = [
+    "src/Foundation/GTMStringEncoding.h",
+    "src/Foundation/GTMStringEncoding.m",
+    "src/GTMDefines.h",
+  ]
+
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [ "//build/config/compiler:no_chromium_code" ]
+  public_configs = [ ":google_toolbox_for_mac_public_config" ]
+
+  if (!is_ios) {
+    sources += [
+      "src/AppKit/GTMCarbonEvent.h",
+      "src/AppKit/GTMCarbonEvent.m",
+      "src/AppKit/GTMFadeTruncatingTextFieldCell.h",
+      "src/AppKit/GTMFadeTruncatingTextFieldCell.m",
+      "src/AppKit/GTMIBArray.h",
+      "src/AppKit/GTMIBArray.m",
+      "src/AppKit/GTMKeyValueAnimation.h",
+      "src/AppKit/GTMKeyValueAnimation.m",
+      "src/AppKit/GTMNSAnimation+Duration.h",
+      "src/AppKit/GTMNSAnimation+Duration.m",
+      "src/AppKit/GTMNSBezierPath+CGPath.h",
+      "src/AppKit/GTMNSBezierPath+CGPath.m",
+      "src/AppKit/GTMNSBezierPath+RoundRect.h",
+      "src/AppKit/GTMNSBezierPath+RoundRect.m",
+      "src/AppKit/GTMNSColor+Luminance.h",
+      "src/AppKit/GTMNSColor+Luminance.m",
+      "src/AppKit/GTMUILocalizer.h",
+      "src/AppKit/GTMUILocalizer.m",
+      "src/AppKit/GTMUILocalizerAndLayoutTweaker.h",
+      "src/AppKit/GTMUILocalizerAndLayoutTweaker.m",
+      "src/DebugUtils/GTMDebugSelectorValidation.h",
+      "src/DebugUtils/GTMTypeCasting.h",
+      "src/Foundation/GTMServiceManagement.c",
+      "src/Foundation/GTMServiceManagement.h",
+    ]
+
+    libs = [
+      "AddressBook.framework",
+      "AppKit.framework",
+      "Carbon.framework",
+      "Cocoa.framework",
+      "QuartzCore.framework",
+    ]
+  } else {  # is_ios
+    sources += [
+      "src/DebugUtils/GTMMethodCheck.h",
+      "src/DebugUtils/GTMMethodCheck.m",
+      "src/Foundation/GTMLightweightProxy.h",
+      "src/Foundation/GTMLightweightProxy.m",
+
+      # GTMLogger is used by breakpad, which is still used on iOS.
+      "src/Foundation/GTMLogger.h",
+      "src/Foundation/GTMLogger.m",
+      "src/Foundation/GTMNSDictionary+URLArguments.h",
+      "src/Foundation/GTMNSDictionary+URLArguments.m",
+      "src/Foundation/GTMNSString+URLArguments.h",
+      "src/Foundation/GTMNSString+URLArguments.m",
+      "src/iPhone/GTMFadeTruncatingLabel.h",
+      "src/iPhone/GTMFadeTruncatingLabel.m",
+      "src/iPhone/GTMRoundedRectPath.h",
+      "src/iPhone/GTMRoundedRectPath.m",
+      "src/iPhone/GTMUIImage+Resize.h",
+      "src/iPhone/GTMUIImage+Resize.m",
+      "src/iPhone/GTMUILocalizer.h",
+      "src/iPhone/GTMUILocalizer.m",
+    ]
+
+    # TODO(crbug.com/569158): Suppresses warnings that are treated as errors
+    # when minimum iOS version support is increased to iOS 9 and up.
+    # This should be removed once all deprecation violations have been fixed.
+    cflags = [ "-Wno-deprecated-declarations" ]
+  }
+
+  if (is_component_build) {
+    # GTM is third-party code, so we don't want to add _EXPORT
+    # annotations to it, so build it without -fvisibility=hidden
+    # (else the interface class symbols will be hidden in a 64bit
+    # build). Only do this in a component build, so that the shipping
+    # chrome binary doesn't end up with unnecessarily exported
+    # symbols.
+    configs -= [ "//build/config/gcc:symbol_visibility_hidden" ]
+    configs += [ "//build/config/gcc:symbol_visibility_default" ]
+  }
+}

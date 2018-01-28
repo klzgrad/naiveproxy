@@ -1,0 +1,45 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module profiling.mojom;
+
+import "chrome/common/profiling/profiling_client.mojom";
+import "mojo/common/file.mojom";
+import "mojo/common/process_id.mojom";
+import "mojo/common/values.mojom";
+
+struct SharedBufferWithSize {
+  handle<shared_buffer> buffer;
+  uint32 size;
+  mojo.common.mojom.ProcessId pid;
+};
+
+// This interface is how the browser process sends commands to the profiling
+// process.
+interface ProfilingService {
+  // Adds a new profiling client.
+  //
+  // The "client" interface will be for the instrumented process. It allows the
+  // profiling process to talk to the new process.
+  //
+  // Both ends of a platform-specific pipe to read memlog trace data from is
+  // passed in. The sender end will be forwarded to the client process.
+  AddProfilingClient(mojo.common.mojom.ProcessId pid,
+                     ProfilingClient client,
+                     handle memlog_pipe_sender,
+                     handle memlog_pipe_receiver);
+
+  // Dumps the memory log of the process with the given |pid| into
+  // |output_file|. |metadata| is a dictionary that should be added to the trace
+  // under the "metadata" key.
+  DumpProcess(mojo.common.mojom.ProcessId pid, handle output_file,
+              mojo.common.mojom.DictionaryValue metadata) => (bool result);
+
+  // Dumps the memory log of all profiled processes into shared buffers. The
+  // contents of each shared buffer is a JSON string compatible with
+  // TRACE_EVENT* macros. Processes that fail to dump will be omitted from
+  // |buffers|.
+  DumpProcessesForTracing() =>
+      (array<SharedBufferWithSize> buffers);
+};

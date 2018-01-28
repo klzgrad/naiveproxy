@@ -1,0 +1,245 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ui.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
+import("//services/service_manager/public/cpp/service.gni")
+import("//services/service_manager/public/service_manifest.gni")
+import("//tools/grit/repack.gni")
+
+assert(is_chromeos)
+
+source_set("lib") {
+  sources = [
+    "accelerators/accelerator_controller_delegate_mus.cc",
+    "accelerators/accelerator_controller_delegate_mus.h",
+    "accelerators/accelerator_controller_registrar.cc",
+    "accelerators/accelerator_controller_registrar.h",
+    "accelerators/accelerator_handler.h",
+    "accelerators/accelerator_ids.h",
+    "ash_window_tree_host_mus.cc",
+    "ash_window_tree_host_mus.h",
+    "bridge/immersive_handler_factory_mus.cc",
+    "bridge/immersive_handler_factory_mus.h",
+    "bridge/shell_port_mash.cc",
+    "bridge/shell_port_mash.h",
+    "bridge/workspace_event_handler_mus.cc",
+    "bridge/workspace_event_handler_mus.h",
+    "disconnected_app_handler.cc",
+    "disconnected_app_handler.h",
+    "display_synchronizer.cc",
+    "display_synchronizer.h",
+    "drag_window_resizer.cc",
+    "drag_window_resizer.h",
+    "event_matcher_util.cc",
+    "event_matcher_util.h",
+    "frame/detached_title_area_renderer.cc",
+    "frame/detached_title_area_renderer.h",
+    "keyboard_ui_mus.cc",
+    "keyboard_ui_mus.h",
+    "move_event_handler.cc",
+    "move_event_handler.h",
+    "network_connect_delegate_mus.cc",
+    "network_connect_delegate_mus.h",
+    "non_client_frame_controller.cc",
+    "non_client_frame_controller.h",
+    "property_util.cc",
+    "property_util.h",
+    "shell_delegate_mus.cc",
+    "shell_delegate_mus.h",
+    "top_level_window_factory.cc",
+    "top_level_window_factory.h",
+    "touch_transform_setter_mus.cc",
+    "touch_transform_setter_mus.h",
+    "wallpaper_delegate_mus.cc",
+    "wallpaper_delegate_mus.h",
+    "window_manager.cc",
+    "window_manager.h",
+    "window_manager_application.cc",
+    "window_manager_application.h",
+    "window_properties.cc",
+    "window_properties.h",
+  ]
+
+  defines = [ "NOTIMPLEMENTED_POLICY=5" ]
+
+  deps = [
+    "//chromeos",
+    "//chromeos:power_manager_proto",
+    "//components/user_manager",
+    "//components/wallpaper",
+    "//device/bluetooth",
+    "//services/ui/public/cpp/input_devices",
+    "//services/ui/public/interfaces/input_devices",
+    "//ui/app_list/presenter",
+    "//ui/app_list/presenter:mojom",
+    "//ui/chromeos",
+    "//ui/display/manager",
+    "//ui/events/devices/mojo",
+    "//ui/keyboard",
+    "//ui/keyboard:mojom",
+    "//ui/message_center",
+    "//ui/wm/public",
+  ]
+
+  public_deps = [
+    "//ash",
+    "//ash/public/cpp:ash_public_cpp",
+    "//ash/wayland",
+    "//base",
+    "//base:i18n",
+    "//mash/public/interfaces",
+    "//mojo/common:common_base",
+    "//services/service_manager/public/cpp",
+    "//services/ui/common:mus_common",
+    "//services/ui/public/cpp",
+    "//services/ui/public/cpp/input_devices",
+    "//services/ui/public/interfaces",
+    "//services/ui/public/interfaces/display",
+    "//skia",
+    "//ui/aura",
+    "//ui/events",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+    "//ui/gfx/geometry/mojo",
+    "//ui/resources",
+    "//ui/strings",
+    "//ui/views",
+    "//ui/views/mus:for_mojo_application",
+    "//ui/wm",
+  ]
+
+  data_deps = [
+    "//ash/touch_hud/mus:touch_hud",
+  ]
+
+  assert_no_deps = [
+    "//content/public/browser",
+    "//content/public/common",
+  ]
+}
+
+service("mus") {
+  output_name = "ash"
+
+  sources = [
+    "main.cc",
+  ]
+
+  deps = [
+    ":lib",
+    ":resources",
+    ":resources_200",
+    "//services/service_manager/public/cpp",
+  ]
+
+  # TODO(beng): This target relies on //mash/session, but there is a cycle so we
+  #             can't state that dependency here.
+  data_deps = [
+    ":resources",
+    ":resources_200",
+    "//services/ui",
+  ]
+}
+
+service_manifest("manifest") {
+  name = "ash"
+  source = "manifest.json"
+}
+
+# TODO: Load locale-specific strings.
+# TODO: Avoid duplication between Mash and Chrome pak files: crbug.com/628715.
+repack("resources") {
+  output = "$root_out_dir/ash_mus_resources.pak"
+  sources = [
+    "$root_gen_dir/ash/resources/ash_resources_100_percent.pak",
+    "$root_gen_dir/ash/strings/ash_strings_en-US.pak",
+    "$root_gen_dir/ui/chromeos/resources/ui_chromeos_resources_100_percent.pak",
+    "$root_gen_dir/ui/chromeos/strings/ui_chromeos_strings_en-US.pak",
+    "$root_gen_dir/ui/resources/ui_resources_100_percent.pak",
+    "$root_gen_dir/ui/strings/app_locale_settings_en-US.pak",
+    "$root_gen_dir/ui/strings/ui_strings_en-US.pak",
+    "$root_gen_dir/ui/views/resources/views_resources_100_percent.pak",
+  ]
+  deps = [
+    "//ash/resources",
+    "//ash/strings",
+    "//ui/chromeos/resources",
+    "//ui/chromeos/strings",
+    "//ui/resources",
+    "//ui/strings",
+    "//ui/views/mus:resources",
+    "//ui/views/resources",
+  ]
+}
+
+repack("resources_200") {
+  output = "$root_out_dir/ash_mus_resources_200.pak"
+  sources = [
+    "$root_gen_dir/ash/resources/ash_resources_200_percent.pak",
+    "$root_gen_dir/ui/chromeos/resources/ui_chromeos_resources_200_percent.pak",
+    "$root_gen_dir/ui/resources/ui_resources_200_percent.pak",
+    "$root_gen_dir/ui/views/resources/views_resources_200_percent.pak",
+  ]
+  deps = [
+    "//ash/resources",
+    "//ui/chromeos/resources",
+    "//ui/resources",
+    "//ui/views/resources",
+  ]
+}
+
+source_set("unittests") {
+  testonly = true
+
+  sources = [
+    "app_launch_unittest.cc",
+    "bridge/shell_port_mash_test_api.h",
+    "display_synchronizer_unittest.cc",
+    "non_client_frame_controller_unittest.cc",
+    "top_level_window_factory_unittest.cc",
+    "window_manager_unittest.cc",
+  ]
+
+  deps = [
+    ":lib",
+    ":resources",
+    "//ash",
+    "//ash:test_support_without_content",
+    "//ash/public/cpp:ash_public_cpp",
+    "//base",
+    "//base/test:test_config",
+    "//base/test:test_support",
+    "//mash/quick_launch/public/interfaces:constants",
+    "//mojo/public/cpp/system",
+    "//services/service_manager/public/cpp:service_test_support",
+    "//services/ui/common:mus_common",
+    "//services/ui/public/cpp",
+    "//services/ui/public/cpp/input_devices",
+    "//services/ui/public/interfaces",
+    "//skia",
+    "//testing/gtest",
+    "//ui/aura",
+    "//ui/aura:test_support",
+    "//ui/base",
+    "//ui/base:test_support",
+    "//ui/compositor:test_support",
+    "//ui/display",
+    "//ui/events",
+    "//ui/events:test_support",
+    "//ui/gfx:test_support",
+    "//ui/gfx/geometry",
+    "//ui/gfx/geometry/mojo",
+    "//ui/message_center",
+    "//ui/views:test_support",
+    "//ui/views/mus",
+  ]
+
+  data_deps = [
+    ":mus",
+    "//mash/quick_launch",
+  ]
+
+  defines = [ "NOTIMPLEMENTED_POLICY=5" ]
+}

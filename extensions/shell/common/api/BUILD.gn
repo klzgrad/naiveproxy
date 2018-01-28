@@ -1,0 +1,74 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//extensions/features/features.gni")
+import("//tools/json_schema_compiler/json_features.gni")
+import("//tools/json_schema_compiler/json_schema_api.gni")
+
+assert(enable_extensions,
+       "Cannot depend on extensions because enable_extensions=false.")
+
+schema_sources = [ "identity.idl" ]
+root_namespace = "extensions::shell::api::%(namespace)s"
+
+json_schema_api("api") {
+  sources = schema_sources
+  schemas = true
+  bundle = true
+  bundle_name = "Shell"
+}
+
+json_schema_api("api_registration") {
+  sources = schema_sources
+  impl_dir = "//extensions/shell/browser/api"
+  bundle_registration = true
+  bundle_name = "Shell"
+
+  deps = [
+    ":api",
+    "//extensions/common",
+  ]
+}
+
+json_features("shell_api_features") {
+  feature_type = "APIFeature"
+  provider_class = "ShellAPIFeatureProvider"
+  sources = [
+    "../../../common/api/_api_features.json",
+    "_api_features.json",
+  ]
+}
+
+json_features("shell_permission_features") {
+  feature_type = "PermissionFeature"
+  provider_class = "ShellPermissionFeatureProvider"
+  sources = [
+    "../../../common/api/_permission_features.json",
+  ]
+}
+
+json_features("shell_manifest_features") {
+  feature_type = "ManifestFeature"
+  provider_class = "ShellManifestFeatureProvider"
+  sources = [
+    "../../../common/api/_manifest_features.json",
+  ]
+}
+
+json_features("shell_behavior_features") {
+  feature_type = "BehaviorFeature"
+  provider_class = "ShellBehaviorFeatureProvider"
+  sources = [
+    "../../../common/api/_behavior_features.json",
+  ]
+}
+
+group("extensions_features") {
+  public_deps = [
+    ":shell_api_features",
+    ":shell_behavior_features",
+    ":shell_manifest_features",
+    ":shell_permission_features",
+  ]
+}

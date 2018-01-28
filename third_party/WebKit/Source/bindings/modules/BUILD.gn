@@ -1,0 +1,199 @@
+# Copyright 2014 Tfe Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//third_party/WebKit/Source/modules/modules.gni")
+import("//third_party/WebKit/Source/bindings/scripts/scripts.gni")
+import("//third_party/WebKit/Source/build/scripts/scripts.gni")
+
+group("bindings_modules_generated") {
+  visibility = [ "//third_party/WebKit/*" ]
+  public_deps = [
+    ":event_modules",
+    ":event_modules_names",
+    ":event_target_modules_names",
+    ":modules_bindings_generated_event_interfaces",
+  ]
+}
+
+generate_event_interfaces("modules_bindings_generated_event_interfaces") {
+  sources = [
+    "//third_party/WebKit/Source/modules/app_banner/BeforeInstallPromptEvent.idl",
+    "//third_party/WebKit/Source/modules/background_fetch/BackgroundFetchClickEvent.idl",
+    "//third_party/WebKit/Source/modules/background_fetch/BackgroundFetchEvent.idl",
+    "//third_party/WebKit/Source/modules/background_fetch/BackgroundFetchFailEvent.idl",
+    "//third_party/WebKit/Source/modules/background_fetch/BackgroundFetchedEvent.idl",
+    "//third_party/WebKit/Source/modules/background_sync/SyncEvent.idl",
+    "//third_party/WebKit/Source/modules/device_orientation/DeviceMotionEvent.idl",
+    "//third_party/WebKit/Source/modules/device_orientation/DeviceOrientationEvent.idl",
+    "//third_party/WebKit/Source/modules/encryptedmedia/MediaEncryptedEvent.idl",
+    "//third_party/WebKit/Source/modules/encryptedmedia/MediaKeyMessageEvent.idl",
+    "//third_party/WebKit/Source/modules/gamepad/GamepadEvent.idl",
+    "//third_party/WebKit/Source/modules/indexeddb/IDBVersionChangeEvent.idl",
+    "//third_party/WebKit/Source/modules/mediarecorder/BlobEvent.idl",
+    "//third_party/WebKit/Source/modules/mediastream/MediaStreamEvent.idl",
+    "//third_party/WebKit/Source/modules/mediastream/MediaStreamTrackEvent.idl",
+    "//third_party/WebKit/Source/modules/notifications/NotificationEvent.idl",
+    "//third_party/WebKit/Source/modules/payments/AbortPaymentEvent.idl",
+    "//third_party/WebKit/Source/modules/payments/CanMakePaymentEvent.idl",
+    "//third_party/WebKit/Source/modules/payments/PaymentRequestEvent.idl",
+    "//third_party/WebKit/Source/modules/payments/PaymentRequestUpdateEvent.idl",
+    "//third_party/WebKit/Source/modules/peerconnection/RTCDTMFToneChangeEvent.idl",
+    "//third_party/WebKit/Source/modules/peerconnection/RTCDataChannelEvent.idl",
+    "//third_party/WebKit/Source/modules/peerconnection/RTCPeerConnectionIceEvent.idl",
+    "//third_party/WebKit/Source/modules/presentation/PresentationConnectionAvailableEvent.idl",
+    "//third_party/WebKit/Source/modules/presentation/PresentationConnectionCloseEvent.idl",
+    "//third_party/WebKit/Source/modules/push_messaging/PushEvent.idl",
+    "//third_party/WebKit/Source/modules/sensor/SensorErrorEvent.idl",
+    "//third_party/WebKit/Source/modules/serviceworkers/ExtendableEvent.idl",
+    "//third_party/WebKit/Source/modules/serviceworkers/ExtendableMessageEvent.idl",
+    "//third_party/WebKit/Source/modules/serviceworkers/FetchEvent.idl",
+    "//third_party/WebKit/Source/modules/serviceworkers/ForeignFetchEvent.idl",
+    "//third_party/WebKit/Source/modules/serviceworkers/InstallEvent.idl",
+    "//third_party/WebKit/Source/modules/speech/SpeechRecognitionError.idl",
+    "//third_party/WebKit/Source/modules/speech/SpeechRecognitionEvent.idl",
+    "//third_party/WebKit/Source/modules/speech/SpeechSynthesisEvent.idl",
+    "//third_party/WebKit/Source/modules/storage/StorageEvent.idl",
+    "//third_party/WebKit/Source/modules/vr/VRDisplayEvent.idl",
+    "//third_party/WebKit/Source/modules/vr/latest/VRDeviceEvent.idl",
+    "//third_party/WebKit/Source/modules/vr/latest/VRSessionEvent.idl",
+    "//third_party/WebKit/Source/modules/webaudio/AudioProcessingEvent.idl",
+    "//third_party/WebKit/Source/modules/webaudio/OfflineAudioCompletionEvent.idl",
+    "//third_party/WebKit/Source/modules/webgl/WebGLContextEvent.idl",
+    "//third_party/WebKit/Source/modules/webmidi/MIDIConnectionEvent.idl",
+    "//third_party/WebKit/Source/modules/webmidi/MIDIMessageEvent.idl",
+    "//third_party/WebKit/Source/modules/websockets/CloseEvent.idl",
+  ]
+  output_file = "event_modules_names.json5"
+  suffix = "Modules"
+}
+
+make_event_factory("event_modules") {
+  visibility = [ ":*" ]
+  in_files = [ "$root_gen_dir/blink/event_modules_names.json5" ]
+  outputs = [
+    "$blink_modules_output_dir/event_modules_factory.cc",
+  ]
+  deps = make_core_generated_deps + [ "//third_party/WebKit/Source/bindings/modules:modules_bindings_generated_event_interfaces" ]
+  deps += [
+    "//device/vr:mojo_bindings_blink",
+    "//media/midi:mojo_blink",
+    "//services/device/public/interfaces:generic_sensor_blink",
+  ]
+}
+
+make_names("event_modules_names") {
+  visibility = [ ":*" ]
+  in_files = [ "$root_gen_dir/blink/event_modules_names.json5" ]
+  output_dir = blink_modules_output_dir
+  deps = make_core_generated_deps + [ "//third_party/WebKit/Source/bindings/modules:modules_bindings_generated_event_interfaces" ]
+}
+
+make_names("event_target_modules_names") {
+  visibility = [ ":*" ]
+  in_files = [ "../../modules/event_target_modules_names.json5" ]
+  output_dir = blink_modules_output_dir
+}
+
+# ------------------------------------------------------------------------------
+
+compute_interfaces_info_individual("interfaces_info_individual_modules") {
+  sources = modules_definition_idl_files + modules_static_dependency_idl_files +
+            modules_generated_dependency_idl_files
+  interfaces_info_file =
+      "$bindings_modules_output_dir/InterfacesInfoOverallIndividual.pickle"
+  component_info_file =
+      "$bindings_modules_output_dir/ComponentInfoModules.pickle"
+  deps = [
+    ":modules_core_global_constructors_idls",
+    ":modules_global_constructors_idls",
+  ]
+}
+
+action("interfaces_info") {
+  script = "$bindings_scripts_dir/compute_interfaces_info_overall.py"
+
+  inputs = [
+    "$bindings_core_output_dir/InterfacesInfoCoreIndividual.pickle",
+    "$bindings_modules_output_dir/InterfacesInfoOverallIndividual.pickle",
+  ]
+  outputs = [
+    "$bindings_modules_output_dir/InterfacesInfoOverall.pickle",
+  ]
+
+  args = [
+    "--",
+    rebase_path("$bindings_core_output_dir/InterfacesInfoCoreIndividual.pickle",
+                root_build_dir),
+    rebase_path(
+        "$bindings_modules_output_dir/InterfacesInfoOverallIndividual.pickle",
+        root_build_dir),
+    rebase_path("$bindings_modules_output_dir/InterfacesInfoOverall.pickle",
+                root_build_dir),
+  ]
+
+  public_deps = [
+    ":interfaces_info_individual_modules",
+    "//third_party/WebKit/Source/bindings/core:interfaces_info_individual_core",
+  ]
+}
+
+compute_global_objects("modules_global_objects") {
+  sources = modules_idl_files
+  sources_generated = [ "$bindings_core_output_dir/GlobalObjectsCore.pickle" ]
+  output_file = "$bindings_modules_output_dir/GlobalObjectsModules.pickle"
+  deps = [
+    "//third_party/WebKit/Source/bindings/core:core_global_objects",
+  ]
+}
+
+generate_global_constructors("modules_core_global_constructors_idls") {
+  sources = core_idl_files + core_idl_with_modules_dependency_files
+  global_objects_file =
+      "$bindings_modules_output_dir/GlobalObjectsModules.pickle"
+  interfaces = modules_core_global_constructors_original_interfaces
+  basenames = modules_core_global_constructors_original_interface_basenames
+  component = "core"
+  output_dir = blink_modules_output_dir
+  deps = [
+    ":modules_global_objects",
+  ]
+}
+
+generate_global_constructors("modules_global_constructors_idls") {
+  sources = modules_idl_files
+  global_objects_file =
+      "$bindings_modules_output_dir/GlobalObjectsModules.pickle"
+  interfaces = modules_global_constructors_original_interfaces
+  basenames = modules_global_constructors_original_interface_basenames
+  component = "modules"
+  output_dir = blink_modules_output_dir
+  deps = [
+    ":modules_global_objects",
+  ]
+}
+
+# Compile the sources produced above. This will get linked into "modules".
+source_set("generated") {
+  visibility = [ "//third_party/WebKit/Source/modules:*" ]
+
+  sources = get_target_outputs(":event_modules") +
+            get_target_outputs(":event_modules_names") +
+            get_target_outputs(":event_target_modules_names")
+
+  configs += [
+    "//third_party/WebKit/Source:config",
+    "//third_party/WebKit/Source/modules:modules_implementation",
+    "//third_party/WebKit/Source:non_test_config",
+    "//third_party/WebKit/Source:inside_blink",
+  ]
+
+  deps = [
+    ":event_modules",
+    ":event_modules_names",
+    ":event_target_modules_names",
+    "//third_party/WebKit/Source/core",
+    "//third_party/WebKit/Source/platform/wtf",
+    "//v8",
+  ]
+}

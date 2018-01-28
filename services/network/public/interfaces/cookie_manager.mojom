@@ -1,0 +1,160 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module network.mojom;
+
+import "mojo/common/time.mojom";
+import "url/mojo/url.mojom";
+
+enum CookiePriority {
+  LOW,
+  MEDIUM,
+  HIGH
+};
+
+// See https://tools.ietf.org/html/draft-ietf-httpbis-cookie-same-site-00
+// and https://tools.ietf.org/html/draft-ietf-httpbis-rfc6265bis for
+// information about same site cookie restrictions.
+enum CookieSameSite {
+  NO_RESTRICTION,
+  LAX_MODE,
+  STRICT_MODE
+};
+
+enum CookieSameSiteFilter {
+  INCLUDE_STRICT_AND_LAX,
+  INCLUDE_LAX,
+  DO_NOT_INCLUDE
+};
+
+// Keep defaults here in sync with net/cookies/cookie_options.cc.
+struct CookieOptions {
+  bool exclude_httponly = true;
+  CookieSameSiteFilter cookie_same_site_filter = DO_NOT_INCLUDE;
+  bool update_access_time = true;
+  // TODO(rdsmith): Remove this element from the mojo structure?  It's only
+  // used in the underlying net:: structure in CanonicalCookie::Create().
+  mojo.common.mojom.Time? server_time;
+};
+
+// See net/cookies/canonical_cookie.{h,cc} for documentation.
+// Keep defaults here in sync with those files.
+struct CanonicalCookie {
+  string name;
+  string value;
+  string domain;
+  string path;
+  mojo.common.mojom.Time? creation;
+  mojo.common.mojom.Time? expiry;
+  mojo.common.mojom.Time? last_access;
+  bool secure = false;
+  bool httponly = false;
+  CookieSameSite site_restrictions = NO_RESTRICTION;
+  CookiePriority priority = MEDIUM;
+};
+
+// Keep values here in sync with net::CookieStore::ChangeCause.
+// (Not typemapped to avoid forcing clients to know about net::CookieStore.)
+enum CookieChangeCause {
+  // The cookie was inserted.
+  INSERTED,
+  // The cookie was changed directly by a consumer's action.
+  EXPLICIT,
+  // The cookie was deleted, but no more details are known.
+  UNKNOWN_DELETION,
+  // The cookie was automatically removed due to an insert operation that
+  // overwrote it.
+  OVERWRITE,
+  // The cookie was automatically removed as it expired.
+  EXPIRED,
+  // The cookie was automatically evicted during garbage collection.
+  EVICTED,
+  // The cookie was overwritten with an already-expired expiration date.
+  EXPIRED_OVERWRITE
+};
+
+// Session cookies are cookies that expire at the end of the browser session.
+// That is represented in canonical cookies by a null expiry time.
+enum CookieDeletionSessionControl {
+  IGNORE_CONTROL,
+  SESSION_COOKIES,
+  PERSISTENT_COOKIES,
+};
+
+// All existing filters are ANDed together.  I.e. if there is a value for
+// created_after_time and there's a value for including_domains, only cookies
+// in including_domains that have been created after the specified date would be
+// deleted.  A value for session_control of IGNORE_CONTROL is treated the same
+// as optional values not being present for the other filters.
+// If no filters are specified then all cookies will be deleted; this can be
+// thought of as there being a default "match everything" filter which is
+// ANDed in with all other filters.
+struct CookieDeletionFilter {
+  // Delete cookies created after a date.
+  mojo.common.mojom.Time? created_after_time;
+
+  // Delete cookies created before a date.
+  mojo.common.mojom.Time? created_before_time;
+
+  // Delete cookies whose domains are not listed.
+  array<string>? excluding_domains;
+
+  // Deletes cookies whose domains are listed.
+  array<string>? including_domains;
+
+  // Delete session/persistent cookies.
+  CookieDeletionSessionControl session_control = IGNORE_CONTROL;
+};
+
+interface CookieChangeNotification {
+  // TODO(rdsmith): Should this be made a batch interface?
+  OnCookieChanged(CanonicalCookie cookie, CookieChangeCause cause);
+};
+
+interface CookieManager {
+  // TODO(rdsmith): Worthwhile specifying a sort order for the getters?
+
+  // Get all the cookies known to the service.
+  GetAllCookies() => (array<CanonicalCookie> cookies);
+
+  // Get all cookies for the specified URL and cookie options.
+  GetCookieList(url.mojom.Url url, CookieOptions cookie_options) =>
+      (array<CanonicalCookie> cookies);
+
+  // Set a cookie.  |secure_source| indicates whether existing secure
+  // cookies can be overwritten (secure cookies may be created from a
+  // non-secure source).  |modify_http_only| indicates whether http_only
+  // cookies may be overwritten.
+  SetCanonicalCookie(
+      CanonicalCookie cookie, bool secure_source, bool modify_http_only) =>
+      (bool success);
+
+  // Delete a set of cookies matching the passed filter.
+  // To delete a single cookie, use SetCanonicalCookie with an expiry
+  // time in the past.
+  // Returns the number of cookies deleted.
+  DeleteCookies(CookieDeletionFilter filter) => (uint32 num_deleted);
+
+  // Send a CookieChangeNotification over which notification
+  // for cookie changes will be sent.  When the specified cookie
+  // associated with the domain/path specified in the URL changes, a
+  // notification will be posted to the passed pointer.
+  //
+  // Note that if the caller may be racing with other uses of the cookie store,
+  // it should follow the notification request with a probe of the relevant
+  // information about the tracked cookie, to make sure that a change to the
+  // cookie did not happen while the notification was being installed.
+  //
+  // TODO(rdsmith): Should this have a filter to register for a lot of
+  // notifications at once?  Maybe combine with the deletion filter?
+  RequestNotification(
+      url.mojom.Url url,
+      string name,
+      CookieChangeNotification notification_pointer);
+
+  // Clone the interface for use somewhere else.  After this call,
+  // requests to the same implementation may be posted to the other side
+  // of the pipe new_interface was configured on.
+  CloneInterface(CookieManager& new_interface);
+};

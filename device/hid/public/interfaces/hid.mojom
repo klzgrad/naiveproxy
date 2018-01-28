@@ -1,0 +1,76 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module device.mojom;
+
+enum HidBusType {
+  kHIDBusTypeUSB = 0,
+  kHIDBusTypeBluetooth = 1,
+};
+
+struct HidUsageAndPage {
+  uint16 usage;
+  uint16 usage_page;
+};
+
+struct HidCollectionInfo {
+  HidUsageAndPage usage;
+  array<int32> report_ids;
+};
+
+struct HidDeviceInfo {
+  string guid;
+  uint16 vendor_id;
+  uint16 product_id;
+  string product_name;
+  string serial_number;
+  HidBusType bus_type;
+  array<uint8> report_descriptor;
+  array<HidCollectionInfo> collections;
+  bool has_report_id;
+  uint64 max_input_report_size;
+  uint64 max_output_report_size;
+  uint64 max_feature_report_size;
+  string device_node;
+};
+
+interface HidManagerClient {
+  // Notifies the client that a device is added.
+  DeviceAdded(HidDeviceInfo device_info);
+
+  // Notifies the client that a device is being removed, called before
+  // removing the device from HidService.
+  DeviceRemoved(HidDeviceInfo device_info);
+};
+
+interface HidManager {
+  // Enumerates available devices and set as a client of HidManager.
+  // The implementation of HidManager guarantees that the returned callback
+  // will always be posted earlier than DeviceAdded() and DeviceRemoved().
+  GetDevicesAndSetClient(associated HidManagerClient client) =>
+                       (array<HidDeviceInfo> devices);
+
+  // Enumerates available devices only.
+  GetDevices() => (array<HidDeviceInfo> devices);
+
+  // Opens a connection to a device by given guid. The callback will be run
+  // with null on failure.
+  Connect(string device_guid) => (HidConnection? connection);
+};
+
+interface HidConnection {
+  // The report_id is returned as 0 if not supported by the device.
+  Read() => (bool success, uint8 report_id, array<uint8>? buffer);
+
+  // Pass the report_id as 0 if not supported by the device.
+  Write(uint8 report_id, array<uint8> buffer) => (bool success);
+
+  // The buffer will contain whatever report data was received from the device.
+  // This may include the report ID. The report ID is not stripped because a
+  // device may respond with other data in place of the report ID.
+  GetFeatureReport(uint8 report_id) => (bool success, array<uint8>? buffer);
+
+  // Pass the report_id as 0 if not supported by the device.
+  SendFeatureReport(uint8 report_id, array<uint8> buffer) => (bool success);
+};

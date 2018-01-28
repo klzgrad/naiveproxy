@@ -1,0 +1,79 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/features.gni")
+import("//chrome/process_version_rc_template.gni")
+import("//media/cdm/ppapi/cdm_paths.gni")
+import("//media/cdm/ppapi/ppapi_cdm_adapter.gni")
+import("//media/media_options.gni")
+
+shared_library("clearkeycdm") {
+  output_dir = "$root_out_dir/$clearkey_cdm_path"
+  sources = [
+    "cdm_file_io_test.cc",
+    "cdm_file_io_test.h",
+    "external_clear_key/cdm_video_decoder.cc",
+    "external_clear_key/cdm_video_decoder.h",
+    "external_clear_key/clear_key_cdm.cc",
+    "external_clear_key/clear_key_cdm.h",
+    "external_clear_key/clear_key_cdm_common.h",
+    "external_clear_key/clear_key_persistent_session_cdm.cc",
+    "external_clear_key/clear_key_persistent_session_cdm.h",
+  ]
+
+  # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+  configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+
+  defines = [ "CDM_IMPLEMENTATION" ]
+
+  deps = [
+    "//base",
+    "//build/config:exe_and_shlib_deps",
+    "//media",  # For media::AudioTimestampHelper
+    "//media:shared_memory_support",  # For media::AudioBus.
+    "//media/cdm:cdm_api",  # For content_decryption_module.h
+    "//url",
+  ]
+
+  if (media_use_ffmpeg) {
+    sources += [
+      "external_clear_key/ffmpeg_cdm_audio_decoder.cc",
+      "external_clear_key/ffmpeg_cdm_audio_decoder.h",
+      "external_clear_key/ffmpeg_cdm_video_decoder.cc",
+      "external_clear_key/ffmpeg_cdm_video_decoder.h",
+    ]
+    defines += [ "CLEAR_KEY_CDM_USE_FFMPEG_DECODER" ]
+    deps += [ "//third_party/ffmpeg" ]
+  }
+
+  if (is_mac) {
+    ldflags = [ "-Wl,-install_name,@loader_path/libclearkeycdm.dylib" ]
+  }
+}
+
+process_version_rc_template("clearkeycdmadapter_resources") {
+  visibility = [ ":*" ]
+  sources = [
+    "clearkeycdmadapter.ver",
+    "external_clear_key/BRANDING",
+  ]
+  output = "$target_gen_dir/clearkeycdmadapter_version.rc"
+}
+
+ppapi_cdm_adapter("clearkeycdmadapter") {
+  output_dir = "$root_out_dir/$clearkey_cdm_path"
+
+  # Check whether the plugin's origin URL is valid.
+  defines = [
+    "CHECK_DOCUMENT_URL",
+    "SUPPORT_EXPERIMENTAL_CDM_INTERFACE",
+  ]
+  deps = [
+    ":clearkeycdm",
+    ":clearkeycdmadapter_resources",
+    "//base",  # Required for the allocator implementation.
+    "//media:shared_memory_support",
+    "//ui/gfx/geometry",
+  ]
+}

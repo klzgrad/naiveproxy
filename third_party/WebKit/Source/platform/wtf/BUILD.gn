@@ -1,0 +1,393 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+assert(!is_ios)
+
+import("//testing/test.gni")
+import("//third_party/WebKit/Source/config.gni")
+
+visibility = [
+  ":*",
+  "//mojo/public/cpp/bindings/*",
+  "//third_party/WebKit/*",
+]
+
+config("wtf_config") {
+  if (is_win) {
+    defines = [
+      "__STD_C",
+      "_CRT_SECURE_NO_DEPRECATE",
+      "_SCL_SECURE_NO_DEPRECATE",
+    ]
+    include_dirs = [ "os-win32" ]
+
+    cflags = [
+      # Don't complain about calling specific versions of templatized
+      # functions (e.g. in RefPtrHashMap.h).
+      "/wd4344",
+
+      # dtoa, icu, etc. like doing assignment within conditional.
+      "/wd4706",
+    ]
+
+    if (is_component_build) {
+      # Chromium windows multi-dll build enables C++ exceptions and this causes
+      # wtf to generate 4291 warning due to operator new/delete
+      # implementations. Disable the warning for chromium windows multi-dll
+      # build.
+      cflags += [ "/wd4291" ]
+    }
+  }
+}
+
+component("wtf") {
+  sources = [
+    "ASCIICType.cpp",
+    "ASCIICType.h",
+    "AddressSanitizer.h",
+    "Alignment.h",
+    "Allocator.h",
+    "Assertions.cpp",
+    "Assertions.h",
+    "Atomics.h",
+    "AutoReset.h",
+    "BitVector.cpp",
+    "BitVector.h",
+    "BitwiseOperations.h",
+    "BloomFilter.h",
+    "ByteOrder.h",
+    "ByteSwap.h",
+    "CPU.h",
+    "CheckedNumeric.h",
+    "Compiler.h",
+    "ConditionalDestructor.h",
+    "ContainerAnnotations.h",
+    "CryptographicallyRandomNumber.cpp",
+    "CryptographicallyRandomNumber.h",
+    "CurrentTime.cpp",
+    "CurrentTime.h",
+    "DataLog.cpp",
+    "DataLog.h",
+    "DateMath.cpp",
+    "DateMath.h",
+    "Deque.h",
+    "DoublyLinkedList.h",
+    "DynamicAnnotations.cpp",
+    "DynamicAnnotations.h",
+    "FilePrintStream.cpp",
+    "FilePrintStream.h",
+    "Forward.h",
+    "Functional.h",
+    "GetPtr.h",
+    "HashCountedSet.h",
+    "HashFunctions.h",
+    "HashIterators.h",
+    "HashMap.h",
+    "HashSet.h",
+    "HashTable.cpp",
+    "HashTable.h",
+    "HashTableDeletedValueType.h",
+    "HashTraits.h",
+    "HexNumber.h",
+    "LeakAnnotations.h",
+    "LinkedHashSet.h",
+    "ListHashSet.h",
+    "Locker.h",
+    "MathExtras.h",
+    "NonCopyingSort.h",
+    "Noncopyable.h",
+    "NotFound.h",
+    "Optional.h",
+    "PrintStream.cpp",
+    "PrintStream.h",
+    "ProcessMetrics.h",
+    "PtrUtil.h",
+    "RefCounted.h",
+    "RefPtr.h",
+    "RefVector.h",
+    "RetainPtr.h",
+    "SaturatedArithmetic.h",
+    "SaturatedArithmeticARM.h",
+    "ScopedLogger.cpp",
+    "ScopedLogger.h",
+    "SizeAssertions.h",
+    "SizeLimits.cpp",
+    "StackUtil.cpp",
+    "StackUtil.h",
+    "StaticConstructors.h",
+    "StdLibExtras.h",
+    "StringExtras.h",
+    "StringHasher.h",
+    "TerminatedArray.h",
+    "TerminatedArrayBuilder.h",
+    "ThreadRestrictionVerifier.h",
+    "ThreadSafeRefCounted.h",
+    "ThreadSpecific.h",
+    "ThreadSpecificWin.cpp",
+    "Threading.h",
+    "ThreadingPrimitives.h",
+    "ThreadingPthreads.cpp",
+    "ThreadingWin.cpp",
+    "Time.h",
+    "TreeNode.h",
+    "TypeTraits.h",
+    "Vector.h",
+    "VectorTraits.h",
+    "WTF.cpp",
+    "WTF.h",
+    "WTFExport.h",
+    "WTFThreadData.cpp",
+    "WTFThreadData.h",
+    "WeakPtr.h",
+    "allocator/PartitionAllocator.cpp",
+    "allocator/PartitionAllocator.h",
+    "allocator/Partitions.cpp",
+    "allocator/Partitions.h",
+    "debug/Alias.h",
+    "debug/CrashLogging.h",
+    "debug/DumpWithoutCrashing.h",
+    "debug/StackTrace.h",
+    "dtoa.cpp",
+    "dtoa.h",
+    "dtoa/bignum-dtoa.cc",
+    "dtoa/bignum-dtoa.h",
+    "dtoa/bignum.cc",
+    "dtoa/bignum.h",
+    "dtoa/cached-powers.cc",
+    "dtoa/cached-powers.h",
+    "dtoa/diy-fp.cc",
+    "dtoa/diy-fp.h",
+    "dtoa/double-conversion.cc",
+    "dtoa/double-conversion.h",
+    "dtoa/double.h",
+    "dtoa/fast-dtoa.cc",
+    "dtoa/fast-dtoa.h",
+    "dtoa/fixed-dtoa.cc",
+    "dtoa/fixed-dtoa.h",
+    "dtoa/strtod.cc",
+    "dtoa/strtod.h",
+    "dtoa/utils.h",
+    "experimental/ContainerTypeOperations.h",
+    "text/ASCIIFastPath.h",
+    "text/AtomicString.cpp",
+    "text/AtomicString.h",
+    "text/AtomicStringCF.cpp",
+    "text/AtomicStringHash.h",
+    "text/AtomicStringTable.cpp",
+    "text/AtomicStringTable.h",
+    "text/Base64.cpp",
+    "text/Base64.h",
+    "text/CString.cpp",
+    "text/CString.h",
+    "text/CharacterNames.h",
+    "text/Collator.h",
+    "text/IntegerToStringConversion.h",
+    "text/NumberParsingOptions.h",
+    "text/ParsingUtilities.h",
+    "text/StringBuffer.h",
+    "text/StringBuilder.cpp",
+    "text/StringBuilder.h",
+    "text/StringConcatenate.cpp",
+    "text/StringConcatenate.h",
+    "text/StringHash.h",
+    "text/StringImpl.cpp",
+    "text/StringImpl.h",
+    "text/StringImplCF.cpp",
+    "text/StringImplMac.mm",
+    "text/StringMac.mm",
+    "text/StringOperators.h",
+    "text/StringStatics.cpp",
+    "text/StringStatics.h",
+    "text/StringStatics.h",
+    "text/StringToNumber.cpp",
+    "text/StringToNumber.h",
+    "text/StringUTF8Adaptor.h",
+    "text/StringView.cpp",
+    "text/StringView.h",
+    "text/TextCodec.cpp",
+    "text/TextCodec.h",
+    "text/TextCodecASCIIFastPath.h",
+    "text/TextCodecICU.cpp",
+    "text/TextCodecICU.h",
+    "text/TextCodecLatin1.cpp",
+    "text/TextCodecLatin1.h",
+    "text/TextCodecReplacement.cpp",
+    "text/TextCodecReplacement.h",
+    "text/TextCodecUTF16.cpp",
+    "text/TextCodecUTF16.h",
+    "text/TextCodecUTF8.cpp",
+    "text/TextCodecUTF8.h",
+    "text/TextCodecUserDefined.cpp",
+    "text/TextCodecUserDefined.h",
+    "text/TextEncoding.cpp",
+    "text/TextEncoding.h",
+    "text/TextEncodingRegistry.cpp",
+    "text/TextEncodingRegistry.h",
+    "text/TextPosition.cpp",
+    "text/TextPosition.h",
+    "text/UTF8.cpp",
+    "text/UTF8.h",
+    "text/Unicode.h",
+    "text/WTFString.cpp",
+    "text/WTFString.h",
+    "text/icu/CollatorICU.cpp",
+    "text/icu/UnicodeIcu.h",
+    "typed_arrays/ArrayBuffer.cpp",
+    "typed_arrays/ArrayBuffer.h",
+    "typed_arrays/ArrayBufferBuilder.cpp",
+    "typed_arrays/ArrayBufferBuilder.h",
+    "typed_arrays/ArrayBufferContents.cpp",
+    "typed_arrays/ArrayBufferContents.h",
+    "typed_arrays/ArrayBufferView.cpp",
+    "typed_arrays/ArrayBufferView.h",
+    "typed_arrays/ArrayPiece.cpp",
+    "typed_arrays/ArrayPiece.h",
+    "typed_arrays/Float32Array.h",
+    "typed_arrays/Float64Array.h",
+    "typed_arrays/Int16Array.h",
+    "typed_arrays/Int32Array.h",
+    "typed_arrays/Int8Array.h",
+    "typed_arrays/IntegralTypedArrayBase.h",
+    "typed_arrays/TypedArrayBase.h",
+    "typed_arrays/Uint16Array.h",
+    "typed_arrays/Uint32Array.h",
+    "typed_arrays/Uint8Array.h",
+    "typed_arrays/Uint8ClampedArray.h",
+  ]
+
+  configs += [
+    "//third_party/WebKit/Source:config",
+    "//third_party/WebKit/Source:non_test_config",
+    "//third_party/WebKit/Source:blink_pch",
+  ]
+
+  defines = [ "WTF_IMPLEMENTATION=1" ]
+
+  public_configs = [
+    ":wtf_config",
+
+    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+    "//build/config/compiler:no_size_t_to_int_warning",
+    "//third_party/WebKit/Source:features",
+  ]
+
+  public_deps = [
+    "//base",
+    "//sandbox",
+    "//third_party/icu",
+  ]
+
+  # Rules changing the |sources| list are temporarily commented out, until
+  # those files are actually moved to here.
+
+  if (is_win) {
+    sources -= [ "ThreadingPthreads.cpp" ]
+
+    cflags = [ "/wd4068" ]  # Unknown pragma.
+
+    # Inject Visual Studio debug visualizers for our types into all targets
+    # that reference this.
+    all_dependent_configs = [ "//tools/win/DebugVisualizers:webkit" ]
+  } else {
+    # Non-Windows.
+    if (!snake_case_source_files) {
+      sources -= [
+        "ThreadSpecificWin.cpp",
+        "ThreadingWin.cpp",
+      ]
+    }
+  }
+
+  if (is_android) {
+    libs = [ "log" ]
+  }
+  if (is_linux) {
+    libs = [ "dl" ]
+  }
+
+  if (is_mac) {
+    libs = [
+      "CoreFoundation.framework",
+      "Foundation.framework",
+    ]
+  } else {
+    sources -= [
+      "text/AtomicStringCF.cpp",
+      "text/StringImplCF.cpp",
+    ]
+  }
+
+  if (remove_webcore_debug_symbols) {
+    configs -= [ "//build/config/compiler:default_symbols" ]
+    configs += remove_webcore_symbols_config
+  }
+}
+
+test("wtf_unittests") {
+  visibility = []  # Allow re-assignment of list.
+  visibility = [ "*" ]
+
+  sources = [
+    "ASCIICTypeTest.cpp",
+    "AssertionsTest.cpp",
+    "DequeTest.cpp",
+    "FunctionalTest.cpp",
+    "HashMapTest.cpp",
+    "HashSetTest.cpp",
+    "ListHashSetTest.cpp",
+    "MathExtrasTest.cpp",
+    "OptionalTest.cpp",
+    "PtrUtilTest.cpp",
+    "RefPtrTest.cpp",
+    "SaturatedArithmeticTest.cpp",
+    "ScopedLoggerTest.cpp",
+    "StringExtrasTest.cpp",
+    "StringHasherTest.cpp",
+    "TimeTest.cpp",
+    "TreeNodeTest.cpp",
+    "TypeTraitsTest.cpp",
+    "VectorTest.cpp",
+    "dtoa_test.cpp",
+    "experimental/ContainerTypeOperationsTest.cpp",
+    "testing/RunAllTests.cpp",
+    "text/AtomicStringTest.cpp",
+    "text/CStringTest.cpp",
+    "text/IntegerToStringConversionTest.cpp",
+    "text/StringBufferTest.cpp",
+    "text/StringBuilderTest.cpp",
+    "text/StringImplTest.cpp",
+    "text/StringOperatorsTest.cpp",
+    "text/StringToNumberTest.cpp",
+    "text/StringViewTest.cpp",
+    "text/TextCodecICUTest.cpp",
+    "text/TextCodecLatin1Test.cpp",
+    "text/TextCodecReplacementTest.cpp",
+    "text/TextCodecTest.cpp",
+    "text/TextCodecUTF8Test.cpp",
+    "text/TextCodecUserDefinedTest.cpp",
+    "text/TextEncodingTest.cpp",
+    "text/WTFStringTest.cpp",
+    "typed_arrays/ArrayBufferBuilderTest.cpp",
+  ]
+
+  # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+  configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+
+  if (is_win) {
+    cflags = [ "/wd4068" ]  # Unknown pragma.
+  }
+
+  configs += [
+    "//third_party/WebKit/Source:config",
+    "//third_party/WebKit/Source:blink_pch",
+  ]
+
+  deps = [
+    ":wtf",
+    "//base",
+    "//base/test:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+}

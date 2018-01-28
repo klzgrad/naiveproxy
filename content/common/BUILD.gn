@@ -1,0 +1,689 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("features.gni")
+import("//build/buildflag_header.gni")
+import("//build/config/features.gni")
+import("//build/config/ui.gni")
+import("//media/media_options.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
+import("//ppapi/features/features.gni")
+import("//sandbox/features.gni")
+import("//tools/ipc_fuzzer/ipc_fuzzer.gni")
+if (is_mac) {
+  import("//build/config/mac/mac_sdk.gni")
+}
+
+# For feature flags internal to content. See content/public/common:features
+# for feature flags that clients of contents need to know about.
+buildflag_header("features") {
+  header = "features.h"
+
+  flags = [
+    "USE_EXTERNAL_POPUP_MENU=$use_external_popup_menu",
+    "ALLOW_CRITICAL_MEMORY_PRESSURE_HANDLING_IN_FOREGROUND=$allow_critical_memory_pressure_handling_in_foreground",
+  ]
+}
+
+source_set("common") {
+  # Targets external to content should always link to the public API.
+  # In addition, targets outside of the content component (shell and tests)
+  # must not link to this because it will duplicate the code in the component
+  # build.
+  visibility = [ "//content/*" ]
+
+  sources = [
+    "accessibility_messages.h",
+    "all_messages.h",
+    "android/browser_side_navigation_policy_android.cc",
+    "android/gin_java_bridge_errors.cc",
+    "android/gin_java_bridge_errors.h",
+    "android/gin_java_bridge_value.cc",
+    "android/gin_java_bridge_value.h",
+    "android/hash_set.cc",
+    "android/hash_set.h",
+    "android/media_metadata_android.cc",
+    "android/media_metadata_android.h",
+    "android/resource_request_body_android.cc",
+    "android/resource_request_body_android.h",
+    "android/sync_compositor_messages.cc",
+    "android/sync_compositor_messages.h",
+    "android/sync_compositor_statics.cc",
+    "android/sync_compositor_statics.h",
+    "appcache_interfaces.cc",
+    "appcache_interfaces.h",
+    "appcache_messages.h",
+    "associated_interface_provider_impl.cc",
+    "associated_interface_provider_impl.h",
+    "associated_interface_registry_impl.cc",
+    "associated_interface_registry_impl.h",
+    "ax_content_node_data.cc",
+    "ax_content_node_data.h",
+    "background_fetch/background_fetch_struct_traits.cc",
+    "background_fetch/background_fetch_struct_traits.h",
+    "background_fetch/background_fetch_types.cc",
+    "background_fetch/background_fetch_types.h",
+    "bluetooth/web_bluetooth_device_id.cc",
+    "bluetooth/web_bluetooth_device_id.h",
+    "browser_plugin/browser_plugin_constants.cc",
+    "browser_plugin/browser_plugin_constants.h",
+    "browser_plugin/browser_plugin_messages.h",
+    "cache_storage/cache_storage_messages.h",
+    "cache_storage/cache_storage_types.cc",
+    "cache_storage/cache_storage_types.h",
+    "child_process_host_impl.cc",
+    "child_process_host_impl.h",
+    "child_process_messages.h",
+    "clipboard_format.h",
+    "clipboard_messages.h",
+    "common_sandbox_support_linux.cc",
+    "content_constants_internal.cc",
+    "content_constants_internal.h",
+    "content_export.h",
+    "content_ipc_logging.cc",
+    "content_message_generator.cc",
+    "content_message_generator.h",
+    "content_param_traits.cc",
+    "content_param_traits.h",
+    "content_param_traits_macros.h",
+    "content_paths.cc",
+    "content_security_policy/content_security_policy.cc",
+    "content_security_policy/content_security_policy.h",
+    "content_security_policy/csp_context.cc",
+    "content_security_policy/csp_context.h",
+    "content_security_policy/csp_directive.cc",
+    "content_security_policy/csp_directive.h",
+    "content_security_policy/csp_disposition_enum.h",
+    "content_security_policy/csp_source.cc",
+    "content_security_policy/csp_source.h",
+    "content_security_policy/csp_source_list.cc",
+    "content_security_policy/csp_source_list.h",
+    "content_security_policy_header.cc",
+    "content_security_policy_header.h",
+    "content_switches_internal.cc",
+    "content_switches_internal.h",
+    "cross_site_document_classifier.cc",
+    "cross_site_document_classifier.h",
+    "cursors/webcursor.cc",
+    "cursors/webcursor.h",
+    "cursors/webcursor_android.cc",
+    "cursors/webcursor_aura.cc",
+    "cursors/webcursor_aurawin.cc",
+    "cursors/webcursor_aurax11.cc",
+    "cursors/webcursor_mac.mm",
+    "cursors/webcursor_ozone.cc",
+    "date_time_suggestion.h",
+    "devtools/devtools_network_conditions.cc",
+    "devtools/devtools_network_conditions.h",
+    "devtools/devtools_network_controller.cc",
+    "devtools/devtools_network_controller.h",
+    "devtools/devtools_network_interceptor.cc",
+    "devtools/devtools_network_interceptor.h",
+    "devtools/devtools_network_transaction.cc",
+    "devtools/devtools_network_transaction.h",
+    "devtools/devtools_network_transaction_factory.cc",
+    "devtools/devtools_network_transaction_factory.h",
+    "devtools/devtools_network_upload_data_stream.cc",
+    "devtools/devtools_network_upload_data_stream.h",
+    "devtools_messages.h",
+    "dom_storage/dom_storage_map.cc",
+    "dom_storage/dom_storage_map.h",
+    "dom_storage/dom_storage_messages.h",
+    "dom_storage/dom_storage_types.h",
+    "download/mhtml_save_status.cc",
+    "download/mhtml_save_status.h",
+    "drag_event_source_info.h",
+    "drag_messages.h",
+    "drag_traits.h",
+    "dwrite_font_proxy_messages.h",
+    "edit_command.h",
+    "feature_policy/feature_policy.cc",
+    "feature_policy/feature_policy.h",
+    "fileapi/file_system_messages.h",
+    "fileapi/webblob_messages.h",
+    "font_cache_dispatcher_win.cc",
+    "font_cache_dispatcher_win.h",
+    "font_config_ipc_linux.cc",
+    "font_config_ipc_linux.h",
+    "font_list.cc",
+    "font_list.h",
+    "font_list_android.cc",
+    "font_list_fontconfig.cc",
+    "font_list_mac.mm",
+    "font_list_win.cc",
+    "frame_message_enums.h",
+    "frame_messages.h",
+    "frame_messages_forward.h",
+    "frame_owner_properties.cc",
+    "frame_owner_properties.h",
+    "frame_replication_state.cc",
+    "frame_replication_state.h",
+    "gin_java_bridge_messages.h",
+    "in_process_child_thread_params.cc",
+    "in_process_child_thread_params.h",
+    "indexed_db/indexed_db_constants.h",
+    "indexed_db/indexed_db_key.cc",
+    "indexed_db/indexed_db_key.h",
+    "indexed_db/indexed_db_key_path.cc",
+    "indexed_db/indexed_db_key_path.h",
+    "indexed_db/indexed_db_key_range.cc",
+    "indexed_db/indexed_db_key_range.h",
+    "indexed_db/indexed_db_metadata.cc",
+    "indexed_db/indexed_db_metadata.h",
+    "indexed_db/indexed_db_struct_traits.cc",
+    "indexed_db/indexed_db_struct_traits.h",
+    "input/event_with_latency_info.h",
+    "input/gesture_event_stream_validator.cc",
+    "input/gesture_event_stream_validator.h",
+    "input/ime_text_span_conversions.cc",
+    "input/ime_text_span_conversions.h",
+    "input/input_event.cc",
+    "input/input_event.h",
+    "input/input_event_ack.cc",
+    "input/input_event_ack.h",
+    "input/input_event_ack_source.h",
+    "input/input_event_ack_state.h",
+    "input/input_event_dispatch_type.h",
+    "input/input_event_stream_validator.cc",
+    "input/input_event_stream_validator.h",
+    "input/input_event_struct_traits.cc",
+    "input/input_event_struct_traits.h",
+    "input/input_param_traits.cc",
+    "input/input_param_traits.h",
+    "input/synthetic_gesture_params.cc",
+    "input/synthetic_gesture_params.h",
+    "input/synthetic_pinch_gesture_params.cc",
+    "input/synthetic_pinch_gesture_params.h",
+    "input/synthetic_pointer_action_list_params.cc",
+    "input/synthetic_pointer_action_list_params.h",
+    "input/synthetic_pointer_action_params.cc",
+    "input/synthetic_pointer_action_params.h",
+    "input/synthetic_smooth_drag_gesture_params.cc",
+    "input/synthetic_smooth_drag_gesture_params.h",
+    "input/synthetic_smooth_scroll_gesture_params.cc",
+    "input/synthetic_smooth_scroll_gesture_params.h",
+    "input/synthetic_tap_gesture_params.cc",
+    "input/synthetic_tap_gesture_params.h",
+    "input/synthetic_web_input_event_builders.cc",
+    "input/synthetic_web_input_event_builders.h",
+    "input/touch_action_optional_struct_traits.cc",
+    "input/touch_action_optional_struct_traits.h",
+    "input/touch_event_stream_validator.cc",
+    "input/touch_event_stream_validator.h",
+    "input/web_touch_event_traits.cc",
+    "input/web_touch_event_traits.h",
+    "input_messages.h",
+    "inter_process_time_ticks_converter.cc",
+    "inter_process_time_ticks_converter.h",
+    "layer_tree_settings_factory.cc",
+    "layer_tree_settings_factory.h",
+    "loader_util.cc",
+    "loader_util.h",
+    "mac/attributed_string_coder.h",
+    "mac/attributed_string_coder.mm",
+    "mac/font_descriptor.h",
+    "mac/font_descriptor.mm",
+    "mac/font_loader.h",
+    "mac/font_loader.mm",
+    "media/aec_dump_messages.h",
+    "media/audio_messages.h",
+    "media/cdm_info.cc",
+    "media/media_devices.cc",
+    "media/media_devices.h",
+    "media/media_devices_param_traits.cc",
+    "media/media_devices_param_traits.h",
+    "media/media_player_delegate_messages.h",
+    "media/media_player_messages_android.h",
+    "media/media_stream_controls.cc",
+    "media/media_stream_controls.h",
+    "media/media_stream_param_traits.cc",
+    "media/media_stream_param_traits.h",
+    "media/media_stream_track_metrics_host_messages.h",
+    "media/midi_messages.h",
+    "media/peer_connection_tracker_messages.h",
+    "media/surface_view_manager_messages_android.h",
+    "media/video_capture.h",
+    "navigation_gesture.h",
+    "navigation_params.cc",
+    "navigation_params.h",
+    "net/url_fetcher.cc",
+    "net/url_request_service_worker_data.cc",
+    "net/url_request_service_worker_data.h",
+    "net/url_request_user_data.cc",
+    "net/url_request_user_data.h",
+    "origin_trials/trial_policy_impl.cc",
+    "origin_trials/trial_policy_impl.h",
+    "origin_util.cc",
+    "p2p_socket_type.h",
+    "page_message_enums.h",
+    "page_messages.h",
+    "page_state_serialization.cc",
+    "page_state_serialization.h",
+    "page_zoom.cc",
+    "pepper_file_util.cc",
+    "pepper_file_util.h",
+    "pepper_plugin_list.cc",
+    "pepper_plugin_list.h",
+    "pepper_renderer_instance_data.cc",
+    "pepper_renderer_instance_data.h",
+    "platform_notification_messages.h",
+    "plugin_list.cc",
+    "plugin_list.h",
+    "possibly_associated_interface_ptr.h",
+    "possibly_associated_interface_ptr_info.h",
+    "presentation/presentation_struct_traits.cc",
+    "presentation/presentation_struct_traits.h",
+    "process_type.cc",
+    "quarantine/quarantine.cc",
+    "quarantine/quarantine_constants_linux.h",
+    "quarantine/quarantine_linux.cc",
+    "quarantine/quarantine_mac.mm",
+    "quarantine/quarantine_win.cc",
+    "quota_messages.h",
+    "render_process_messages.h",
+    "render_widget_surface_properties.cc",
+    "render_widget_surface_properties.h",
+    "resize_params.cc",
+    "resize_params.h",
+    "resource_messages.cc",
+    "resource_messages.h",
+    "sandbox_init_mac.cc",
+    "sandbox_init_mac.h",
+    "sandbox_init_win.cc",
+    "sandbox_linux/bpf_cdm_policy_linux.cc",
+    "sandbox_linux/bpf_cdm_policy_linux.h",
+    "sandbox_linux/bpf_cros_amd_gpu_policy_linux.cc",
+    "sandbox_linux/bpf_cros_amd_gpu_policy_linux.h",
+    "sandbox_linux/bpf_cros_arm_gpu_policy_linux.cc",
+    "sandbox_linux/bpf_cros_arm_gpu_policy_linux.h",
+    "sandbox_linux/bpf_gpu_policy_linux.cc",
+    "sandbox_linux/bpf_gpu_policy_linux.h",
+    "sandbox_linux/bpf_pdf_compositor_policy_linux.cc",
+    "sandbox_linux/bpf_pdf_compositor_policy_linux.h",
+    "sandbox_linux/bpf_ppapi_policy_linux.cc",
+    "sandbox_linux/bpf_ppapi_policy_linux.h",
+    "sandbox_linux/bpf_renderer_policy_linux.cc",
+    "sandbox_linux/bpf_renderer_policy_linux.h",
+    "sandbox_linux/bpf_utility_policy_linux.cc",
+    "sandbox_linux/bpf_utility_policy_linux.h",
+    "sandbox_linux/sandbox_bpf_base_policy_linux.cc",
+    "sandbox_linux/sandbox_bpf_base_policy_linux.h",
+    "sandbox_linux/sandbox_debug_handling_linux.cc",
+    "sandbox_linux/sandbox_debug_handling_linux.h",
+    "sandbox_linux/sandbox_init_linux.cc",
+    "sandbox_linux/sandbox_linux.cc",
+    "sandbox_linux/sandbox_linux.h",
+    "sandbox_linux/sandbox_seccomp_bpf_linux.cc",
+    "sandbox_linux/sandbox_seccomp_bpf_linux.h",
+    "sandbox_win.cc",
+    "sandbox_win.h",
+    "savable_subframe.h",
+    "send_zygote_child_ping_linux.cc",
+    "service_manager/service_manager_connection_impl.cc",
+    "service_manager/service_manager_connection_impl.h",
+    "service_worker/embedded_worker_messages.h",
+    "service_worker/embedded_worker_settings.h",
+    "service_worker/embedded_worker_start_params.cc",
+    "service_worker/embedded_worker_start_params.h",
+    "service_worker/service_worker_client_info.cc",
+    "service_worker/service_worker_client_info.h",
+    "service_worker/service_worker_loader_helpers.cc",
+    "service_worker/service_worker_loader_helpers.h",
+    "service_worker/service_worker_messages.h",
+    "service_worker/service_worker_provider_host_info.cc",
+    "service_worker/service_worker_provider_host_info.h",
+    "service_worker/service_worker_status_code.cc",
+    "service_worker/service_worker_status_code.h",
+    "service_worker/service_worker_types.cc",
+    "service_worker/service_worker_types.h",
+    "service_worker/service_worker_utils.cc",
+    "service_worker/service_worker_utils.h",
+    "site_isolation_policy.cc",
+    "site_isolation_policy.h",
+    "speech_recognition_messages.h",
+    "swapped_out_messages.cc",
+    "swapped_out_messages.h",
+    "task_scheduler.cc",
+    "task_scheduler.h",
+    "text_input_client_messages.h",
+    "text_input_state.cc",
+    "text_input_state.h",
+    "throttling_url_loader.cc",
+    "throttling_url_loader.h",
+    "unique_name_helper.cc",
+    "unique_name_helper.h",
+    "url_request_struct_traits.cc",
+    "url_request_struct_traits.h",
+    "url_schemes.cc",
+    "url_schemes.h",
+    "user_agent.cc",
+    "view_message_enums.h",
+    "view_messages.h",
+    "zygote_commands_linux.h",
+  ]
+
+  configs += [
+    "//content:content_implementation",
+    "//build/config:precompiled_headers",
+    "//build/config/compiler:no_size_t_to_int_warning",
+  ]
+
+  public_deps = [
+    ":mojo_bindings",
+    "//cc",
+    "//gpu/command_buffer/common",
+    "//ipc",
+    "//services/service_manager/sandbox",
+    "//third_party/WebKit/common:blink_common",
+    "//third_party/WebKit/public:blink_headers",
+  ]
+  deps = [
+    ":features",
+    "//base",
+    "//base/third_party/dynamic_annotations",
+    "//build/util:webkit_version",
+    "//cc/ipc",
+    "//components/discardable_memory/common",
+    "//components/tracing",
+    "//components/tracing:startup_tracing",
+    "//components/viz/service",
+    "//content:resources",
+    "//content/app/resources",
+    "//content/public/common:interfaces",
+    "//content/public/common:service_names",
+    "//device/base/synchronization",
+    "//device/bluetooth",
+    "//gpu",
+    "//gpu/command_buffer/client:gles2_c_lib",
+    "//gpu/command_buffer/client:gles2_cmd_helper",
+    "//gpu/command_buffer/client:gles2_implementation",
+    "//gpu/command_buffer/client:gles2_interface",
+    "//gpu/command_buffer/common:gles2_utils",
+    "//gpu/command_buffer/service",
+    "//gpu/ipc/client",
+    "//gpu/ipc/common",
+    "//gpu/skia_bindings",
+    "//ipc",
+    "//media",
+    "//media:shared_memory_support",
+    "//media/base/ipc",
+    "//media/capture",
+    "//media/capture/ipc",
+    "//media/gpu:features",
+    "//media/gpu/ipc/client",
+    "//media/gpu/ipc/common",
+    "//media/midi",
+    "//media/midi:mojo",
+    "//mojo/common:common_base",
+    "//mojo/edk/system",
+    "//net",
+    "//ppapi/features",
+    "//sandbox",
+    "//sandbox:sandbox_features",
+    "//services/network/public/interfaces:interfaces",
+    "//services/resource_coordinator/public/cpp:resource_coordinator_cpp",
+    "//services/service_manager",
+    "//services/service_manager/embedder",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/interfaces",
+    "//services/service_manager/runner/common",
+    "//services/ui/public/interfaces",
+    "//services/video_capture/public/interfaces",
+    "//services/viz/public/interfaces",
+    "//skia",
+    "//storage/common",
+    "//third_party/angle:angle_gpu_info_util",
+    "//third_party/boringssl",
+    "//third_party/icu",
+    "//ui/accessibility",
+    "//ui/base",
+    "//ui/base/ime",
+    "//ui/display",
+    "//ui/events/blink",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+    "//ui/gfx/ipc",
+    "//ui/gfx/ipc/color",
+    "//ui/gfx/ipc/geometry",
+    "//ui/gfx/ipc/skia",
+    "//ui/gl",
+    "//ui/latency/ipc",
+    "//ui/shell_dialogs",
+    "//url",
+    "//url/ipc:url_ipc",
+  ]
+
+  defines = []
+  include_dirs = []
+  libs = []
+  ldflags = []
+
+  allow_circular_includes_from = [
+    ":mojo_bindings",
+    "//content/public/common:interfaces",
+  ]
+
+  if (is_android && use_seccomp_bpf) {
+    set_sources_assignment_filter([])
+    sources += [
+      "sandbox_linux/sandbox_bpf_base_policy_linux.cc",
+      "sandbox_linux/sandbox_bpf_base_policy_linux.h",
+    ]
+    set_sources_assignment_filter(sources_assignment_filter)
+  }
+
+  if (is_mac) {
+    deps += [ "//sandbox/mac:seatbelt" ]
+  }
+
+  if (is_android) {
+    deps += [
+      "//content/public/android:common_aidl",
+      "//content/public/android:jni",
+    ]
+
+    libs += [ "android" ]
+  }
+
+  if (is_debug && !is_component_build && enable_plugins) {
+    # Content depends on the PPAPI message logging stuff; if this isn't here,
+    # some unit test binaries won't compile. This only worked in release mode
+    # because logging is disabled there.
+    deps += [ "//ppapi/proxy:ipc_sources" ]
+  }
+
+  if (enable_webrtc) {
+    sources += [ "p2p_messages.h" ]
+    deps += [
+      "//third_party/webrtc/rtc_base:rtc_base",
+      "//third_party/webrtc_overrides",
+    ]
+  }
+
+  if (use_ozone) {
+    deps += [ "//ui/ozone" ]
+  } else {
+    sources -= [ "cursors/webcursor_ozone.cc" ]
+  }
+
+  if (!use_aura) {
+    sources -= [ "cursors/webcursor_aura.cc" ]
+  }
+
+  if (!use_aura || !use_x11) {
+    sources -= [ "cursors/webcursor_aurax11.cc" ]
+  }
+
+  if (is_linux) {
+    deps += [ "//third_party/fontconfig" ]
+  }
+
+  if (is_mac || is_win || is_android || is_fuchsia) {
+    sources -= [ "font_list_fontconfig.cc" ]
+  }
+
+  if (enable_plugins) {
+    deps += [
+      "//ppapi/proxy:ipc",
+      "//ppapi/shared_impl",
+    ]
+  } else {
+    sources -= [
+      "pepper_file_util.cc",
+      "pepper_file_util.h",
+      "pepper_plugin_list.cc",
+      "pepper_plugin_list.h",
+      "pepper_renderer_instance_data.cc",
+      "pepper_renderer_instance_data.h",
+      "plugin_list.cc",
+      "plugin_list.h",
+    ]
+  }
+
+  if (!is_win || !use_aura) {
+    sources -= [ "cursors/webcursor_aurawin.cc" ]
+  }
+
+  if (!use_seccomp_bpf) {
+    if (is_linux) {
+      sources -= [
+        "sandbox_linux/bpf_cros_amd_gpu_policy_linux.cc",
+        "sandbox_linux/bpf_cros_amd_gpu_policy_linux.h",
+        "sandbox_linux/bpf_cros_arm_gpu_policy_linux.cc",
+        "sandbox_linux/bpf_cros_arm_gpu_policy_linux.h",
+        "sandbox_linux/bpf_gpu_policy_linux.cc",
+        "sandbox_linux/bpf_gpu_policy_linux.h",
+        "sandbox_linux/bpf_ppapi_policy_linux.cc",
+        "sandbox_linux/bpf_ppapi_policy_linux.h",
+        "sandbox_linux/bpf_renderer_policy_linux.cc",
+        "sandbox_linux/bpf_renderer_policy_linux.h",
+        "sandbox_linux/bpf_utility_policy_linux.cc",
+        "sandbox_linux/bpf_utility_policy_linux.h",
+        "sandbox_linux/sandbox_bpf_base_policy_linux.cc",
+        "sandbox_linux/sandbox_bpf_base_policy_linux.h",
+      ]
+    }
+  }
+
+  if (is_mac) {
+    deps += [ "//media/gpu" ]
+  }
+
+  if (enable_ipc_fuzzer) {
+    configs += [ "//tools/ipc_fuzzer:ipc_fuzzer_config" ]
+    sources += [
+      "external_ipc_dumper.cc",
+      "external_ipc_dumper.h",
+    ]
+  }
+
+  if (is_fuchsia) {
+    sources += [
+      "font_list_fuchsia.cc",
+      "sandbox_policy_fuchsia.cc",
+      "sandbox_policy_fuchsia.h",
+    ]
+  }
+}
+
+# See comment at the top of //content/BUILD.gn for how this works.
+group("for_content_tests") {
+  visibility = [ "//content/test/*" ]
+  if (!is_component_build) {
+    public_deps = [
+      ":common",
+    ]
+  }
+}
+
+mojom("mojo_bindings") {
+  # This interface is internal to content.
+  visibility = [ "//content/*" ]
+
+  # indexed_db.mojom uses a native typemap that is not available in Java.
+  cpp_only = true
+
+  sources = [
+    "associated_interfaces.mojom",
+    "child.mojom",
+    "child_memory_coordinator.mojom",
+    "field_trial_recorder.mojom",
+    "file_utilities.mojom",
+    "frame.mojom",
+    "frame_sink_provider.mojom",
+    "histogram_fetcher.mojom",
+    "host_zoom.mojom",
+    "image_downloader/image_downloader.mojom",
+    "indexed_db/indexed_db.mojom",
+    "input/input_handler.mojom",
+    "input/input_injector.mojom",
+    "leveldb_wrapper.mojom",
+    "manifest_observer.mojom",
+    "media/media_devices.mojom",
+    "media/media_stream.mojom",
+    "media/renderer_audio_output_stream_factory.mojom",
+    "memory_coordinator.mojom",
+    "native_types.mojom",
+    "push_messaging.mojom",
+    "render_frame_message_filter.mojom",
+    "render_message_filter.mojom",
+    "render_widget_window_tree_client_factory.mojom",
+    "renderer.mojom",
+    "renderer_host.mojom",
+    "service_worker/controller_service_worker.mojom",
+    "service_worker/embedded_worker.mojom",
+    "service_worker/service_worker.mojom",
+    "service_worker/service_worker_container.mojom",
+    "service_worker/service_worker_event_dispatcher.mojom",
+    "service_worker/service_worker_fetch_response_callback.mojom",
+    "service_worker/service_worker_installed_scripts_manager.mojom",
+    "service_worker/service_worker_provider.mojom",
+    "service_worker/service_worker_types.mojom",
+    "shared_worker/shared_worker.mojom",
+    "shared_worker/shared_worker_client.mojom",
+    "shared_worker/shared_worker_connector.mojom",
+    "shared_worker/shared_worker_factory.mojom",
+    "shared_worker/shared_worker_host.mojom",
+    "shared_worker/shared_worker_info.mojom",
+    "storage_partition_service.mojom",
+    "video_capture.mojom",
+    "web_database.mojom",
+    "widget.mojom",
+  ]
+
+  import_dirs = [ "//mojo/services" ]
+
+  public_deps = [
+    "//components/leveldb/public/interfaces",
+    "//content/public/common:interfaces",
+    "//ipc:mojom_constants",
+    "//media/capture/mojo:capture_types",
+    "//media/mojo/interfaces",
+    "//mojo/common:common_custom_types",
+    "//services/network/public/interfaces",
+    "//services/service_manager/public/interfaces",
+    "//services/ui/public/interfaces",
+    "//services/video_capture/public/interfaces",
+    "//services/viz/public/interfaces",
+    "//skia/public/interfaces",
+    "//storage/public/interfaces",
+    "//third_party/WebKit/public:mojo_bindings",
+    "//ui/base/mojo:mojo_bindings",
+    "//ui/gfx/geometry/mojo",
+    "//ui/gfx/mojo",
+    "//url/mojo:url_mojom_gurl",
+    "//url/mojo:url_mojom_origin",
+  ]
+
+  # //storage/public/interfaces is configured to be exported
+  # as STORAGE_COMMON, so override the dependencies to make it
+  # depend via //storage/common.
+  overridden_deps = [ "//storage/public/interfaces" ]
+  component_deps = [ "//storage/common" ]
+
+  component_output_prefix = "content_common_mojo_bindings"
+  export_class_attribute = "CONTENT_EXPORT"
+  export_define = "CONTENT_IMPLEMENTATION=1"
+  export_header = "content/common/content_export.h"
+}

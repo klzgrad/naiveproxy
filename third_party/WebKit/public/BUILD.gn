@@ -1,0 +1,950 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/buildflag_header.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
+import("//third_party/WebKit/public/public_features.gni")
+import("//third_party/WebKit/Source/config.gni")
+import("//third_party/WebKit/Source/core/core.gni")
+import("//tools/grit/grit_rule.gni")
+import("//tools/grit/repack.gni")
+
+if (is_android) {
+  import("//build/config/android/rules.gni")
+}
+
+group("blink") {
+  public_deps = [
+    ":blink_headers",
+  ]
+  deps = [
+    "//third_party/WebKit/Source/controller",
+    "//third_party/WebKit/Source/core",
+    "//third_party/WebKit/Source/modules",
+    "//third_party/WebKit/Source/platform",
+  ]
+}
+
+group("test_support") {
+  testonly = true
+  public_deps = [
+    ":test_headers",
+    "//third_party/WebKit/Source/modules/exported:test_support",
+    "//third_party/WebKit/Source/platform:test_support",
+  ]
+}
+
+group("all_blink") {
+  # This includes some test targets. Don't link into production!
+  testonly = true
+
+  public_deps = [
+    "//third_party/WebKit/Source/controller",
+    "//third_party/WebKit/Source/controller:webkit_unit_tests",
+    "//third_party/WebKit/Source/core",
+    "//third_party/WebKit/Source/modules",
+    "//third_party/WebKit/Source/platform:blink_platform_unittests",
+    "//third_party/WebKit/Source/platform/heap:blink_heap_unittests",
+    "//third_party/WebKit/Source/platform/wtf:wtf_unittests",
+  ]
+}
+
+config("blink_headers_config") {
+  include_dirs = [
+    "..",
+    "$root_gen_dir/third_party/WebKit",
+  ]
+
+  # Allow :blink_headers to include v8.h without linking to it.
+  configs = [ "//v8:external_config" ]
+}
+
+# Public feature flags used outside of Blink.
+buildflag_header("features") {
+  header = "public_features.h"
+  flags = [
+    "DEBUG_DEVTOOLS=$debug_devtools",
+    "USE_DEFAULT_RENDER_THEME=$use_default_render_theme",
+    "USE_MINIKIN_HYPHENATION=$use_minikin_hyphenation",
+  ]
+}
+
+if (is_android) {
+  java_cpp_enum("blink_headers_java_enums_srcjar") {
+    sources = [
+      "./platform/WebDisplayMode.h",
+      "./platform/WebFocusType.h",
+      "./platform/WebInputEvent.h",
+      "./platform/WebReferrerPolicy.h",
+      "./platform/WebTextInputMode.h",
+      "./platform/WebTextInputType.h",
+      "./platform/modules/remoteplayback/WebRemotePlaybackAvailability.h",
+      "./web/WebContextMenuData.h",
+    ]
+  }
+
+  java_cpp_enum("blink_cursor_type_java_enums_srcjar") {
+    sources = [
+      "./platform/WebCursorInfo.h",
+    ]
+  }
+
+  android_library("blink_headers_java") {
+    deps = [
+      "//third_party/android_tools:android_support_annotations_java",
+    ]
+    srcjar_deps = [ ":blink_headers_java_enums_srcjar" ]
+  }
+}
+
+source_set("test_headers") {
+  testonly = true
+  sources = [
+    "platform/scheduler/test/fake_renderer_scheduler.h",
+    "platform/scheduler/test/mock_renderer_scheduler.h",
+    "platform/scheduler/test/renderer_scheduler_test_support.h",
+  ]
+  deps = [
+    "//base:base",
+    "//cc:cc",
+    "//testing/gmock:gmock",
+  ]
+}
+
+# Depend on this target to use public blink API headers for things like enums
+# and public structures without actually linking against any Blink libraries.
+source_set("blink_headers") {
+  sources = [
+    "platform/BlameContext.h",
+    "platform/CORSStatus.h",
+    "platform/FilePathConversion.h",
+    "platform/InterfaceProvider.h",
+    "platform/InterfaceRegistry.h",
+    "platform/Platform.h",
+    "platform/PointerProperties.h",
+    "platform/ShapeProperties.h",
+    "platform/TaskType.h",
+    "platform/URLConversion.h",
+    "platform/UserMetricsAction.h",
+    "platform/WebAddressSpace.h",
+    "platform/WebApplicationCacheHost.h",
+    "platform/WebApplicationCacheHostClient.h",
+    "platform/WebAudioBus.h",
+    "platform/WebAudioDestinationConsumer.h",
+    "platform/WebAudioDevice.h",
+    "platform/WebAudioLatencyHint.h",
+    "platform/WebAudioSourceProvider.h",
+    "platform/WebAudioSourceProviderClient.h",
+    "platform/WebBlendMode.h",
+    "platform/WebBlobData.h",
+    "platform/WebBlobInfo.h",
+    "platform/WebBlobRegistry.h",
+    "platform/WebBrowserControlsState.h",
+    "platform/WebCache.h",
+    "platform/WebCachePolicy.h",
+    "platform/WebCallbacks.h",
+    "platform/WebCanvas.h",
+    "platform/WebCanvasCaptureHandler.h",
+    "platform/WebClientHintsType.h",
+    "platform/WebClipboard.h",
+    "platform/WebCoalescedInputEvent.h",
+    "platform/WebColor.h",
+    "platform/WebCommon.h",
+    "platform/WebCompositeAndReadbackAsyncCallback.h",
+    "platform/WebCompositorMutatorClient.h",
+    "platform/WebCompositorSupport.h",
+    "platform/WebConnectionType.h",
+    "platform/WebContentDecryptionModule.h",
+    "platform/WebContentDecryptionModuleAccess.h",
+    "platform/WebContentDecryptionModuleException.h",
+    "platform/WebContentDecryptionModuleResult.h",
+    "platform/WebContentDecryptionModuleSession.h",
+    "platform/WebContentLayer.h",
+    "platform/WebContentLayerClient.h",
+    "platform/WebContentSecurityPolicy.h",
+    "platform/WebContentSecurityPolicyStruct.h",
+    "platform/WebContentSettingCallbacks.h",
+    "platform/WebContentSettingsClient.h",
+    "platform/WebCookieJar.h",
+    "platform/WebCredential.h",
+    "platform/WebCredentialManagerClient.h",
+    "platform/WebCredentialManagerError.h",
+    "platform/WebCredentialMediationRequirement.h",
+    "platform/WebCrypto.h",
+    "platform/WebCryptoAlgorithm.h",
+    "platform/WebCryptoAlgorithmParams.h",
+    "platform/WebCryptoKey.h",
+    "platform/WebCryptoKeyAlgorithm.h",
+    "platform/WebCryptoKeyAlgorithmParams.h",
+    "platform/WebCursorInfo.h",
+    "platform/WebData.h",
+    "platform/WebDataConsumerHandle.h",
+    "platform/WebDatabaseObserver.h",
+    "platform/WebDisplayItemList.h",
+    "platform/WebDisplayMode.h",
+    "platform/WebDistillability.h",
+    "platform/WebDocumentSubresourceFilter.h",
+    "platform/WebDoublePoint.h",
+    "platform/WebDoubleSize.h",
+    "platform/WebDragData.h",
+    "platform/WebDragOperation.h",
+    "platform/WebEditingCommandType.h",
+    "platform/WebEffectiveConnectionType.h",
+    "platform/WebEncryptedMediaClient.h",
+    "platform/WebEncryptedMediaKeyInformation.h",
+    "platform/WebEncryptedMediaRequest.h",
+    "platform/WebEncryptedMediaTypes.h",
+    "platform/WebEventListenerProperties.h",
+    "platform/WebExternalTextureLayer.h",
+    "platform/WebFallbackThemeEngine.h",
+    "platform/WebFeaturePolicy.h",
+    "platform/WebFederatedCredential.h",
+    "platform/WebFileError.h",
+    "platform/WebFileInfo.h",
+    "platform/WebFileSystem.h",
+    "platform/WebFileSystemCallbacks.h",
+    "platform/WebFileSystemEntry.h",
+    "platform/WebFileSystemType.h",
+    "platform/WebFileUtilities.h",
+    "platform/WebFileWriter.h",
+    "platform/WebFileWriterClient.h",
+    "platform/WebFloatPoint.h",
+    "platform/WebFloatPoint3D.h",
+    "platform/WebFloatRect.h",
+    "platform/WebFloatSize.h",
+    "platform/WebFocusType.h",
+    "platform/WebFont.h",
+    "platform/WebFontDescription.h",
+    "platform/WebGamepadListener.h",
+    "platform/WebGestureCurve.h",
+    "platform/WebGestureCurveTarget.h",
+    "platform/WebGestureDevice.h",
+    "platform/WebGestureEvent.h",
+    "platform/WebGraphicsContext3DProvider.h",
+    "platform/WebHTTPBody.h",
+    "platform/WebHTTPHeaderVisitor.h",
+    "platform/WebHTTPLoadInfo.h",
+    "platform/WebHistoryScrollRestorationType.h",
+    "platform/WebIconSizesParser.h",
+    "platform/WebImage.h",
+    "platform/WebImageCaptureFrameGrabber.h",
+    "platform/WebImageGenerator.h",
+    "platform/WebImageLayer.h",
+    "platform/WebInbandTextTrack.h",
+    "platform/WebInbandTextTrackClient.h",
+    "platform/WebInputEvent.h",
+    "platform/WebInputEventResult.h",
+    "platform/WebInsecureRequestPolicy.h",
+    "platform/WebIsolatedWorldIds.h",
+    "platform/WebKeyboardEvent.h",
+    "platform/WebLayer.h",
+    "platform/WebLayerPositionConstraint.h",
+    "platform/WebLayerScrollClient.h",
+    "platform/WebLayerStickyPositionConstraint.h",
+    "platform/WebLayerTreeView.h",
+    "platform/WebLayoutAndPaintAsyncCallback.h",
+    "platform/WebLoadingBehaviorFlag.h",
+    "platform/WebLocalizedString.h",
+    "platform/WebMediaConstraints.h",
+    "platform/WebMediaDeviceInfo.h",
+    "platform/WebMediaKeySystemConfiguration.h",
+    "platform/WebMediaKeySystemMediaCapability.h",
+    "platform/WebMediaPlayer.h",
+    "platform/WebMediaPlayerClient.h",
+    "platform/WebMediaPlayerEncryptedMediaClient.h",
+    "platform/WebMediaPlayerSource.h",
+    "platform/WebMediaRecorderHandler.h",
+    "platform/WebMediaRecorderHandlerClient.h",
+    "platform/WebMediaSource.h",
+    "platform/WebMediaStream.h",
+    "platform/WebMediaStreamCenter.h",
+    "platform/WebMediaStreamCenterClient.h",
+    "platform/WebMediaStreamSource.h",
+    "platform/WebMediaStreamTrack.h",
+    "platform/WebMemoryCoordinator.h",
+    "platform/WebMemoryPressureLevel.h",
+    "platform/WebMemoryState.h",
+    "platform/WebMenuSourceType.h",
+    "platform/WebMixedContent.h",
+    "platform/WebMixedContentContextType.h",
+    "platform/WebMockClipboard.h",
+    "platform/WebMouseEvent.h",
+    "platform/WebMouseWheelEvent.h",
+    "platform/WebNativeScrollBehavior.h",
+    "platform/WebNetworkStateNotifier.h",
+    "platform/WebNonCopyable.h",
+    "platform/WebPageVisibilityState.h",
+    "platform/WebPasswordCredential.h",
+    "platform/WebPlatformEventListener.h",
+    "platform/WebPlatformEventType.h",
+    "platform/WebPluginListBuilder.h",
+    "platform/WebPoint.h",
+    "platform/WebPointerEvent.h",
+    "platform/WebPointerProperties.h",
+    "platform/WebPrerender.h",
+    "platform/WebPrerenderingSupport.h",
+    "platform/WebPrescientNetworking.h",
+    "platform/WebPrivatePtr.h",
+    "platform/WebPublicSuffixList.h",
+    "platform/WebRTCAnswerOptions.h",
+    "platform/WebRTCCertificate.h",
+    "platform/WebRTCCertificateGenerator.h",
+    "platform/WebRTCConfiguration.h",
+    "platform/WebRTCDTMFSenderHandler.h",
+    "platform/WebRTCDTMFSenderHandlerClient.h",
+    "platform/WebRTCDataChannelHandler.h",
+    "platform/WebRTCDataChannelHandlerClient.h",
+    "platform/WebRTCDataChannelInit.h",
+    "platform/WebRTCError.h",
+    "platform/WebRTCICECandidate.h",
+    "platform/WebRTCKeyParams.h",
+    "platform/WebRTCLegacyStats.h",
+    "platform/WebRTCOfferOptions.h",
+    "platform/WebRTCPeerConnectionHandler.h",
+    "platform/WebRTCPeerConnectionHandlerClient.h",
+    "platform/WebRTCRtpContributingSource.h",
+    "platform/WebRTCRtpReceiver.h",
+    "platform/WebRTCRtpSender.h",
+    "platform/WebRTCSessionDescription.h",
+    "platform/WebRTCSessionDescriptionRequest.h",
+    "platform/WebRTCStats.h",
+    "platform/WebRTCStatsRequest.h",
+    "platform/WebRTCStatsResponse.h",
+    "platform/WebRTCVoidRequest.h",
+    "platform/WebRect.h",
+    "platform/WebReferrerPolicy.h",
+    "platform/WebRenderingStats.h",
+    "platform/WebRuntimeFeatures.h",
+    "platform/WebScreenInfo.h",
+    "platform/WebScrollBoundaryBehavior.h",
+    "platform/WebScrollbar.h",
+    "platform/WebScrollbarBehavior.h",
+    "platform/WebScrollbarButtonsPlacement.h",
+    "platform/WebScrollbarLayer.h",
+    "platform/WebScrollbarOverlayColorTheme.h",
+    "platform/WebScrollbarThemeGeometry.h",
+    "platform/WebScrollbarThemePainter.h",
+    "platform/WebSecurityOrigin.h",
+    "platform/WebSecurityStyle.h",
+    "platform/WebSelectionBound.h",
+    "platform/WebSetSinkIdCallbacks.h",
+    "platform/WebSize.h",
+    "platform/WebSocketHandshakeThrottle.h",
+    "platform/WebSourceBuffer.h",
+    "platform/WebSourceBufferClient.h",
+    "platform/WebSpeechSynthesisUtterance.h",
+    "platform/WebSpeechSynthesisVoice.h",
+    "platform/WebSpeechSynthesizer.h",
+    "platform/WebSpeechSynthesizerClient.h",
+    "platform/WebSpellCheckPanelHostClient.h",
+    "platform/WebStorageArea.h",
+    "platform/WebStorageNamespace.h",
+    "platform/WebStorageQuotaCallbacks.h",
+    "platform/WebStorageQuotaError.h",
+    "platform/WebStorageQuotaType.h",
+    "platform/WebString.h",
+    "platform/WebSurfaceLayerBridge.h",
+    "platform/WebTextInputInfo.h",
+    "platform/WebTextInputMode.h",
+    "platform/WebTextInputType.h",
+    "platform/WebTextRun.h",
+    "platform/WebThemeEngine.h",
+    "platform/WebThread.h",
+    "platform/WebThreadSafeData.h",
+    "platform/WebTimeRange.h",
+    "platform/WebTouchAction.h",
+    "platform/WebTouchEvent.h",
+    "platform/WebTouchPoint.h",
+    "platform/WebTraceLocation.h",
+    "platform/WebTrialTokenValidator.h",
+    "platform/WebURL.h",
+    "platform/WebURLError.h",
+    "platform/WebURLLoadTiming.h",
+    "platform/WebURLLoader.h",
+    "platform/WebURLLoaderClient.h",
+    "platform/WebURLLoaderMockFactory.h",
+    "platform/WebURLLoaderTestDelegate.h",
+    "platform/WebURLRequest.h",
+    "platform/WebURLResponse.h",
+    "platform/WebVector.h",
+    "platform/WebVideoFrameSubmitter.h",
+    "platform/WebViewportStyle.h",
+    "platform/WebWorkerFetchContext.h",
+    "platform/linux/WebFallbackFont.h",
+    "platform/linux/WebFontRenderStyle.h",
+    "platform/linux/WebSandboxSupport.h",
+    "platform/mac/WebSandboxSupport.h",
+    "platform/mac/WebScrollbarTheme.h",
+    "platform/modules/background_fetch/WebBackgroundFetchSettledFetch.h",
+    "platform/modules/device_orientation/WebDeviceMotionListener.h",
+    "platform/modules/device_orientation/WebDeviceOrientationListener.h",
+    "platform/modules/indexeddb/WebIDBCallbacks.h",
+    "platform/modules/indexeddb/WebIDBCursor.h",
+    "platform/modules/indexeddb/WebIDBDatabase.h",
+    "platform/modules/indexeddb/WebIDBDatabaseCallbacks.h",
+    "platform/modules/indexeddb/WebIDBDatabaseError.h",
+    "platform/modules/indexeddb/WebIDBDatabaseException.h",
+    "platform/modules/indexeddb/WebIDBFactory.h",
+    "platform/modules/indexeddb/WebIDBKey.h",
+    "platform/modules/indexeddb/WebIDBKeyPath.h",
+    "platform/modules/indexeddb/WebIDBKeyRange.h",
+    "platform/modules/indexeddb/WebIDBMetadata.h",
+    "platform/modules/indexeddb/WebIDBObservation.h",
+    "platform/modules/indexeddb/WebIDBTypes.h",
+    "platform/modules/indexeddb/WebIDBValue.h",
+    "platform/modules/installedapp/WebRelatedApplication.h",
+    "platform/modules/installedapp/WebRelatedAppsFetcher.h",
+    "platform/modules/media_capabilities/WebAudioConfiguration.h",
+    "platform/modules/media_capabilities/WebMediaCapabilitiesClient.h",
+    "platform/modules/media_capabilities/WebMediaConfiguration.h",
+    "platform/modules/media_capabilities/WebVideoConfiguration.h",
+    "platform/modules/notifications/WebNotificationAction.h",
+    "platform/modules/notifications/WebNotificationConstants.h",
+    "platform/modules/notifications/WebNotificationData.h",
+    "platform/modules/notifications/WebNotificationDelegate.h",
+    "platform/modules/notifications/WebNotificationManager.h",
+    "platform/modules/notifications/WebNotificationResources.h",
+    "platform/modules/payments/WebPaymentCurrencyAmount.h",
+    "platform/modules/payments/WebPaymentDetailsModifier.h",
+    "platform/modules/payments/WebPaymentHandlerResponse.h",
+    "platform/modules/payments/WebPaymentItem.h",
+    "platform/modules/payments/WebPaymentMethodData.h",
+    "platform/modules/payments/WebPaymentRequestEventData.h",
+    "platform/modules/presentation/WebPresentationAvailabilityObserver.h",
+    "platform/modules/presentation/WebPresentationClient.h",
+    "platform/modules/presentation/WebPresentationConnection.h",
+    "platform/modules/presentation/WebPresentationConnectionCallbacks.h",
+    "platform/modules/presentation/WebPresentationController.h",
+    "platform/modules/presentation/WebPresentationError.h",
+    "platform/modules/presentation/WebPresentationInfo.h",
+    "platform/modules/presentation/WebPresentationReceiver.h",
+    "platform/modules/push_messaging/WebPushClient.h",
+    "platform/modules/push_messaging/WebPushError.h",
+    "platform/modules/push_messaging/WebPushPermissionStatus.h",
+    "platform/modules/push_messaging/WebPushProvider.h",
+    "platform/modules/push_messaging/WebPushSubscription.h",
+    "platform/modules/push_messaging/WebPushSubscriptionOptions.h",
+    "platform/modules/remoteplayback/WebRemotePlaybackAvailability.h",
+    "platform/modules/remoteplayback/WebRemotePlaybackClient.h",
+    "platform/modules/remoteplayback/WebRemotePlaybackState.h",
+    "platform/modules/screen_orientation/WebLockOrientationCallback.h",
+    "platform/modules/screen_orientation/WebLockOrientationError.h",
+    "platform/modules/screen_orientation/WebScreenOrientationClient.h",
+    "platform/modules/screen_orientation/WebScreenOrientationEnumTraits.h",
+    "platform/modules/screen_orientation/WebScreenOrientationLockType.h",
+    "platform/modules/screen_orientation/WebScreenOrientationType.h",
+    "platform/modules/serviceworker/WebNavigationPreloadState.h",
+    "platform/modules/serviceworker/WebServiceWorker.h",
+    "platform/modules/serviceworker/WebServiceWorkerCache.h",
+    "platform/modules/serviceworker/WebServiceWorkerCacheError.h",
+    "platform/modules/serviceworker/WebServiceWorkerCacheStorage.h",
+    "platform/modules/serviceworker/WebServiceWorkerClientQueryOptions.h",
+    "platform/modules/serviceworker/WebServiceWorkerClientType.h",
+    "platform/modules/serviceworker/WebServiceWorkerClientsClaimCallbacks.h",
+    "platform/modules/serviceworker/WebServiceWorkerClientsInfo.h",
+    "platform/modules/serviceworker/WebServiceWorkerError.h",
+    "platform/modules/serviceworker/WebServiceWorkerInstalledScriptsManager.h",
+    "platform/modules/serviceworker/WebServiceWorkerNetworkProvider.h",
+    "platform/modules/serviceworker/WebServiceWorkerProvider.h",
+    "platform/modules/serviceworker/WebServiceWorkerProviderClient.h",
+    "platform/modules/serviceworker/WebServiceWorkerProxy.h",
+    "platform/modules/serviceworker/WebServiceWorkerRegistration.h",
+    "platform/modules/serviceworker/WebServiceWorkerRegistrationProxy.h",
+    "platform/modules/serviceworker/WebServiceWorkerRequest.h",
+    "platform/modules/serviceworker/WebServiceWorkerResponse.h",
+    "platform/modules/serviceworker/WebServiceWorkerResponseError.h",
+    "platform/modules/serviceworker/WebServiceWorkerSkipWaitingCallbacks.h",
+    "platform/modules/serviceworker/WebServiceWorkerStreamHandle.h",
+    "platform/modules/webmidi/WebMIDIAccessor.h",
+    "platform/modules/webmidi/WebMIDIAccessorClient.h",
+    "platform/scheduler/child/child_scheduler.h",
+    "platform/scheduler/child/single_thread_idle_task_runner.h",
+    "platform/scheduler/child/webthread_base.h",
+    "platform/scheduler/renderer/render_widget_scheduling_state.h",
+    "platform/scheduler/renderer/renderer_scheduler.h",
+    "platform/scheduler/renderer_process_type.h",
+    "web/WebAXEnums.h",
+    "web/WebAXObject.h",
+    "web/WebActiveWheelFlingParameters.h",
+    "web/WebApplyConstraintsRequest.h",
+    "web/WebArrayBuffer.h",
+    "web/WebArrayBufferConverter.h",
+    "web/WebArrayBufferView.h",
+    "web/WebAssociatedURLLoader.h",
+    "web/WebAssociatedURLLoaderClient.h",
+    "web/WebAssociatedURLLoaderOptions.h",
+    "web/WebAutofillClient.h",
+    "web/WebBlob.h",
+    "web/WebCSSParser.h",
+    "web/WebColorChooser.h",
+    "web/WebColorChooserClient.h",
+    "web/WebColorSuggestion.h",
+    "web/WebConsoleMessage.h",
+    "web/WebContextFeatures.h",
+    "web/WebContextMenuData.h",
+    "web/WebCryptoNormalize.h",
+    "web/WebCustomElement.h",
+    "web/WebDOMActivityLogger.h",
+    "web/WebDOMEvent.h",
+    "web/WebDOMFileSystem.h",
+    "web/WebDOMMediaStreamTrack.h",
+    "web/WebDOMMessageEvent.h",
+    "web/WebDatabase.h",
+    "web/WebDateTimeChooserCompletion.h",
+    "web/WebDateTimeChooserParams.h",
+    "web/WebDateTimeInputType.h",
+    "web/WebDateTimeSuggestion.h",
+    "web/WebDevToolsAgent.h",
+    "web/WebDevToolsAgentClient.h",
+    "web/WebDevToolsFrontend.h",
+    "web/WebDevToolsFrontendClient.h",
+    "web/WebDeviceEmulationParams.h",
+    "web/WebDocument.h",
+    "web/WebDocumentLoader.h",
+    "web/WebDragStatus.h",
+    "web/WebDraggableRegion.h",
+    "web/WebElement.h",
+    "web/WebElementCollection.h",
+    "web/WebEmbeddedWorker.h",
+    "web/WebEmbeddedWorkerStartData.h",
+    "web/WebExternalPopupMenu.h",
+    "web/WebExternalPopupMenuClient.h",
+    "web/WebFileChooserCompletion.h",
+    "web/WebFileChooserParams.h",
+    "web/WebFindOptions.h",
+    "web/WebFormControlElement.h",
+    "web/WebFormElement.h",
+    "web/WebFrame.h",
+    "web/WebFrameClient.h",
+    "web/WebFrameContentDumper.h",
+    "web/WebFrameLoadType.h",
+    "web/WebFrameOwnerProperties.h",
+    "web/WebFrameSerializer.h",
+    "web/WebFrameSerializerCacheControlPolicy.h",
+    "web/WebFrameSerializerClient.h",
+    "web/WebFrameWidget.h",
+    "web/WebHeap.h",
+    "web/WebHelperPlugin.h",
+    "web/WebHistoryCommitType.h",
+    "web/WebHistoryItem.h",
+    "web/WebHitTestResult.h",
+    "web/WebIconURL.h",
+    "web/WebImageCache.h",
+    "web/WebImageDecoder.h",
+    "web/WebImeTextSpan.h",
+    "web/WebInputElement.h",
+    "web/WebInputMethodController.h",
+    "web/WebKit.h",
+    "web/WebLabelElement.h",
+    "web/WebLanguageDetectionDetails.h",
+    "web/WebLeakDetector.h",
+    "web/WebLocalFrame.h",
+    "web/WebMeaningfulLayout.h",
+    "web/WebMediaDeviceChangeObserver.h",
+    "web/WebMediaDevicesRequest.h",
+    "web/WebMediaPlayerAction.h",
+    "web/WebMediaStreamRegistry.h",
+    "web/WebMemoryStatistics.h",
+    "web/WebMenuItemInfo.h",
+    "web/WebMetaElement.h",
+    "web/WebNavigationPolicy.h",
+    "web/WebNavigationType.h",
+    "web/WebNavigatorContentUtilsClient.h",
+    "web/WebNode.h",
+    "web/WebOptionElement.h",
+    "web/WebPageImportanceSignals.h",
+    "web/WebPagePopup.h",
+    "web/WebPepperSocket.h",
+    "web/WebPepperSocketClient.h",
+    "web/WebPerformance.h",
+    "web/WebPlugin.h",
+    "web/WebPluginAction.h",
+    "web/WebPluginContainer.h",
+    "web/WebPluginDocument.h",
+    "web/WebPluginParams.h",
+    "web/WebPluginScriptForbiddenScope.h",
+    "web/WebPopupMenuInfo.h",
+    "web/WebPopupType.h",
+    "web/WebPrerendererClient.h",
+    "web/WebPrintParams.h",
+    "web/WebPrintPresetOptions.h",
+    "web/WebPrintScalingOption.h",
+    "web/WebRange.h",
+    "web/WebRemoteFrame.h",
+    "web/WebRemoteFrameClient.h",
+    "web/WebRenderTheme.h",
+    "web/WebSandboxFlags.h",
+    "web/WebScopedUserGesture.h",
+    "web/WebScopedWindowFocusAllowedIndicator.h",
+    "web/WebScriptController.h",
+    "web/WebScriptExecutionCallback.h",
+    "web/WebScriptSource.h",
+    "web/WebSearchableFormData.h",
+    "web/WebSecurityPolicy.h",
+    "web/WebSelectElement.h",
+    "web/WebSelection.h",
+    "web/WebSelector.h",
+    "web/WebSerializedScriptValue.h",
+    "web/WebSerializedScriptValueVersion.h",
+    "web/WebSettings.h",
+    "web/WebSharedWorker.h",
+    "web/WebSharedWorkerClient.h",
+    "web/WebSharedWorkerConnectListener.h",
+    "web/WebSharedWorkerRepositoryClient.h",
+    "web/WebSpeechGrammar.h",
+    "web/WebSpeechRecognitionHandle.h",
+    "web/WebSpeechRecognitionParams.h",
+    "web/WebSpeechRecognitionResult.h",
+    "web/WebSpeechRecognizer.h",
+    "web/WebSpeechRecognizerClient.h",
+    "web/WebStorageEventDispatcher.h",
+    "web/WebSurroundingText.h",
+    "web/WebTestingSupport.h",
+    "web/WebTextCheckClient.h",
+    "web/WebTextCheckingCompletion.h",
+    "web/WebTextCheckingResult.h",
+    "web/WebTextDecorationType.h",
+    "web/WebTextDirection.h",
+    "web/WebTreeScopeType.h",
+    "web/WebTriggeringEventInfo.h",
+    "web/WebUserGestureIndicator.h",
+    "web/WebUserGestureToken.h",
+    "web/WebUserMediaClient.h",
+    "web/WebUserMediaRequest.h",
+    "web/WebV8ContextSnapshot.h",
+    "web/WebView.h",
+    "web/WebViewClient.h",
+    "web/WebWidget.h",
+    "web/WebWidgetClient.h",
+    "web/WebWindowFeatures.h",
+    "web/linux/WebFontRendering.h",
+    "web/mac/WebSubstringUtil.h",
+    "web/mac/WebSubstringUtil.h",
+    "web/modules/password_manager/WebFormElementObserver.h",
+    "web/modules/password_manager/WebFormElementObserverCallback.h",
+    "web/modules/serviceworker/WebServiceWorkerContextClient.h",
+    "web/modules/serviceworker/WebServiceWorkerContextProxy.h",
+    "web/win/WebFontRendering.h",
+  ]
+
+  if (is_android) {
+    # Android uses some Linux sources, put those back.
+    set_sources_assignment_filter([])
+    sources += [
+      "platform/linux/WebFontRenderStyle.h",
+      "web/linux/WebFontRendering.h",
+    ]
+    set_sources_assignment_filter(sources_assignment_filter)
+  }
+
+  public_configs = [
+    ":blink_headers_config",
+
+    # Blink exposes icu headers in the public API.
+    "//third_party/icu:icu_config",
+  ]
+
+  public_deps = [
+    "//net",
+    "//skia",
+    "//third_party/WebKit/common:blink_common",
+    "//url",
+  ]
+
+  deps = [
+    ":generate_mojo_bindings",
+    "//base:base",
+    "//cc:cc",
+    "//cc/paint:paint",
+    "//components/viz/common",
+    "//device/screen_orientation/public/interfaces:interfaces_shared_cpp_sources",
+    "//media/midi:mojo_shared_cpp_sources",
+    "//mojo/public/cpp/bindings:bindings",
+    "//mojo/public/cpp/system:system",
+    "//services/network/public/interfaces:interfaces",
+    "//v8:v8_headers",
+  ]
+}
+
+group("blink_devtools_frontend_resources") {
+  public_deps = [
+    "//third_party/WebKit/Source/devtools:devtools_frontend_resources",
+  ]
+}
+
+group("blink_devtools_frontend_resources_files") {
+  data_deps = [
+    "//third_party/WebKit/Source/devtools:devtools_all_files",
+  ]
+}
+
+group("blink_generate_devtools_grd") {
+  public_deps = [
+    "//third_party/WebKit/Source/devtools:generate_devtools_grd",
+  ]
+}
+
+resources_out_dir = "$root_gen_dir/blink/public/resources"
+
+grit("resources") {
+  output_dir = resources_out_dir
+  source = "blink_resources.grd"
+  outputs = [
+    "grit/blink_resources.h",
+    "blink_resources.pak",
+  ]
+  html_min_css = "$blink_core_output_dir/html.css"
+  grit_flags = [
+    "-E",
+    "html_min_css=" + rebase_path(html_min_css, "."),
+  ]
+  deps = [
+    "//third_party/WebKit/Source/core:make_minimized_css",
+  ]
+}
+
+grit("image_resources") {
+  output_dir = "$root_gen_dir/blink/public/resources"
+  source = "blink_image_resources.grd"
+  outputs = [
+    "grit/blink_image_resources.h",
+    "blink_image_resources_100_percent.pak",
+    "blink_image_resources_200_percent.pak",
+  ]
+}
+
+group("scaled_resources") {
+  public_deps = [
+    ":image_resources",
+    ":media_controls_resources_header",
+    "//third_party/WebKit/Source/modules/media_controls:media_controls_resources",
+  ]
+}
+
+copy("media_controls_resources_header") {
+  sources = [
+    "$root_gen_dir/blink/modules/media_controls/resources/grit/media_controls_resources.h",
+  ]
+  outputs = [
+    "$resources_out_dir/grit/media_controls_resources.h",
+  ]
+  deps = [
+    "//third_party/WebKit/Source/modules/media_controls:media_controls_resources",
+  ]
+}
+
+repack("scaled_resources_100_percent") {
+  output = "$root_gen_dir/blink/public/resources/blink_scaled_resources_100_percent.pak"
+  sources = [
+    "$root_gen_dir/blink/modules/media_controls/resources/media_controls_resources_100_percent.pak",
+    "$root_gen_dir/blink/public/resources/blink_image_resources_100_percent.pak",
+  ]
+  deps = [
+    ":scaled_resources",
+  ]
+}
+
+repack("scaled_resources_200_percent") {
+  output = "$root_gen_dir/blink/public/resources/blink_scaled_resources_200_percent.pak"
+  sources = [
+    "$root_gen_dir/blink/modules/media_controls/resources/media_controls_resources_200_percent.pak",
+    "$root_gen_dir/blink/public/resources/blink_image_resources_200_percent.pak",
+  ]
+  deps = [
+    ":scaled_resources",
+  ]
+}
+
+mojom("mojo_bindings") {
+  visibility = [
+    "//content/*",
+    "//chrome/common:mojo_bindings",
+  ]
+  visibility_blink = [
+    "//content/common:mojo_bindings_blink",
+    "//chrome/common:mojo_bindings_blink",
+    "//third_party/WebKit/Source/platform",
+    "//third_party/WebKit/Source/platform/loader",
+  ]
+  sources = [
+    "platform/address_space.mojom",
+    "platform/content_security_policy.mojom",
+    "platform/display_mode.mojom",
+    "platform/media_download_in_product_help.mojom",
+    "platform/media_engagement.mojom",
+    "platform/mime_registry.mojom",
+    "platform/modules/app_banner/app_banner.mojom",
+    "platform/modules/background_fetch/background_fetch.mojom",
+    "platform/modules/background_sync/background_sync.mojom",
+    "platform/modules/bluetooth/web_bluetooth.mojom",
+    "platform/modules/broadcastchannel/broadcast_channel.mojom",
+    "platform/modules/budget_service/budget_service.mojom",
+    "platform/modules/credentialmanager/credential_manager.mojom",
+    "platform/modules/fetch/fetch_api_request.mojom",
+    "platform/modules/hyphenation/hyphenation.mojom",
+    "platform/modules/insecure_input/insecure_input_service.mojom",
+    "platform/modules/keyboard_lock/keyboard_lock.mojom",
+    "platform/modules/manifest/manifest.mojom",
+    "platform/modules/manifest/manifest_manager.mojom",
+    "platform/modules/notifications/notification.mojom",
+    "platform/modules/notifications/notification_service.mojom",
+    "platform/modules/payments/payment_app.mojom",
+    "platform/modules/permissions/permission.mojom",
+    "platform/modules/permissions/permission_status.mojom",
+    "platform/modules/presentation/presentation.mojom",
+    "platform/modules/serviceworker/service_worker_error_type.mojom",
+    "platform/modules/serviceworker/service_worker_event_status.mojom",
+    "platform/modules/serviceworker/service_worker_registration.mojom",
+    "platform/modules/serviceworker/service_worker_state.mojom",
+    "platform/modules/serviceworker/service_worker_stream_handle.mojom",
+    "platform/modules/webauth/authenticator.mojom",
+    "platform/modules/websockets/websocket.mojom",
+    "platform/referrer.mojom",
+    "platform/reporting.mojom",
+    "platform/site_engagement.mojom",
+    "web/console_message.mojom",
+    "web/selection_menu_behavior.mojom",
+    "web/shared_worker_creation_context_type.mojom",
+    "web/window_features.mojom",
+    "web/worker_content_settings_proxy.mojom",
+  ]
+  public_deps = [
+    ":android_mojo_bindings",
+    ":web_client_hints_types_mojo_bindings",
+    ":web_feature_mojo_bindings",
+    "//device/bluetooth/public/interfaces",
+    "//device/screen_orientation/public/interfaces",
+    "//mojo/common:common_custom_types",
+    "//services/network/public/interfaces:interfaces",
+    "//storage/public/interfaces",
+    "//ui/gfx/geometry/mojo",
+    "//url/mojo:url_mojom_gurl",
+    "//url/mojo:url_mojom_origin",
+  ]
+
+  # //storage/public/interfaces is configured to be exported
+  # as STORAGE_COMMON, so override the dependencies to make it
+  # depend via //storage/common.
+  overridden_deps = [ "//storage/public/interfaces" ]
+  component_deps = [ "//storage/common" ]
+
+  component_output_prefix = "blink_mojo_bindings"
+
+  # The chromium variant must be linked with content and use the same export
+  # settings in component build because of the WebBluetoothDeviceId typemap
+  # inside content.
+  export_class_attribute = "CONTENT_EXPORT"
+  export_define = "CONTENT_IMPLEMENTATION=1"
+  export_header = "content/common/content_export.h"
+
+  # Similarly, the blink variant must be linked with the platform component
+  # since it uses types from it in its typemaps.
+  export_class_attribute_blink = "BLINK_PLATFORM_EXPORT"
+  export_define_blink = "BLINK_PLATFORM_IMPLEMENTATION=1"
+  export_header_blink = "third_party/WebKit/public/platform/WebCommon.h"
+}
+
+mojom("android_mojo_bindings") {
+  visibility = [ ":mojo_bindings" ]
+  visibility_blink = [ ":mojo_bindings_blink" ]
+  sources = [
+    "platform/input_host.mojom",
+    "platform/input_messages.mojom",
+    "platform/modules/document_metadata/copyless_paste.mojom",
+    "platform/modules/installation/installation.mojom",
+    "platform/modules/installedapp/installed_app_provider.mojom",
+    "platform/modules/installedapp/related_application.mojom",
+    "platform/modules/mediasession/media_session.mojom",
+    "platform/modules/payments/payment_request.mojom",
+    "platform/modules/webshare/webshare.mojom",
+  ]
+  public_deps = [
+    "//mojo/common:common_custom_types",
+    "//ui/gfx/geometry/mojo",
+    "//url/mojo:url_mojom_gurl",
+  ]
+
+  component_output_prefix = "blink_android_mojo_bindings"
+
+  # See comment above.
+  export_class_attribute = "CONTENT_EXPORT"
+  export_define = "CONTENT_IMPLEMENTATION=1"
+  export_header = "content/common/content_export.h"
+  export_class_attribute_blink = "BLINK_PLATFORM_EXPORT"
+  export_define_blink = "BLINK_PLATFORM_IMPLEMENTATION=1"
+  export_header_blink = "third_party/WebKit/public/platform/WebCommon.h"
+}
+
+# The offscreen_canvas_mojo_bindings is separated from the rest of mojom files
+# because its deps contain too many files in Chromium that would pollute the
+# include paths in generated mojom-blink files for other services.
+mojom("offscreen_canvas_mojo_bindings") {
+  visibility = [ "//content/*" ]
+  visibility_blink = [ "//third_party/WebKit/Source/platform" ]
+  sources = [
+    "platform/modules/offscreencanvas/offscreen_canvas_surface.mojom",
+  ]
+  deps = [
+    "//services/viz/public/interfaces",
+  ]
+
+  component_output_prefix = "blink_offscreen_canvas_mojo_bindings"
+
+  # See comment above
+  export_class_attribute = "CONTENT_EXPORT"
+  export_define = "CONTENT_IMPLEMENTATION=1"
+  export_header = "content/common/content_export.h"
+  export_class_attribute_blink = "BLINK_PLATFORM_EXPORT"
+  export_define_blink = "BLINK_PLATFORM_IMPLEMENTATION=1"
+  export_header_blink = "third_party/WebKit/public/platform/WebCommon.h"
+}
+
+# Note that this intentionally depends on the generator target of the mojom
+# target instead of the mojom target itself directly. This is to ensure that the
+# dependencies are header-only and don't link against any bindings code.
+group("generate_mojo_bindings") {
+  deps = [
+    # It's important to generate both the regular and the Blink variants. The
+    # Blink public API exposes a number of Mojo interfaces; omitting it will
+    # cause non-deterministic compile failures for code that uses the regular
+    # variant of the generated files.
+    ":mojo_bindings__generator",
+    ":mojo_bindings_blink__generator",
+    ":offscreen_canvas_mojo_bindings_blink__generator",
+  ]
+}
+
+# The web_feature_mojo_bindings is separated from the rest of the mojom files
+# because the chromium typemap for blink mojo_bindings has private content
+# dependencies.
+mojom("web_feature_mojo_bindings") {
+  sources = [
+    "platform/web_feature.mojom",
+  ]
+}
+
+# The web_feature_mojo_bindings is separated from the rest of the mojom files
+# because the chromium typemap for blink mojo_bindings has private content
+# dependencies.
+mojom("web_client_hints_types_mojo_bindings") {
+  sources = [
+    "platform/web_client_hints_types.mojom",
+  ]
+}
+
+# Some mojom typemaps are shared between Chromium and Blink variants and
+# therefore require some shared traits implementation. These definitions are
+# relegated to a separate target to avoid duplication between the variants.
+source_set("shared_typemap_traits") {
+  visibility = [ ":*" ]
+  sources = [
+    "web/ConsoleMessageStructTraits.cpp",
+    "web/ConsoleMessageStructTraits.h",
+  ]
+  deps = [
+    ":blink_headers",
+    ":mojo_bindings_shared__generator",
+    "//mojo/public/cpp/bindings:struct_traits",
+  ]
+}

@@ -1,0 +1,43 @@
+import("../optimize_webui.gni")
+import("//tools/grit/grit_rule.gni")
+import("//chrome/common/features.gni")
+
+extensions_pak_file = "extensions_resources.pak"
+unpak_folder = "extensions_resources.unpak"
+
+optimize_webui("build") {
+  host = "extensions"
+  html_in_files = [ "extensions.html" ]
+  html_out_files = [ "vulcanized.html" ]
+  input = rebase_path("$target_gen_dir/$unpak_folder", root_build_dir)
+  js_out_files = [ "crisper.js" ]
+
+  deps = [
+    ":unpak",
+  ]
+}
+
+unpak("unpak") {
+  pak_file = extensions_pak_file
+  out_folder = unpak_folder
+
+  deps = [
+    ":flattened_resources",
+  ]
+}
+
+grit("flattened_resources") {
+  source = "extensions_resources.grd"
+
+  # The .grd contains references to generated files.
+  source_is_generated = true
+
+  defines = chrome_grit_defines
+  outputs = [
+    "grit/extensions_resources.h",
+    "grit/extensions_resources_map.cc",
+    "grit/extensions_resources_map.h",
+    extensions_pak_file,
+  ]
+  output_dir = "$root_gen_dir/chrome/browser/resources/md_extensions"
+}

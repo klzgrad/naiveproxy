@@ -1,0 +1,55 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// DIAL device description parsing interface provided by the utility process and
+// exposed by mojo policy control to the chrome browser process.
+
+module chrome.mojom;
+
+// Error encountered while parsing DIAL device description XML text.
+enum DialParsingError {
+  NONE = 0,
+  INVALID_XML = 1,
+  FAILED_TO_READ_UDN = 2,
+  FAILED_TO_READ_FRIENDLY_NAME = 3,
+  FAILED_TO_READ_MODEL_NAME = 4,
+  FAILED_TO_READ_DEVICE_TYPE = 5,
+  MISSING_UNIQUE_ID = 6,
+  MISSING_FRIENDLY_NAME = 7,
+  MISSING_APP_URL = 8,
+  INVALID_APP_URL = 9,
+  UTILITY_PROCESS_ERROR = 10,
+
+  // Note: Add entries only immediately above this line.
+  // TODO(https://crbug.com/742517): remove this enum value.
+  TOTAL_COUNT = 11
+};
+
+struct DialDeviceDescription {
+  // UUID (UDN).
+  string unique_id;
+
+  // Short user-friendly title.
+  string friendly_name;
+
+  // Model name.
+  string model_name;
+
+  // The reported device type, e.g. urn:dial-multiscreen-org:device:dial:1
+  string device_type;
+};
+
+interface DialDeviceDescriptionParser {
+  // Parses |device_description_xml_data| to get device description data. If
+  // parsing succeeds, invokes callback with valid |device_description|.
+  // Otherwise invokes callback with nullptr.
+  // |device_description|: device description object. Empty if parsing fails.
+  // |parsing_error|: error encountered while parsing DIAL device description.
+  // Spec for DIAL device description:
+  // http://upnp.org/specs/arch/UPnP-arch-DeviceArchitecture-v2.0.pdf
+  // Section 2.3 Device description.
+  ParseDialDeviceDescription(string device_description_xml_data)
+      => (DialDeviceDescription? device_description,
+          DialParsingError parsing_error);
+};

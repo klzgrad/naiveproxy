@@ -1,0 +1,194 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//mojo/public/tools/bindings/mojom.gni")
+import("//testing/test.gni")
+import("//third_party/google_input_tools/closure.gni")
+import("//third_party/google_input_tools/inputview.gni")
+import("//tools/grit/grit_rule.gni")
+
+component("keyboard") {
+  sources = [
+    "keyboard_controller.cc",
+    "keyboard_controller.h",
+    "keyboard_controller_observer.h",
+    "keyboard_event_filter.cc",
+    "keyboard_event_filter.h",
+    "keyboard_export.h",
+    "keyboard_layout_delegate.h",
+    "keyboard_layout_manager.cc",
+    "keyboard_layout_manager.h",
+    "keyboard_switches.cc",
+    "keyboard_switches.h",
+    "keyboard_ui.cc",
+    "keyboard_ui.h",
+    "keyboard_util.cc",
+    "keyboard_util.h",
+  ]
+
+  defines = [ "KEYBOARD_IMPLEMENTATION" ]
+
+  deps = [
+    "//base",
+    "//base/third_party/dynamic_annotations",
+    "//skia",
+    "//ui/aura",
+    "//ui/base",
+    "//ui/base/ime",
+    "//ui/compositor",
+    "//ui/display:display",
+    "//ui/events",
+    "//ui/events:dom_keycode_converter",
+    "//ui/events:events_base",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+    "//ui/wm",
+  ]
+
+  if (use_ozone) {
+    deps += [ "//ui/ozone" ]
+  }
+}
+
+component("keyboard_with_content") {
+  sources = [
+    "content/keyboard.cc",
+    "content/keyboard.h",
+    "content/keyboard_constants.cc",
+    "content/keyboard_constants.h",
+    "content/keyboard_content_util.cc",
+    "content/keyboard_content_util.h",
+  ]
+
+  defines = [ "KEYBOARD_IMPLEMENTATION" ]
+
+  deps = [
+    ":keyboard",
+    ":resources",
+    "//base",
+    "//base/third_party/dynamic_annotations",
+    "//content/public/browser",
+    "//content/public/common",
+    "//ipc",
+    "//skia",
+    "//ui/aura",
+    "//ui/base",
+    "//ui/base/ime",
+    "//ui/compositor",
+    "//ui/events",
+    "//ui/events:dom_keycode_converter",
+    "//ui/events:events_base",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+    "//ui/wm",
+    "//url",
+  ]
+
+  data_deps = [
+    ":resources",
+  ]
+}
+
+static_library("test_support") {
+  testonly = true
+  sources = [
+    "keyboard_test_util.cc",
+    "keyboard_test_util.h",
+  ]
+  deps = [
+    ":keyboard",
+    "//base",
+    "//skia",
+    "//ui/aura",
+    "//ui/base:test_support",
+  ]
+}
+
+grit("resources_grit") {
+  source = "keyboard_resources.grd"
+  outputs = [
+    "grit/keyboard_resources.h",
+    "grit/keyboard_resources_map.h",
+    "keyboard_resources.pak",
+  ]
+
+  input_tools_root_dir = "//third_party/google_input_tools/src/chrome/os"
+  inputview_gen_js = "$root_gen_dir/ui/keyboard/resources/inputview.js"
+  grit_flags = [
+    "-E",
+    "input_tools_root_dir=" + rebase_path(input_tools_root_dir, "."),
+    "-E",
+    "inputview_gen_js=" + rebase_path(inputview_gen_js, root_build_dir),
+  ]
+
+  deps = [
+    ":inputview",
+  ]
+}
+
+copy("resources") {
+  sources = [
+    "$target_gen_dir/keyboard_resources.pak",
+  ]
+  outputs = [
+    "$root_out_dir/keyboard_resources.pak",
+  ]
+  public_deps = [
+    ":resources_grit",
+  ]
+}
+
+build_closure("inputview") {
+  sources = inputview_sources
+  target = "$target_gen_dir/resources/inputview.js"
+  json_file = "//third_party/google_input_tools/inputview.gypi"
+  sources += [ json_file ]
+  json_sources = "variables.inputview_sources"
+  path = rebase_path("//third_party/google_input_tools")
+}
+
+mojom("mojom") {
+  sources = [
+    "keyboard.mojom",
+  ]
+  deps = [
+    "//ui/gfx/geometry/mojo",
+  ]
+}
+
+test("keyboard_unittests") {
+  sources = [
+    "keyboard_controller_unittest.cc",
+    "keyboard_event_filter_unittest.cc",
+    "keyboard_util_unittest.cc",
+    "test/run_all_unittests.cc",
+  ]
+
+  deps = [
+    ":keyboard",
+    ":keyboard_with_content",
+    ":test_support",
+    "//base",
+    "//base/test:test_support",
+    "//content/test:test_support",
+    "//mojo/edk/system",
+    "//skia",
+    "//testing/gtest",
+    "//ui/aura:test_support",
+    "//ui/base",
+    "//ui/base:test_support",
+    "//ui/base/ime",
+    "//ui/compositor:test_support",
+    "//ui/events:test_support",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+    "//ui/gl:test_support",
+    "//ui/resources:ui_test_pak",
+    "//ui/wm",
+  ]
+
+  data_deps = [
+    "//ui/resources:ui_test_pak_data",
+  ]
+}

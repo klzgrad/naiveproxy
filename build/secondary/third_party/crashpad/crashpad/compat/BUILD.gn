@@ -1,0 +1,69 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+config("compat_config") {
+  include_dirs = []
+
+  if (is_win) {
+    include_dirs += [ "win" ]
+  } else {
+    include_dirs += [ "non_win" ]
+  }
+
+  if (is_mac) {
+    include_dirs += [
+      "mac",
+      "non_cxx11_lib",
+    ]
+  }
+}
+
+static_library("compat") {
+  sources = []
+  if (is_mac) {
+    sources += [
+      "mac/AvailabilityMacros.h",
+      "mac/kern/exc_resource.h",
+      "mac/mach-o/getsect.cc",
+      "mac/mach-o/getsect.h",
+      "mac/mach-o/loader.h",
+      "mac/mach/mach.h",
+      "mac/sys/resource.h",
+      "non_cxx11_lib/type_traits",
+      "non_cxx11_lib/utility",
+    ]
+  } else {
+    sources += [ "non_mac/mach/mach.h" ]
+  }
+
+  if (is_win) {
+    sources += [
+      "win/getopt.h",
+      "win/strings.cc",
+      "win/strings.h",
+      "win/sys/types.h",
+      "win/time.cc",
+      "win/time.h",
+      "win/winnt.h",
+    ]
+  } else {
+    sources += [
+      "non_win/dbghelp.h",
+      "non_win/minwinbase.h",
+      "non_win/timezoneapi.h",
+      "non_win/verrsrc.h",
+      "non_win/windows.h",
+      "non_win/winnt.h",
+    ]
+  }
+
+  public_configs = [ ":compat_config" ]
+
+  deps = []
+  if (is_mac) {
+    deps += [ "//third_party/crashpad/crashpad/third_party/apple_cctools" ]
+  } else if (is_win) {
+    deps += [ "//third_party/crashpad/crashpad/third_party/getopt" ]
+  }
+}

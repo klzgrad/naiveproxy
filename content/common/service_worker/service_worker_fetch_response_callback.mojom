@@ -1,0 +1,35 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module content.mojom;
+
+import "mojo/common/time.mojom";
+import "storage/public/interfaces/blobs.mojom";
+import "third_party/WebKit/public/platform/modules/serviceworker/service_worker_stream_handle.mojom";
+
+[Native]
+struct ServiceWorkerResponse;
+
+// Callback interface which is passed to a controller service worker through
+// DispatchFetchEvent (either via ServiceWorkerEventDispatcher or via
+// ControllerServiceWorker interface).
+// The receiver service worker uses this interface to respond to a fetch event.
+interface ServiceWorkerFetchResponseCallback {
+  // Responds to the request with |response|. The body is empty.
+  OnResponse(ServiceWorkerResponse response,
+             mojo.common.mojom.Time dispatch_event_time);
+  // Responds to the request with |response|. The body is returned as a blob.
+  // TODO(kinuko): This should not be necessary once we properly support
+  // transferring blob within |response|. See crbug.com/75523 for more details.
+  OnResponseBlob(ServiceWorkerResponse response,
+                 storage.mojom.Blob body_as_blob,
+                 mojo.common.mojom.Time dispatch_event_time);
+  // Responds to the request with |response|. The body is returned as a stream.
+  OnResponseStream(ServiceWorkerResponse response,
+                   blink.mojom.ServiceWorkerStreamHandle body_as_stream,
+                   mojo.common.mojom.Time dispatch_event_time);
+  // Provides no response to the request. The browser will fall back to the
+  // network.
+  OnFallback(mojo.common.mojom.Time dispatch_event_time);
+};

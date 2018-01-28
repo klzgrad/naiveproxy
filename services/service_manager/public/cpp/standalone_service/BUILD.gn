@@ -1,0 +1,63 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+source_set("standalone_service") {
+  sources = [
+    "standalone_service.cc",
+    "standalone_service.h",
+    "switches.cc",
+    "switches.h",
+  ]
+
+  deps = [
+    "//mojo/edk/system",
+    "//mojo/public/cpp/system",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/runner:init",
+    "//services/service_manager/runner/common",
+  ]
+
+  public_deps = [
+    "//base",
+    "//services/service_manager/public/interfaces",
+  ]
+
+  if (is_linux && !is_android) {
+    sources += [
+      "linux_sandbox.cc",
+      "linux_sandbox.h",
+    ]
+
+    deps += [
+      "//sandbox/linux:sandbox",
+      "//sandbox/linux:sandbox_services",
+      "//sandbox/linux:seccomp_bpf",
+    ]
+  }
+
+  if (is_mac) {
+    sources += [
+      "mach_broker.cc",
+      "mach_broker.h",
+    ]
+  }
+}
+
+# Service executable targets should link against this to get a boilerplate entry
+# point which accepts canonical command-line arguments to establish a connection
+# to the Service Manager. In order to link properly, dependents must ensure that
+# they define a ServiceMain() symbol which matches the signature in
+# //services/service_manager/public/c/main.h.
+source_set("main") {
+  sources = [
+    "main.cc",
+  ]
+
+  deps = [
+    ":standalone_service",
+    "//base",
+    "//base:i18n",
+    "//services/service_manager/runner:init",
+  ]
+}

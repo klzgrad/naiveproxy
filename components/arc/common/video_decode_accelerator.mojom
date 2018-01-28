@@ -1,0 +1,101 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// This file defined the mojo interface between Android and Chromium for video
+// decoding. See comments of VideoDecodeAccelerator for more info.
+
+module arc.mojom;
+
+import "video_common.mojom";
+
+[Extensible]
+enum HalPixelFormatExtension {
+  HAL_PIXEL_FORMAT_YCbCr_420_888 = 0x23,
+  HAL_PIXEL_FORMAT_H264 = 0x34363248,
+  HAL_PIXEL_FORMAT_VP8 = 0x00385056,
+};
+
+enum PortType {
+  PORT_INPUT = 0,
+  PORT_OUTPUT = 1,
+};
+
+struct BufferMetadata {
+  int64 timestamp;  // in microseconds
+  uint32 bytes_used;
+};
+
+struct VideoFormat {
+  uint32 pixel_format;
+  uint32 buffer_size;
+
+  // minimal number of buffers required to process the video.
+  uint32 min_num_buffers;
+  uint32 coded_width;
+  uint32 coded_height;
+  uint32 crop_left;
+  uint32 crop_width;
+  uint32 crop_top;
+  uint32 crop_height;
+};
+
+struct VideoDecodeAcceleratorConfig {
+  // Deprecated. This config struct is used for decoder only.
+  enum DeviceTypeDeprecated {
+    DEVICE_ENCODER = 0,
+    DEVICE_DECODER = 1,
+  };
+
+  // Deprecated. Only decoder will be supported.
+  DeviceTypeDeprecated device_type_deprecated;
+  uint32 num_input_buffers;
+  uint32 input_pixel_format;
+};
+
+// Next MinVersion: 4
+// Deprecated method IDs: 2, 7
+// Next method ID: 10
+interface VideoDecodeAccelerator {
+  enum Result {
+    SUCCESS = 0,
+    ILLEGAL_STATE = 1,
+    INVALID_ARGUMENT = 2,
+    UNREADABLE_INPUT = 3,
+    PLATFORM_FAILURE = 4,
+    INSUFFICIENT_RESOURCES = 5,
+  };
+
+  [MinVersion=2]
+  Initialize@8(VideoDecodeAcceleratorConfig config,
+               VideoDecodeClient client) => (Result result);
+
+  BindSharedMemory@1(PortType port, uint32 index, handle ashmem_fd,
+                     uint32 offset, uint32 length);
+
+  [MinVersion=3]
+  BindDmabuf@9(PortType port, uint32 index, handle dmabuf_fd,
+               array<VideoFramePlane> planes);
+
+  UseBuffer@3(PortType port, uint32 index, BufferMetadata metadata);
+
+  SetNumberOfOutputBuffers@4(uint32 number);
+
+  Reset@5();
+
+  Flush@6();
+};
+
+// Deprecated method IDs: 0
+// Next method ID: 6
+interface VideoDecodeClient {
+  OnError@1(VideoDecodeAccelerator.Result error);
+
+  OnBufferDone@2(PortType port, uint32 index, BufferMetadata metadata);
+
+  OnResetDone@3();
+
+  OnOutputFormatChanged@4(VideoFormat format);
+
+  OnFlushDone@5();
+};

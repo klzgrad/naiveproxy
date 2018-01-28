@@ -1,0 +1,88 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ios/rules.gni")
+import("//build/config/mac/base_rules.gni")
+import("//build/mac/tweak_info_plist.gni")
+import("//ios/build/chrome_build.gni")
+import("//ios/public/provider/chrome/browser/build_config.gni")
+import("//ios/third_party/earl_grey/ios_eg_test.gni")
+
+tweak_info_plist("info_plist") {
+  info_plists = [
+    "//ios/chrome/app/resources/Info.plist",
+    "//ios/chrome/app/resources/EarlGreyAddition+Info.plist",
+  ]
+  if (ios_chrome_info_plist_additions != []) {
+    info_plists += ios_chrome_info_plist_additions
+  }
+  if (ios_encryption_export_compliance_code != "") {
+    info_plists +=
+        [ "//ios/chrome/app/resources/EncryptionExportCompliance+Info.plist" ]
+  }
+  args = [
+    "--breakpad=$breakpad_enabled_as_int",
+    "--branding=$chromium_short_name",
+  ]
+}
+
+compile_entitlements("entitlements") {
+  entitlements_templates = [ "resources/Chrome.entitlements" ]
+  if (ios_chrome_entitlements_additions != []) {
+    # TODO(crbug.com/707206): Allow additional entitlements once the CSChromium
+    # mobile provisioning profiles have been updated.
+    # entitlements_templates += ios_chrome_entitlements_additions
+  }
+  substitutions = [ "IOS_BUNDLE_ID_PREFIX=$ios_app_bundle_id_prefix" ]
+  output_name = "$target_gen_dir/$chromium_short_name.entitlements"
+}
+
+ios_eg_test("ios_clean_skeleton_perf_egtests") {
+  entitlements_target = ":entitlements"
+  info_plist_target = ":info_plist"
+
+  sources = [
+    "startup_egtest.mm",
+  ]
+
+  deps = [
+    "//ios/chrome/app:tests_fake_hook",
+    "//ios/clean/chrome/app:main",
+    "//ios/testing/perf:startup",
+  ]
+
+  bundle_deps = [
+    "//ios/chrome/app/resources",
+    ios_application_icons_target,
+  ]
+
+  configs += [ "//build/config/compiler:enable_arc" ]
+
+  _eg_main_application_delegate = "MainApplicationDelegate"
+
+  extra_substitutions = [
+    "CONTENT_WIDGET_EXTENSION_BUNDLE_ID=$chromium_bundle_id.ContentTodayExtension",
+    "CHROMIUM_HANDOFF_ID=$chromium_handoff_id",
+    "CHROMIUM_SHORT_NAME=$target_name",
+    "CHROMIUM_URL_SCHEME_1=$url_unsecure_scheme",
+    "CHROMIUM_URL_SCHEME_2=$url_secure_scheme",
+    "CHROMIUM_URL_SCHEME_3=$url_x_callback_scheme",
+    "CHROMIUM_URL_CHANNEL_SCHEME=$url_channel_scheme",
+    "EG_MAIN_APPLICATION_DELEGATE=$_eg_main_application_delegate",
+    "SSOAUTH_URL_SCHEME=$url_ssoauth_scheme",
+  ]
+
+  if (ios_automatically_manage_certs) {
+    # Use the same bundle identifier for EarlGrey tests as for unit tests
+    # when managing certificates as the number of free certs is limited.
+    extra_substitutions +=
+        [ "CHROMIUM_BUNDLE_ID=gtest.${ios_generic_test_bundle_id_suffix}" ]
+  } else {
+    extra_substitutions += [ "CHROMIUM_BUNDLE_ID=gtest.$target_name" ]
+  }
+
+  if (ios_encryption_export_compliance_code != "") {
+    extra_substitutions += [ "ENCRYPTION_EXPORT_COMPLIANCE_CODE=$ios_encryption_export_compliance_code" ]
+  }
+}

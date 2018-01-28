@@ -1,0 +1,116 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//mojo/public/tools/bindings/mojom.gni")
+import("//testing/test.gni")
+
+group("common") {
+  public_deps = [
+    ":common_base",
+    ":common_custom_types",
+  ]
+}
+
+mojom("common_custom_types") {
+  sources = [
+    "file.mojom",
+    "file_info.mojom",
+    "file_path.mojom",
+    "memory_allocator_dump_cross_process_uid.mojom",
+    "process_id.mojom",
+    "string16.mojom",
+    "text_direction.mojom",
+    "time.mojom",
+    "unguessable_token.mojom",
+    "values.mojom",
+    "version.mojom",
+  ]
+
+  # TODO(crbug.com/699569): Convert to use the new JS bindings.
+  js_bindings_mode = "both"
+}
+
+mojom("read_only_buffer") {
+  sources = [
+    "read_only_buffer.mojom",
+  ]
+}
+
+component("common_base") {
+  output_name = "mojo_common_lib"
+
+  sources = [
+    "data_pipe_drainer.cc",
+    "data_pipe_drainer.h",
+    "data_pipe_utils.cc",
+    "data_pipe_utils.h",
+  ]
+
+  defines = [ "MOJO_COMMON_IMPLEMENTATION" ]
+
+  public_deps = [
+    "//base",
+    "//mojo/public/cpp/bindings",
+    "//mojo/public/cpp/system",
+  ]
+}
+
+mojom("test_common_custom_types") {
+  sources = [
+    "test_common_custom_types.mojom",
+    "traits_test_service.mojom",
+  ]
+  public_deps = [
+    ":common_custom_types",
+  ]
+}
+
+test("mojo_common_unittests") {
+  deps = [
+    ":common",
+    ":common_custom_types",
+    ":struct_traits",
+    ":test_common_custom_types",
+    "//base",
+    "//base/test:test_support",
+    "//mojo/edk/test:run_all_unittests",
+    "//mojo/edk/test:test_support",
+    "//mojo/public/cpp/bindings",
+    "//mojo/public/cpp/test_support:test_utils",
+    "//testing/gtest",
+    "//url",
+  ]
+
+  sources = [
+    "common_custom_types_unittest.cc",
+    "struct_traits_unittest.cc",
+  ]
+}
+
+source_set("struct_traits") {
+  sources = [
+    "common_custom_types_struct_traits.cc",
+    "common_custom_types_struct_traits.h",
+  ]
+  deps = [
+    ":common_custom_types_shared_cpp_sources",
+    "//base:base",
+    "//mojo/public/cpp/system",
+  ]
+  public_deps = [
+    "//base:i18n",
+  ]
+}
+
+source_set("values_struct_traits") {
+  sources = [
+    "values_struct_traits.cc",
+    "values_struct_traits.h",
+  ]
+  public_deps = [
+    ":common_custom_types_shared_cpp_sources",
+    "//base",
+    "//mojo/public/cpp/bindings:bindings",
+  ]
+}

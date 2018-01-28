@@ -1,0 +1,87 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module content.mojom;
+
+import "content/common/service_worker/controller_service_worker.mojom";
+import "content/common/service_worker/service_worker_types.mojom";
+import "third_party/WebKit/public/platform/modules/serviceworker/service_worker_error_type.mojom";
+import "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom";
+import "url/mojo/url.mojom";
+
+// mojom::ServiceWorkerContainerHost is a browser-side interface. The renderer
+// process uses this interface to request the browser process to do operations
+// involving service worker registrations.
+interface ServiceWorkerContainerHost {
+  // Corresponds to navigator.serviceWorker.register().
+  // Registers a service worker from |script_url| with |options|.
+  // On success, |error| is kNone with |registration| and |attributes| set.
+  // Otherwise, |error| and |error_msg| describe the failure.
+  Register(url.mojom.Url script_url,
+           blink.mojom.ServiceWorkerRegistrationOptions options)
+    => (blink.mojom.ServiceWorkerErrorType error,
+        string? error_msg,
+        blink.mojom.ServiceWorkerRegistrationObjectInfo? registration,
+        ServiceWorkerVersionAttributes? attributes);
+
+  // Corresponds to navigator.serviceWorker.getRegistration().
+  // Gets the service worker registration for the |client_url|.
+  // On success, |error| is kNone with |registration| and |attributes| set.
+  // Otherwise, |error| and |error_msg| describe the failure.
+  GetRegistration(url.mojom.Url client_url)
+    => (blink.mojom.ServiceWorkerErrorType error,
+        string? error_msg,
+        blink.mojom.ServiceWorkerRegistrationObjectInfo? registration,
+        ServiceWorkerVersionAttributes? attributes);
+
+  // Corresponds to navigator.serviceWorker.getRegistrations().
+  // Gets all service worker registrations which have the same origin with
+  // the ServiceWorkerContainer that this interface hosts.
+  // On success, |error| is kNone with |infos| and |attrs| set. Otherwise,
+  // |error| and |error_msg| describe the failure.
+  GetRegistrations()
+    => (blink.mojom.ServiceWorkerErrorType error,
+        string? error_msg,
+        array<blink.mojom.ServiceWorkerRegistrationObjectInfo>? infos,
+        array<ServiceWorkerVersionAttributes>? attrs);
+
+  // Corresponds to navigator.serviceWorker.ready.
+  // Returns the service worker registration for the ServiceWorkerContainer that
+  // this interface hosts, once such a registration exists and has an active
+  // service worker.
+  GetRegistrationForReady()
+    => (blink.mojom.ServiceWorkerRegistrationObjectInfo? registration,
+        ServiceWorkerVersionAttributes? attributes);
+
+  // S13nServiceWorker:
+  // Gets a Mojo end point to the controller ServiceWorker. This may start a
+  // service worker instance in a renderer process if the corresponding
+  // instance is not alive.
+  // This method must be called only by the controllees.
+  // If the browser fails to start the service worker it is propagated as a
+  // connection error of the returned pipe. The detailed error reasons are not
+  // reported to the controllees, but the browser process is responsible for
+  // properly handling the failure and recording the reasons.
+  GetControllerServiceWorker(ControllerServiceWorker& controller);
+};
+
+// mojom::ServiceWorkerContainer is a renderer-side interface.
+// The browser process uses this interface to send messages to documents or
+// the service worker's context.
+//
+// Roughly corresponds to the web-exposed ServiceWorkerContainer interface,
+// i.e., navigator.serviceWorker. Actually, the plan is for this interface to be
+// used for anything that could access a ServiceWorkerRegistration or
+// ServiceWorker object. For example, ServiceWorkerGlobalScope needs to be
+// connected to this, since it has self.registration, even though we don’t
+// implement navigator.serviceWorker for Worker yet. But eventually anything
+// that can touch these objects should be a ServiceWorkerContainer, so it’s OK
+// to use this name.
+interface ServiceWorkerContainer {
+  // TODO(xiaofeng.zhang): implement them.
+  // SetController();
+  // ServiceWorkerStateChanged();
+  // ServiceWorkerRegistrationUpdateFound();
+  // PostMessage();
+};

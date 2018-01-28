@@ -1,0 +1,48 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// Media parsing interface provided by the utility process and exposed by
+// mojo policy control to the chrome browser process.
+
+module extensions.mojom;
+
+import "mojo/common/file.mojom";
+import "mojo/common/time.mojom";
+import "mojo/common/values.mojom";
+
+interface MediaParser {
+  // Extract metadata from a |mime_type| blob of data of |total_size| and
+  // available from the browser process via |media_data_source|. If there
+  // are images referred to in the metadata, and |get_attached_images| is
+  // true, return the images in |attached_images|.
+  ParseMediaMetadata(string mime_type,
+                     int64 total_size,
+                     bool get_attached_images,
+                     MediaDataSource media_data_source)
+      => (bool parse_success,
+          mojo.common.mojom.DictionaryValue metadata,
+          array<AttachedImage> attached_images);
+
+  // Validate the passed media file with sanity checks, and file decoding
+  // for at most |decode_time| wall clock time. Returns |success| true if
+  // |file| appears to be a well-formed media file, false otherwise.
+  // Note: it is still not safe to decode the file in the browser process
+  // after this check.
+  CheckMediaFile(mojo.common.mojom.TimeDelta decode_time,
+                 mojo.common.mojom.File file)
+      => (bool success);
+};
+
+interface MediaDataSource {
+  // ParseMediaMetadata interface used to read blob data for parsing from
+  // the browser process.
+  ReadBlob(int64 position, int64 length) => (array<uint8> data);
+};
+
+struct AttachedImage {
+  // If ParseMediaMetadata returns attached images, each of the images is
+  // returned in an AttachedImage object.
+  string type;
+  array<uint8> data;
+};

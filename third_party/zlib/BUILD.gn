@@ -1,0 +1,215 @@
+# Copyright (c) 2013 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+if (current_cpu == "arm" || current_cpu == "arm64") {
+  import("//build/config/arm.gni")
+}
+
+config("zlib_config") {
+  include_dirs = [ "." ]
+}
+
+config("zlib_adler32_simd_config") {
+  if (!is_ios && (current_cpu == "x86" || current_cpu == "x64")) {
+    defines = [ "ADLER32_SIMD_SSSE3" ]
+  }
+
+  if (current_cpu == "arm" || current_cpu == "arm64") {
+    if (arm_use_neon) {
+      defines = [ "ADLER32_SIMD_NEON" ]
+    }
+  }
+}
+
+source_set("zlib_adler32_simd") {
+  visibility = [ ":*" ]
+
+  if (!is_ios && (current_cpu == "x86" || current_cpu == "x64")) {
+    sources = [
+      "adler32_simd.c",
+      "adler32_simd.h",
+    ]
+
+    if (!is_win || is_clang) {
+      cflags = [ "-mssse3" ]
+    }
+  }
+
+  if (current_cpu == "arm" || current_cpu == "arm64") {
+    if (arm_use_neon) {
+      sources = [
+        "adler32_simd.c",
+        "adler32_simd.h",
+      ]
+
+      if (!is_debug) {
+        # Use optimize_speed (-O3) to output the _smallest_ code.
+        configs -= [ "//build/config/compiler:default_optimization" ]
+        configs += [ "//build/config/compiler:optimize_speed" ]
+      }
+    }
+  }
+
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [ "//build/config/compiler:no_chromium_code" ]
+
+  public_configs = [ ":zlib_adler32_simd_config" ]
+}
+
+static_library("zlib_x86_simd") {
+  if (!is_ios && (current_cpu == "x86" || current_cpu == "x64")) {
+    sources = [
+      "crc_folding.c",
+      "fill_window_sse.c",
+    ]
+    if (!is_win || is_clang) {
+      cflags = [
+        "-msse4.2",
+        "-mpclmul",
+      ]
+    }
+  } else {
+    sources = [
+      "simd_stub.c",
+    ]
+  }
+
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [ "//build/config/compiler:no_chromium_code" ]
+}
+
+config("zlib_warnings") {
+  if (is_clang && !is_ios && (current_cpu == "x86" || current_cpu == "x64")) {
+    cflags = [ "-Wno-incompatible-pointer-types" ]
+  }
+}
+
+static_library("zlib") {
+  if (!is_win) {
+    # Don't stomp on "libzlib" on other platforms.
+    output_name = "chrome_zlib"
+  }
+
+  sources = [
+    "adler32.c",
+    "compress.c",
+    "crc32.c",
+    "crc32.h",
+    "deflate.c",
+    "deflate.h",
+    "gzclose.c",
+    "gzguts.h",
+    "gzlib.c",
+    "gzread.c",
+    "gzwrite.c",
+    "infback.c",
+    "inffast.c",
+    "inffast.h",
+    "inffixed.h",
+    "inflate.c",
+    "inflate.h",
+    "inftrees.c",
+    "inftrees.h",
+    "names.h",
+    "trees.c",
+    "trees.h",
+    "uncompr.c",
+    "x86.h",
+    "zconf.h",
+    "zlib.h",
+    "zutil.c",
+    "zutil.h",
+  ]
+
+  if (current_cpu == "arm" || current_cpu == "arm64") {
+    if (arm_use_neon) {
+      # TODO: handle InflateBack case, see crbug.com/769880.
+      sources -= [
+        "inffast.c",
+        "inflate.c",
+      ]
+      sources += [
+        "contrib/arm/chunkcopy.h",
+        "contrib/arm/inffast.c",
+        "contrib/arm/inflate.c",
+      ]
+    }
+  }
+
+  defines = []
+  deps = []
+
+  if (!is_ios && (current_cpu == "x86" || current_cpu == "x64")) {
+    sources += [ "x86.c" ]
+
+    deps += [ ":zlib_adler32_simd" ]
+  }
+
+  if (current_cpu == "arm" || current_cpu == "arm64") {
+    if (arm_use_neon) {
+      deps += [ ":zlib_adler32_simd" ]
+    }
+  }
+
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [
+    "//build/config/compiler:no_chromium_code",
+
+    # Must be after no_chromium_code for warning flags to be ordered correctly.
+    ":zlib_warnings",
+  ]
+
+  public_configs = [ ":zlib_config" ]
+
+  deps += [
+    ":zlib_x86_simd"
+  ]
+}
+
+config("minizip_warnings") {
+  visibility = [ ":*" ]
+  if (is_clang) {
+    # zlib uses `if ((a == b))` for some reason.
+    cflags = [ "-Wno-parentheses-equality" ]
+  }
+}
+
+static_library("minizip") {
+  sources = [
+    "contrib/minizip/ioapi.c",
+    "contrib/minizip/ioapi.h",
+    "contrib/minizip/iowin32.c",
+    "contrib/minizip/iowin32.h",
+    "contrib/minizip/unzip.c",
+    "contrib/minizip/unzip.h",
+    "contrib/minizip/zip.c",
+    "contrib/minizip/zip.h",
+  ]
+
+  if (!is_win) {
+    sources -= [
+      "contrib/minizip/iowin32.c",
+      "contrib/minizip/iowin32.h",
+    ]
+  }
+  if (is_mac || is_ios || is_android || is_nacl) {
+    # Mac, Android and the BSDs don't have fopen64, ftello64, or fseeko64. We
+    # use fopen, ftell, and fseek instead on these systems.
+    defines = [ "USE_FILE32API" ]
+  }
+
+  deps = [
+    ":zlib",
+  ]
+
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [
+    "//build/config/compiler:no_chromium_code",
+
+    # Must be after no_chromium_code for warning flags to be ordered correctly.
+    ":minizip_warnings",
+  ]
+
+  public_configs = [ ":zlib_config" ]
+}

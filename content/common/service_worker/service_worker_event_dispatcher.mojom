@@ -1,0 +1,160 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module content.mojom;
+
+import "content/common/service_worker/service_worker_fetch_response_callback.mojom";
+import "content/public/common/url_loader.mojom";
+import "mojo/common/string16.mojom";
+import "mojo/common/time.mojom";
+import "storage/public/interfaces/blobs.mojom";
+import "third_party/WebKit/public/platform/modules/background_sync/background_sync.mojom";
+import "third_party/WebKit/public/platform/modules/fetch/fetch_api_request.mojom";
+import "third_party/WebKit/public/platform/modules/payments/payment_app.mojom";
+import "third_party/WebKit/public/platform/modules/serviceworker/service_worker_event_status.mojom";
+import "url/mojo/origin.mojom";
+import "url/mojo/url.mojom";
+
+[Native]
+struct PlatformNotificationData;
+
+[Native]
+struct PushEventPayload;
+
+[Native]
+struct ServiceWorkerResponse;
+
+[Native]
+struct ExtendableMessageEventSource;
+
+// TODO(peter): Move this to Blink when ServiceWorkerResponse has a Mojo
+// counterpart.
+struct BackgroundFetchSettledFetch {
+  blink.mojom.FetchAPIRequest request;
+  ServiceWorkerResponse response;
+};
+
+enum BackgroundFetchState {
+  PENDING,
+  SUCCEEDED,
+  FAILED
+};
+
+struct FetchEventPreloadHandle {
+  URLLoader url_loader;
+  URLLoaderClient& url_loader_client_request;
+};
+
+struct ExtendableMessageEvent {
+  mojo.common.mojom.String16 message;
+  url.mojom.Origin source_origin;
+  array<handle<message_pipe>> message_ports;
+  ExtendableMessageEventSource source;
+};
+
+// An interface for dispatching events to a ServiceWorker. This interface is
+// implemented by ServiceWorkerContextClient that lives in the renderer-side
+// to dispatch events from the browser-side.
+//
+// Those events expecting such response
+// (blink.mojom.ServiceWorkerEventStatus, mojo.common.mojom.Time) are considered
+// 'simple events'. ServiceWorkerVersion::CreateSimpleEventCallback can be used
+// to create the callback for these.
+interface ServiceWorkerEventDispatcher {
+  DispatchInstallEvent(associated ServiceWorkerInstallEventMethods method)
+      => (blink.mojom.ServiceWorkerEventStatus status,
+          bool has_fetch_handler,
+          mojo.common.mojom.Time dispatch_event_time);
+  DispatchActivateEvent()
+      => (blink.mojom.ServiceWorkerEventStatus status,
+          mojo.common.mojom.Time dispatch_event_time);
+
+  // These methods dispatch to the ServiceWorkerGlobalScope the events listed on
+  // https://wicg.github.io/background-fetch/#service-worker-global-events.
+  // The callbacks are called once the event handler has run and waitUntil()
+  // promise has settled. |developer_id| and |unique_id| are documented in
+  // content::BackgroundFetchRegistrationId.
+  DispatchBackgroundFetchAbortEvent(string developer_id)
+      => (blink.mojom.ServiceWorkerEventStatus status,
+          mojo.common.mojom.Time dispatch_event_time);
+  DispatchBackgroundFetchClickEvent(string developer_id,
+                                    BackgroundFetchState state)
+      => (blink.mojom.ServiceWorkerEventStatus status,
+          mojo.common.mojom.Time dispatch_event_time);
+  DispatchBackgroundFetchFailEvent(string developer_id,
+                                   array<BackgroundFetchSettledFetch> fetches)
+      => (blink.mojom.ServiceWorkerEventStatus status,
+          mojo.common.mojom.Time dispatch_event_time);
+  DispatchBackgroundFetchedEvent(string developer_id,
+                                 string unique_id,
+                                 array<BackgroundFetchSettledFetch> fetches)
+      => (blink.mojom.ServiceWorkerEventStatus status,
+          mojo.common.mojom.Time dispatch_event_time);
+
+  // The callback is called once the event finishes, which means the event
+  // handler ran and all outstanding respondWith() and waitUntil() promises have
+  // settled. |response_callback| is called once the promise to respondWith()
+  // settles, or when the event handler ran without calling respondWith().
+  // |fetch_event_id| is used internally when sending the response with a blob
+  // body back to the browser process. In that case, |response_callback| won't
+  // be called.
+  DispatchFetchEvent(int32 fetch_event_id, blink.mojom.FetchAPIRequest request,
+                     FetchEventPreloadHandle? preload_handle,
+                     ServiceWorkerFetchResponseCallback response_callback)
+      => (blink.mojom.ServiceWorkerEventStatus status,
+          mojo.common.mojom.Time dispatch_event_time);
+  DispatchNotificationClickEvent(string notification_id,
+                                 PlatformNotificationData notification_data,
+                                 int32 action_index,
+                                 mojo.common.mojom.String16? reply)
+      => (blink.mojom.ServiceWorkerEventStatus status,
+          mojo.common.mojom.Time dispatch_event_time);
+  DispatchNotificationCloseEvent(string notification_id,
+                                 PlatformNotificationData notification_data)
+      => (blink.mojom.ServiceWorkerEventStatus status,
+          mojo.common.mojom.Time dispatch_event_time);
+  DispatchPushEvent(PushEventPayload payload)
+      => (blink.mojom.ServiceWorkerEventStatus status,
+          mojo.common.mojom.Time dispatch_event_time);
+  // Arguments are passed to the event handler as parameters of SyncEvent.
+  // Ref: https://wicg.github.io/BackgroundSync/spec/#sync-event
+  DispatchSyncEvent(string id,
+                    blink.mojom.BackgroundSyncEventLastChance last_chance)
+      => (blink.mojom.ServiceWorkerEventStatus status,
+          mojo.common.mojom.Time dispatch_event_time);
+  DispatchAbortPaymentEvent(
+      int32 event_id,
+      payments.mojom.PaymentHandlerResponseCallback result_of_abort_payment)
+          => (blink.mojom.ServiceWorkerEventStatus status,
+              mojo.common.mojom.Time dispatch_event_time);
+  DispatchCanMakePaymentEvent(
+      int32 event_id,
+      payments.mojom.CanMakePaymentEventData event_data,
+      payments.mojom.PaymentHandlerResponseCallback result_of_can_make_payment)
+          => (blink.mojom.ServiceWorkerEventStatus status,
+              mojo.common.mojom.Time dispatch_event_time);
+  DispatchPaymentRequestEvent(
+      int32 payment_request_id,
+      payments.mojom.PaymentRequestEventData request_data,
+      payments.mojom.PaymentHandlerResponseCallback response_callback)
+          => (blink.mojom.ServiceWorkerEventStatus status,
+              mojo.common.mojom.Time dispatch_event_time);
+  DispatchExtendableMessageEvent(ExtendableMessageEvent event)
+      => (blink.mojom.ServiceWorkerEventStatus status,
+          mojo.common.mojom.Time dispatch_event_time);
+
+  // Pings the service worker to check if it is responsive. If the callback is
+  // not called within a certain period of time, the browser will terminate the
+  // worker. Unlike the other functions in this interface, Ping() does not
+  // dispatch an event.
+  Ping() => ();
+};
+
+// This interface is passed from the browser to the renderer with
+// DispatchInstallEvent. The ordering between RegisterForeignFetchScopes and the
+// callback of DispatchInstallEvent should be preserved.
+interface ServiceWorkerInstallEventMethods {
+  RegisterForeignFetchScopes(array<url.mojom.Url> sub_scopes,
+                             array<url.mojom.Origin> origins);
+};

@@ -1,0 +1,108 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/chromecast_build.gni")
+import("//chromecast/chromecast.gni")
+import("//media/media_options.gni")
+
+source_set("backend") {
+  sources = [
+    "audio_decoder_wrapper.cc",
+    "audio_decoder_wrapper.h",
+    "media_pipeline_backend_factory.h",
+    "media_pipeline_backend_factory_impl.cc",
+    "media_pipeline_backend_factory_impl.h",
+    "media_pipeline_backend_manager.cc",
+    "media_pipeline_backend_manager.h",
+    "media_pipeline_backend_wrapper.cc",
+    "media_pipeline_backend_wrapper.h",
+  ]
+
+  public_deps = [
+    "//chromecast/public",
+    "//chromecast/public/media",
+  ]
+
+  deps = [
+    "//base",
+    "//chromecast:chromecast_features",
+    "//chromecast/media:libcast_media",
+    "//chromecast/media/cma/base",
+  ]
+}
+
+source_set("cast_media_android_dummy") {
+  sources = [
+    "cast_media_android_dummy.cc",
+  ]
+  deps = [
+    "//base",
+    "//chromecast:chromecast_features",
+    "//chromecast/public",
+    "//chromecast/public/media",
+  ]
+}
+
+# Target for OEM partners to override media shared library, i.e.
+# libcast_media_1.0.so. This target is only used to build executables
+# with correct linkage information.
+cast_shared_library("libcast_media_1.0") {
+  if (is_cast_desktop_build) {
+    deps = [
+      ":default",
+    ]
+  } else {
+    deps = [
+      ":dummy",
+    ]
+  }
+}
+
+# Default implementation of media backend used on desktop.
+source_set("default") {
+  sources = [
+    "audio_decoder_default.cc",
+    "audio_decoder_default.h",
+    "cast_media_default.cc",
+    "media_pipeline_backend_default.cc",
+    "media_pipeline_backend_default.h",
+    "media_sink_default.cc",
+    "media_sink_default.h",
+    "video_decoder_default.cc",
+    "video_decoder_default.h",
+  ]
+
+  deps = [
+    "//base",
+    "//chromecast/base",
+    "//chromecast/public/media",
+    "//media",
+  ]
+}
+
+# Dummy implementation of media backend used on chromecast devices.
+# Must not depend on anything outside //chromecast/public.
+source_set("dummy") {
+  sources = [
+    "cast_media_dummy.cc",
+  ]
+
+  deps = [
+    "//chromecast/public",
+  ]
+}
+
+# Implementation of video decoder that discards decoder buffers.
+# Used on audio platforms for media streams containing video.
+source_set("null") {
+  sources = [
+    "video_decoder_null.cc",
+    "video_decoder_null.h",
+  ]
+
+  deps = [
+    "//base",
+    "//chromecast/public/media",
+  ]
+}

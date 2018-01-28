@@ -1,0 +1,71 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module app_list.mojom;
+
+import "services/ui/public/interfaces/window_manager_constants.mojom";
+
+// TODO(msw): Rename this file to app_list.mojom; move to ash?
+// TODO(msw): Ash should implement the app list and presenter; chrome should
+//            just push data about its apps into the app list interface.
+
+// Matches app_list::AppListView:AppListState.
+enum AppListState {
+  // Closes |app_list_main_view_| and dismisses the delegate.
+  CLOSED = 0,
+  // The initial state for the app list when neither maximize or side shelf
+  // modes are active. If set, the widget will peek over the shelf by
+  // kPeekingAppListHeight DIPs.
+  PEEKING = 1,
+  // Entered when text is entered into the search box from peeking mode.
+  HALF = 2,
+  // Default app list state in maximize and side shelf modes. Entered from an
+  // upward swipe from |PEEKING| or from clicking the chevron.
+  FULLSCREEN_ALL_APPS = 3,
+  // Entered from an upward swipe from |HALF| or by entering text in the
+  // search box from |FULLSCREEN_ALL_APPS|.
+  FULLSCREEN_SEARCH = 4,
+};
+
+// Implemented by ash. Used by chrome to set the presenter interface.
+interface AppList {
+  // Set the app list presenter interface, to let ash trigger Chrome's app list.
+  SetAppListPresenter(AppListPresenter presenter);
+
+  // Notify the app list that the presenter's [target] visibility changed.
+  OnTargetVisibilityChanged(bool visible);
+
+  // |display_id| gives the display containing the app list.
+  OnVisibilityChanged(bool visible, int64 display_id);
+};
+
+// Implemented by chrome. Used by ash to actually show and dismiss the app list.
+interface AppListPresenter {
+  // Show the app list on the specified display.
+  Show(int64 display_id);
+
+  // Dismiss the app list.
+  Dismiss();
+
+  // Show the app list (on the specified display) if it is hidden; hide the
+  // app list if it is shown.
+  ToggleAppList(int64 display_id);
+
+  // Starts a voice interaction session.
+  StartVoiceInteractionSession();
+
+  // Starts or stops a voice interaction session based on the current state.
+  ToggleVoiceInteractionSession();
+
+  // Updates y position and opacity of app list.
+  UpdateYPositionAndOpacity(int32 y_position_in_screen,
+                            float background_opacity);
+
+  // Ends the drag of app list from shelf.
+  EndDragFromShelf(AppListState app_list_state);
+
+  // Passes MouseWheelEvents from the Shelf to the AppListView.
+  ProcessMouseWheelOffset(int32 y_scroll_offset);
+
+};

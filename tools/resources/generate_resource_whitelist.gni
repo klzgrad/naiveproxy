@@ -1,0 +1,47 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# Generates the final .pak file whitelist that can be used by repack()'s
+# repack_whitelist parameter. Used resources are tracked by the toolchain when
+# enable_resource_whitelist_generation = true, and per-.o and per-.so .whitelist
+# files are generated. However, there are a couple of IDs (IDS_VERSION_UI_32BIT
+# and IDS_VERSION_UI_64BIT) that should always be included, and which are not
+# referenced in code. This action adds in these two ids to an existing
+# .so.whitelist.
+#
+# Variables
+#   input: Path to the .whitelist created by the toolchain.
+#   output: Path to write the output whitelist to.
+#
+# Example
+#   generate_resource_whitelist("pak_whitelist") {
+#     deps = [ ":my_shared_library" ]
+#     input = "$root_out_dir/libmy_shared_library$shlib_extension.whitelist"
+#     output = "$target_gen_dir/pak_whitelist.txt"
+#   }
+template("generate_resource_whitelist") {
+  action(target_name) {
+    forward_variables_from(invoker, [ "deps" ])
+    assert(is_android,
+           "Resource whitelist currently implemented only on Android")
+
+    script = "//tools/resources/generate_resource_whitelist.py"
+
+    inputs = [
+      invoker.input,
+    ]
+
+    outputs = [
+      invoker.output,
+    ]
+
+    args = [
+      "--input",
+      rebase_path(invoker.input, root_build_dir),
+      "--output",
+      rebase_path(invoker.output, root_build_dir),
+      "--output-directory=.",
+    ]
+  }
+}

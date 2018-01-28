@@ -1,0 +1,109 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module content.mojom;
+
+import "media/mojo/interfaces/media_types.mojom";
+import "media/capture/mojo/video_capture_types.mojom";
+import "ui/gfx/geometry/mojo/geometry.mojom";
+
+// This file decribes the communication between a given Renderer Host interface
+// implementation (VideoCaptureHost) and a remote VideoCaptureObserver.
+// VideoCaptureHost offers a stateless part (GetDeviceSupportedFormats() and
+// GetDeviceFormatsInUse()) that can be invoked at any time, and a stateful part
+// sandwiched between Start() and Stop(). A Client's OnStateChanged() can be
+// notified any time during the stateful part. The stateful part is composed of
+// a preamble where a Renderer client sends a command to Start() the capture,
+// registering itself as the associated remote VideoCaptureObserver. The Host
+// will then create and pre- share a number of buffers:
+//
+//   Observer                                        VideoCaptureHost
+//      | ---> StartCapture                                     |
+//      |                        OnStateChanged(STARTED) <---   |
+//      |                             OnBufferCreated(1) <---   |
+//      |                             OnBufferCreated(2) <---   |
+//      =                                                       =
+// and capture will then refer to those preallocated buffers:
+//      |                               OnBufferReady(1) <---   |
+//      |                               OnBufferReady(2) <---   |
+//      | ---> ReleaseBuffer(1)                                 |
+//      |                               OnBufferReady(1) <---   |
+//      | ---> ReleaseBuffer(2)                                 |
+//      |                               OnBufferReady(2) <---   |
+//      | ---> ReleaseBuffer(1)                                 |
+//      |                         ...                           |
+//      =                                                       =
+// Buffers can be reallocated with a larger size, if e.g. resolution changes.
+//      |                 (resolution change)                   |
+//      |                           OnBufferDestroyed(1) <---   |
+//      |                             OnBufferCreated(3) <---   |
+//      |                               OnBufferReady(3) <---   |
+//      | ---> ReleaseBuffer(2)                                 |
+//      |                           OnBufferDestroyed(2) <---   |
+//      |                             OnBufferCreated(5) <---   |
+//      |                               OnBufferReady(5) <---   |
+//      =                                                       =
+// In the communication epilogue, the client Stop()s capture, receiving a last
+// status update:
+//      | ---> StopCapture                                      |
+//      |                        OnStateChanged(STOPPED) <---   |
+
+enum VideoCaptureState {
+  STARTED,
+  PAUSED,
+  RESUMED,
+  STOPPED,
+  FAILED,
+  ENDED,
+};
+
+// Interface for notifications from Browser/Host back to Renderer/Client. This
+// interface is used between VideoCaptureHost.Start() and Stop().
+interface VideoCaptureObserver {
+  // Gets notified about a VideoCaptureState update.
+  OnStateChanged(VideoCaptureState state);
+
+  // A new buffer identified by |buffer_id| has been created for video capture.
+  OnBufferCreated(int32 buffer_id, handle<shared_buffer> handle_fd);
+
+  // |buffer_id| has video capture data with |info| containing the associated
+  // VideoFrame constituent parts.
+  OnBufferReady(int32 buffer_id, media.mojom.VideoFrameInfo info);
+
+  // |buffer_id| has been released by VideoCaptureHost and must not be used.
+  OnBufferDestroyed(int32 buffer_id);
+};
+
+interface VideoCaptureHost {
+  // Start the |session_id| session with |params|. The video capture will be
+  // identified as |device_id|, a new id picked by the renderer process.
+  // |observer| will be used for notifications.
+  Start(int32 device_id, int32 session_id, media.mojom.VideoCaptureParams params,
+        VideoCaptureObserver observer);
+
+  // Closes the video capture specified by |device_id|.
+  Stop(int32 device_id);
+
+  // Pauses the video capture specified by |device_id|.
+  Pause(int32 device_id);
+
+  // Resume |device_id| video capture, in |session_id| and with |params|.
+  Resume(int32 device_id, int32 session_id, media.mojom.VideoCaptureParams params);
+
+  // Requests that the video capturer send a frame "soon" (e.g., to resolve
+  // picture loss or quality issues).
+  RequestRefreshFrame(int32 device_id);
+
+  // Indicates that a renderer has finished using a previously shared buffer.
+  ReleaseBuffer(int32 device_id, int32 buffer_id,
+                double consumer_resource_utilization);
+
+  // Get the formats supported by a device referenced by |session_id|.
+  GetDeviceSupportedFormats(int32 device_id, int32 session_id)
+    => (array<media.mojom.VideoCaptureFormat> formats_supported);
+
+  // Get the format(s) in use by a device referenced by |session_id|.
+  GetDeviceFormatsInUse(int32 device_id, int32 session_id)
+    => (array<media.mojom.VideoCaptureFormat> formats_in_use);
+};

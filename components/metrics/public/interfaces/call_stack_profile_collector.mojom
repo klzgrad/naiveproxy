@@ -1,0 +1,88 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module metrics.mojom;
+
+import "mojo/common/file_path.mojom";
+import "mojo/common/time.mojom";
+
+// These structs mirror the corresponding types in base::StackSamplingProfiler.
+
+struct CallStackModule {
+  uint64 base_address;
+  string id;
+  mojo.common.mojom.FilePath filename;
+};
+
+struct CallStackFrame {
+  uint64 instruction_pointer;
+  uint64 module_index;
+};
+
+struct CallStackSample {
+  array<CallStackFrame> frames;
+  uint32 process_milestones;
+};
+
+struct CallStackProfile {
+  array<CallStackModule> modules;
+  array<CallStackSample> samples;
+  mojo.common.mojom.TimeDelta profile_duration;
+  mojo.common.mojom.TimeDelta sampling_period;
+};
+
+enum Process {
+  UNKNOWN_PROCESS,
+  BROWSER_PROCESS,
+  RENDERER_PROCESS,
+  GPU_PROCESS,
+  UTILITY_PROCESS,
+  ZYGOTE_PROCESS,
+  SANDBOX_HELPER_PROCESS,
+  PPAPI_PLUGIN_PROCESS,
+  PPAPI_BROKER_PROCESS,
+};
+
+enum Thread {
+  UNKNOWN_THREAD,
+
+  UI_THREAD,
+  FILE_THREAD,
+  FILE_USER_BLOCKING_THREAD,
+  PROCESS_LAUNCHER_THREAD,
+  CACHE_THREAD,
+  IO_THREAD,
+  DB_THREAD,
+
+  GPU_MAIN_THREAD,
+
+  RENDER_THREAD,
+  UTILITY_THREAD,
+};
+
+enum Trigger {
+  UNKNOWN,
+  PROCESS_STARTUP,
+  JANKY_TASK,
+  THREAD_HUNG,
+  PERIODIC_COLLECTION,
+};
+
+enum SampleOrderingSpec {
+  MAY_SHUFFLE,
+  PRESERVE_ORDER,
+};
+
+struct CallStackProfileParams {
+  Process process;
+  Thread thread;
+  Trigger trigger;
+  SampleOrderingSpec ordering_spec;
+};
+
+interface CallStackProfileCollector {
+  Collect(CallStackProfileParams params,
+          mojo.common.mojom.TimeTicks start_timestamp,
+          array<CallStackProfile> profiles);
+};

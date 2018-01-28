@@ -1,0 +1,70 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module device.mojom;
+
+struct GamepadQuaternion {
+  float x;
+  float y;
+  float z;
+  float w;
+};
+
+struct GamepadVector {
+  float x;
+  float y;
+  float z;
+};
+
+struct GamepadButton {
+  bool pressed;
+  bool touched;
+  double value;
+};
+
+struct GamepadPose {
+  GamepadQuaternion? orientation;
+  GamepadVector? position;
+  GamepadVector? angular_velocity;
+  GamepadVector? linear_velocity;
+  GamepadVector? angular_acceleration;
+  GamepadVector? linear_acceleration;
+};
+
+enum GamepadHand {
+  GamepadHandNone = 0,
+  GamepadHandLeft = 1,
+  GamepadHandRight = 2
+};
+
+struct Gamepad {
+  bool connected;
+  array<uint16> id;
+  uint64 timestamp;
+  array<double> axes;
+  array<GamepadButton> buttons;
+  array<uint16> mapping;
+  GamepadPose? pose;
+  GamepadHand hand;
+  uint32 display_id;
+};
+
+interface GamepadObserver {
+  GamepadConnected(int32 index, Gamepad gamepad);
+  GamepadDisconnected(int32 index, Gamepad gamepad);
+};
+
+// Asks the browser process to start polling, and return a shared memory
+// handle that will hold the data from the hardware. See
+// gamepad_shared_buffer.h for a description of how synchronization is
+// handled. The number of Starts should match the number of Stops.
+interface GamepadMonitor {
+  [Sync]
+  GamepadStartPolling() => (handle<shared_buffer> memory_handle);
+
+  [Sync]
+  GamepadStopPolling() => ();
+
+  SetObserver(GamepadObserver gamepad_observer);
+};

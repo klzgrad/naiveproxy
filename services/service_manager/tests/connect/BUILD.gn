@@ -1,0 +1,175 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//services/catalog/public/tools/catalog.gni")
+import("//services/service_manager/public/cpp/service.gni")
+import("//services/service_manager/public/service_manifest.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
+import("//testing/test.gni")
+
+source_set("connect") {
+  testonly = true
+  sources = [
+    "connect_unittest.cc",
+  ]
+  deps = [
+    ":interfaces",
+    "//base",
+    "//base/test:test_support",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/cpp:service_test_support",
+    "//services/service_manager/public/interfaces",
+    "//services/service_manager/tests:util",
+  ]
+
+  data_deps = [
+    ":connect_test_app",
+    ":connect_test_class_app",
+    ":connect_test_singleton_app",
+    ":connect_test_exe",
+    ":connect_test_package",
+  ]
+}
+
+mojom("interfaces") {
+  sources = [
+    "connect_test.mojom",
+  ]
+  deps = [
+    "//services/service_manager/public/interfaces",
+  ]
+}
+
+service_manifest("manifest") {
+  name = "connect_unittests"
+  source = "connect_unittests_manifest.json"
+}
+
+service_manifest("connect_test_a_manifest") {
+  name = "connect_test_a"
+  source = "connect_test_app_a_manifest.json"
+}
+
+service_manifest("connect_test_b_manifest") {
+  name = "connect_test_b"
+  source = "connect_test_app_b_manifest.json"
+}
+
+service_manifest("connect_test_sandboxed_manifest") {
+  name = "connect_test_sandboxed_app"
+  source = "connect_test_sandboxed_app_manifest.json"
+}
+
+service("connect_test_package") {
+  testonly = true
+  sources = [
+    "connect_test_package.cc",
+  ]
+  deps = [
+    ":interfaces",
+    "//base",
+    "//mojo/common:common_base",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/interfaces",
+  ]
+}
+
+service_manifest("connect_test_package_manifest") {
+  name = "connect_test_package"
+  source = "connect_test_package_manifest.json"
+  packaged_services = [
+    ":connect_test_a_manifest",
+    ":connect_test_b_manifest",
+    ":connect_test_sandboxed_manifest",
+  ]
+}
+
+service("connect_test_app") {
+  testonly = true
+  sources = [
+    "connect_test_app.cc",
+  ]
+  deps = [
+    ":interfaces",
+    "//base",
+    "//mojo/common:common_base",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/interfaces",
+  ]
+}
+
+service_manifest("connect_test_app_manifest") {
+  name = "connect_test_app"
+  source = "connect_test_app_manifest.json"
+}
+
+service("connect_test_class_app") {
+  testonly = true
+  sources = [
+    "connect_test_class_app.cc",
+  ]
+  deps = [
+    ":interfaces",
+    "//base",
+    "//mojo/common:common_base",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/interfaces",
+  ]
+}
+
+service_manifest("connect_test_class_app_manifest") {
+  name = "connect_test_class_app"
+  source = "connect_test_class_app_manifest.json"
+}
+
+service("connect_test_singleton_app") {
+  testonly = true
+  sources = [
+    "connect_test_singleton_app.cc",
+  ]
+  deps = [
+    "//base",
+    "//mojo/common:common_base",
+    "//services/service_manager/public/cpp",
+  ]
+}
+
+service_manifest("connect_test_singleton_app_manifest") {
+  name = "connect_test_singleton_app"
+  source = "connect_test_singleton_app_manifest.json"
+}
+
+executable("connect_test_exe") {
+  testonly = true
+
+  sources = [
+    "connect_test_exe.cc",
+  ]
+
+  deps = [
+    ":interfaces",
+    "//base",
+    "//build/config:exe_and_shlib_deps",
+    "//build/win:default_exe_manifest",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/cpp/standalone_service:main",
+  ]
+}
+
+service_manifest("connect_test_exe_manifest") {
+  name = "connect_test_exe"
+  source = "connect_test_exe_manifest.json"
+}
+
+catalog("catalog") {
+  embedded_services = [ ":manifest" ]
+
+  standalone_services = [
+    ":connect_test_app_manifest",
+    ":connect_test_class_app_manifest",
+    ":connect_test_exe_manifest",
+    ":connect_test_package_manifest",
+    ":connect_test_singleton_app_manifest",
+  ]
+}
