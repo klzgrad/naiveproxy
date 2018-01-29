@@ -65,19 +65,14 @@ class NaiveClientConnection {
   int DoConnectServer();
   int DoConnectServerComplete(int result);
   void Pull(Direction from, Direction to);
-  void Push(Direction from,
-            Direction to,
-            scoped_refptr<IOBuffer> buffer,
-            int size);
-  void OnIOError(Direction from, int error);
-  void OnReadComplete(Direction from,
-                      Direction to,
-                      scoped_refptr<IOBuffer> buffer,
-                      int result);
-  void OnWriteComplete(Direction from,
-                       Direction to,
-                       scoped_refptr<DrainableIOBuffer> drainable,
-                       int result);
+  void Push(Direction from, Direction to, int size);
+  void Disconnect(Direction side);
+  bool IsConnected(Direction side);
+  void OnBothDisconnected();
+  void OnPullError(Direction from, Direction to, int error);
+  void OnPushError(Direction from, Direction to, int error);
+  void OnPullComplete(Direction from, Direction to, int result);
+  void OnPushComplete(Direction from, Direction to, int result);
 
   int id_;
 
@@ -96,9 +91,16 @@ class NaiveClientConnection {
   std::unique_ptr<ClientSocketHandle> server_socket_handle_;
 
   StreamSocket* sockets_[kNumDirections];
+  scoped_refptr<IOBuffer> read_buffers_[kNumDirections];
+  scoped_refptr<DrainableIOBuffer> write_buffers_[kNumDirections];
   int errors_[kNumDirections];
+  bool write_pending_[kNumDirections];
   int bytes_passed_without_yielding_[kNumDirections];
   base::TimeTicks yield_after_time_[kNumDirections];
+
+  bool early_pull_pending_;
+  bool can_push_to_server_;
+  int early_pull_result_;
 
   bool full_duplex_;
 
