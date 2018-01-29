@@ -49,6 +49,8 @@ SpdyProxyClientSocket::SpdyProxyClientSocket(
       user_buffer_len_(0),
       write_buffer_len_(0),
       was_ever_used_(false),
+      use_fastopen_(false),
+      read_headers_pending_(false),
       net_log_(NetLogWithSource::Make(spdy_stream->net_log().net_log(),
                                       NetLogSourceType::PROXY_CLIENT_SOCKET)),
       source_dependency_(source_net_log.source()) {
@@ -335,6 +337,20 @@ int SpdyProxyClientSocket::DoLoop(int last_io_result) {
         rv = DoReadReplyComplete(rv);
         net_log_.EndEventWithNetErrorCode(
             NetLogEventType::HTTP_TRANSACTION_TUNNEL_READ_HEADERS, rv);
+        if (use_fastopen_ && read_headers_pending_) {
+          read_headers_pending_ = false;
+          if (rv < 0) {
+            // read_callback_ cannot be called.
+            if (!read_callback_)
+              rv = ERR_IO_PENDING;
+            // read_callback_ will be called with this error and be reset.
+            // Further data after that will be ignored.
+            next_state_ = STATE_DISCONNECTED;
+          } else {
+            // Does not call read_callback_ from here if headers are OK.
+            rv = ERR_IO_PENDING;
+          }
+        }
         break;
       default:
         NOTREACHED() << "bad state";
@@ -375,6 +391,10 @@ int SpdyProxyClientSocket::DoSendRequest() {
     HttpRequestHeaders proxy_delegate_headers;
     proxy_delegate_->OnBeforeTunnelRequest(proxy_server_,
                                            &proxy_delegate_headers);
+    if (proxy_delegate_headers.HasHeader("fastopen")) {
+      proxy_delegate_headers.RemoveHeader("fastopen");
+      use_fastopen_ = true;
+    }
     request_.extra_headers.MergeFrom(proxy_delegate_headers);
   }
 
@@ -396,6 +416,12 @@ int SpdyProxyClientSocket::DoSendRequest() {
 int SpdyProxyClientSocket::DoSendRequestComplete(int result) {
   if (result < 0)
     return result;
+
+  if (use_fastopen_) {
+    read_headers_pending_ = true;
+    next_state_ = STATE_OPEN;
+    return OK;
+  }
 
   // Wait for HEADERS frame from the server
   next_state_ = STATE_READ_REPLY_COMPLETE;
@@ -458,6 +484,10 @@ void SpdyProxyClientSocket::OnEarlyHintsReceived(
 void SpdyProxyClientSocket::OnHeadersReceived(
     const spdy::Http2HeaderBlock& response_headers,
     const spdy::Http2HeaderBlock* pushed_request_headers) {
+  if (use_fastopen_ && read_headers_pending_ && next_state_ == STATE_OPEN) {
+    next_state_ = STATE_READ_REPLY_COMPLETE;
+  }
+
   // If we've already received the reply, existing headers are too late.
   // TODO(mbelshe): figure out a way to make HEADERS frames useful after the
   //                initial response.
