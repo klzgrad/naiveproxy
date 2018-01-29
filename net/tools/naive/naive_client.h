@@ -38,7 +38,7 @@ class NaiveClient {
   void OnRunComplete(int connection_id, int result);
   void HandleRunResult(NaiveClientConnection* connection, int result);
 
-  void Close(int connection_id);
+  void Close(int connection_id, int reason);
 
   NaiveClientConnection* FindConnection(int connection_id);
   bool HasClosedConnection(NaiveClientConnection* connection);

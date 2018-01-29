@@ -85,7 +85,7 @@ void NaiveClient::OnConnectComplete(int connection_id, int result) {
 void NaiveClient::HandleConnectResult(NaiveClientConnection* connection,
                                       int result) {
   if (result != OK) {
-    Close(connection->id());
+    Close(connection->id(), result);
     return;
   }
   DoRun(connection);
@@ -109,15 +109,16 @@ void NaiveClient::OnRunComplete(int connection_id, int result) {
 
 void NaiveClient::HandleRunResult(NaiveClientConnection* connection,
                                   int result) {
-  LOG(INFO) << "Connection " << connection->id()
-            << " ended: " << ErrorToString(result);
-  Close(connection->id());
+  Close(connection->id(), result);
 }
 
-void NaiveClient::Close(int connection_id) {
+void NaiveClient::Close(int connection_id, int reason) {
   auto it = connection_by_id_.find(connection_id);
   if (it == connection_by_id_.end())
     return;
+
+  LOG(INFO) << "Connection " << connection_id
+            << " closed: " << ErrorToShortString(reason);
 
   // The call stack might have callbacks which still have the pointer of
   // connection. Instead of referencing connection with ID all the time,
