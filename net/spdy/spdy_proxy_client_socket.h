@@ -176,6 +176,9 @@ class NET_EXPORT_PRIVATE SpdyProxyClientSocket : public ProxyClientSocket,
   bool redirect_has_load_timing_info_;
   LoadTimingInfo redirect_load_timing_info_;
 
+  bool use_fastopen_;
+  bool read_headers_pending_;
+
   const NetLogWithSource net_log_;
   const NetLogSource source_dependency_;
 
