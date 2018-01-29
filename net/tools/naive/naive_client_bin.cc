@@ -24,6 +24,8 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "net/base/auth.h"
+#include "net/dns/host_resolver.h"
+#include "net/dns/mapped_host_resolver.h"
 #include "net/http/http_auth.h"
 #include "net/http/http_auth_cache.h"
 #include "net/http/http_network_session.h"
@@ -56,6 +58,19 @@ constexpr int kListenBackLog = 512;
 constexpr int kDefaultMaxSocketsPerPool = 256;
 constexpr int kDefaultMaxSocketsPerGroup = 255;
 constexpr int kExpectedMaxUsers = 8;
+constexpr char kDefaultHostName[] = "example";
+
+struct Params {
+  std::string listen_addr;
+  int listen_port;
+  std::string proxy_url;
+  std::string proxy_user;
+  std::string proxy_pass;
+  std::string host_resolver_rules;
+  logging::LoggingSettings log_settings;
+  base::FilePath net_log_path;
+  base::FilePath ssl_key_path;
+};
 
 std::unique_ptr<base::Value> GetConstants(
     const base::CommandLine::StringType& command_line_string) {
@@ -81,14 +96,12 @@ std::unique_ptr<base::Value> GetConstants(
 
 // Builds a URLRequestContext assuming there's only a single loop.
 std::unique_ptr<net::URLRequestContext> BuildURLRequestContext(
-    const std::string& proxy_url,
-    const std::string& proxy_user,
-    const std::string& proxy_pass,
+    const Params& params,
     net::NetLog* net_log) {
   net::URLRequestContextBuilder builder;
 
   net::ProxyConfig proxy_config;
-  proxy_config.proxy_rules().ParseFromString(proxy_url);
+  proxy_config.proxy_rules().ParseFromString(params.proxy_url);
   auto proxy_service = net::ProxyService::CreateWithoutProxyResolver(
       std::make_unique<net::ProxyConfigServiceFixed>(proxy_config), net_log);
   proxy_service->ForceReloadProxyConfig();
@@ -97,31 +110,27 @@ std::unique_ptr<net::URLRequestContext> BuildURLRequestContext(
   builder.DisableHttpCache();
   builder.set_net_log(net_log);
 
+  if (!params.host_resolver_rules.empty()) {
+    auto remapped_resolver = std::make_unique<net::MappedHostResolver>(
+        net::HostResolver::CreateDefaultResolver(net_log));
+    remapped_resolver->SetRulesFromString(params.host_resolver_rules);
+    builder.set_host_resolver(std::move(remapped_resolver));
+  }
+
   auto context = builder.Build();
 
   net::HttpNetworkSession* session =
       context->http_transaction_factory()->GetSession();
   net::HttpAuthCache* auth_cache = session->http_auth_cache();
-  GURL auth_origin(proxy_url);
-  net::AuthCredentials credentials(base::ASCIIToUTF16(proxy_user),
-                                   base::ASCIIToUTF16(proxy_pass));
+  GURL auth_origin(params.proxy_url);
+  net::AuthCredentials credentials(base::ASCIIToUTF16(params.proxy_user),
+                                   base::ASCIIToUTF16(params.proxy_pass));
   auth_cache->Add(auth_origin, /*realm=*/std::string(),
                   net::HttpAuth::AUTH_SCHEME_BASIC, /*challenge=*/"Basic",
                   credentials, /*path=*/"/");
 
   return context;
 }
-
-struct Params {
-  std::string listen_addr;
-  int listen_port;
-  std::string proxy_url;
-  std::string proxy_user;
-  std::string proxy_pass;
-  logging::LoggingSettings log_settings;
-  base::FilePath net_log_path;
-  base::FilePath ssl_key_path;
-};
 
 bool ParseCommandLineFlags(Params* params) {
   const base::CommandLine& line = *base::CommandLine::ForCurrentProcess();
@@ -130,41 +139,39 @@ bool ParseCommandLineFlags(Params* params) {
     LOG(INFO) << "Usage: naive_client [options]\n"
                  "\n"
                  "Options:\n"
-                 "-h, --help                  Show this help message and exit\n"
-                 "--addr=<address>            Address to listen on\n"
-                 "--port=<port>               Port to listen on\n"
-                 "--proxy=https://<user>:<pass>@<domain>[:port]\n"
-                 "                            Proxy specification\n"
-                 "--log                       Log to stderr, otherwise no log\n"
-                 "--log-net-log=<path>        Save NetLog\n"
-                 "--ssl-key-log-file=<path>   Save SSL keys for Wireshark\n";
+                 "-h, --help                 Show this message\n"
+                 "--addr=<address>           Address to listen on (0.0.0.0)\n"
+                 "--port=<port>              Port to listen on (1080)\n"
+                 "--proxy=https://<user>:<pass>@<hostname>[:port]\n"
+                 "                           Proxy specification.\n"
+                 "--log                      Log to stderr, otherwise no log\n"
+                 "--log-net-log=<path>       Save NetLog\n"
+                 "--ssl-key-log-file=<path>  Save SSL keys for Wireshark\n";
     exit(EXIT_SUCCESS);
     return false;
   }
 
-  if (!line.HasSwitch("addr")) {
-    LOG(ERROR) << "Missing --addr";
-    return false;
+  params->listen_addr = "0.0.0.0";
+  if (line.HasSwitch("addr")) {
+    params->listen_addr = line.GetSwitchValueASCII("addr");
   }
-  params->listen_addr = line.GetSwitchValueASCII("addr");
   if (params->listen_addr.empty()) {
-    LOG(ERROR) << "Invalid --port";
+    LOG(ERROR) << "Invalid --addr";
     return false;
   }
 
-  if (!line.HasSwitch("port")) {
-    LOG(ERROR) << "Missing --port";
-    return false;
-  }
-  if (!base::StringToInt(line.GetSwitchValueASCII("port"),
-                         &params->listen_port)) {
-    LOG(ERROR) << "Invalid --port";
-    return false;
-  }
-  if (params->listen_port <= 0 ||
-      params->listen_port > std::numeric_limits<uint16_t>::max()) {
-    LOG(ERROR) << "Invalid --port";
-    return false;
+  params->listen_port = 1080;
+  if (line.HasSwitch("port")) {
+    if (!base::StringToInt(line.GetSwitchValueASCII("port"),
+                           &params->listen_port)) {
+      LOG(ERROR) << "Invalid --port";
+      return false;
+    }
+    if (params->listen_port <= 0 ||
+        params->listen_port > std::numeric_limits<uint16_t>::max()) {
+      LOG(ERROR) << "Invalid --port";
+      return false;
+    }
   }
 
   if (!line.HasSwitch("proxy")) {
@@ -187,6 +194,23 @@ bool ParseCommandLineFlags(Params* params) {
   params->proxy_url = url::SchemeHostPort(url).Serialize();
   params->proxy_user = url.username();
   params->proxy_pass = url.password();
+
+  if (line.HasSwitch("host-resolver-rules")) {
+    params->host_resolver_rules =
+        line.GetSwitchValueASCII("host-resolver-rules");
+  } else {
+    // SNI should only contain DNS hostnames not IP addresses per RFC 6066.
+    if (url.HostIsIPAddress()) {
+      GURL::Replacements replacements;
+      replacements.SetHostStr(kDefaultHostName);
+      params->proxy_url =
+          url::SchemeHostPort(url.ReplaceComponents(replacements)).Serialize();
+      LOG(INFO) << "Using '" << kDefaultHostName << "' as the hostname for "
+                << url.host();
+      params->host_resolver_rules =
+          std::string("MAP ") + kDefaultHostName + " " + url.host();
+    }
+  }
 
   if (line.HasSwitch("log")) {
     params->log_settings.logging_dest = logging::LOG_TO_SYSTEM_DEBUG_LOG;
@@ -302,8 +326,7 @@ int main(int argc, char* argv[]) {
   net_log.AddObserver(&printing_log_observer,
                       net::NetLogCaptureMode::Default());
 
-  auto context = BuildURLRequestContext(params.proxy_url, params.proxy_user,
-                                        params.proxy_pass, &net_log);
+  auto context = BuildURLRequestContext(params, &net_log);
 
   auto server_socket =
       std::make_unique<net::TCPServerSocket>(&net_log, net::NetLogSource());
