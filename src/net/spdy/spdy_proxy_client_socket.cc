@@ -312,6 +312,13 @@ void SpdyProxyClientSocket::OnIOComplete(int result) {
   DCHECK_NE(STATE_DISCONNECTED, next_state_);
   int rv = DoLoop(result);
   if (rv != ERR_IO_PENDING) {
+    if (use_fastopen_ && read_headers_pending_ == false) {
+      if (rv != OK)
+        next_state_ = STATE_DISCONNECTED;
+      if (read_callback_ && rv != OK)
+        std::move(read_callback_).Run(rv);
+      return;
+    }
     std::move(read_callback_).Run(rv);
   }
 }
@@ -446,6 +453,10 @@ int SpdyProxyClientSocket::DoCalculateHeadersComplete(int result) {
     return result;
   }
   next_state_ = STATE_SEND_REQUEST;
+  if (proxy_delegate_headers_.HasHeader("fastopen")) {
+    proxy_delegate_headers_.RemoveHeader("fastopen");
+    use_fastopen_ = true;
+  }
   request_.extra_headers.MergeFrom(proxy_delegate_headers_);
   return result;
 }
@@ -472,6 +483,12 @@ int SpdyProxyClientSocket::DoSendRequest() {
 int SpdyProxyClientSocket::DoSendRequestComplete(int result) {
   if (result < 0)
     return result;
+
+  if (use_fastopen_) {
+    read_headers_pending_ = true;
+    next_state_ = STATE_OPEN;
+    return OK;
+  }
 
   // Wait for HEADERS frame from the server
   next_state_ = STATE_READ_REPLY_COMPLETE;
@@ -553,6 +570,11 @@ void SpdyProxyClientSocket::OnEarlyHintsReceived(
 
 void SpdyProxyClientSocket::OnHeadersReceived(
     const quiche::HttpHeaderBlock& response_headers) {
+  if (use_fastopen_ && read_headers_pending_ && next_state_ == STATE_OPEN) {
+    read_headers_pending_ = false;
+    next_state_ = STATE_READ_REPLY_COMPLETE;
+  }
+
   // If we've already received the reply, existing headers are too late.
   // TODO(mbelshe): figure out a way to make HEADERS frames useful after the
   //                initial response.
@@ -563,7 +585,7 @@ void SpdyProxyClientSocket::OnHeadersReceived(
   const int rv = SpdyHeadersToHttpResponse(response_headers, &response_);
   DCHECK_NE(rv, ERR_INCOMPLETE_HTTP2_HEADERS);
 
-  OnIOComplete(OK);
+  OnIOComplete(rv);
 }
 
 // Called when data is received or on EOF (if `buffer is nullptr).
