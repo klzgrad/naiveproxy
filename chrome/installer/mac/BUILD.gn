@@ -1,0 +1,131 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/util/branding.gni")
+import("//build/util/version.gni")
+import("//build/config/features.gni")
+
+group("mac") {
+  public_deps = [
+    ":copies",
+    ":make_signers",
+    "app:mac_installer_app",
+  ]
+
+  if (is_chrome_branded) {
+    public_deps += [ ":keychain_reauthorizers" ]
+  }
+}
+
+_packaging_dir = "$root_out_dir/$chrome_product_full_name Packaging"
+
+action("make_signers") {
+  visibility = [ ":mac" ]
+
+  script = "//build/gn_run_binary.py"
+  shell_script = "//chrome/installer/mac/make_signers.sh"
+
+  deps = [
+    ":copy_variables",
+  ]
+
+  inputs = [
+    script,
+    shell_script,
+    "sign_app.sh.in",
+    "sign_versioned_dir.sh.in",
+    "app_resource_rules.plist.in",
+    "//chrome/VERSION",
+  ]
+
+  outputs = [
+    "$_packaging_dir/sign_app.sh",
+    "$_packaging_dir/sign_versioned_dir.sh",
+    "$_packaging_dir/app_resource_rules.plist",
+  ]
+
+  args = [
+    rebase_path(shell_script, root_build_dir),
+    rebase_path(_packaging_dir, root_build_dir),
+    chrome_product_full_name,
+    chrome_version_full,
+  ]
+}
+
+copy("copy_variables") {
+  visibility = [
+    ":make_signers",
+    ":copies",
+  ]
+  sources = [
+    "variables.sh",
+  ]
+  outputs = [
+    "$_packaging_dir/{{source_file_part}}",
+  ]
+}
+
+copy("copies") {
+  visibility = [ ":mac" ]
+
+  deps = [
+    ":copy_variables",
+    "//chrome/installer/mac/third_party/bsdiff:goobsdiff",
+    "//chrome/installer/mac/third_party/bsdiff:goobspatch",
+    "//chrome/installer/mac/third_party/xz:lzma_decompress",
+    "//chrome/installer/mac/third_party/xz:xz",
+    "//chrome/installer/mac/third_party/xz:xzdec",
+  ]
+
+  sources = [
+    "$root_out_dir/goobsdiff",
+    "$root_out_dir/goobspatch",
+    "$root_out_dir/liblzma_decompress.dylib",
+    "$root_out_dir/xz",
+    "$root_out_dir/xzdec",
+    "dirdiffer.sh",
+    "dirpatcher.sh",
+    "dmgdiffer.sh",
+    "pkg-dmg",
+    "sign_installer_tools.sh",
+  ]
+
+  if (is_chrome_branded) {
+    sources += [ "keystone_install.sh" ]
+  }
+
+  if (is_chrome_branded) {
+    sources += [
+      "//chrome/app/theme/google_chrome/mac/app_canary.icns",
+      "//chrome/app/theme/google_chrome/mac/document_canary.icns",
+      "internal/chrome_canary_dmg_dsstore",
+      "internal/chrome_canary_dmg_icon.icns",
+      "internal/chrome_dmg_background.png",
+      "internal/chrome_dmg_dsstore",
+      "internal/chrome_dmg_icon.icns",
+      "internal/generate_diffs",
+      "internal/generate_dmgs",
+      "internal/signing_common.sh",
+    ]
+  }
+
+  outputs = [
+    "$_packaging_dir/{{source_file_part}}",
+  ]
+}
+
+if (is_chrome_branded) {
+  copy("keychain_reauthorizers") {
+    visibility = [ ":mac" ]
+
+    sources = [
+      "internal/keychain_reauthorizers/com.google.Chrome",
+      "internal/keychain_reauthorizers/com.google.Chrome.canary",
+    ]
+
+    outputs = [
+      "$_packaging_dir/keychain_reauthorizers/{{source_file_part}}",
+    ]
+  }
+}

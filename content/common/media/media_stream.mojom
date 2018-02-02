@@ -1,0 +1,102 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module content.mojom;
+
+// TODO(c.padhi): Add typemapping for MediaStreamDevice,
+// see https://crbug.com/742682.
+// Native struct content::MediaStreamDevice.
+// (see content/public/common/media_stream_request.h)
+[Native]
+struct MediaStreamDevice;
+
+// Types of media streams (see content/public/common/media_stream_request.h).
+enum MediaStreamType {
+  MEDIA_NO_SERVICE,
+  MEDIA_DEVICE_AUDIO_CAPTURE,
+  MEDIA_DEVICE_VIDEO_CAPTURE,
+  MEDIA_TAB_AUDIO_CAPTURE,
+  MEDIA_TAB_VIDEO_CAPTURE,
+  MEDIA_DESKTOP_VIDEO_CAPTURE,
+  MEDIA_DESKTOP_AUDIO_CAPTURE,
+  NUM_MEDIA_TYPES
+};
+
+// See content/public/common/media_stream_request.h.
+enum MediaStreamRequestResult {
+  OK,
+  PERMISSION_DENIED,
+  PERMISSION_DISMISSED,
+  INVALID_STATE,
+  NO_HARDWARE,
+  INVALID_SECURITY_ORIGIN_DEPRECATED,
+  TAB_CAPTURE_FAILURE,
+  SCREEN_CAPTURE_FAILURE,
+  CAPTURE_FAILURE,
+  CONSTRAINT_NOT_SATISFIED,
+  TRACK_START_FAILURE,
+  NOT_SUPPORTED,
+  FAILED_DUE_TO_SHUTDOWN,
+  KILL_SWITCH_ON
+};
+
+// See content/common/media/media_stream_controls.h.
+struct TrackControls {
+  bool requested;
+  string stream_source;
+  string device_id;
+};
+
+// See content/common/media/media_stream_controls.h.
+struct StreamControls {
+  TrackControls audio;
+  TrackControls video;
+  bool hotword_enabled;
+  bool disable_local_echo;
+};
+
+// Per-frame renderer-side interface that receives device stopped notifications
+// from the browser process.
+interface MediaStreamDeviceObserver {
+  OnDeviceStopped(string label, MediaStreamDevice device);
+};
+
+// Per-process browser-side interface that is used by the renderer process to
+// make media stream requests.
+interface MediaStreamDispatcherHost {
+  // Requests a new media stream.
+  GenerateStream(int32 render_frame_id, int32 request_id,
+                 StreamControls controls, bool user_gesture)
+      => (MediaStreamRequestResult result, string label,
+         array<MediaStreamDevice> audio_devices,
+         array<MediaStreamDevice> video_devices);
+
+  // Cancels the request for a new media stream or opening a device.
+  CancelRequest(int32 render_frame_id, int32 request_id);
+
+  // Closes a stream device that has been opened by GenerateStream.
+  StopStreamDevice(int32 render_frame_id, string device_id);
+
+  // Opens a device identified by |device_id|.
+  OpenDevice(int32 render_frame_id, int32 request_id, string device_id,
+             MediaStreamType type)
+      => (bool success, string label, MediaStreamDevice device);
+
+  // Cancels an open request identified by |label|.
+  CloseDevice(string label);
+
+  // Tells the browser process if the video capture is secure (i.e., all
+  // connected video sinks meet the requirement of output protection.).
+  // Note: the browser process only trusts the |is_secure| value in this Mojo
+  // message if it's comimg from a trusted, whitelisted extension. Extensions
+  // run in separate render processes. So it shouldn't be possible, for example,
+  // for a user's visit to a malicious web page to compromise a render process
+  // running a trusted extension to make it report falsehood in this Mojo
+  // message.
+  SetCapturingLinkSecured(int32 session_id, MediaStreamType type,
+                          bool is_secure);
+
+  // Tells the browser process that the stream has been started successfully.
+  OnStreamStarted(string label);
+};

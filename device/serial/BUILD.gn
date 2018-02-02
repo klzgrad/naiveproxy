@@ -1,0 +1,92 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/features.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
+
+# Library works only on desktop platforms.
+if (is_win || is_linux || is_mac) {
+  config("platform_support") {
+    visibility = [ ":serial" ]
+    if (is_win) {
+      libs = [ "setupapi.lib" ]
+      ldflags = [ "/DELAYLOAD:setupapi.dll" ]
+    }
+  }
+
+  static_library("serial") {
+    visibility = [
+      ":test_support",
+      "//device:device_unittests",
+      "//services/device/serial",
+      "//tools/battor_agent:battor_agent_lib",
+    ]
+
+    output_name = "device_serial"
+
+    sources = [
+      "buffer.cc",
+      "buffer.h",
+      "serial_device_enumerator.cc",
+      "serial_device_enumerator.h",
+      "serial_device_enumerator_linux.cc",
+      "serial_device_enumerator_linux.h",
+      "serial_device_enumerator_mac.cc",
+      "serial_device_enumerator_mac.h",
+      "serial_device_enumerator_win.cc",
+      "serial_device_enumerator_win.h",
+      "serial_io_handler.cc",
+      "serial_io_handler.h",
+      "serial_io_handler_posix.cc",
+      "serial_io_handler_posix.h",
+      "serial_io_handler_win.cc",
+      "serial_io_handler_win.h",
+    ]
+
+    public_configs = [ ":platform_support" ]
+
+    public_deps = [
+      "//base",
+      "//device/base",
+      "//services/device/public/interfaces",
+    ]
+
+    deps = [
+      "//mojo/public/cpp/system",
+      "//net",
+      "//third_party/re2",
+    ]
+
+    if (use_udev) {
+      deps += [ "//device/udev_linux" ]
+    }
+    if (is_chromeos) {
+      deps += [
+        "//chromeos",
+        "//dbus",
+      ]
+    }
+    if (is_mac) {
+      libs = [
+        "Foundation.framework",
+        "IOKit.framework",
+      ]
+    }
+  }
+
+  static_library("test_support") {
+    # TODO(leonhsl): Merge necessary parts of TestSerialIoHandler into
+    # battor_connection_impl_unittest.cc to hide serial impl completely.
+    visibility = [ "//tools/battor_agent:battor_agent_unittests" ]
+
+    sources = [
+      "test_serial_io_handler.cc",
+      "test_serial_io_handler.h",
+    ]
+
+    public_deps = [
+      ":serial",
+    ]
+  }
+}

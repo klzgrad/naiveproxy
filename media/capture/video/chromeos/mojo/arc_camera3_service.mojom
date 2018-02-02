@@ -1,0 +1,48 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module arc.mojom;
+
+import "arc_camera3.mojom";
+
+// The ARC++ camera HAL v3 Mojo dispatcher.  The dispatcher acts as a proxy and
+// waits for the server and the clients to register.  There can only be one
+// server registered, with multiple clients requesting connections to the
+// server.  For each client, the dispatcher is responsible for creating a Mojo
+// channel to the server and pass the established Mojo channel to the client in
+// order to set up a Mojo channel between the client and the server.
+//
+// The CameraHalDispatcher is designed to help the server and the clients to
+// recover from errors easily.  For example, when the camera HAL process crashes
+// the CameraHalDispatcher can still hold the connections of the clients. When
+// the camera HAL reconnects the CameraHalDispatcher can then quickly restore
+// the Mojo channels between the clients and the camera HAL process by calling
+// CameraHalClient::SetUpChannel() in RegiserServer().
+interface CameraHalDispatcher {
+  // A CameraHalServer calls RegisterServer to register itself with the
+  // dispatcher.
+  RegisterServer@0(CameraHalServer server);
+
+  // A CameraHalClient calls RegisterClient to register itself with the
+  // dispatcher.
+  RegisterClient@1(CameraHalClient client);
+};
+
+// The ARC++ camera HAL v3 Mojo server.
+interface CameraHalServer {
+  // A caller calls CreateChannel to create a new Mojo channel to the camera
+  // HAL v3 adapter.  Upon successfully binding of |camera_module_request|, the
+  // caller will have a established Mojo channel to the camera HAL v3 adapter
+  // process.
+  CreateChannel@0(CameraModule& camera_module_request);
+};
+
+// The ARC++ camera HAL v3 Mojo client.
+interface CameraHalClient {
+  // A caller calls SetUpChannel to dispatch the established Mojo channel
+  // |camera_module_ptr| to the client.  The CameraHalClient can create a
+  // Mojo channel to the camera HAL v3 adapter process with |camera_module_ptr|.
+  // SetUpChannel may be called multiple times.
+  SetUpChannel@0(CameraModule camera_module_ptr);
+};

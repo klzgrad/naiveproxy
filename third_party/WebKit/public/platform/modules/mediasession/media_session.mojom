@@ -1,0 +1,72 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module blink.mojom;
+
+import "mojo/common/string16.mojom";
+import "ui/gfx/geometry/mojo/geometry.mojom";
+import "url/mojo/url.mojom";
+
+// Spec: https://wicg.github.io/mediasession/
+enum MediaSessionAction {
+     PLAY,
+     PAUSE,
+     PREVIOUS_TRACK,
+     NEXT_TRACK,
+     SEEK_BACKWARD,
+     SEEK_FORWARD,
+
+     LAST = SEEK_FORWARD,
+};
+
+enum MediaSessionPlaybackState {
+     NONE,
+     PAUSED,
+     PLAYING,
+};
+
+// Album art in MediaMetadata
+// Spec: https://wicg.github.io/mediasession/
+struct MediaImage {
+  url.mojom.Url src;
+  mojo.common.mojom.String16 type;
+  array<gfx.mojom.Size> sizes;
+};
+
+// MediaMetadata
+// Spec: https://wicg.github.io/mediasession/
+struct MediaMetadata {
+  mojo.common.mojom.String16 title;
+  mojo.common.mojom.String16 artist;
+  mojo.common.mojom.String16 album;
+  array<MediaImage> artwork;
+};
+
+interface MediaSessionClient {
+  // Notifies the Blink side that a MediaSessionAction has been fired from the
+  // UI or the platform.
+  DidReceiveAction(MediaSessionAction action);
+};
+
+interface MediaSessionService {
+  // MediaSessionClient interface is used to notify Blink MediaSession of
+  // media control actions.
+  SetClient(MediaSessionClient client);
+
+  // Notifies the browser that the page specified its current playback state.
+  SetPlaybackState(MediaSessionPlaybackState state);
+
+  // Notifies the browser that the metadata is set, |metadata| will be displayed
+  // on the UI.
+  SetMetadata(MediaMetadata? metadata);
+
+  // Notifies the browser that the event handler for |action| has been set,
+  // browser needs to show a media button in the UI or register listeners to the
+  // platform.
+  EnableAction(MediaSessionAction action);
+  // Notifies the browser that the event handler for |action| has been set,
+  // browser needs to hide the media button in the UI and unregister listeners
+  // from the platform.
+  DisableAction(MediaSessionAction action);
+};

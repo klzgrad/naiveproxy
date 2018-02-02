@@ -1,0 +1,94 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module ash.mojom;
+
+import "ash/public/interfaces/user_info.mojom";
+import "components/proximity_auth/public/interfaces/auth_type.mojom";
+import "mojo/common/string16.mojom";
+
+// Supported multi-profile user behavior values.
+// Keep in sync with the enum in md_user_pod_row.js and user_pod_row.js
+enum MultiProfileUserBehavior {
+  UNRESTRICTED = 0,
+  PRIMARY_ONLY = 1,
+  NOT_ALLOWED = 2,
+  OWNER_PRIMARY_ONLY = 3,
+};
+
+// Easy unlock icon choices.
+enum EasyUnlockIconId {
+  // No icon shown.
+  NONE,
+  // The user has clicked the easy unlock icon and disabled easy unlock for this
+  // login/lock session.
+  HARDLOCKED,
+  // Phone could not be found.
+  LOCKED,
+  // Phone found, but it is not unlocked.
+  LOCKED_TO_BE_ACTIVATED,
+  // Phone found, but it is too far away.
+  LOCKED_WITH_PROXIMITY_HINT,
+  // Phone found and unlocked. The user can click to dismiss the login/lock
+  // screen.
+  UNLOCKED,
+  // Scanning for phone.
+  SPINNER,
+};
+
+// Information about the custom icon in the user pod.
+struct EasyUnlockIconOptions {
+  // Icon that should be displayed.
+  EasyUnlockIconId icon;
+  // Tooltip that is associated with the icon. This is shown automatically if
+  // |autoshow_tooltip| is true. The user can always see the tooltip if they
+  // hover over the icon. The tooltip should be used for the accessibility label
+  // if it is present.
+  mojo.common.mojom.String16 tooltip;
+  // If true, the tooltip should be displayed (even if the user is not currently
+  // hovering over the icon, ie, this makes |tooltip| act like a little like a
+  // notification).
+  bool autoshow_tooltip;
+  // Accessibility label. Only used if |tooltip| is empty.
+  // TODO(jdufault): Always populate and use |aria_label|, even if |tooltip| is
+  // non-empty.
+  mojo.common.mojom.String16 aria_label;
+  // If true, clicking the easy unlock icon should fire a hardlock event which
+  // will disable easy unlock. The hardlock event will request a new icon
+  // display via a separate EasyUnlockIconsOption update. See
+  // login_screen.mojom::HardlockPod.
+  bool hardlock_on_click;
+  // If true, the lock screen is being demoed so the user can test out easy
+  // unlock. The flow operates as normal. Hardlocking is disabled in this
+  // scenario.
+  // TODO(jdufault): This should be removed, as it does not change UI.
+  bool is_trial_run;
+};
+
+// Info about a user in login/lock screen.
+struct LoginUserInfo {
+  // User's basic information including account id, email, avatar etc.
+  UserInfo basic_user_info;
+
+  // What method the user can use to sign in.
+  proximity_auth.mojom.AuthType auth_type;
+
+  // True if this user has already signed in.
+  bool is_signed_in;
+
+  // True if this user is the device owner.
+  bool is_device_owner;
+
+  // True if fingerprint unlock is allowed for this user.
+  bool allow_fingerprint_unlock;
+
+  // True if multi-profiles sign in is allowed for this user.
+  bool is_multiprofile_allowed;
+
+  // Enforced policy for multi-profiles sign in.
+  MultiProfileUserBehavior multiprofile_policy;
+
+  // True if this user can be removed.
+  bool can_remove;
+};

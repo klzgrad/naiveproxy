@@ -1,0 +1,65 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module translate.mojom;
+
+import "mojo/common/time.mojom";
+import "url/mojo/url.mojom";
+
+enum TranslateError {
+  NONE,
+  NETWORK,
+  INITIALIZATION_ERROR,
+  UNKNOWN_LANGUAGE,
+  UNSUPPORTED_LANGUAGE,
+  IDENTICAL_LANGUAGES,
+  TRANSLATION_ERROR,
+  TRANSLATION_TIMEOUT,
+  UNEXPECTED_SCRIPT_ERROR,
+  BAD_ORIGIN,
+  SCRIPT_LOAD_ERROR,
+  TRANSLATE_ERROR_MAX,
+};
+
+struct LanguageDetectionDetails {
+  mojo.common.mojom.Time time;
+  url.mojom.Url url;
+  string content_language;
+  string cld_language;
+  bool is_cld_reliable;
+  bool has_notranslate;
+  string html_root_language;
+  string adopted_language;
+  string contents;
+};
+
+interface Page {
+  // Requests that the page be translated from |source_lang| to
+  // |target_lang|.
+  //
+  // If a Translate request is already in progress with a matching
+  // |target_lang|, this request will respond with |cancelled| set
+  // to |true|.
+  //
+  // If a Translate request is already in progress with a different
+  // |target_lang|, that request will respond with |cancelled| set
+  // to |true| and this request will proceed normally.
+  //
+  // If |cancelled| is |true| all other response values should be
+  // ignored.
+  Translate(string translate_script, string source_lang, string target_lang)
+      => (bool cancelled, string original_lang, string translated_lang,
+          TranslateError error);
+
+  // Requests that the page be reverted to its original language with
+  // no translation applied.
+  RevertTranslation();
+};
+
+interface ContentTranslateDriver {
+  // Notification that a new page is ready to translate,
+  // and the language for it has been determined.
+  RegisterPage(Page page, LanguageDetectionDetails details,
+               bool page_needs_translation);
+};

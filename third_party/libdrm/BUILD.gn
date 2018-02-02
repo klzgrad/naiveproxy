@@ -1,0 +1,62 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+import("//build/config/linux/pkg_config.gni")
+
+assert(is_linux)
+
+declare_args() {
+  # Controls whether the build should use the version of libdrm
+  # library shipped with the system. In release builds of Chrome OS we
+  # use the system version, but when building on dev workstations we
+  # bundle it because Ubuntu doesn't ship a usable version.
+  use_system_libdrm = false
+}
+
+if (!use_system_libdrm) {
+  config("libdrm_config") {
+    # Define _GNU_SOURCE for vasprintf use in xf86drm.c
+    defines = [ "_GNU_SOURCE" ]
+    include_dirs = [
+      "src",
+      "src/include",
+      "src/include/drm",
+    ]
+    if (is_clang) {
+      cflags = [ "-Wno-enum-conversion" ]
+    }
+  }
+
+  static_library("libdrm") {
+    sources = [
+      "src/xf86drm.c",
+      "src/xf86drmHash.c",
+      "src/xf86drmMode.c",
+      "src/xf86drmRandom.c",
+    ]
+
+    include_dirs = [
+      "src",
+      "src/include",
+    ]
+    configs -= [ "//build/config/compiler:chromium_code" ]
+    configs += [ "//build/config/compiler:no_chromium_code" ]
+    cflags = [
+      # xf86drm.c uses readdir_r, which has been deprecated as of
+      # glibc-2.24.  This causes a build error when using the Debian
+      # Stretch sysroot.
+      "-Wno-deprecated-declarations",
+    ]
+
+    public_configs = [ ":libdrm_config" ]
+  }
+}
+
+if (use_system_libdrm) {
+  pkg_config("libdrm_config") {
+    packages = [ "libdrm" ]
+  }
+  group("libdrm") {
+    public_configs = [ ":libdrm_config" ]
+  }
+}

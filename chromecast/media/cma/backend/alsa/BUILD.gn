@@ -1,0 +1,91 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/chromecast_build.gni")
+import("//chromecast/chromecast.gni")
+import("//media/media_options.gni")
+import("//testing/test.gni")
+
+# Alsa must be used for these targets to build.
+assert(use_alsa)
+
+cast_shared_library("libcast_media_1.0_audio") {
+  sources = [
+    "cast_media_shlib.cc",
+  ]
+
+  deps = [
+    ":alsa_cma_backend",
+    "//base",
+    "//chromecast/base",
+    "//chromecast/media/cma/backend:audio",
+    "//chromecast/public",
+    "//chromecast/public/media",
+    "//media",
+  ]
+}
+
+cast_source_set("alsa_cma_backend") {
+  sources = [
+    "alsa_volume_control.cc",
+    "alsa_volume_control.h",
+    "alsa_wrapper.cc",
+    "alsa_wrapper.h",
+    "mixer_output_stream_alsa.cc",
+    "mixer_output_stream_alsa.h",
+  ]
+
+  libs = [ "asound" ]
+
+  deps = [
+    "//base",
+    "//chromecast/base",
+    "//chromecast/media/base",
+    "//chromecast/media/cma/backend:audio",
+    "//chromecast/media/cma/backend:audio_features",
+    "//chromecast/media/cma/base",
+    "//chromecast/media/cma/decoder",
+    "//chromecast/public/media",
+    "//media",
+  ]
+}
+
+cast_source_set("unit_tests") {
+  testonly = true
+  sources = [
+    # TODO(sergeyu): Remove ALSA dependency from these tests and move them
+    # to media/cma/backend.
+    "stream_mixer_unittest.cc",
+  ]
+
+  deps = [
+    ":test_support",
+    "//base",
+    "//chromecast/media",
+    "//chromecast/media/cma/backend:audio",
+    "//chromecast/public",
+    "//media",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+}
+
+cast_source_set("test_support") {
+  testonly = true
+
+  sources = [
+    "mock_alsa_wrapper.cc",
+    "mock_alsa_wrapper.h",
+  ]
+
+  public_deps = [
+    ":alsa_cma_backend",
+  ]
+
+  deps = [
+    "//base",
+    "//media",
+    "//testing/gmock",
+  ]
+}

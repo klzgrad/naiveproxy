@@ -1,0 +1,219 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+//
+// Next MinVersion: 20
+
+module arc.mojom;
+
+import "scale_factor.mojom";
+
+// Describes the type of action to invoke.
+enum ActionType {
+  VIEW,
+  SEND,
+  SEND_MULTIPLE,
+};
+
+[Extensible]
+enum PatternType {
+  PATTERN_LITERAL,
+  PATTERN_PREFIX,
+  PATTERN_SIMPLE_GLOB,
+};
+
+struct PatternMatcher {
+  string pattern;
+  PatternType type;
+};
+
+struct AuthorityEntry {
+  string host;
+  int32 port;
+};
+
+struct IntentInfo {
+  string action;
+  array<string>? categories;
+  string? data;  // URI
+  string? type;  // explicit MIME type for data
+  [MinVersion=13] string? clip_data_uri;  // optional URI to provide as ClipData
+};
+
+struct IntentFilter {
+  array<string> actions;
+  array<string> categories;
+  array<string> data_schemes;
+  [MinVersion=10] array<AuthorityEntry>? data_authorities;
+  [MinVersion=10] array<PatternMatcher>? data_paths;
+  [MinVersion=10] array<PatternMatcher>? deprecated_data_scheme_specific_parts;
+};
+
+// Describes a package that can handle an intent.
+struct IntentHandlerInfo {
+  string name;
+  string package_name;
+  string activity_name;  // A hint for retrieving the package's icon.
+  [MinVersion=4] ActionType action_type;
+  [MinVersion=6] bool is_preferred;
+  [MinVersion=11] string? action;  // e.g. "android.intent.action.VIEW"
+  // RequestUrlHandlerList may fill |fallback_url| when it is called with an
+  // intent: URL.
+  [MinVersion=14] string? fallback_url;
+};
+
+// Describes an activity.
+struct ActivityName {
+  string package_name;
+  string? activity_name;  // may be null to indicate any activity within package
+};
+
+// Describes an icon for the activity.
+struct ActivityIcon {
+  ActivityName activity;
+  uint32 width;  // in px
+  uint32 height;  // in px
+  array<uint8> icon;  // in BGRA8888 format
+};
+
+// URL associated with its mime type.
+struct UrlWithMimeType {
+  string url;
+  string mime_type;
+};
+
+// Describes a specific page in chrome://, about:blank, about:downloads and about:history.
+[Extensible]
+enum ChromePage {
+  MULTIDEVICE,
+  MAIN,
+  POWER,
+  BLUETOOTH,
+  DATETIME,
+  DISPLAY,
+  WIFI,
+  LANGUAGES,
+  PRIVACY,
+  HELP,
+  ACCOUNTS,
+  APPEARANCE,
+  AUTOFILL,
+  BLUETOOTHDEVICES,
+  CHANGEPICTURE,
+  CLEARBROWSERDATA,
+  CLOUDPRINTERS,
+  CUPSPRINTERS,
+  DOWNLOADS,
+  KEYBOARDOVERLAY,
+  LOCKSCREEN,
+  MANAGEACCESSIBILITY,
+  NETWORKSTYPEVPN,
+  ONSTARTUP,
+  PASSWORDS,
+  POINTEROVERLAY,
+  RESET,
+  SEARCH,
+  STORAGE,
+  SYNCSETUP,
+  ABOUTBLANK,
+  ABOUTDOWNLOADS,
+  ABOUTHISTORY,
+
+  LAST = ABOUTHISTORY,
+};
+
+// Handles intents from ARC in Chrome.
+// Deprecated method ID: 4
+// Next method ID: 8
+interface IntentHelperHost {
+  // Called when icons associated with the package are no longer up to date.
+  [MinVersion=3] OnIconInvalidated@1(string package_name);
+
+  // Called when intent filters are updated. Either on startup or when
+  // apps are installed or uninstalled.
+  [MinVersion=9] OnIntentFiltersUpdated@5(array<IntentFilter> intent_filters);
+
+  // Opens the downloads directory in the Chrome OS file manager.
+  [MinVersion=5] OnOpenDownloads@2();
+
+  // Opens the url with Chrome for Chrome OS.
+  // This function is intended to only open URLs that other web content in Chrome would be able to
+  // navigate to as well. No special URLs that allow access to privileged functions are allowed.
+  OnOpenUrl@0(string url);
+
+  // Opens the wallpaper picker dialog.
+  [MinVersion=6] OpenWallpaperPicker@3();
+
+  // Sets an image as the wallpaper.
+  // |jpeg_data| is a JPEG encoded wallpaper image.
+  [MinVersion=8] SetWallpaperDeprecated@4(array<uint8> jpeg_data);
+
+  // Opens the volume control.
+  [MinVersion=16] OpenVolumeControl@6();
+
+  // Opens the specified Chrome page in the Chrome browser.
+  [MinVersion=17] OnOpenChromePage@7([MinVersion=18] ChromePage page);
+};
+
+// Sends intents to ARC on behalf of Chrome.
+// Next method ID: 14
+interface IntentHelperInstance {
+  // Sets the given package as a preferred package. The next time an ACTION_VIEW
+  // intent is sent with a URL that requires disambiguation, instead of opening
+  // the ResolverActivity, this package will be picked if it is on the list.
+  // When multiple packages are set as preferred, the most recent setting wins.
+  [MinVersion=7] AddPreferredPackage@8(string package_name);
+
+  // DEPRECATED. Use FileSystemInstance.GetFileSize() instead.
+  [MinVersion=15] GetFileSizeDeprecated@11(string url) => (int64 size);
+
+  // Passes an intent to an activity.
+  [MinVersion=12] HandleIntent@10(IntentInfo intent, ActivityName activity);
+
+  // Handles the URL by sending an ACTION_VIEW intent to the package. The
+  // most suitable activity for the URL within the package will be started.
+  [MinVersion=2] HandleUrl@2(string url, string package_name);
+
+  // Handles the list of URLs by sending a specified intent to the handler.
+  [MinVersion=5] HandleUrlList@7(array<UrlWithMimeType> urls,
+                                 ActivityName activity,
+                                 ActionType action_type);
+
+  // DEPRECATED: Please use Init@13 instead.
+  InitDeprecated@0(IntentHelperHost host_ptr);
+
+  // Establishes full-duplex communication with the host.
+  [MinVersion=19] Init@13(IntentHelperHost host_ptr) => ();
+
+  // DEPRECATED. Use FileSystemInstance.OpenFileToRead() instead.
+  [MinVersion=15] OpenFileToReadDeprecated@12(string url) => (handle? fd);
+
+  // Requests 48dp * 48dp icons of the |activities| suitable for the
+  // |scale_factor|. An array of icon data will be returned.
+  [MinVersion=3] RequestActivityIcons@4(array<ActivityName> activities,
+                                        ScaleFactor scale_factor)
+      => (array<ActivityIcon> icons);
+
+  // Requests a list of packages that can handle |intent|.
+  [MinVersion=12] RequestIntentHandlerList@9(IntentInfo intent)
+      => (array<IntentHandlerInfo> handlers);
+
+  // Requests a list of packages that can handle the URL.
+  [MinVersion=2] RequestUrlHandlerList@3(string url)
+      => (array<IntentHandlerInfo> handlers);
+
+  // Requests a list of packages that can handle the list of files.
+  [MinVersion=4] RequestUrlListHandlerList@6(array<UrlWithMimeType> urls)
+      => (array<IntentHandlerInfo> handlers);
+
+  // Send an Android broadcast message to the Android package and class
+  // specified.  Data can be sent as extras by including a JSON map string which
+  // will be automatically converted to a bundle accessible by the receiver.
+  //
+  // Note: Broadcasts can only be sent to whitelisted packages.  Packages can be
+  // added to the whitelist in ArcBridgeService.java in the Android source.
+  [MinVersion=1] SendBroadcast@1(string action,
+                                 string package_name,
+                                 string cls,
+                                 string extras);
+};

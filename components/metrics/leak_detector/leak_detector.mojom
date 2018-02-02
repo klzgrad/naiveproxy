@@ -1,0 +1,42 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module metrics.mojom;
+
+struct LeakDetectorParams {
+  float sampling_rate;
+  uint32 max_stack_depth;
+  uint64 analysis_interval_bytes;
+  uint32 size_suspicion_threshold;
+  uint32 call_stack_suspicion_threshold;
+};
+
+struct AllocationBreakdown {
+  array<uint32> counts_by_size;
+  uint32 count_for_call_stack;
+};
+
+struct MemoryLeakReport {
+  uint32 size_bytes;
+  array<uint64> call_stack;
+  uint32 num_rising_intervals;
+  uint32 num_allocs_increase;
+
+  array<AllocationBreakdown> alloc_breakdown_history;
+};
+
+// Provides a remote interface for enabling LeakDetector on remote processes.
+interface LeakDetector {
+  // Returns a LeakDetectorParams struct. Used to indicate to the remote process
+  // what parameters to use when initializing LeakDetector. Can also return
+  // |params.sampling_rate| == 0 to indicate that LeakDetector should not be
+  // initialized on a particular process.
+  GetParams() => (LeakDetectorParams params);
+
+  // When a remote process running LeakDetector gets some leak reports, it
+  // should call this function to return the leak reports back to the main
+  // process that implements this function. The reports should be sent back as
+  // an array of serialized MemoryLeakReportProtos.
+  SendLeakReports(array<MemoryLeakReport> reports);
+};

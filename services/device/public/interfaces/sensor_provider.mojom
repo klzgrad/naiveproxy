@@ -1,0 +1,51 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module device.mojom;
+
+import "sensor.mojom";
+
+struct SensorInitParams {
+  // The shared memory handle used to fetch the sensor reading.
+  handle<shared_buffer> memory;
+
+  // The offset at which shared buffer must be mapped.
+  uint64 buffer_offset;
+
+  // The ReportingMode supported by the sensor.
+  ReportingMode mode;
+
+  // Default sensor configuration.
+  SensorConfiguration default_configuration;
+
+  // Maximum sampling frequency for the sensor: it considers both
+  // |SensorConfiguration::kMaxAllowedFrequency| and actual sensor
+  // capabilities.
+  double maximum_frequency;
+
+  // Minimum sampling frequency for the sensor.
+  double minimum_frequency;
+
+  // Each sensor's read buffer contains 5 tightly packed 64-bit floating
+  // point fields (please see sensor_reading.h) and a seqlock, so its size is
+  // 6 * 8 = 48 bytes.
+  const uint64 kReadBufferSizeForTests = 48;
+};
+
+interface SensorProvider {
+  // Gets the sensor interface by the given type.
+  //
+  // |type| type of the sensor.
+  //
+  // |sensor_request| the Sensor interface instance to be initialized.
+  //
+  // |init_params| on success will contain the SensorInitParams describing the
+  //               sensor details,
+  //               contains null on failure.
+  // |client_request| on success contains a request to be bound by the client,
+  //                  contains null on failure.
+  GetSensor(SensorType type, Sensor& sensor_request) => (
+      SensorInitParams? init_params,
+      SensorClient&? client_request);
+};

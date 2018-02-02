@@ -1,0 +1,37 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module blink.mojom;
+
+import "services/viz/public/interfaces/compositing/compositor_frame_sink.mojom";
+import "services/viz/public/interfaces/compositing/frame_sink_id.mojom";
+import "services/viz/public/interfaces/compositing/surface_id.mojom";
+import "services/viz/public/interfaces/compositing/surface_info.mojom";
+import "services/viz/public/interfaces/compositing/surface_sequence.mojom";
+
+interface OffscreenCanvasSurface {
+  Require(viz.mojom.SurfaceId surface_id, viz.mojom.SurfaceSequence sequence);
+  Satisfy(viz.mojom.SurfaceSequence sequence);
+};
+
+interface OffscreenCanvasSurfaceClient {
+  OnFirstSurfaceActivation(viz.mojom.SurfaceInfo surface_info);
+};
+
+// Creates OffscreenCanvasSurface and CompositorFrameSink instances for use
+// with offscreen canvas.
+interface OffscreenCanvasProvider {
+  // Create an OffscreenCanvasSurface for |frame_sink_id|. |client| will observe
+  // any changes to the SurfaceId associated with |frame_sink_id|.
+  CreateOffscreenCanvasSurface(viz.mojom.FrameSinkId parent_frame_sink_id,
+                               viz.mojom.FrameSinkId frame_sink_id,
+                               OffscreenCanvasSurfaceClient client,
+                               OffscreenCanvasSurface& surface);
+
+  // Create an CompositorFrameSink for |frame_sink_id|. This must happen
+  // after creating an OffsreenCanvasSurface for |frame_sink_id|.
+  CreateCompositorFrameSink(viz.mojom.FrameSinkId frame_sink_id,
+                            viz.mojom.CompositorFrameSinkClient client,
+                            viz.mojom.CompositorFrameSink& sink);
+};

@@ -1,0 +1,119 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ui.gni")
+import("//testing/test.gni")
+import("//services/service_manager/public/cpp/service.gni")
+import("//services/service_manager/public/service_manifest.gni")
+import("//tools/grit/repack.gni")
+
+group("all") {
+  testonly = true
+  deps = [
+    ":ui",
+    "//services/ui/ime/test_ime_driver",
+    "//services/ui/test_wm",
+    "//services/viz",
+  ]
+}
+
+service("ui") {
+  sources = [
+    "main.cc",
+  ]
+
+  deps = [
+    ":lib",
+    "//services/service_manager/public/cpp",
+  ]
+
+  data_deps = [
+    ":resources_100",
+    ":resources_200",
+    ":resources_strings",
+    "//services/viz",
+  ]
+}
+
+service_manifest("manifest") {
+  name = "ui"
+  source = "manifest.json"
+}
+
+source_set("lib") {
+  sources = [
+    "service.cc",
+    "service.h",
+  ]
+
+  public_deps = [
+    "//services/ui/common:mus_common",
+  ]
+  deps = [
+    "//base",
+    "//cc",
+    "//components/discardable_memory/public/interfaces",
+    "//components/discardable_memory/service",
+    "//components/viz/service",
+    "//mojo/common:common_base",
+    "//services/catalog/public/cpp",
+    "//services/catalog/public/interfaces:constants",
+    "//services/service_manager/public/cpp",
+    "//services/ui/clipboard:lib",
+    "//services/ui/ime:lib",
+    "//services/ui/input_devices",
+    "//services/ui/public/interfaces",
+    "//services/ui/ws:lib",
+    "//services/ui/ws:test_interface",
+    "//ui/events",
+    "//ui/events/ozone:events_ozone_layout",
+    "//ui/gl:gl",
+    "//ui/platform_window:platform_impls",
+    "//ui/platform_window:platform_window",
+  ]
+
+  if (use_x11) {
+    public_configs = [ "//build/config/linux:x11" ]
+    public_deps += [ "//ui/events/platform/x11" ]
+  }
+
+  if (use_ozone) {
+    deps += [ "//ui/ozone:ozone" ]
+  }
+
+  if (is_chromeos) {
+    deps += [ "//services/ui/public/cpp/input_devices:input_device_controller" ]
+  }
+}
+
+repack("resources_strings") {
+  sources = [
+    "$root_gen_dir/ui/strings/app_locale_settings_en-US.pak",
+    "$root_gen_dir/ui/strings/ui_strings_en-US.pak",
+  ]
+  output = "$root_out_dir/mus_app_resources_strings.pak"
+  deps = [
+    "//ui/strings",
+  ]
+}
+
+repack("resources_100") {
+  sources = [
+    "$root_gen_dir/ui/resources/ui_resources_100_percent.pak",
+  ]
+  output = "$root_out_dir/mus_app_resources_100.pak"
+  deps = [
+    "//ui/resources",
+  ]
+}
+
+repack("resources_200") {
+  sources = [
+    "$root_gen_dir/ui/resources/ui_resources_200_percent.pak",
+  ]
+  output = "$root_out_dir/mus_app_resources_200.pak"
+  deps = [
+    "//ui/resources",
+  ]
+}

@@ -1,0 +1,232 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/crypto.gni")
+import("//build/config/features.gni")
+import("//build/config/sysroot.gni")
+import("//chrome/common/features.gni")
+import("//extensions/features/features.gni")
+import("//printing/features/features.gni")
+import("//services/service_manager/public/service_manifest.gni")
+
+static_library("utility") {
+  sources = [
+    "chrome_content_utility_client.cc",
+    "chrome_content_utility_client.h",
+    "cloud_print/bitmap_image.cc",
+    "cloud_print/bitmap_image.h",
+    "cloud_print/pwg_encoder.cc",
+    "cloud_print/pwg_encoder.h",
+    "utility_message_handler.h",
+  ]
+
+  defines = []
+  configs += [
+    "//build/config:precompiled_headers",
+    "//build/config/compiler:wexit_time_destructors",
+  ]
+
+  public_deps = []
+  deps = [
+    "//base",
+    "//chrome:resources",
+    "//chrome:strings",
+    "//chrome/common",
+    "//chrome/common:mojo_bindings",
+    "//chrome/common/printing:interfaces",
+    "//chrome/common/profiling",
+    "//chrome/profiling",
+    "//components/patch_service:lib",
+    "//components/search_engines",
+    "//components/strings",
+    "//components/url_formatter",
+    "//content/public/child",
+    "//content/public/common",
+    "//content/public/network",
+    "//content/public/utility",
+    "//extensions/features",
+    "//ipc",
+    "//media",
+    "//net:net_with_v8",
+    "//printing/features",
+    "//services/service_manager/public/cpp",
+    "//skia",
+    "//sql",
+    "//third_party/libxml",
+    "//third_party/zlib/google:zip",
+    "//ui/base:ui_features",
+  ]
+
+  if (!is_android) {
+    sources += [
+      "importer/bookmark_html_reader.cc",
+      "importer/bookmark_html_reader.h",
+      "importer/bookmarks_file_importer.cc",
+      "importer/bookmarks_file_importer.h",
+      "importer/edge_database_reader_win.cc",
+      "importer/edge_database_reader_win.h",
+      "importer/edge_importer_win.cc",
+      "importer/edge_importer_win.h",
+      "importer/external_process_importer_bridge.cc",
+      "importer/external_process_importer_bridge.h",
+      "importer/favicon_reencode.cc",
+      "importer/favicon_reencode.h",
+      "importer/firefox_importer.cc",
+      "importer/firefox_importer.h",
+      "importer/ie_importer_win.cc",
+      "importer/ie_importer_win.h",
+      "importer/importer.cc",
+      "importer/importer.h",
+      "importer/importer_creator.cc",
+      "importer/importer_creator.h",
+      "importer/nss_decryptor.cc",
+      "importer/nss_decryptor.h",
+      "importer/nss_decryptor_mac.h",
+      "importer/nss_decryptor_mac.mm",
+      "importer/nss_decryptor_win.cc",
+      "importer/nss_decryptor_win.h",
+      "importer/profile_import_impl.cc",
+      "importer/profile_import_impl.h",
+      "importer/profile_import_service.cc",
+      "importer/profile_import_service.h",
+      "importer/safari_importer.h",
+      "importer/safari_importer.mm",
+    ]
+    deps += [
+      "//chrome/common:mojo_bindings",
+      "//chrome/common/importer:interfaces",
+      "//services/data_decoder:lib",
+      "//services/proxy_resolver:lib",
+    ]
+  }
+
+  if (enable_extensions) {
+    sources += [
+      "extensions/extensions_handler.cc",
+      "extensions/extensions_handler.h",
+      "image_writer/disk_unmounter_mac.cc",
+      "image_writer/disk_unmounter_mac.h",
+      "image_writer/error_messages.cc",
+      "image_writer/error_messages.h",
+      "image_writer/image_writer.cc",
+      "image_writer/image_writer.h",
+      "image_writer/image_writer_handler.cc",
+      "image_writer/image_writer_handler.h",
+      "image_writer/image_writer_mac.cc",
+      "image_writer/image_writer_win.cc",
+    ]
+    deps += [
+      "//chrome/common/extensions/api",
+      "//chrome/services/media_gallery_util:lib",
+      "//extensions/utility",
+    ]
+
+    public_deps += [ "//chrome/common/extensions/api" ]
+
+    # Prevent wininet from loading in the renderer. http://crbug.com/460679
+    if (is_win) {
+      ldflags = [ "/DELAYLOAD:wininet.dll" ]
+
+      # Add ESE library for Edge Import support.
+      libs = [ "esent.lib" ]
+      ldflags += [ "/DELAYLOAD:esent.dll" ]
+
+      deps += [
+        "//chrome/services/util_win:lib",
+        "//chrome/services/wifi_util_win:lib",
+      ]
+    }
+
+    if (is_win || is_mac) {
+      deps += [ "//components/wifi" ]
+    } else {
+      sources += [ "image_writer/image_writer_stub.cc" ]
+    }
+  }
+
+  if (enable_mus) {
+    sources += [
+      "mash_service_factory.cc",
+      "mash_service_factory.h",
+    ]
+    deps += [
+      "//mash/quick_launch:lib",
+      "//mash/quick_launch/public/interfaces",
+      "//services/ui:lib",
+      "//services/ui/public/interfaces",
+    ]
+
+    if (is_linux) {
+      deps += [
+        "//components/font_service:lib",
+        "//components/font_service/public/interfaces",
+      ]
+    }
+  }
+
+  if (is_chromeos) {
+    deps += [
+      "//ash",
+      "//ash/autoclick/mus:lib",
+      "//ash/touch_hud/mus:lib",
+      "//chrome/services/file_util:lib",
+    ]
+  }
+
+  if (use_nss_certs) {
+    sources += [
+      "importer/nss_decryptor_system_nss.cc",
+      "importer/nss_decryptor_system_nss.h",
+    ]
+    deps += [
+      "//crypto",
+      "//crypto:platform",
+    ]
+  }
+
+  if (enable_print_preview) {
+    sources += [
+      "printing/pdf_to_pwg_raster_converter_impl.cc",
+      "printing/pdf_to_pwg_raster_converter_impl.h",
+      "printing/pdf_to_pwg_raster_converter_service.cc",
+      "printing/pdf_to_pwg_raster_converter_service.h",
+    ]
+  }
+
+  if (enable_print_preview || (enable_basic_printing && is_win)) {
+    sources += [
+      "printing_handler.cc",
+      "printing_handler.h",
+    ]
+    deps += [ "//pdf" ]
+  }
+
+  if (enable_basic_printing || enable_print_preview) {
+    deps += [
+      "//components/printing/service/public/cpp:factory",
+      "//components/printing/service/public/interfaces",
+    ]
+  }
+
+  if (safe_browsing_mode == 1) {
+    deps += [ "//chrome/services/file_util:lib" ]
+    if (is_mac) {
+      deps += [ "//chrome/utility/safe_browsing/mac" ]
+    }
+  }
+}
+
+if (!is_android) {
+  service_manifest("profile_import_manifest") {
+    name = "profile_import"
+    source = "importer/profile_import_manifest.json"
+  }
+}
+
+if (enable_print_preview) {
+  service_manifest("pdf_to_pwg_raster_converter_manifest") {
+    name = "pdf_to_pwg_raster_converter"
+    source = "printing/pdf_to_pwg_raster_converter_manifest.json"
+  }
+}

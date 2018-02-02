@@ -1,0 +1,88 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//testing/libfuzzer/fuzzer_test.gni")
+
+source_set("mac") {
+  sources = [
+    "dmg_analyzer.cc",
+    "dmg_analyzer.h",
+    "dmg_iterator.cc",
+    "dmg_iterator.h",
+  ]
+
+  deps = [
+    ":dmg_common",
+    "//base",
+    "//chrome/common",
+    "//components/safe_browsing:csd_proto",
+  ]
+}
+
+config("dmg_public_config") {
+  libs = [
+    "bz2",
+    "CoreFoundation.framework",
+  ]
+}
+
+source_set("dmg_common") {
+  visibility = [ ":*" ]
+
+  sources = [
+    "convert_big_endian.h",
+    "hfs.cc",
+    "hfs.h",
+    "read_stream.cc",
+    "read_stream.h",
+    "udif.cc",
+    "udif.h",
+  ]
+
+  deps = [
+    "//base",
+    "//third_party/zlib",
+  ]
+
+  public_configs = [ ":dmg_public_config" ]
+}
+
+executable("crdmg") {
+  sources = [
+    "crdmg.cc",
+  ]
+
+  deps = [
+    ":dmg_common",
+    "//base",
+    "//sandbox/mac:seatbelt",
+  ]
+}
+
+fuzzer_test("safe_browsing_dmg_fuzzer") {
+  sources = [
+    "dmg_fuzzer.cc",
+  ]
+
+  deps = [
+    ":dmg_common",
+    "//base",
+  ]
+}
+
+fuzzer_test("safe_browsing_hfs_fuzzer") {
+  sources = [
+    "hfs_fuzzer.cc",
+  ]
+
+  deps = [
+    ":dmg_common",
+    "//base",
+    "//chrome/test:mac_safe_browsing_test_data",
+  ]
+
+  seed_corpus = "$root_out_dir/test_data/chrome/safe_browsing_dmg"
+
+  libfuzzer_options = [ "max_len=1488576" ]
+}

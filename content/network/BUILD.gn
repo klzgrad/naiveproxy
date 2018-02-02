@@ -1,0 +1,101 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//services/service_manager/public/service_manifest.gni")
+
+group("network") {
+  visibility = [ "//content/*" ]  # This is an internal content API.
+
+  if (is_component_build) {
+    public_deps = [
+      "//content",
+    ]
+  } else {
+    public_deps = [
+      ":network_sources",
+    ]
+  }
+}
+
+source_set("network_sources") {
+  # Depend on via ":network above.
+  visibility = [
+    ":network",
+    "//content",  # For the component build.
+    "//content/app:*",
+    "//content/public/network/*",
+    "//content/utility:utility",
+
+    # For use by StoragePartition.
+    # TODO(mmenke): Remove when network service ships.
+    "//content/browser",
+  ]
+
+  sources = [
+    "cache_url_loader.cc",
+    "cache_url_loader.h",
+    "cookie_manager.cc",
+    "cookie_manager.h",
+    "http_server_properties_pref_delegate.cc",
+    "http_server_properties_pref_delegate.h",
+    "network_change_manager.cc",
+    "network_change_manager.h",
+    "network_context.cc",
+    "network_context.h",
+    "network_sandbox_hook_linux.cc",
+    "network_sandbox_hook_linux.h",
+    "network_service_impl.cc",
+    "network_service_impl.h",
+    "network_service_url_loader_factory.cc",
+    "network_service_url_loader_factory.h",
+    "proxy_resolver_factory_mojo.cc",
+    "proxy_resolver_factory_mojo.h",
+    "proxy_service_mojo.cc",
+    "proxy_service_mojo.h",
+    "restricted_cookie_manager.cc",
+    "restricted_cookie_manager.h",
+    "throttling/network_conditions.cc",
+    "throttling/network_conditions.h",
+    "throttling/throttling_controller.cc",
+    "throttling/throttling_controller.h",
+    "throttling/throttling_network_interceptor.cc",
+    "throttling/throttling_network_interceptor.h",
+    "throttling/throttling_network_transaction.cc",
+    "throttling/throttling_network_transaction.h",
+    "throttling/throttling_network_transaction_factory.cc",
+    "throttling/throttling_network_transaction_factory.h",
+    "throttling/throttling_upload_data_stream.cc",
+    "throttling/throttling_upload_data_stream.h",
+    "upload_progress_tracker.cc",
+    "upload_progress_tracker.h",
+    "url_loader.cc",
+    "url_loader.h",
+  ]
+
+  configs += [ "//content:content_implementation" ]
+
+  deps = [
+    "//base",
+    "//components/network_session_configurator/browser",
+    "//components/network_session_configurator/common",
+    "//components/prefs",
+    "//content:export",
+    "//content/common",
+    "//content/common:mojo_bindings",
+    "//content/public/common:common_sources",
+    "//content/public/network:network_sources",
+    "//mojo/public/cpp/bindings",
+    "//net",
+    "//net:net_browser_services",
+    "//services/network/public/cpp",
+    "//services/proxy_resolver/public/interfaces",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/interfaces",
+  ]
+}
+
+service_manifest("manifest") {
+  name = "network"
+  source = "manifest.json"
+}

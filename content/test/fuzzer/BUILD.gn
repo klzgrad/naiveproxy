@@ -1,0 +1,101 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# Fuzzers for content/ components.
+
+import("//testing/libfuzzer/fuzzer_test.gni")
+import("//third_party/protobuf/proto_library.gni")
+
+# Empty group for package discovery.
+group("fuzzer") {
+}
+
+source_set("fuzzer_support") {
+  sources = [
+    "fuzzer_support.cc",
+    "fuzzer_support.h",
+  ]
+  public_deps = [
+    "//base",
+    "//content/renderer:for_content_tests",
+    "//content/shell:content_shell_lib",
+    "//content/test:test_support",
+    "//gin",
+  ]
+  testonly = true
+}
+
+fuzzer_test("origin_trial_token_fuzzer") {
+  sources = [
+    "origin_trial_token_fuzzer.cc",
+  ]
+  deps = [
+    ":fuzzer_support",
+  ]
+  dict =
+      "//content/test/data/fuzzer_dictionaries/origin_trial_token_fuzzer.dict"
+  seed_corpus = "//content/test/data/fuzzer_corpus/origin_trial_token_data/"
+}
+
+fuzzer_test("origin_manifest_parser_fuzzer") {
+  sources = [
+    "origin_manifest_parser_fuzzer.cc",
+  ]
+  deps = [
+    ":fuzzer_support",
+    "//content/browser:for_content_tests",
+  ]
+  dict = "//content/test/data/fuzzer_dictionaries/origin_manifest_parser_fuzzer.dict"
+  seed_corpus = "//content/test/data/fuzzer_corpus/origin_manifest_parser_data/"
+}
+
+fuzzer_test("renderer_fuzzer") {
+  sources = [
+    "renderer_fuzzer.cc",
+  ]
+  deps = [
+    ":fuzzer_support",
+  ]
+}
+
+fuzzer_test("renderer_tree_fuzzer") {
+  sources = [
+    "renderer_tree_fuzzer.cc",
+  ]
+  deps = [
+    ":fuzzer_support",
+  ]
+  additional_configs = [ "//testing/libfuzzer:no_clusterfuzz" ]
+}
+
+fuzzer_test("clear_site_data_fuzzer") {
+  sources = [
+    "clear_site_data_fuzzer.cc",
+  ]
+  deps = [
+    ":fuzzer_support",
+    "//base",
+    "//content/browser:for_content_tests",
+  ]
+  seed_corpus = "//content/test/data/fuzzer_corpus/clear_site_data/"
+}
+
+fuzzer_test("renderer_proto_tree_fuzzer") {
+  sources = [
+    "renderer_proto_tree_fuzzer.cc",
+  ]
+  deps = [
+    ":fuzzer_support",
+    ":html_tree_proto",
+    "//third_party/libprotobuf-mutator",
+  ]
+  additional_configs = [ "//testing/libfuzzer:no_clusterfuzz" ]
+}
+
+proto_library("html_tree_proto") {
+  sources = [
+    "html_tree.proto",
+  ]
+  testonly = true
+}

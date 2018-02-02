@@ -1,0 +1,71 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module ash.mojom;
+
+import "ui/gfx/image/mojo/image.mojom";
+import "ui/message_center/mojo/notification.mojom";
+import "ui/message_center/mojo/notifier_id.mojom";
+import "mojo/common/string16.mojom";
+
+// A struct that contains information for presenting a notifier in a settings
+// panel.
+struct NotifierUiData {
+  // The notifier (e.g. an extension).
+  message_center.mojom.NotifierId notifier_id;
+
+  // The user-visible name of the notifier (e.g. an extension's name).
+  mojo.common.mojom.String16 name;
+
+  // True if the notifier has a button for advanced settings/"learn more".
+  bool has_advanced_settings;
+
+  // True if notifications from the notifier are presently enabled.
+  bool enabled;
+
+  // An icon displayed next to the name.
+  gfx.mojom.ImageSkia? icon;
+};
+
+// The message center controller funnels notification requests from the client
+// to the MessageCenter.
+interface AshMessageCenterController {
+  SetClient(associated AshMessageCenterClient client);
+
+  ShowClientNotification(message_center.mojom.Notification notification);
+
+  UpdateNotifierIcon(message_center.mojom.NotifierId notifier_id,
+                     gfx.mojom.ImageSkia icon);
+
+  NotifierEnabledChanged(message_center.mojom.NotifierId notifier_id,
+                         bool enabled);
+};
+
+// The message center client interface mimics
+// message_center::NotificationDelegate. The ID strings match the id passed in
+// |notification| in ShowClientNotification and the format of the ID is up to
+// the client.
+interface AshMessageCenterClient {
+  // Called when a notification previously displayed by the client is closed.
+  HandleNotificationClosed(string id, bool by_user);
+
+  // Called when the body of a notification is clicked.
+  HandleNotificationClicked(string id);
+
+  // Called when a notification that has buttons (e.g., "Learn more") receives a
+  // click on one of the buttons.
+  HandleNotificationButtonClicked(string id, int32 button_index);
+
+  // Called when a user enables or disables notifications from the given
+  // notifier.
+  SetNotifierEnabled(message_center.mojom.NotifierId notifier_id, bool enabled);
+
+  // Called when the advanced settings button is pressed for a notifier.
+  HandleNotifierAdvancedSettingsRequested(
+      message_center.mojom.NotifierId notifier_id);
+
+  // Asks the client for a list of notifiers and associated UI information to be
+  // displayed in a settings panel.
+  GetNotifierList() => (array<NotifierUiData> notifiers);
+};

@@ -1,0 +1,97 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//chromecast/chromecast.gni")
+import("//build/config/ui.gni")
+import("//testing/test.gni")
+
+cast_source_set("graphics") {
+  sources = [
+    "cast_window_manager.h",
+  ]
+
+  deps = [
+    "//base",
+    "//ui/gfx",
+  ]
+
+  if (use_aura) {
+    sources += [
+      "cast_focus_client_aura.cc",
+      "cast_focus_client_aura.h",
+      "cast_window_manager_aura.cc",
+      "cast_window_manager_aura.h",
+    ]
+
+    deps += [
+      "//ui/base/ime",
+      "//ui/views",
+      "//ui/wm",
+      "//ui/wm/public",
+    ]
+  } else {
+    sources += [
+      "cast_window_manager_default.cc",
+      "cast_window_manager_default.h",
+    ]
+  }
+
+  if (use_aura) {
+    sources += [
+      "cast_screen.cc",
+      "cast_screen.h",
+    ]
+
+    deps += [
+      ":libcast_graphics_1.0",
+      "//chromecast/base",
+      "//chromecast/public",
+      "//ui/aura",
+      "//ui/display",
+      "//ui/gfx/geometry",
+    ]
+  }
+}
+
+cast_shared_library("libcast_graphics_1.0") {
+  sources = [
+    "cast_egl_platform_default.cc",
+    "graphics_properties_default.cc",
+    "osd_plane_default.cc",
+  ]
+
+  public_deps = [
+    "//chromecast/public",
+  ]
+
+  deps = [
+    "//base",
+    "//chromecast/base:chromecast_switches",
+    "//chromecast/base:init_shlib",
+  ]
+}
+
+if (use_aura && !is_cast_audio_only) {
+  test("cast_graphics_unittests") {
+    sources = [
+      "cast_focus_client_aura_test.cc",
+      "cast_views_test.cc",
+      "cast_window_manager_aura_test.cc",
+      "run_all_unittests.cc",
+    ]
+    deps = [
+      ":graphics",
+      "//base/test:test_support",
+      "//mojo/edk/system",
+      "//testing/gtest",
+      "//ui/aura",
+      "//ui/aura:test_support",
+      "//ui/base:test_support",
+      "//ui/events:test_support",
+      "//ui/gfx",
+      "//ui/gl:test_support",
+      "//ui/views",
+    ]
+  }
+}

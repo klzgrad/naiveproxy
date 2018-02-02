@@ -1,0 +1,80 @@
+// Copyright (c) 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "net/cert/known_roots_mac.h"
+
+#include <Security/Security.h>
+
+#include <set>
+
+#include "base/lazy_instance.h"
+#include "crypto/mac_security_services_lock.h"
+#include "net/cert/x509_util_mac.h"
+
+using base::ScopedCFTypeRef;
+
+namespace net {
+
+namespace {
+
+// Helper class for managing the set of OS X Known Roots. This is only safe
+// to initialize while the crypto::GetMacSecurityServicesLock() is held, due
+// to calling into Security.framework functions; however, once initialized,
+// it can be called at any time.
+// In practice, due to lazy initialization, it's best to just always guard
+// accesses with the lock.
+class OSXKnownRootHelper {
+ public:
+  bool IsKnownRoot(SecCertificateRef cert) {
+    // If there are no known roots, then an API failure occurred. For safety,
+    // assume that all certificates are issued by known roots.
+    if (known_roots_.empty())
+      return true;
+
+    SHA256HashValue hash = x509_util::CalculateFingerprint256(cert);
+    return known_roots_.find(hash) != known_roots_.end();
+  }
+
+ private:
+  friend struct base::LazyInstanceTraitsBase<OSXKnownRootHelper>;
+
+  OSXKnownRootHelper() {
+    crypto::GetMacSecurityServicesLock().AssertAcquired();
+
+    CFArrayRef cert_array = NULL;
+    OSStatus rv = SecTrustSettingsCopyCertificates(
+        kSecTrustSettingsDomainSystem, &cert_array);
+    if (rv != noErr) {
+      LOG(ERROR) << "Unable to determine trusted roots; assuming all roots are "
+                 << "trusted! Error " << rv;
+      return;
+    }
+    base::ScopedCFTypeRef<CFArrayRef> scoped_array(cert_array);
+    for (CFIndex i = 0, size = CFArrayGetCount(cert_array); i < size; ++i) {
+      SecCertificateRef cert = reinterpret_cast<SecCertificateRef>(
+          const_cast<void*>(CFArrayGetValueAtIndex(cert_array, i)));
+      known_roots_.insert(x509_util::CalculateFingerprint256(cert));
+    }
+  }
+
+  ~OSXKnownRootHelper() {}
+
+  std::set<SHA256HashValue, SHA256HashValueLessThan> known_roots_;
+};
+
+base::LazyInstance<OSXKnownRootHelper>::Leaky g_known_roots =
+    LAZY_INSTANCE_INITIALIZER;
+
+}  // namespace
+
+bool IsKnownRoot(SecCertificateRef cert) {
+  return g_known_roots.Get().IsKnownRoot(cert);
+}
+
+void InitializeKnownRoots() {
+  base::AutoLock lock(crypto::GetMacSecurityServicesLock());
+  g_known_roots.Get();
+}
+
+}  // namespace net

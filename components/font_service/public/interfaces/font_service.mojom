@@ -1,0 +1,45 @@
+// Copyright 2014 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module font_service.mojom;
+
+import "mojo/common/file.mojom";
+
+enum TypefaceSlant {
+  ROMAN = 0,
+  ITALIC = 1,
+  OBLIQUE = 2,
+};
+
+struct TypefaceStyle {
+  uint16 weight;
+  uint8 width;
+  TypefaceSlant slant;
+};
+
+// A reference to specific font on the font service.
+struct FontIdentity {
+  uint32 id;
+  int32 ttc_index;
+  // TODO(erg): So the string is supposed to be a path. However, the current
+  // chrome code goes out of its way to send this to the renderer process, and
+  // it is passed to blink, even though the openStream() IPC in chrome uses the
+  // id number instead. Do more investigation about what we need to do to plug
+  // this system path leak.
+  string str_representation;
+};
+
+// Loads and resolves fonts.
+//
+// We still need to load fonts from within a sandboxed process. We set
+// up a service to match fonts and load them,
+interface FontService {
+  // Returns the best match for |family_name| and |style|. On error, returns a
+  // null |identity|.
+  MatchFamilyName(string family_name, TypefaceStyle style) =>
+      (FontIdentity? identity, string family_name, TypefaceStyle style);
+
+  // Returns a handle to the raw font specified by |id_number|.
+  OpenStream(uint32 id_number) => (mojo.common.mojom.File? font_handle);
+};

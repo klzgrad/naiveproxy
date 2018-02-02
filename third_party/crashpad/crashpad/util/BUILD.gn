@@ -1,0 +1,478 @@
+# Copyright 2015 The Crashpad Authors. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("//testing/test.gni")
+
+if (is_mac) {
+  import("//build/config/sysroot.gni")
+}
+
+if (is_mac) {
+  action_foreach("mig") {
+    script = "mach/mig.py"
+
+    sources = [
+      "$sysroot/usr/include/mach/exc.defs",
+      "$sysroot/usr/include/mach/mach_exc.defs",
+      "$sysroot/usr/include/mach/notify.defs",
+      "mach/child_port.defs",
+    ]
+
+    outputs = [
+      "$target_gen_dir/mach/{{source_name_part}}User.c",
+      "$target_gen_dir/mach/{{source_name_part}}Server.c",
+      "$target_gen_dir/mach/{{source_name_part}}.h",
+      "$target_gen_dir/mach/{{source_name_part}}Server.h",
+    ]
+
+    args = [ "{{source}}" ]
+    args += rebase_path(outputs, root_build_dir)
+    if (!use_system_xcode) {
+      args += [
+        "--developer-dir",
+        hermetic_xcode_path,
+      ]
+    }
+    args += [
+      "--sdk",
+      mac_sdk_path,
+      "--include",
+      rebase_path("../compat/mac", root_build_dir),
+    ]
+  }
+}
+
+static_library("util") {
+  sources = [
+    "file/delimited_file_reader.cc",
+    "file/delimited_file_reader.h",
+    "file/directory_reader.h",
+    "file/directory_reader_posix.cc",
+    "file/file_io.cc",
+    "file/file_io.h",
+    "file/file_io_posix.cc",
+    "file/file_reader.cc",
+    "file/file_reader.h",
+    "file/file_seeker.cc",
+    "file/file_seeker.h",
+    "file/file_writer.cc",
+    "file/file_writer.h",
+    "file/filesystem.h",
+    "file/filesystem_posix.cc",
+    "file/scoped_remove_file.cc",
+    "file/scoped_remove_file.h",
+    "file/string_file.cc",
+    "file/string_file.h",
+    "misc/address_sanitizer.h",
+    "misc/address_types.h",
+    "misc/arraysize_unsafe.h",
+    "misc/as_underlying_type.h",
+    "misc/clock.h",
+    "misc/clock_posix.cc",
+    "misc/from_pointer_cast.h",
+    "misc/implicit_cast.h",
+    "misc/initialization_state.h",
+    "misc/initialization_state_dcheck.cc",
+    "misc/initialization_state_dcheck.h",
+    "misc/lexing.cc",
+    "misc/lexing.h",
+    "misc/metrics.cc",
+    "misc/metrics.h",
+    "misc/paths.h",
+    "misc/pdb_structures.cc",
+    "misc/pdb_structures.h",
+    "misc/random_string.cc",
+    "misc/random_string.h",
+    "misc/reinterpret_bytes.cc",
+    "misc/reinterpret_bytes.h",
+    "misc/scoped_forbid_return.cc",
+    "misc/scoped_forbid_return.h",
+    "misc/symbolic_constants_common.h",
+    "misc/time.cc",
+    "misc/time.h",
+    "misc/tri_state.h",
+    "misc/uuid.cc",
+    "misc/uuid.h",
+    "misc/zlib.cc",
+    "misc/zlib.h",
+    "net/http_body.cc",
+    "net/http_body.h",
+    "net/http_body_gzip.cc",
+    "net/http_body_gzip.h",
+    "net/http_headers.h",
+    "net/http_multipart_builder.cc",
+    "net/http_multipart_builder.h",
+    "net/http_transport.cc",
+    "net/http_transport.h",
+    "net/url.cc",
+    "net/url.h",
+    "numeric/checked_address_range.cc",
+    "numeric/checked_address_range.h",
+    "numeric/checked_range.h",
+    "numeric/checked_vm_address_range.h",
+    "numeric/in_range_cast.h",
+    "numeric/int128.h",
+    "numeric/safe_assignment.h",
+    "posix/close_multiple.cc",
+    "posix/close_multiple.h",
+    "posix/close_stdio.cc",
+    "posix/close_stdio.h",
+    "posix/double_fork_and_exec.cc",
+    "posix/double_fork_and_exec.h",
+    "posix/drop_privileges.cc",
+    "posix/drop_privileges.h",
+    "posix/process_info.h",
+    "posix/scoped_dir.cc",
+    "posix/scoped_dir.h",
+    "posix/scoped_mmap.cc",
+    "posix/scoped_mmap.h",
+    "posix/signals.cc",
+    "posix/signals.h",
+    "posix/symbolic_constants_posix.cc",
+    "posix/symbolic_constants_posix.h",
+    "stdlib/aligned_allocator.cc",
+    "stdlib/aligned_allocator.h",
+    "stdlib/map_insert.h",
+    "stdlib/objc.h",
+    "stdlib/string_number_conversion.cc",
+    "stdlib/string_number_conversion.h",
+    "stdlib/strlcpy.cc",
+    "stdlib/strlcpy.h",
+    "stdlib/strnlen.cc",
+    "stdlib/strnlen.h",
+    "stdlib/thread_safe_vector.h",
+    "string/split_string.cc",
+    "string/split_string.h",
+    "synchronization/semaphore.h",
+    "synchronization/semaphore_posix.cc",
+    "thread/thread.cc",
+    "thread/thread.h",
+    "thread/thread_log_messages.cc",
+    "thread/thread_log_messages.h",
+    "thread/thread_posix.cc",
+    "thread/worker_thread.cc",
+    "thread/worker_thread.h",
+  ]
+
+  if (is_mac) {
+    sources += [
+      "mac/checked_mach_address_range.h",
+      "mac/launchd.h",
+      "mac/launchd.mm",
+      "mac/mac_util.cc",
+      "mac/mac_util.h",
+      "mac/service_management.cc",
+      "mac/service_management.h",
+      "mac/xattr.cc",
+      "mac/xattr.h",
+      "mach/child_port_handshake.cc",
+      "mach/child_port_handshake.h",
+      "mach/child_port_server.cc",
+      "mach/child_port_server.h",
+      "mach/child_port_types.h",
+      "mach/composite_mach_message_server.cc",
+      "mach/composite_mach_message_server.h",
+      "mach/exc_client_variants.cc",
+      "mach/exc_client_variants.h",
+      "mach/exc_server_variants.cc",
+      "mach/exc_server_variants.h",
+      "mach/exception_behaviors.cc",
+      "mach/exception_behaviors.h",
+      "mach/exception_ports.cc",
+      "mach/exception_ports.h",
+      "mach/exception_types.cc",
+      "mach/exception_types.h",
+      "mach/mach_extensions.cc",
+      "mach/mach_extensions.h",
+      "mach/mach_message.cc",
+      "mach/mach_message.h",
+      "mach/mach_message_server.cc",
+      "mach/mach_message_server.h",
+      "mach/notify_server.cc",
+      "mach/notify_server.h",
+      "mach/scoped_task_suspend.cc",
+      "mach/scoped_task_suspend.h",
+      "mach/symbolic_constants_mach.cc",
+      "mach/symbolic_constants_mach.h",
+      "mach/task_for_pid.cc",
+      "mach/task_for_pid.h",
+      "mach/task_memory.cc",
+      "mach/task_memory.h",
+      "misc/clock_mac.cc",
+      "misc/paths_mac.cc",
+      "net/http_transport_mac.mm",
+      "posix/process_info_mac.cc",
+      "synchronization/semaphore_mac.cc",
+    ]
+    sources += get_target_outputs(":mig")
+  }
+
+  if (is_win) {
+    sources += [
+      "file/directory_reader_win.cc",
+      "file/file_io_win.cc",
+      "file/filesystem_win.cc",
+      "misc/clock_win.cc",
+      "misc/paths_win.cc",
+      "misc/time_win.cc",
+      "net/http_transport_win.cc",
+      "synchronization/semaphore_win.cc",
+      "thread/thread_win.cc",
+      "win/address_types.h",
+      "win/capture_context.h",
+      "win/checked_win_address_range.h",
+      "win/command_line.cc",
+      "win/command_line.h",
+      "win/critical_section_with_debug_info.cc",
+      "win/critical_section_with_debug_info.h",
+      "win/exception_handler_server.cc",
+      "win/exception_handler_server.h",
+      "win/get_function.cc",
+      "win/get_function.h",
+      "win/get_module_information.cc",
+      "win/get_module_information.h",
+      "win/handle.cc",
+      "win/handle.h",
+      "win/initial_client_data.cc",
+      "win/initial_client_data.h",
+      "win/module_version.cc",
+      "win/module_version.h",
+      "win/nt_internals.cc",
+      "win/nt_internals.h",
+      "win/ntstatus_logging.cc",
+      "win/ntstatus_logging.h",
+      "win/process_info.cc",
+      "win/process_info.h",
+      "win/process_structs.h",
+      "win/registration_protocol_win.cc",
+      "win/registration_protocol_win.h",
+      "win/safe_terminate_process.h",
+      "win/scoped_handle.cc",
+      "win/scoped_handle.h",
+      "win/scoped_local_alloc.cc",
+      "win/scoped_local_alloc.h",
+      "win/scoped_process_suspend.cc",
+      "win/scoped_process_suspend.h",
+      "win/scoped_set_event.cc",
+      "win/scoped_set_event.h",
+      "win/session_end_watcher.cc",
+      "win/session_end_watcher.h",
+      "win/termination_codes.h",
+      "win/xp_compat.h",
+    ]
+
+    # There's no ml.exe yet in cross builds, so provide broken-but-not-asm
+    # versions of the functions defined in .asm files.
+    #
+    # CaptureContext() in capture_context_broken.cc just calls CHECK(false).
+    # SafeTerminateProcess() in safe_terminate_process.cc just calls regular
+    # TerminateProcess() without the protection against broken third-party
+    # patching of TerminateProcess().
+    #
+    # TODO(thakis): Use the .asm file in cross builds somehow,
+    # https://crbug.com/762167.
+    if (host_os == "win") {
+      sources += [
+        "win/capture_context.asm",
+        "win/safe_terminate_process.asm",
+      ]
+    } else {
+      sources += [
+        "win/capture_context_broken.cc",
+        "win/safe_terminate_process_broken.cc",
+      ]
+    }
+  }
+
+  public_configs = [ "..:crashpad_config" ]
+
+  # Include files from here and generated files starting with "util".
+  include_dirs = [ "$root_gen_dir/third_party/crashpad/crashpad" ]
+
+  public_deps = [
+    "../compat",
+  ]
+
+  deps = [
+    "//base",
+
+    # TODO(GN): Should this point at Chromium's zlib when in Chromium?
+    "../third_party/zlib",
+  ]
+
+  if (is_mac) {
+    libs = [
+      "bsm",
+      "CoreFoundation.framework",
+      "Foundation.framework",
+      "IOKit.framework",
+    ]
+    deps += [ ":mig" ]
+  }
+
+  if (is_win) {
+    cflags = [
+      "/wd4201",  # nonstandard extension used : nameless struct/union.
+      "/wd4577",  # 'noexcept' used with no exception handling mode specified.
+    ]
+    libs = [ "winhttp.lib" ]
+
+    if (current_cpu == "x86") {
+      asmflags = [ "/safeseh" ]
+    }
+  }
+}
+
+source_set("util_test") {
+  testonly = true
+
+  sources = [
+    "file/delimited_file_reader_test.cc",
+    "file/directory_reader_test.cc",
+    "file/file_io_test.cc",
+    "file/file_reader_test.cc",
+    "file/filesystem_test.cc",
+    "file/string_file_test.cc",
+    "misc/arraysize_unsafe_test.cc",
+    "misc/clock_test.cc",
+    "misc/from_pointer_cast_test.cc",
+    "misc/initialization_state_dcheck_test.cc",
+    "misc/initialization_state_test.cc",
+    "misc/paths_test.cc",
+    "misc/random_string_test.cc",
+    "misc/reinterpret_bytes_test.cc",
+    "misc/scoped_forbid_return_test.cc",
+    "misc/time_test.cc",
+    "misc/uuid_test.cc",
+    "net/http_body_gzip_test.cc",
+    "net/http_body_test.cc",
+    "net/http_body_test_util.cc",
+    "net/http_body_test_util.h",
+    "net/http_multipart_builder_test.cc",
+    "net/http_transport_test.cc",
+    "net/url_test.cc",
+    "numeric/checked_address_range_test.cc",
+    "numeric/checked_range_test.cc",
+    "numeric/in_range_cast_test.cc",
+    "numeric/int128_test.cc",
+    "posix/process_info_test.cc",
+    "posix/scoped_mmap_test.cc",
+    "posix/signals_test.cc",
+    "posix/symbolic_constants_posix_test.cc",
+    "stdlib/aligned_allocator_test.cc",
+    "stdlib/map_insert_test.cc",
+    "stdlib/string_number_conversion_test.cc",
+    "stdlib/strlcpy_test.cc",
+    "stdlib/strnlen_test.cc",
+    "stdlib/thread_safe_vector_test.cc",
+    "string/split_string_test.cc",
+    "synchronization/semaphore_test.cc",
+    "thread/thread_log_messages_test.cc",
+    "thread/thread_test.cc",
+    "thread/worker_thread_test.cc",
+  ]
+
+  if (is_mac) {
+    sources += [
+      "mac/launchd_test.mm",
+      "mac/mac_util_test.mm",
+      "mac/service_management_test.mm",
+      "mac/xattr_test.cc",
+      "mach/child_port_handshake_test.cc",
+      "mach/child_port_server_test.cc",
+      "mach/composite_mach_message_server_test.cc",
+      "mach/exc_client_variants_test.cc",
+      "mach/exc_server_variants_test.cc",
+      "mach/exception_behaviors_test.cc",
+      "mach/exception_ports_test.cc",
+      "mach/exception_types_test.cc",
+      "mach/mach_extensions_test.cc",
+      "mach/mach_message_server_test.cc",
+      "mach/mach_message_test.cc",
+      "mach/notify_server_test.cc",
+      "mach/scoped_task_suspend_test.cc",
+      "mach/symbolic_constants_mach_test.cc",
+      "mach/task_memory_test.cc",
+    ]
+  }
+
+  if (is_win) {
+    sources += [
+      "win/capture_context_test.cc",
+      "win/command_line_test.cc",
+      "win/critical_section_with_debug_info_test.cc",
+      "win/exception_handler_server_test.cc",
+      "win/get_function_test.cc",
+      "win/handle_test.cc",
+      "win/initial_client_data_test.cc",
+      "win/process_info_test.cc",
+      "win/registration_protocol_win_test.cc",
+      "win/safe_terminate_process_test.cc",
+      "win/scoped_process_suspend_test.cc",
+      "win/session_end_watcher_test.cc",
+    ]
+  }
+
+  data = [
+    "net/http_transport_test_server.py",
+    "net/testdata/",
+  ]
+
+  deps = [
+    ":util",
+    "../client",
+    "../compat",
+    "../test",
+    "../third_party/zlib",
+    "//base",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+
+  if (is_mac) {
+    libs = [ "Foundation.framework" ]
+  }
+
+  if (is_win) {
+    libs = [ "rpcrt4.lib" ]
+    data_deps = [
+      ":crashpad_util_test_process_info_test_child",
+      ":crashpad_util_test_safe_terminate_process_test_child",
+    ]
+  }
+}
+
+if (is_win) {
+  executable("crashpad_util_test_process_info_test_child") {
+    testonly = true
+    sources = [
+      "win/process_info_test_child.cc",
+    ]
+
+    # Set an unusually high load address to make sure that the main executable
+    # still appears as the first element in ProcessInfo::Modules().
+    ldflags = [
+      "/BASE:0x78000000",
+      "/DYNAMICBASE:NO",
+      "/FIXED",
+    ]
+  }
+
+  executable("crashpad_util_test_safe_terminate_process_test_child") {
+    testonly = true
+    sources = [
+      "win/safe_terminate_process_test_child.cc",
+    ]
+  }
+}

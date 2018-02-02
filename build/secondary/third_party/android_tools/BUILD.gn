@@ -1,0 +1,248 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/android/rules.gni")
+
+config("cpu_features_include") {
+  include_dirs = [ "$android_ndk_root/sources/android/cpufeatures" ]
+}
+
+config("cpu_features_warnings") {
+  if (is_clang) {
+    # cpu-features.c has few unused functions on x86 b/26403333
+    cflags = [ "-Wno-unused-function" ]
+  }
+}
+
+source_set("cpu_features") {
+  sources = [
+    "$android_ndk_root/sources/android/cpufeatures/cpu-features.c",
+  ]
+  public_configs = [ ":cpu_features_include" ]
+
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [
+    "//build/config/compiler:no_chromium_code",
+
+    # Must be after no_chromium_code for warning flags to be ordered correctly.
+    ":cpu_features_warnings",
+  ]
+}
+
+template("support_lib_alias") {
+  java_group(target_name) {
+    forward_variables_from(invoker, [ "testonly" ])
+    deps = [
+      "$android_support_library_package:$target_name",
+    ]
+  }
+}
+
+support_lib_alias("android_support_chromium_java") {
+  testonly = true
+}
+support_lib_alias("android_gcm_java") {
+}
+support_lib_alias("emma_device_java") {
+}
+support_lib_alias("android_arch_lifecycle_common_java") {
+}
+support_lib_alias("android_arch_lifecycle_runtime_java") {
+}
+support_lib_alias("android_support_multidex_java") {
+}
+support_lib_alias("android_support_annotations_java") {
+}
+support_lib_alias("android_support_cardview_java") {
+}
+support_lib_alias("android_support_compat_java") {
+}
+support_lib_alias("android_support_core_ui_java") {
+}
+support_lib_alias("android_support_core_utils_java") {
+}
+support_lib_alias("android_support_design_java") {
+}
+support_lib_alias("android_support_fragment_java") {
+}
+support_lib_alias("android_support_media_compat_java") {
+}
+support_lib_alias("android_support_transition_java") {
+}
+support_lib_alias("android_support_v4_java") {
+}
+support_lib_alias("android_support_v7_appcompat_java") {
+}
+support_lib_alias("android_support_v7_appcompat_java_internal") {
+}
+support_lib_alias("android_support_v7_gridlayout_java") {
+}
+support_lib_alias("android_support_v7_mediarouter_java") {
+}
+support_lib_alias("android_support_v7_palette_java") {
+}
+support_lib_alias("android_support_v7_preference_java") {
+}
+support_lib_alias("android_support_v7_recyclerview_java") {
+}
+support_lib_alias("android_support_v13_java") {
+}
+support_lib_alias("android_support_v14_preference_java") {
+}
+support_lib_alias("android_support_v17_leanback_java") {
+}
+support_lib_alias("android_support_v17_preference_java") {
+}
+support_lib_alias("android_support_vector_drawable_java") {
+}
+
+# TODO(dgn): Use the POM files instead of hardcoding the dependencies.
+gms_path = "$default_extras_android_sdk_root/extras/google/m2repository/com/google/android/gms"
+gms_version = "11.2.0"
+
+android_aar_prebuilt("google_play_services_basement_java") {
+  deps = [
+    ":android_support_v4_java",
+  ]
+  _lib_name = "play-services-basement"
+  aar_path = "$gms_path/$_lib_name/$gms_version/$_lib_name-$gms_version.aar"
+  info_path = "//build/secondary/third_party/android_tools/$target_name.info"
+  input_jars_paths = [ "$android_sdk/optional/org.apache.http.legacy.jar" ]
+}
+
+android_aar_prebuilt("google_play_services_tasks_java") {
+  deps = [
+    ":google_play_services_basement_java",
+  ]
+  _lib_name = "play-services-tasks"
+  aar_path = "$gms_path/$_lib_name/$gms_version/$_lib_name-$gms_version.aar"
+  info_path = "//build/secondary/third_party/android_tools/$target_name.info"
+  proguard_configs =
+      [ "${target_gen_dir}/google_play_services_basement_java/proguard.txt" ]
+}
+
+android_aar_prebuilt("google_play_services_base_java") {
+  deps = [
+    ":android_support_v4_java",
+    ":google_play_services_basement_java",
+    ":google_play_services_tasks_java",
+  ]
+  _lib_name = "play-services-base"
+  aar_path = "$gms_path/$_lib_name/$gms_version/$_lib_name-$gms_version.aar"
+  info_path = "//build/secondary/third_party/android_tools/$target_name.info"
+  proguard_configs =
+      [ "${target_gen_dir}/google_play_services_basement_java/proguard.txt" ]
+}
+
+android_aar_prebuilt("google_play_services_auth_base_java") {
+  deps = [
+    ":google_play_services_base_java",
+    ":google_play_services_basement_java",
+  ]
+  _lib_name = "play-services-auth-base"
+  aar_path = "$gms_path/$_lib_name/$gms_version/$_lib_name-$gms_version.aar"
+  info_path = "//build/secondary/third_party/android_tools/$target_name.info"
+  proguard_configs =
+      [ "${target_gen_dir}/google_play_services_basement_java/proguard.txt" ]
+}
+
+android_aar_prebuilt("google_play_services_auth_java") {
+  deps = [
+    ":google_play_services_auth_base_java",
+    ":google_play_services_base_java",
+    ":google_play_services_basement_java",
+  ]
+  _lib_name = "play-services-auth"
+  aar_path = "$gms_path/$_lib_name/$gms_version/$_lib_name-$gms_version.aar"
+  info_path = "//build/secondary/third_party/android_tools/$target_name.info"
+  proguard_configs =
+      [ "${target_gen_dir}/google_play_services_basement_java/proguard.txt" ]
+}
+
+android_aar_prebuilt("google_play_services_cast_java") {
+  deps = [
+    ":android_support_v7_mediarouter_java",
+    ":google_play_services_base_java",
+    ":google_play_services_basement_java",
+  ]
+  _lib_name = "play-services-cast"
+  aar_path = "$gms_path/$_lib_name/$gms_version/$_lib_name-$gms_version.aar"
+  info_path = "//build/secondary/third_party/android_tools/$target_name.info"
+  proguard_configs =
+      [ "${target_gen_dir}/google_play_services_basement_java/proguard.txt" ]
+}
+
+android_aar_prebuilt("google_play_services_iid_java") {
+  deps = [
+    ":google_play_services_base_java",
+    ":google_play_services_basement_java",
+  ]
+  _lib_name = "play-services-iid"
+  aar_path = "$gms_path/$_lib_name/$gms_version/$_lib_name-$gms_version.aar"
+  info_path = "//build/secondary/third_party/android_tools/$target_name.info"
+  proguard_configs =
+      [ "${target_gen_dir}/google_play_services_basement_java/proguard.txt" ]
+}
+
+android_aar_prebuilt("google_play_services_gcm_java") {
+  deps = [
+    ":google_play_services_base_java",
+    ":google_play_services_basement_java",
+    ":google_play_services_iid_java",
+  ]
+  _lib_name = "play-services-gcm"
+  aar_path = "$gms_path/$_lib_name/$gms_version/$_lib_name-$gms_version.aar"
+  info_path = "//build/secondary/third_party/android_tools/$target_name.info"
+  proguard_configs =
+      [ "${target_gen_dir}/google_play_services_basement_java/proguard.txt" ]
+}
+
+android_aar_prebuilt("google_play_services_location_java") {
+  deps = [
+    ":google_play_services_base_java",
+    ":google_play_services_basement_java",
+  ]
+  _lib_name = "play-services-location"
+  aar_path = "$gms_path/$_lib_name/$gms_version/$_lib_name-$gms_version.aar"
+  info_path = "//build/secondary/third_party/android_tools/$target_name.info"
+  proguard_configs =
+      [ "${target_gen_dir}/google_play_services_basement_java/proguard.txt" ]
+}
+
+android_aar_prebuilt("google_play_services_nearby_java") {
+  deps = [
+    ":google_play_services_base_java",
+    ":google_play_services_basement_java",
+  ]
+  _lib_name = "play-services-nearby"
+  aar_path = "$gms_path/$_lib_name/$gms_version/$_lib_name-$gms_version.aar"
+  info_path = "//build/secondary/third_party/android_tools/$target_name.info"
+  proguard_configs =
+      [ "${target_gen_dir}/google_play_services_basement_java/proguard.txt" ]
+}
+
+android_aar_prebuilt("google_play_services_vision_java") {
+  deps = [
+    ":google_play_services_base_java",
+    ":google_play_services_basement_java",
+    ":google_play_services_vision_common_java",
+  ]
+  _lib_name = "play-services-vision"
+  aar_path = "$gms_path/$_lib_name/$gms_version/$_lib_name-$gms_version.aar"
+  info_path = "//build/secondary/third_party/android_tools/$target_name.info"
+  proguard_configs =
+      [ "${target_gen_dir}/google_play_services_basement_java/proguard.txt" ]
+}
+
+android_aar_prebuilt("google_play_services_vision_common_java") {
+  deps = [
+    ":google_play_services_base_java",
+    ":google_play_services_basement_java",
+  ]
+  _lib_name = "play-services-vision-common"
+  aar_path = "$gms_path/$_lib_name/$gms_version/$_lib_name-$gms_version.aar"
+  info_path = "//build/secondary/third_party/android_tools/$target_name.info"
+  proguard_configs =
+      [ "${target_gen_dir}/google_play_services_basement_java/proguard.txt" ]
+}

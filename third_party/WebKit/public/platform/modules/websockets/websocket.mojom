@@ -1,0 +1,142 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module blink.mojom;
+
+import "url/mojo/origin.mojom";
+import "url/mojo/url.mojom";
+
+enum WebSocketMessageType {
+  CONTINUATION,
+  TEXT,
+  BINARY,
+  LAST = BINARY
+};
+
+// TODO(darin): Move to a more general location.
+struct HttpHeader {
+  string name;
+  string value;
+};
+
+// TODO(darin): Remove redundancy b/w |headers| and |headers_text|.
+
+struct WebSocketHandshakeRequest {
+  url.mojom.Url url;
+  array<HttpHeader> headers;
+  string headers_text;
+};
+
+struct WebSocketHandshakeResponse {
+  url.mojom.Url url;
+  int32 status_code;
+  string status_text;
+  array<HttpHeader> headers;
+  string headers_text;
+};
+
+interface WebSocketClient {
+  OnFailChannel(string reason);
+
+  // Notify the renderer that the browser has started an opening handshake.
+  // This message is for showing the request in the inspector and
+  // can be omitted if the inspector is not active.
+  OnStartOpeningHandshake(WebSocketHandshakeRequest request);
+
+  // Notify the renderer that the browser has finished an opening handshake.
+  // This message precedes AddChannelResponse.
+  // This message is for showing the response in the inspector and
+  // can be omitted if the inspector is not active.
+  OnFinishOpeningHandshake(WebSocketHandshakeResponse response);
+
+  // Response to an AddChannelRequest. |selected_protocol| is the sub-protocol
+  // the server selected, or empty if no sub-protocol was selected.
+  // |extensions| is the list of extensions negotiated for the connection.
+  OnAddChannelResponse(string selected_protocol, string extensions);
+
+  // Receive a non-control frame from the remote server.
+  // - |fin| indicates that this frame is the last in the current message.
+  // - |type| is the type of the message. On the first frame of a message, it
+  //   must be set to either WebSocketMessageType.TEXT or
+  //   WebSocketMessageType.BINARY. On subsequent frames, it must be set to
+  //   WebSocketMessageType.CONTINUATION, and the type is the same as that of
+  //   the first message. If |type| is WebSocketMessageType.TEXT, then the
+  //   concatenation of the |data| from every frame in the message must be valid
+  //   UTF-8. If |fin| is not set, |data| must be non-empty.
+  OnDataFrame(bool fin, WebSocketMessageType type, array<uint8> data);
+
+  // Add |quota| tokens of send quota for the channel. |quota| must be a
+  // positive integer. Both the browser and the renderer set send quota for the
+  // other side, and check that quota has not been exceeded when receiving
+  // messages.  Both sides start a new channel with a quota of 0, and must wait
+  // for a FlowControl message before calling SendFrame. The total available
+  // quota on one side must never exceed 0x7FFFFFFFFFFFFFFF tokens.
+  OnFlowControl(int64 quota);
+
+  // Drop the channel.
+  //
+  // When sent by the renderer, this will cause a Close message will be sent and
+  // the TCP/IP connection will be closed.
+  //
+  // When sent by the browser, this indicates that a Close has been received,
+  // the connection was closed, or a network or protocol error occurred.
+  //
+  // - |code| is one of the reason codes specified in RFC6455.
+  // - |reason|, if non-empty, is a UTF-8 encoded string which may be useful
+  //   for debugging but is not necessarily human-readable, as supplied by the
+  //   server in the Close message.
+  // - If |was_clean| is false, then the WebSocket connection was not closed
+  //   cleanly.
+  OnDropChannel(bool was_clean, uint16 code, string reason);
+
+  // Notify the renderer that a closing handshake has been initiated by the
+  // server, so that it can set the Javascript readyState to CLOSING.
+  OnClosingHandshake();
+};
+
+interface WebSocket {
+  // The client side may observe the following disconnection reason from the
+  // service side:
+  const uint32 kInsufficientResources = 1;
+
+  // Open new WebSocket connection to |socket_url|. |requested_protocols| is a
+  // list of tokens identifying sub-protocols the renderer would like to use,
+  // as described in RFC6455 "Subprotocols Using the WebSocket Protocol".
+  AddChannelRequest(url.mojom.Url url,
+                    array<string> requested_protocols,
+                    url.mojom.Origin origin,
+                    url.mojom.Url first_party_for_cookies,
+                    string user_agent_override,
+                    WebSocketClient client);
+
+  // Send a non-control frame to the remote server.
+  // - |fin| indicates that this frame is the last in the current message.
+  // - |type| is the type of the message. On the first frame of a message, it
+  //   must be set to either WebSocketMessageType.TEXT or
+  //   WebSocketMessageType.BINARY. On subsequent frames, it must be set to
+  //   WebSocketMessageType.CONTINUATION, and the type is the same as that of
+  //   the first message. If |type| is WebSocketMessageType.TEXT, then the
+  //   concatenation of the |data| from every frame in the message must be valid
+  //   UTF-8. If |fin| is not set, |data| must be non-empty.
+  SendFrame(bool fin, WebSocketMessageType type, array<uint8> data);
+
+  // Add |quota| tokens of send quota for the channel. |quota| must be a
+  // positive integer. Both the browser and the renderer set send quota for the
+  // other side, and check that quota has not been exceeded when receiving
+  // messages.  Both sides start a new channel with a quota of 0, and must wait
+  // for a FlowControl message before calling SendFrame. The total available
+  // quota on one side must never exceed 0x7FFFFFFFFFFFFFFF tokens.
+  SendFlowControl(int64 quota);
+
+  // Close the channel gracefully.
+  //
+  // When sent by the renderer, this will cause a Close message will be sent and
+  // the TCP/IP connection will be closed.
+  //
+  // - |code| is one of the reason codes specified in RFC6455.
+  // - |reason|, if non-empty, is a UTF-8 encoded string which may be useful for
+  //   debugging but is not necessarily human-readable, as supplied by the
+  //   server in the Close message.
+  StartClosingHandshake(uint16 code, string reason);
+};

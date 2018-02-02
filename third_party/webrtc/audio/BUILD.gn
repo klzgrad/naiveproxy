@@ -1,0 +1,220 @@
+# Copyright (c) 2015 The WebRTC project authors. All Rights Reserved.
+#
+# Use of this source code is governed by a BSD-style license
+# that can be found in the LICENSE file in the root of the source
+# tree. An additional intellectual property rights grant can be found
+# in the file PATENTS.  All contributing project authors may
+# be found in the AUTHORS file in the root of the source tree.
+
+import("../webrtc.gni")
+if (is_android) {
+  import("//build/config/android/config.gni")
+  import("//build/config/android/rules.gni")
+}
+
+rtc_static_library("audio") {
+  sources = [
+    "audio_receive_stream.cc",
+    "audio_receive_stream.h",
+    "audio_send_stream.cc",
+    "audio_send_stream.h",
+    "audio_state.cc",
+    "audio_state.h",
+    "audio_transport_proxy.cc",
+    "audio_transport_proxy.h",
+    "conversion.h",
+    "null_audio_poller.cc",
+    "null_audio_poller.h",
+    "scoped_voe_interface.h",
+    "time_interval.cc",
+    "time_interval.h",
+  ]
+
+  if (!build_with_chromium && is_clang) {
+    # Suppress warnings from the Chromium Clang plugin (bugs.webrtc.org/163).
+    suppressed_configs += [ "//build/config/clang:find_bad_constructs" ]
+  }
+
+  deps = [
+    "..:webrtc_common",
+    "../api:audio_mixer_api",
+    "../api:call_api",
+    "../api:optional",
+    "../api/audio_codecs:audio_codecs_api",
+    "../api/audio_codecs:builtin_audio_encoder_factory",
+    "../call:bitrate_allocator",
+    "../call:call_interfaces",
+    "../call:rtp_interfaces",
+    "../common_audio",
+    "../modules/audio_coding:cng",
+    "../modules/audio_device",
+    "../modules/audio_processing",
+    "../modules/bitrate_controller:bitrate_controller",
+    "../modules/congestion_controller:congestion_controller",
+    "../modules/pacing:pacing",
+    "../modules/remote_bitrate_estimator:remote_bitrate_estimator",
+    "../modules/rtp_rtcp:rtp_rtcp",
+    "../rtc_base:rtc_base",
+    "../rtc_base:rtc_base_approved",
+    "../rtc_base:rtc_task_queue",
+    "../system_wrappers",
+    "../voice_engine",
+  ]
+}
+if (rtc_include_tests) {
+  rtc_source_set("audio_end_to_end_test") {
+    testonly = true
+
+    sources = [
+      "test/audio_end_to_end_test.cc",
+      "test/audio_end_to_end_test.h",
+    ]
+    deps = [
+      ":audio",
+      "../system_wrappers:system_wrappers",
+      "../test:fake_audio_device",
+      "../test:test_common",
+      "../test:test_support",
+    ]
+
+    if (!build_with_chromium && is_clang) {
+      # Suppress warnings from the Chromium Clang plugin (bugs.webrtc.org/163).
+      suppressed_configs += [ "//build/config/clang:find_bad_constructs" ]
+    }
+  }
+
+  rtc_source_set("audio_tests") {
+    testonly = true
+
+    sources = [
+      "audio_receive_stream_unittest.cc",
+      "audio_send_stream_tests.cc",
+      "audio_send_stream_unittest.cc",
+      "audio_state_unittest.cc",
+      "time_interval_unittest.cc",
+    ]
+    deps = [
+      ":audio",
+      ":audio_end_to_end_test",
+      "../api:mock_audio_mixer",
+      "../call:mock_rtp_interfaces",
+      "../call:rtp_interfaces",
+      "../call:rtp_receiver",
+      "../modules/audio_device:mock_audio_device",
+      "../modules/audio_mixer:audio_mixer_impl",
+      "../modules/audio_processing:audio_processing_statistics",
+      "../modules/congestion_controller:congestion_controller",
+      "../modules/congestion_controller:mock_congestion_controller",
+      "../modules/pacing:mock_paced_sender",
+      "../modules/pacing:pacing",
+      "../modules/rtp_rtcp:mock_rtp_rtcp",
+      "../modules/rtp_rtcp:rtp_rtcp_format",
+      "../rtc_base:rtc_base_approved",
+      "../rtc_base:rtc_base_tests_utils",
+      "../rtc_base:rtc_task_queue",
+      "../system_wrappers:system_wrappers",
+      "../test:audio_codec_mocks",
+      "../test:rtp_test_utils",
+      "../test:test_common",
+      "../test:test_support",
+      "../voice_engine",
+      "utility:utility_tests",
+      "//testing/gmock",
+      "//testing/gtest",
+    ]
+
+    if (!rtc_use_memcheck) {
+      # This test is timing dependent, which rules out running on memcheck bots.
+      sources += [ "test/audio_stats_test.cc" ]
+    }
+
+    if (!build_with_chromium && is_clang) {
+      # Suppress warnings from the Chromium Clang plugin (bugs.webrtc.org/163).
+      suppressed_configs += [ "//build/config/clang:find_bad_constructs" ]
+    }
+  }
+
+  if (rtc_enable_protobuf) {
+    rtc_test("low_bandwidth_audio_test") {
+      testonly = true
+
+      sources = [
+        "test/low_bandwidth_audio_test.cc",
+      ]
+
+      deps = [
+        ":audio_end_to_end_test",
+        "../common_audio",
+        "../rtc_base:rtc_base_approved",
+        "../system_wrappers",
+        "../test:fake_audio_device",
+        "../test:test_common",
+        "../test:test_main",
+        "//testing/gmock",
+        "//testing/gtest",
+      ]
+      if (is_android) {
+        deps += [ "//testing/android/native_test:native_test_native_code" ]
+      }
+
+      data = [
+        "../resources/voice_engine/audio_dtx16.wav",
+        "../resources/voice_engine/audio_tiny16.wav",
+        "../resources/voice_engine/audio_tiny48.wav",
+        "test/low_bandwidth_audio_test.py",
+      ]
+      if (is_linux) {
+        data += [
+          "../tools_webrtc/audio_quality/linux/PolqaOem64",
+          "../tools_webrtc/audio_quality/linux/pesq",
+        ]
+      }
+      if (is_win) {
+        data += [
+          "../tools_webrtc/audio_quality/win/PolqaOem64.dll",
+          "../tools_webrtc/audio_quality/win/PolqaOem64.exe",
+          "../tools_webrtc/audio_quality/win/pesq.exe",
+          "../tools_webrtc/audio_quality/win/vcomp120.dll",
+        ]
+      }
+      if (is_mac) {
+        data += [ "../tools_webrtc/audio_quality/mac/pesq" ]
+      }
+
+      if (!build_with_chromium && is_clang) {
+        # Suppress warnings from the Chromium Clang plugin (bugs.webrtc.org/163)
+        suppressed_configs += [ "//build/config/clang:find_bad_constructs" ]
+      }
+    }
+  }
+
+  rtc_source_set("audio_perf_tests") {
+    testonly = true
+
+    sources = [
+      "test/audio_bwe_integration_test.cc",
+      "test/audio_bwe_integration_test.h",
+    ]
+    deps = [
+      "../common_audio",
+      "../rtc_base:rtc_base_approved",
+      "../system_wrappers",
+      "../test:fake_audio_device",
+      "../test:field_trial",
+      "../test:single_threaded_task_queue",
+      "../test:test_common",
+      "../test:test_main",
+      "//testing/gmock",
+      "//testing/gtest",
+    ]
+
+    data = [
+      "//resources/voice_engine/audio_dtx16.wav",
+    ]
+
+    if (!build_with_chromium && is_clang) {
+      # Suppress warnings from the Chromium Clang plugin (bugs.webrtc.org/163).
+      suppressed_configs += [ "//build/config/clang:find_bad_constructs" ]
+    }
+  }
+}

@@ -1,0 +1,173 @@
+// Copyright 2014 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module content.mojom;
+
+import "content/common/url_loader_factory_bundle.mojom";
+import "content/public/common/url_loader.mojom";
+import "content/public/common/window_container_type.mojom";
+import "mojo/common/unguessable_token.mojom";
+import "services/service_manager/public/interfaces/interface_provider.mojom";
+import "third_party/WebKit/public/platform/referrer.mojom";
+import "third_party/WebKit/public/web/window_features.mojom";
+import "ui/base/mojo/window_open_disposition.mojom";
+import "url/mojo/url.mojom";
+
+// The name of the InterfaceProviderSpec in service manifests used by the
+// frame tree to expose frame-specific interfaces between renderer and browser.
+const string kNavigation_FrameSpec = "navigation:frame";
+
+// Implemented by the frame provider (e.g. renderer processes).
+interface Frame {
+  GetInterfaceProvider(service_manager.mojom.InterfaceProvider& interfaces);
+  GetCanonicalUrlForSharing() => (url.mojom.Url? canonical_url);
+};
+
+// See src/content/common/navigation_params.h
+[Native]
+struct CommonNavigationParams;
+
+// See src/content/common/navigation_params.h
+[Native]
+struct RequestNavigationParams;
+
+// Implemented by the frame provider and currently must be associated with the
+// legacy IPC channel.
+interface FrameNavigationControl {
+  // Tells the renderer that a navigation is ready to commit.  The renderer
+  // should request |body_url| to get access to the stream containing the body
+  // of the response. When the Network Service is enabled, |body_url| is not
+  // used and instead the data is passed to the renderer via |body_data|. In
+  // that case |subresource_loader_factories| may also be provided by the
+  // browser as a a means for the renderer to load subresources where
+  // applicable.
+  //
+  // For automation driver-initiated navigations over the devtools protocol,
+  // |devtools_navigation_token_| is used to tag the navigation. This navigation
+  // token is then sent into the renderer and lands on the DocumentLoader. That
+  // way subsequent Blink-level frame lifecycle events can be associated with
+  // the concrete navigation.
+  // - The value should not be sent back to the browser.
+  // - The value on DocumentLoader may be generated in the renderer in some
+  // cases, and thus shouldn't be trusted.
+  // TODO(crbug.com/783506): Replace devtools navigation token with the generic
+  // navigation token that can be passed from renderer to the browser.
+  CommitNavigation(URLResponseHead head,
+                   url.mojom.Url body_url,
+                   CommonNavigationParams common_params,
+                   RequestNavigationParams request_params,
+                   handle<data_pipe_consumer>? body_data,
+                   URLLoaderFactoryBundle? subresource_loader_factories,
+                   mojo.common.mojom.UnguessableToken devtools_navigation_token);
+};
+
+// Implemented by the frame (e.g. renderer processes).
+// Instances of this interface must be associated with (i.e., FIFO with) the
+// legacy IPC channel.
+interface FrameBindingsControl {
+  // Used to tell a render frame whether it should expose various bindings
+  // that allow JS content extended privileges. See BindingsPolicy for valid
+  // flag values.
+  AllowBindings(int32 enabled_bindings_flags);
+};
+
+// Implemented by a service that provides implementations of the Frame
+// interface. (e.g. renderer processes).
+interface FrameFactory {
+  CreateFrame(int32 frame_routing_id, Frame& frame);
+};
+
+struct CreateNewWindowParams {
+  // True if this open request came in the context of a user gesture.
+  bool user_gesture;
+
+  // Type of window requested.
+  WindowContainerType window_container_type;
+
+  // The session storage namespace ID this window should use.
+  int64 session_storage_namespace_id;
+
+  // The name of the resulting frame that should be created (empty if none
+  // has been specified). UTF8 encoded string.
+  string frame_name;
+
+  // Whether the opener will be suppressed in the new window, in which case
+  // scripting the new window is not allowed.
+  bool opener_suppressed;
+
+  // Whether the window should be opened in the foreground, background, etc.
+  ui.mojom.WindowOpenDisposition disposition;
+
+  // The URL that will be loaded in the new window (empty if none has been
+  // specified).
+  url.mojom.Url target_url;
+
+  // The referrer that will be used to load |target_url| (empty if none has
+  // been specified).
+  blink.mojom.Referrer referrer;
+
+  // The window features to use for the new window.
+  blink.mojom.WindowFeatures features;
+};
+
+// Operation result when the renderer asks the browser to create a new window.
+enum CreateNewWindowStatus {
+  // Ignore creation of the new window. This can happen because creation is
+  // blocked or because the new window should have no opener relationship.
+  kIgnore,
+  // Reuse the current window rather than creating a new window.
+  kReuse,
+  // Create a new window using the corresponding params in |reply|.
+  kSuccess,
+};
+
+// All routing IDs in this struct must be set to a valid routing ID.
+struct CreateNewWindowReply {
+  // The ID of the view to be created.
+  int32 route_id;
+
+  // The ID of the main frame hosted in the view.
+  int32 main_frame_route_id;
+
+  // The ID of the widget for the main frame.
+  int32 main_frame_widget_route_id;
+
+  // The InterfaceProvider through which the main RenderFrame can access
+  // services exposed by its RenderFrameHost.
+  service_manager.mojom.InterfaceProvider main_frame_interface_provider;
+
+  // Duplicated from CreateNewWindowParams because legacy code.
+  int64 cloned_session_storage_namespace_id;
+
+  // Used for devtools instrumentation and trace-ability. The token is
+  // propagated to Blink's LocalFrame and both Blink and content/
+  // can tag calls and requests with this instrumentation token in order to
+  // attribute them to the context frame.
+  // |devtools_frame_token| is only defined by the browser and is never
+  // sent back from the renderer in the control calls.
+  mojo.common.mojom.UnguessableToken devtools_main_frame_token;
+};
+
+// An opaque handle that keeps alive the associated render process even after
+// the frame is detached. Used by resource requests with "keepalive" specified.
+interface KeepAliveHandle {};
+
+[Native]
+struct DidCommitProvisionalLoadParams;
+
+// Implemented by the frame server (i.e. the browser process). For messages that
+// must be associated with the IPC channel.
+interface FrameHost {
+  // Sent by the renderer to request the browser to create a new window. |reply|
+  // is only non-null on when status == CreateNewWindowStatus::kSuccess.
+  [Sync] CreateNewWindow(CreateNewWindowParams params)
+      => (CreateNewWindowStatus status, CreateNewWindowReply? reply);
+
+  // Creates and returns a KeepAliveHandle.
+  IssueKeepAliveHandle(KeepAliveHandle& keep_alive_handle);
+
+  // Sent by the renderer when a navigation commits in the frame.
+  DidCommitProvisionalLoad(
+      DidCommitProvisionalLoadParams params);
+};

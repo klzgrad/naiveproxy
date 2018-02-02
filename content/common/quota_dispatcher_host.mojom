@@ -1,0 +1,35 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module content.mojom;
+
+import "storage/common/quota/quota_types.mojom";
+import "url/mojo/url.mojom";
+
+// API for the renderer process to request quota information from the browser
+// process.
+// TODO(sashab): Put callback parameters in an optional struct, only set on
+// success.
+// TODO(sashab): Remove origin_url and render_frame_id, moving this interface to
+// be per-execution context instead of per-process.
+// TODO(sashab): Change origin_url to a url.mojom.Origin instead.
+// TODO(sashab): Move this API and the necessary types to WebKit/common/.
+interface QuotaDispatcherHost {
+  // Renderer process queries storage usage and quota from the browser process.
+  QueryStorageUsageAndQuota(url.mojom.Url origin_url,
+                            storage.mojom.StorageType storage_type) =>
+      (storage.mojom.QuotaStatusCode error,
+       int64 current_usage,
+       int64 current_quota);
+
+  // Renderer process requests storage quota from the browser process.
+  // render_frame_id is used for showing the permissions UI.
+  RequestStorageQuota(int64 render_frame_id,
+                      url.mojom.Url origin_url,
+                      storage.mojom.StorageType storage_type,
+                      uint64 requested_size) =>
+      (storage.mojom.QuotaStatusCode error,
+       int64 current_usage,
+       int64 granted_quota);
+};

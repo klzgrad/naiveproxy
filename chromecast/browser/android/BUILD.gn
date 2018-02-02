@@ -1,0 +1,117 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//chromecast/chromecast.gni")
+import("//build/config/android/rules.gni")
+import("//media/media_options.gni")
+
+assert(is_android)
+
+cast_shell_android_manifest =
+    "$root_gen_dir/cast_shell_manifest/AndroidManifest.xml"
+
+manifest_variables = [
+  "cast_build_enable_background_activities=$enable_background_activities",
+]
+
+jinja_template("cast_shell_manifest") {
+  input = "apk/AndroidManifest.xml.jinja2"
+  output = cast_shell_android_manifest
+
+  variables = manifest_variables
+}
+
+java_cpp_template("cast_shell_build_config_gen") {
+  sources = [
+    "apk/templates/BuildConfig.template",
+  ]
+  package_path = "org/chromium/chromecast/shell"
+
+  defines = []
+  if (display_web_contents_in_service) {
+    defines += [ "_DISPLAY_WEB_CONTENTS_IN_SERVICE" ]
+  }
+
+  # Set the logcat extractor size in lines.
+  defines += [ "_LOGCAT_EXTRACTOR_SIZE=${logcat_extractor_size}" ]
+}
+
+android_resources("cast_shell_android_resources") {
+  android_manifest = cast_shell_android_manifest
+  android_manifest_dep = ":cast_shell_manifest"
+  resource_dirs = [ "//chromecast/browser/android/apk/res" ]
+}
+
+android_library("cast_audio_manager_java") {
+  java_src_dir = "//chromecast/browser/android/apk/src"
+  java_files =
+      [ "$java_src_dir/org/chromium/chromecast/shell/CastAudioManager.java" ]
+}
+
+android_library("cast_intents_java") {
+  java_src_dir = "//chromecast/browser/android/apk/src"
+  java_files =
+      [ "$java_src_dir/org/chromium/chromecast/shell/CastIntents.java" ]
+}
+
+android_library("cast_shell_java") {
+  java_src_dir = "//chromecast/browser/android/apk/src"
+  java_files = [
+    "$java_src_dir/org/chromium/chromecast/shell/CastApplication.java",
+    "$java_src_dir/org/chromium/chromecast/shell/CastBrowserHelper.java",
+    "$java_src_dir/org/chromium/chromecast/shell/CastContentWindowAndroid.java",
+    "$java_src_dir/org/chromium/chromecast/shell/CastCrashHandler.java",
+    "$java_src_dir/org/chromium/chromecast/shell/CastCrashUploader.java",
+    "$java_src_dir/org/chromium/chromecast/shell/CastCrashUploaderFactory.java",
+    "$java_src_dir/org/chromium/chromecast/shell/CastMetricsHelper.java",
+    "$java_src_dir/org/chromium/chromecast/shell/CastSysInfoAndroid.java",
+    "$java_src_dir/org/chromium/chromecast/shell/CastWebContentsActivity.java",
+    "$java_src_dir/org/chromium/chromecast/shell/CastWebContentsService.java",
+    "$java_src_dir/org/chromium/chromecast/shell/CastWebContentsComponent.java",
+    "$java_src_dir/org/chromium/chromecast/shell/LogcatExtractor.java",
+  ]
+
+  android_manifest = cast_shell_android_manifest
+
+  srcjar_deps = [ ":cast_shell_build_config_gen" ]
+
+  deps = [
+    ":cast_audio_manager_java",
+    ":cast_intents_java",
+    ":cast_shell_android_resources",
+    ":cast_shell_manifest",
+    "//base:base_java",
+    "//chromecast/base:base_java",
+    "//components/crash/android:java",
+    "//content/public/android:content_java",
+    "//device/geolocation:geolocation_java",
+    "//media/base/android:media_java",
+    "//net/android:net_java",
+
+    # TODO(slan): We may need to pass this in as a parameter.
+    "//third_party/android_tools:android_support_core_utils_java",
+    "//ui/android:ui_java",
+  ]
+
+  if (is_cast_using_cma_backend) {
+    deps += [ "//chromecast/media/cma/backend/android:audio_track_java" ]
+  }
+}
+
+junit_binary("cast_shell_junit_tests") {
+  java_files = [
+    "junit/src/org/chromium/chromecast/shell/CastWebContentsComponentTest.java",
+    "junit/src/org/chromium/chromecast/shell/LogcatExtractorUnitTest.java",
+  ]
+
+  srcjar_deps = [ ":cast_shell_build_config_gen" ]
+
+  deps = [
+    ":cast_intents_java",
+    ":cast_shell_java",
+    "//base:base_java_test_support",
+    "//content/public/android:content_java",
+    "//third_party/android_tools:android_support_core_utils_java",
+  ]
+}

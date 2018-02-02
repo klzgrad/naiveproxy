@@ -1,0 +1,114 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ui.gni")
+import("//services/catalog/public/tools/catalog.gni")
+import("//services/service_manager/public/cpp/service.gni")
+import("//services/service_manager/public/service_manifest.gni")
+import("//services/service_manager/public/tools/test/service_test.gni")
+import("//testing/test.gni")
+
+source_set("lib") {
+  sources = [
+    "mus_demo.cc",
+    "mus_demo.h",
+    "window_tree_data.cc",
+    "window_tree_data.h",
+  ]
+
+  if (use_ozone && !is_chromeos) {
+    sources += [
+      "mus_demo_external.cc",
+      "mus_demo_external.h",
+    ]
+  } else {
+    sources += [
+      "mus_demo_internal.cc",
+      "mus_demo_internal.h",
+    ]
+  }
+
+  public_deps = [
+    "//services/service_manager/public/cpp",
+    "//skia",
+  ]
+
+  deps = [
+    "//base",
+    "//mojo/public/cpp/bindings",
+    "//services/service_manager/public/cpp",
+    "//services/ui/public/cpp",
+    "//services/ui/public/cpp:internal",
+    "//services/ui/public/interfaces",
+    "//ui/aura",
+    "//ui/aura_extra",
+    "//ui/gfx/geometry",
+    "//ui/wm",
+  ]
+}
+
+service("mus_demo") {
+  if (use_ozone && !is_chromeos) {
+    sources = [
+      "main_external.cc",
+    ]
+  } else {
+    sources = [
+      "main_internal.cc",
+    ]
+  }
+
+  deps = [
+    ":lib",
+  ]
+
+  data_deps = [
+    "//services/ui",
+  ]
+}
+
+group("demo") {
+  deps = [
+    ":mus_demo",
+  ]
+}
+
+service_manifest("manifest") {
+  name = "mus_demo"
+  source = "manifest.json"
+}
+
+source_set("tests") {
+  testonly = true
+
+  sources = [
+    "mus_demo_unittests.cc",
+  ]
+
+  deps = [
+    ":demo",
+    "//base",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/cpp:service_test_support",
+    "//services/ui/public/interfaces",
+    "//testing/gtest",
+  ]
+
+  data_deps = [
+    ":mus_demo",
+    "//services/ui",
+    "//services/ui/ime/test_ime_driver",
+  ]
+}
+
+service_manifest("unittest_manifest") {
+  name = "mus_demo_unittests"
+  source = "test_manifest.json"
+}
+
+catalog("tests_catalog") {
+  testonly = true
+  embedded_services = [ ":unittest_manifest" ]
+  standalone_services = [ ":manifest" ]
+}

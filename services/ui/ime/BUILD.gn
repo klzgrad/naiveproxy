@@ -1,0 +1,59 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//services/catalog/public/tools/catalog.gni")
+import("//services/service_manager/public/cpp/service.gni")
+import("//services/service_manager/public/service_manifest.gni")
+import("//services/service_manager/public/tools/test/service_test.gni")
+import("//testing/test.gni")
+
+source_set("lib") {
+  sources = [
+    "ime_driver_bridge.cc",
+    "ime_driver_bridge.h",
+    "ime_registrar_impl.cc",
+    "ime_registrar_impl.h",
+  ]
+
+  deps = [
+    "//base",
+    "//mojo/common",
+    "//mojo/public/cpp/bindings",
+    "//services/service_manager/public/cpp",
+    "//services/ui/public/interfaces",
+  ]
+}
+
+source_set("tests") {
+  testonly = true
+
+  sources = [
+    "ime_unittest.cc",
+  ]
+
+  deps = [
+    "//base",
+    "//mojo/common",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/cpp:service_test_support",
+    "//services/ui/public/interfaces",
+  ]
+
+  data_deps = [
+    ":lib",
+    "//services/ui",
+    "//services/ui/ime/test_ime_driver",
+  ]
+}
+
+service_manifest("unittest_manifest") {
+  name = "ime_unittests"
+  source = "test_manifest.json"
+}
+
+catalog("tests_catalog") {
+  testonly = true
+  embedded_services = [ ":unittest_manifest" ]
+  standalone_services = [ "//services/ui/ime/test_ime_driver:manifest" ]
+}

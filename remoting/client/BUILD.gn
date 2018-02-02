@@ -1,0 +1,97 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+static_library("client") {
+  sources = [
+    "chromoting_client.cc",
+    "chromoting_client.h",
+    "chromoting_session.cc",
+    "chromoting_session.h",
+    "client_context.cc",
+    "client_context.h",
+    "client_telemetry_logger.cc",
+    "client_telemetry_logger.h",
+    "client_user_interface.h",
+    "connect_to_host_info.cc",
+    "connect_to_host_info.h",
+    "cursor_shape_stub_proxy.cc",
+    "cursor_shape_stub_proxy.h",
+    "empty_cursor_filter.cc",
+    "empty_cursor_filter.h",
+    "host_experiment_sender.cc",
+    "host_experiment_sender.h",
+    "queued_task_poster.cc",
+    "queued_task_poster.h",
+    "software_video_renderer.cc",
+    "software_video_renderer.h",
+  ]
+
+  configs += [
+    "//build/config/compiler:wexit_time_destructors",
+    "//remoting/build/config:version",
+    "//remoting/build/config:enable_webrtc_remoting_client",
+  ]
+
+  deps = [
+    "//remoting/base",
+    "//remoting/client/audio",
+    "//remoting/codec:decoder",
+    "//remoting/protocol",
+    "//third_party/libyuv",
+    "//third_party/webrtc/modules/desktop_capture:primitives",
+    "//ui/events:dom_keycode_converter",
+  ]
+
+  libs = []
+
+  if (is_nacl) {
+    sources -= [ "client_telemetry_logger.cc" ]
+  } else {
+    sources += [
+      "chromoting_client_runtime.cc",
+      "chromoting_client_runtime.h",
+      "dual_buffer_frame_consumer.cc",
+      "dual_buffer_frame_consumer.h",
+      "gesture_interpreter.cc",
+      "gesture_interpreter.h",
+      "oauth_token_getter_proxy.cc",
+      "oauth_token_getter_proxy.h",
+    ]
+    deps += [
+      "//remoting/client/display",
+      "//remoting/client/input",
+      "//remoting/client/ui",
+    ]
+  }
+  if (is_android) {
+    libs += [ "android" ]
+  }
+}
+
+source_set("unit_tests") {
+  testonly = true
+
+  sources = [
+    "chromoting_client_runtime_unittest.cc",
+    "client_telemetry_logger_unittest.cc",
+    "dual_buffer_frame_consumer_unittest.cc",
+    "empty_cursor_filter_unittest.cc",
+    "oauth_token_getter_proxy_unittest.cc",
+    "queued_task_poster_unittest.cc",
+    "software_video_renderer_unittest.cc",
+  ]
+
+  configs += [
+    "//remoting/build/config:version",
+    "//remoting/build/config:enable_webrtc_remoting_client",
+  ]
+
+  deps = [
+    ":client",
+    "//remoting/proto",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//third_party/webrtc/rtc_base:rtc_base_approved",
+  ]
+}

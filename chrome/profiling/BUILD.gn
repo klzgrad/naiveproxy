@@ -1,0 +1,76 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//chrome/common/features.gni")
+import("//services/service_manager/public/cpp/service.gni")
+import("//services/service_manager/public/service_manifest.gni")
+
+static_library("profiling") {
+  sources = [
+    "address.h",
+    "allocation_event.cc",
+    "allocation_event.h",
+    "allocation_tracker.cc",
+    "allocation_tracker.h",
+    "backtrace.cc",
+    "backtrace.h",
+    "backtrace_storage.cc",
+    "backtrace_storage.h",
+    "json_exporter.cc",
+    "json_exporter.h",
+    "memlog_connection_manager.cc",
+    "memlog_connection_manager.h",
+    "memlog_receiver.h",
+    "memlog_receiver_pipe.cc",
+    "memlog_receiver_pipe.h",
+    "memlog_receiver_pipe_posix.cc",
+    "memlog_receiver_pipe_posix.h",
+    "memlog_receiver_pipe_win.cc",
+    "memlog_receiver_pipe_win.h",
+    "memlog_stream_parser.cc",
+    "memlog_stream_parser.h",
+    "memlog_stream_receiver.h",
+    "profiling_service.cc",
+    "profiling_service.h",
+  ]
+
+  deps = [
+    "//base",
+    "//chrome/common",
+    "//content/public/child",
+    "//mojo/edk/system",
+    "//services/resource_coordinator/public/cpp:resource_coordinator_cpp",
+    "//third_party/zlib",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "backtrace_storage_unittest.cc",
+    "json_exporter_unittest.cc",
+    "memlog_stream_parser_unittest.cc",
+  ]
+  deps = [
+    ":profiling",
+    "//base",
+    "//testing/gtest",
+  ]
+}
+
+service_manifest("manifest") {
+  name = "profiling"
+  source = "profiling_manifest.json"
+}
+
+fuzzer_test("profiling_fuzzer") {
+  sources = [
+    "memlog_stream_fuzzer.cc",
+  ]
+  deps = [
+    ":profiling",
+  ]
+  libfuzzer_options = [ "max_len = 64000" ]
+  dict = "memlog_stream_fuzzer.dict"
+}

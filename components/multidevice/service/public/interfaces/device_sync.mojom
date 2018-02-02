@@ -1,0 +1,119 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module device_sync.mojom;
+
+import "mojo/common/time.mojom";
+
+// Used to generate rotating BLE advertisement data, which is necessary to
+// establish a BLE communication channel between two devices. To
+// create the BLE channel, both devices must possess the other's BeaconSeeds.
+struct BeaconSeed {
+  string data;
+  mojo.common.mojom.TimeTicks start_time;
+  mojo.common.mojom.TimeTicks end_time;
+};
+
+// Metadata describing a remote device with which the current device can
+// communicate.
+struct RemoteDevice {
+  // Public key used to authenticate a communication channel.
+  string public_key;
+
+  // Identifier which is unique to each device.
+  string device_id;
+
+  // Identifier for the user to whom this device is registered.
+  string user_id;
+
+  // Human-readable device name; by default, this is the name of the device
+  // model, but this value is editable.
+  string device_name;
+
+  // True if this device has the capability of unlocking another device via
+  // EasyUnlock.
+  bool unlock_key;
+
+  // True if this device can enable a Wi-Fi hotspot to support Instant
+  // Tethering (i.e., the device supports mobile data and its model supports the
+  // feature).
+  bool mobile_hotspot_supported;
+
+  // Seeds belonging to the device. Each seed has start and end timestamps which
+  // indicate how long the seed is valid, and each device has enough associated
+  // seeds to keep the device connectable for over 30 days. If no new device
+  // metadata synced for over 30 days, it is possible that a connection will not
+  // be able to be established over BLE.
+  array<BeaconSeed> beacon_seeds;
+};
+
+enum ResultCode {
+  SUCCESS,
+  ERROR_INTERNAL,
+  ERROR_NO_VALID_ACCESS_TOKEN,
+  ERROR_SERVER_FAILED_TO_RESPOND,
+  ERROR_CANNOT_PARSE_SERVER_RESPONSE,
+};
+
+enum PromotableFeature {
+  EASY_UNLOCK,
+};
+
+struct SetCapabilityResponse {
+  ResultCode result_code;
+};
+
+struct IneligibleDevice {
+  string device_id;
+  string reason;  // Reason why the device is not eligible.
+};
+
+struct FindEligibleDevicesResponse {
+  ResultCode result_code;
+
+  // Only set when result_code == SUCCESS.
+  array<string> eligible_device_ids;
+  array<IneligibleDevice> ineligible_devices;
+};
+
+struct IsCapabilityPromotableResponse {
+  ResultCode result_code;
+
+  // Only set when result_code == SUCCESS.
+  bool is_promotable;
+};
+
+// Properties associated with a device which can be set and retrieved by calls
+// to the server.
+// TODO(khorimoto): Add additional capabilities, including the Tether
+//                  capability.
+enum RemoteDeviceCapability {
+  UNLOCK_KEY,
+};
+
+interface DeviceSyncObserver {
+  // Invoked when the current device has finished enrolling itself (i.e., when
+  // it has contacted the server to provide device metadata). Devices must
+  // enroll themselves before other device can establish connections to them,
+  // and they continue to re-enroll themselves on a periodic basis after that.
+  OnEnrollmentFinished(bool success);
+
+  // Invoked when new devices have been synced from the server.
+  OnDevicesSynced(bool success);
+};
+
+interface DeviceSync {
+  // Triggers an enrollment. Result of the enrollment will be relayed via the
+  // OnEnrollmentFinished() observer function.
+  ForceEnrollmentNow();
+
+  // Triggers a device sync. Result of the sync will be relayed via the
+  // OnDevicesSynced() observer function.
+  ForceSyncNow();
+
+  // Adds an Observer of this API.
+  AddObserver(DeviceSyncObserver observer);
+
+  // TODO(khorimoto): Flesh out API.
+};

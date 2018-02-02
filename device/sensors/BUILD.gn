@@ -1,0 +1,113 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/features.gni")
+
+if (is_android) {
+  import("//build/config/android/rules.gni")  # For generate_jni().
+}
+
+component("sensors") {
+  sources = [
+    "data_fetcher_shared_memory.h",
+    "data_fetcher_shared_memory_android.cc",
+    "data_fetcher_shared_memory_base.cc",
+    "data_fetcher_shared_memory_base.h",
+    "data_fetcher_shared_memory_chromeos.cc",
+    "data_fetcher_shared_memory_default.cc",
+    "data_fetcher_shared_memory_mac.cc",
+    "data_fetcher_shared_memory_win.cc",
+    "device_sensor_export.h",
+    "device_sensor_host.cc",
+    "device_sensor_host.h",
+    "device_sensor_service.cc",
+    "device_sensor_service.h",
+    "device_sensors_consts.h",
+    "sensor_manager_android.cc",
+    "sensor_manager_android.h",
+    "sensor_manager_chromeos.cc",
+    "sensor_manager_chromeos.h",
+  ]
+
+  defines = [ "DEVICE_SENSOR_IMPLEMENTATION" ]
+
+  deps = [
+    "//base",
+    "//device/sensors/public/cpp:full",
+    "//mojo/public/cpp/bindings",
+    "//ui/gfx/geometry:geometry",
+  ]
+
+  public_deps = [
+    "//device/sensors/public/interfaces",
+  ]
+
+  if (is_win) {
+    sources -= [ "data_fetcher_shared_memory_default.cc" ]
+    libs = [
+      "sensorsapi.lib",
+      "portabledeviceguids.lib",
+    ]
+  }
+  if (is_android) {
+    sources -= [ "data_fetcher_shared_memory_default.cc" ]
+    deps += [ ":device_sensors_jni_headers" ]
+  }
+  if (is_mac) {
+    sources -= [ "data_fetcher_shared_memory_default.cc" ]
+    deps += [ "//third_party/sudden_motion_sensor" ]
+    libs = [
+      "CoreFoundation.framework",
+      "IOKit.framework",
+    ]
+  }
+  if (is_chromeos) {
+    sources -= [ "data_fetcher_shared_memory_default.cc" ]
+    deps += [
+      "//chromeos",
+      "//ui/gfx",
+    ]
+  }
+  if (is_fuchsia) {
+    sources += [ "data_fetcher_shared_memory_fuchsia.cc" ]
+    sources -= [ "data_fetcher_shared_memory_default.cc" ]
+  }
+}
+
+if (is_android) {
+  generate_jni("device_sensors_jni_headers") {
+    sources = [
+      "android/java/src/org/chromium/device/sensors/DeviceSensors.java",
+    ]
+    jni_package = "sensors"
+  }
+
+  android_library("java") {
+    java_files =
+        [ "android/java/src/org/chromium/device/sensors/DeviceSensors.java" ]
+    deps = [
+      "//base:base_java",
+      "//third_party/android_tools:android_support_annotations_java",
+    ]
+    srcjar_deps = [ ":device_sensors_android_java_enums_srcjar" ]
+  }
+
+  android_library("javatests") {
+    testonly = true
+    java_files = [ "android/javatests/src/org/chromium/device/sensors/DeviceSensorsTest.java" ]
+    deps = [
+      ":java",
+      "//base:base_java_test_support",
+      "//third_party/android_support_test_runner:runner_java",
+      "//third_party/junit",
+    ]
+  }
+
+  java_cpp_enum("device_sensors_android_java_enums_srcjar") {
+    sources = [
+      "device_sensors_consts.h",
+      "sensor_manager_android.h",
+    ]
+  }
+}

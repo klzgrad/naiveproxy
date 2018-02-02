@@ -1,0 +1,69 @@
+// Copyright 2015 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module mojo.test;
+
+import "mojo/public/interfaces/bindings/tests/ping_service.mojom";
+
+interface FooInterface {};
+
+struct StructContainsAssociated {
+  associated FooInterface? foo_interface;
+  associated FooInterface& foo_request;
+  array<associated FooInterface> foo_interfaces;
+  array<associated FooInterface&> foo_requests;
+};
+
+union UnionContainsAssociated {
+  associated FooInterface foo_interface;
+  associated FooInterface& foo_request;
+  array<associated FooInterface> foo_interfaces;
+  array<associated FooInterface&> foo_requests;
+};
+
+interface InterfacePassesAssociated {
+  PassFoo(associated FooInterface foo_interface,
+          associated FooInterface& foo_request) =>
+         (associated FooInterface foo_interface,
+          associated FooInterface& foo_request);
+
+  PassStruct(StructContainsAssociated foo_struct) =>
+            (StructContainsAssociated foo_struct);
+
+  PassUnion(UnionContainsAssociated foo_union) =>
+           (UnionContainsAssociated foo_union);
+};
+
+interface IntegerSender {
+  Echo(int32 value) => (int32 value);
+  Send(int32 value);
+};
+
+interface StringSender {
+  Echo(string value) => (string value);
+  Send(string value);
+};
+
+interface IntegerSenderConnection {
+  GetSender(associated IntegerSender& sender);
+  AsyncGetSender() => (associated IntegerSender sender);
+};
+
+interface IntegerSenderConnectionAtBothEnds {
+  GetSender(associated IntegerSender& sender);
+  SetSender(associated IntegerSender sender) => (int32 value);
+};
+
+interface SenderConnection {
+  GetIntegerSender(associated IntegerSender& sender);
+  GetStringSender(associated StringSender& sender);
+};
+
+interface AssociatedPingProvider {
+  GetPing(associated PingService& request);
+};
+
+interface AssociatedPingProviderProvider {
+  GetPingProvider(associated AssociatedPingProvider& request);
+};

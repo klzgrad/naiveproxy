@@ -1,0 +1,116 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//testing/test.gni")
+
+action("build_version_inc") {
+  script = "shaderc_build_version_wrapper.py"
+
+  args = [
+    rebase_path(target_gen_dir),
+    rebase_path("src/utils/update_build_version.py"),
+    rebase_path("src"),
+    rebase_path("//third_party/SPIRV-Tools/src"),
+    rebase_path("//third_party/glslang/src"),
+  ]
+  inputs = [
+    "README.chromium",
+    "//third_party/SPIRV-Tools/README.chromium",
+    "//third_party/glslang/README.chromium",
+  ]
+  outputs = [
+    "${target_gen_dir}/build-version.inc",
+  ]
+}
+
+config("libshaderc_util_config") {
+  include_dirs = [ "src/libshaderc_util/include" ]
+}
+
+static_library("libshaderc_util") {
+  sources = [
+    "src/libshaderc_util/include/liblibshaderc_util/counting_includer.h",
+    "src/libshaderc_util/include/liblibshaderc_util/file_finder.h",
+    "src/libshaderc_util/include/liblibshaderc_util/format.h",
+    "src/libshaderc_util/include/liblibshaderc_util/io.h",
+    "src/libshaderc_util/include/liblibshaderc_util/message.h",
+    "src/libshaderc_util/include/liblibshaderc_util/mutex.h",
+    "src/libshaderc_util/include/liblibshaderc_util/resources.h",
+    "src/libshaderc_util/include/liblibshaderc_util/spirv_tools_wrapper.h",
+    "src/libshaderc_util/include/liblibshaderc_util/string_piece.h",
+    "src/libshaderc_util/include/liblibshaderc_util/universal_unistd.h",
+    "src/libshaderc_util/include/liblibshaderc_util/version_profile.h",
+    "src/libshaderc_util/src/compiler.cc",
+    "src/libshaderc_util/src/file_finder.cc",
+    "src/libshaderc_util/src/io.cc",
+    "src/libshaderc_util/src/message.cc",
+    "src/libshaderc_util/src/resources.cc",
+    "src/libshaderc_util/src/shader_stage.cc",
+    "src/libshaderc_util/src/spirv_tools_wrapper.cc",
+    "src/libshaderc_util/src/version_profile.cc",
+  ]
+
+  all_dependent_configs = [ ":libshaderc_util_config" ]
+
+  deps = [
+    "//third_party/SPIRV-Tools:SPIRV-Tools",
+    "//third_party/glslang:HLSL",
+    "//third_party/glslang:OGLCompiler",
+    "//third_party/glslang:SPIRV",
+    "//third_party/glslang:glslang",
+  ]
+}
+
+config("libshaderc_config") {
+  include_dirs = [ "src/libshaderc/include" ]
+}
+
+static_library("libshaderc") {
+  sources = [
+    "src/libshaderc/include/shaderc/shaderc.h",
+    "src/libshaderc/include/shaderc/shaderc.hpp",
+    "src/libshaderc/src/shaderc.cc",
+    "src/libshaderc/src/shaderc_private.h",
+  ]
+
+  all_dependent_configs = [ ":libshaderc_config" ]
+
+  deps = [
+    ":libshaderc_util",
+    "//third_party/glslang:glslang",
+  ]
+}
+
+static_library("glslc_lib") {
+  sources = [
+    "src/glslc/src/dependency_info.cc",
+    "src/glslc/src/dependency_info.h",
+    "src/glslc/src/file.cc",
+    "src/glslc/src/file.h",
+    "src/glslc/src/file_compiler.cc",
+    "src/glslc/src/file_compiler.h",
+    "src/glslc/src/file_includer.cc",
+    "src/glslc/src/file_includer.h",
+    "src/glslc/src/shader_stage.cc",
+    "src/glslc/src/shader_stage.h",
+  ]
+
+  deps = [
+    ":libshaderc",
+    ":libshaderc_util",
+  ]
+}
+
+executable("glslc") {
+  sources = [
+    "src/glslc/src/main.cc",
+  ]
+
+  include_dirs = [ target_gen_dir ]
+
+  deps = [
+    ":build_version_inc",
+    ":glslc_lib",
+  ]
+}

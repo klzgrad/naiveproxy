@@ -1,0 +1,156 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//services/catalog/public/tools/catalog.gni")
+import("//services/service_manager/public/cpp/service.gni")
+import("//services/service_manager/public/service_manifest.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
+import("//testing/test.gni")
+
+source_set("lifecycle") {
+  testonly = true
+  sources = [
+    "lifecycle_unittest.cc",
+  ]
+  deps = [
+    ":interfaces",
+    "//base",
+    "//base/test:test_support",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/cpp:service_test_support",
+    "//services/service_manager/public/interfaces",
+    "//services/service_manager/runner/common",
+    "//services/service_manager/tests:util",
+  ]
+
+  data_deps = [
+    ":lifecycle_unittest_app",
+    ":lifecycle_unittest_parent",
+    ":lifecycle_unittest_exe",
+    ":lifecycle_unittest_package",
+  ]
+}
+
+mojom("interfaces") {
+  sources = [
+    "lifecycle_unittest.mojom",
+  ]
+}
+
+service_manifest("manifest") {
+  name = "lifecycle_unittest"
+  source = "lifecycle_unittest_manifest.json"
+}
+
+service_manifest("lifecycle_unittest_package_app_a_manifest") {
+  name = "lifecycle_unittest_package_app_a"
+  source = "package_app_a_manifest.json"
+}
+
+service_manifest("lifecycle_unittest_package_app_b_manifest") {
+  name = "lifecycle_unittest_package_app_b"
+  source = "package_app_b_manifest.json"
+}
+
+source_set("app_client") {
+  sources = [
+    "app_client.cc",
+    "app_client.h",
+  ]
+  deps = [
+    ":interfaces",
+    "//base",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/interfaces",
+  ]
+}
+
+service("lifecycle_unittest_package") {
+  testonly = true
+  sources = [
+    "package.cc",
+  ]
+  deps = [
+    ":app_client",
+    ":interfaces",
+    "//base",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/interfaces",
+  ]
+}
+
+service_manifest("lifecycle_unittest_package_manifest") {
+  name = "lifecycle_unittest_package"
+  source = "package_manifest.json"
+  packaged_services = [
+    ":lifecycle_unittest_package_app_a_manifest",
+    ":lifecycle_unittest_package_app_b_manifest",
+  ]
+}
+
+service("lifecycle_unittest_app") {
+  testonly = true
+  sources = [
+    "app.cc",
+  ]
+  deps = [
+    ":app_client",
+    ":interfaces",
+    "//base",
+    "//services/service_manager/public/cpp",
+  ]
+}
+
+service_manifest("lifecycle_unittest_app_manifest") {
+  name = "lifecycle_unittest_app"
+  source = "app_manifest.json"
+}
+
+service("lifecycle_unittest_parent") {
+  testonly = true
+  sources = [
+    "parent.cc",
+  ]
+  deps = [
+    ":interfaces",
+    "//base",
+    "//services/service_manager/public/cpp",
+  ]
+}
+
+service_manifest("lifecycle_unittest_parent_manifest") {
+  name = "lifecycle_unittest_parent"
+  source = "parent_manifest.json"
+}
+
+executable("lifecycle_unittest_exe") {
+  testonly = true
+  sources = [
+    "lifecycle_exe.cc",
+  ]
+  deps = [
+    ":app_client",
+    "//base",
+    "//build/config:exe_and_shlib_deps",
+    "//build/win:default_exe_manifest",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/cpp/standalone_service:main",
+  ]
+}
+
+service_manifest("lifecycle_unittest_exe_manifest") {
+  name = "lifecycle_unittest_exe"
+  source = "exe_manifest.json"
+}
+
+catalog("catalog") {
+  embedded_services = [ ":manifest" ]
+
+  standalone_services = [
+    ":lifecycle_unittest_app_manifest",
+    ":lifecycle_unittest_exe_manifest",
+    ":lifecycle_unittest_package_manifest",
+    ":lifecycle_unittest_parent_manifest",
+  ]
+}

@@ -1,0 +1,65 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module service_manager.test.mojom;
+
+import "services/service_manager/public/interfaces/connector.mojom";
+
+interface ConnectTestService {
+  GetTitle() => (string title);
+  GetInstance() => (string instance);
+};
+
+interface ClassInterface {
+  Ping() => (string response);
+};
+
+// Interface implemented by a standalone (non-package) app,
+// mojo:connect_test_app.
+interface StandaloneApp {
+  // Attempts to connect to an application whose name is explicitly allowed by
+  // the standalone app's CapabilitySpec, but whose enclosing package is not.
+  // The connection should succeed anyway.
+  ConnectToAllowedAppInBlockedPackage() => (string title);
+
+  // Connects to mojo:connect_test_class_app & requests ClassInterface from it.
+  // This should be permitted because mojo:connect_test_app requests class
+  // "class" from mojo:connect_test_class_app, which mojo:connect_test_class_app
+  // defines as including ClassInterface.
+  // The response contains the response from ClassInterface::Ping() and
+  // ConnectTestService::GetTitle().
+  ConnectToClassInterface() => (string class_interface_response, string title);
+};
+
+interface UserIdTest {
+  // Attempts to connect to mojo:connect_test_class_app as |user_id|.
+  // The callback takes the connection response result, and the identity
+  // mojo:connect_test_class_app was run as, which should match |user_id|.
+  ConnectToClassAppAsDifferentUser(service_manager.mojom.Identity target) =>
+      (int32 connection_result, service_manager.mojom.Identity target);
+};
+
+interface ClientProcessTest {
+  // Attempts to launch a bare exe and connect to it using the
+  // ClientProcessConnection param to Connector::Connect(). The callback takes
+  // the result of the connection, and the identity of the app that the caller
+  // can use to connect to this app as well.
+  LaunchAndConnectToProcess() =>
+      (int32 connection_result, service_manager.mojom.Identity target);
+};
+
+struct ConnectionState {
+  string connection_remote_name;
+  string connection_remote_userid;
+  string initialize_local_name;
+  string initialize_userid;
+};
+
+interface ExposedInterface {
+  ConnectionAccepted(ConnectionState state);
+};
+
+interface BlockedInterface {
+  GetTitleBlocked() => (string blocked_title);
+};

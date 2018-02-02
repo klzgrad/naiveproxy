@@ -1,0 +1,192 @@
+diff -ru protobuf2/src/google/protobuf/compiler/cpp/cpp_message.cc protobuf/src/google/protobuf/compiler/cpp/cpp_message.cc
+--- protobuf2/src/google/protobuf/compiler/cpp/cpp_message.cc	2017-07-20 11:08:08.427529526 -0700
++++ protobuf/src/google/protobuf/compiler/cpp/cpp_message.cc	2017-07-20 11:12:21.215840768 -0700
+@@ -3394,8 +3394,8 @@
+ 
+       // Emit code to parse the common, expected case.
+       printer->Print("if (static_cast< ::google::protobuf::uint8>(tag) ==\n"
+-                     "    static_cast< ::google::protobuf::uint8>($commontag$u)) {\n",
+-          "commontag", SimpleItoa(WireFormat::MakeTag(field)));
++                     "    static_cast< ::google::protobuf::uint8>($truncated$u)) {\n",
++          "truncated", SimpleItoa(WireFormat::MakeTag(field) & 0xFF));
+ 
+       printer->Indent();
+       if (field->is_packed()) {
+@@ -3409,22 +3409,22 @@
+       if (field->is_packed()) {
+         internal::WireFormatLite::WireType wiretype =
+             WireFormat::WireTypeForFieldType(field->type());
++        const uint32 tag = internal::WireFormatLite::MakeTag(
++            field->number(), wiretype);
+         printer->Print("} else if (static_cast< ::google::protobuf::uint8>(tag) ==\n"
+-                       "           static_cast< ::google::protobuf::uint8>($uncommontag$u)) {\n",
+-                       "uncommontag", SimpleItoa(
+-                           internal::WireFormatLite::MakeTag(
+-                               field->number(), wiretype)));
++                       "           static_cast< ::google::protobuf::uint8>($truncated$u)) {\n",
++                       "truncated", SimpleItoa(tag & 0xFF));
+         printer->Indent();
+         field_generator.GenerateMergeFromCodedStream(printer);
+         printer->Outdent();
+       } else if (field->is_packable() && !field->is_packed()) {
+         internal::WireFormatLite::WireType wiretype =
+             internal::WireFormatLite::WIRETYPE_LENGTH_DELIMITED;
++        const uint32 tag = internal::WireFormatLite::MakeTag(
++            field->number(), wiretype);
+         printer->Print("} else if (static_cast< ::google::protobuf::uint8>(tag) ==\n"
+-                       "           static_cast< ::google::protobuf::uint8>($uncommontag$u)) {\n",
+-                       "uncommontag", SimpleItoa(
+-                           internal::WireFormatLite::MakeTag(
+-                               field->number(), wiretype)));
++                       "           static_cast< ::google::protobuf::uint8>($truncated$u)) {\n",
++                       "truncated", SimpleItoa(tag & 0xFF));
+         printer->Indent();
+         field_generator.GenerateMergeFromCodedStreamWithPacking(printer);
+         printer->Outdent();
+diff -ru protobuf2/src/google/protobuf/descriptor.pb.cc protobuf/src/google/protobuf/descriptor.pb.cc
+--- protobuf2/src/google/protobuf/descriptor.pb.cc	2017-07-20 11:08:08.419529516 -0700
++++ protobuf/src/google/protobuf/descriptor.pb.cc	2017-07-20 11:20:23.248428561 -0700
+@@ -8684,7 +8684,7 @@
+       // optional string objc_class_prefix = 36;
+       case 36: {
+         if (static_cast< ::google::protobuf::uint8>(tag) ==
+-            static_cast< ::google::protobuf::uint8>(290u)) {
++            static_cast< ::google::protobuf::uint8>(0x22u)) {
+           DO_(::google::protobuf::internal::WireFormatLite::ReadString(
+                 input, this->mutable_objc_class_prefix()));
+           ::google::protobuf::internal::WireFormat::VerifyUTF8StringNamedField(
+@@ -8700,7 +8700,7 @@
+       // optional string csharp_namespace = 37;
+       case 37: {
+         if (static_cast< ::google::protobuf::uint8>(tag) ==
+-            static_cast< ::google::protobuf::uint8>(298u)) {
++            static_cast< ::google::protobuf::uint8>(0x28u)) {
+           DO_(::google::protobuf::internal::WireFormatLite::ReadString(
+                 input, this->mutable_csharp_namespace()));
+           ::google::protobuf::internal::WireFormat::VerifyUTF8StringNamedField(
+@@ -8716,7 +8716,7 @@
+       // optional string swift_prefix = 39;
+       case 39: {
+         if (static_cast< ::google::protobuf::uint8>(tag) ==
+-            static_cast< ::google::protobuf::uint8>(314u)) {
++            static_cast< ::google::protobuf::uint8>(0x3au)) {
+           DO_(::google::protobuf::internal::WireFormatLite::ReadString(
+                 input, this->mutable_swift_prefix()));
+           ::google::protobuf::internal::WireFormat::VerifyUTF8StringNamedField(
+@@ -8732,7 +8732,7 @@
+       // optional string php_class_prefix = 40;
+       case 40: {
+         if (static_cast< ::google::protobuf::uint8>(tag) ==
+-            static_cast< ::google::protobuf::uint8>(322u)) {
++            static_cast< ::google::protobuf::uint8>(0x42u)) {
+           DO_(::google::protobuf::internal::WireFormatLite::ReadString(
+                 input, this->mutable_php_class_prefix()));
+           ::google::protobuf::internal::WireFormat::VerifyUTF8StringNamedField(
+@@ -8748,7 +8748,7 @@
+       // optional string php_namespace = 41;
+       case 41: {
+         if (static_cast< ::google::protobuf::uint8>(tag) ==
+-            static_cast< ::google::protobuf::uint8>(330u)) {
++            static_cast< ::google::protobuf::uint8>(0x4au)) {
+           DO_(::google::protobuf::internal::WireFormatLite::ReadString(
+                 input, this->mutable_php_namespace()));
+           ::google::protobuf::internal::WireFormat::VerifyUTF8StringNamedField(
+@@ -8764,7 +8764,7 @@
+       // repeated .google.protobuf.UninterpretedOption uninterpreted_option = 999;
+       case 999: {
+         if (static_cast< ::google::protobuf::uint8>(tag) ==
+-            static_cast< ::google::protobuf::uint8>(7994u)) {
++            static_cast< ::google::protobuf::uint8>(0x3au)) {
+           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+                 input, add_uninterpreted_option()));
+         } else {
+@@ -10352,7 +10352,7 @@
+       // repeated .google.protobuf.UninterpretedOption uninterpreted_option = 999;
+       case 999: {
+         if (static_cast< ::google::protobuf::uint8>(tag) ==
+-            static_cast< ::google::protobuf::uint8>(7994u)) {
++            static_cast< ::google::protobuf::uint8>(0x3au)) {
+           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+                 input, add_uninterpreted_option()));
+         } else {
+@@ -10943,7 +10943,7 @@
+       // repeated .google.protobuf.UninterpretedOption uninterpreted_option = 999;
+       case 999: {
+         if (static_cast< ::google::protobuf::uint8>(tag) ==
+-            static_cast< ::google::protobuf::uint8>(7994u)) {
++            static_cast< ::google::protobuf::uint8>(0x3au)) {
+           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+                 input, add_uninterpreted_option()));
+         } else {
+@@ -11515,7 +11515,7 @@
+       // repeated .google.protobuf.UninterpretedOption uninterpreted_option = 999;
+       case 999: {
+         if (static_cast< ::google::protobuf::uint8>(tag) ==
+-            static_cast< ::google::protobuf::uint8>(7994u)) {
++            static_cast< ::google::protobuf::uint8>(0x3au)) {
+           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+                 input, add_uninterpreted_option()));
+         } else {
+@@ -11854,7 +11854,7 @@
+       // repeated .google.protobuf.UninterpretedOption uninterpreted_option = 999;
+       case 999: {
+         if (static_cast< ::google::protobuf::uint8>(tag) ==
+-            static_cast< ::google::protobuf::uint8>(7994u)) {
++            static_cast< ::google::protobuf::uint8>(0x3au)) {
+           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+                 input, add_uninterpreted_option()));
+         } else {
+@@ -12264,7 +12264,7 @@
+       // repeated .google.protobuf.UninterpretedOption uninterpreted_option = 999;
+       case 999: {
+         if (static_cast< ::google::protobuf::uint8>(tag) ==
+-            static_cast< ::google::protobuf::uint8>(7994u)) {
++            static_cast< ::google::protobuf::uint8>(0x3au)) {
+           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+                 input, add_uninterpreted_option()));
+         } else {
+@@ -12611,7 +12611,7 @@
+       // optional bool deprecated = 33 [default = false];
+       case 33: {
+         if (static_cast< ::google::protobuf::uint8>(tag) ==
+-            static_cast< ::google::protobuf::uint8>(264u)) {
++            static_cast< ::google::protobuf::uint8>(0x08u)) {
+           set_has_deprecated();
+           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                    bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+@@ -12625,7 +12625,7 @@
+       // repeated .google.protobuf.UninterpretedOption uninterpreted_option = 999;
+       case 999: {
+         if (static_cast< ::google::protobuf::uint8>(tag) ==
+-            static_cast< ::google::protobuf::uint8>(7994u)) {
++            static_cast< ::google::protobuf::uint8>(0x3au)) {
+           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+                 input, add_uninterpreted_option()));
+         } else {
+@@ -12981,7 +12981,7 @@
+       // optional bool deprecated = 33 [default = false];
+       case 33: {
+         if (static_cast< ::google::protobuf::uint8>(tag) ==
+-            static_cast< ::google::protobuf::uint8>(264u)) {
++            static_cast< ::google::protobuf::uint8>(0x08u)) {
+           set_has_deprecated();
+           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                    bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+@@ -12995,7 +12995,7 @@
+       // optional .google.protobuf.MethodOptions.IdempotencyLevel idempotency_level = 34 [default = IDEMPOTENCY_UNKNOWN];
+       case 34: {
+         if (static_cast< ::google::protobuf::uint8>(tag) ==
+-            static_cast< ::google::protobuf::uint8>(272u)) {
++            static_cast< ::google::protobuf::uint8>(0x10u)) {
+           int value;
+           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                    int, ::google::protobuf::internal::WireFormatLite::TYPE_ENUM>(
+@@ -13015,7 +13015,7 @@
+       // repeated .google.protobuf.UninterpretedOption uninterpreted_option = 999;
+       case 999: {
+         if (static_cast< ::google::protobuf::uint8>(tag) ==
+-            static_cast< ::google::protobuf::uint8>(7994u)) {
++            static_cast< ::google::protobuf::uint8>(0x3au)) {
+           DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+                 input, add_uninterpreted_option()));
+         } else {

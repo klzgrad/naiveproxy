@@ -1,0 +1,75 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/android/config.gni")
+import("//build/config/android/rules.gni")
+import("//chromecast/chromecast.gni")
+
+cast_source_set("cast_media_android") {
+  sources = [
+    "audio_decoder_android.cc",
+    "audio_decoder_android.h",
+    "audio_sink_android.cc",
+    "audio_sink_android.h",
+    "audio_sink_android_audiotrack_impl.cc",
+    "audio_sink_android_audiotrack_impl.h",
+    "audio_sink_manager.cc",
+    "audio_sink_manager.h",
+    "cast_media_android.cc",
+    "media_codec_support_cast_audio.cc",
+    "media_pipeline_backend_android.cc",
+    "media_pipeline_backend_android.h",
+    "volume_control_android.cc",
+    "volume_control_android.h",
+  ]
+
+  deps = [
+    ":audio_track_java",
+    ":audio_track_jni_headers",
+    "//base",
+    "//chromecast:chromecast_features",
+    "//chromecast/base",
+    "//chromecast/media/cma/backend:null",
+    "//chromecast/media/cma/base",
+    "//chromecast/media/cma/decoder",
+    "//chromecast/public/media",
+    "//media",
+  ]
+}
+
+generate_jni("audio_track_jni_headers") {
+  sources = [
+    "java/src/org/chromium/chromecast/cma/backend/android/AudioSinkAudioTrackImpl.java",
+    "java/src/org/chromium/chromecast/cma/backend/android/VolumeControl.java",
+  ]
+
+  if (enable_volume_tables_access) {
+    sources += [ "java/src/org/chromium/chromecast/cma/backend/android/VolumeMap.java" ]
+  }
+
+  jni_package = "audio_track"
+}
+
+android_library("audio_track_java") {
+  java_files = [
+    "java/src/org/chromium/chromecast/cma/backend/android/AudioSinkAudioTrackImpl.java",
+    "java/src/org/chromium/chromecast/cma/backend/android/VolumeControl.java",
+  ]
+
+  if (enable_volume_tables_access) {
+    java_files += [ "java/src/org/chromium/chromecast/cma/backend/android/VolumeMap.java" ]
+  }
+
+  deps = [
+    "//base:base_java",
+    "//chromecast/base:base_java",
+    "//chromecast/public:volume_control_enums_java",
+    "//third_party/android_tools:android_support_annotations_java",
+    "//third_party/android_tools:android_support_v13_java",
+  ]
+
+  if (enable_volume_tables_access) {
+    deps += [ "//chromecast/internal/android/prebuilt/things:support_lib_java" ]
+  }
+}

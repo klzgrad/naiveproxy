@@ -1,0 +1,76 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module media.mojom;
+
+import "media/mojo/interfaces/media_types.mojom";
+import "mojo/common/time.mojom";
+import "ui/gfx/geometry/mojo/geometry.mojom";
+
+// This file is the Mojo version of the media::VideoEncodeAccelerator interface
+// and describes the communication between a Client and a remote "service"
+// VideoEncodeAccelerator (VEA) with the purpose of encoding Video Frames by
+// means of hardware accelerated features.
+//
+//   Client                                    VideoEncodeAccelerator
+//      | ---> Initialize                                       |
+//      |                     RequireBitstreamBuffers(N) <---   |
+//      | ---> UseOutputBitstreamBuffer(0)                      |
+//      | ---> UseOutputBitstreamBuffer(1)                      |
+//      |  ...                                                  |
+//      =                                                       =
+// The Client requests a remote Encode() and eventually the VEA will leave the
+// encoded results in a pre-shared BitstreamBuffer, that is then restored to the
+// VEA when the Client is finished with it. Note that there might not be a 1:1
+// relationship between Encode() and BitstreamBufferReady() calls.
+//      | ---> Encode()                                         |
+//      |                        BitstreamBufferReady(k) <---   |
+//      | ---> UseOutputBitstreamBuffer(k)                      |
+//      =                                                       =
+// At any time the VEA can send a NotifyError() to the Client. Similarly at any
+// time the Client can send a RequestEncodingParametersChange() to the VEA. None
+// of these messages are acknowledged.
+
+interface VideoEncodeAcceleratorProvider {
+  CreateVideoEncodeAccelerator(VideoEncodeAccelerator& request);
+};
+
+interface VideoEncodeAccelerator {
+  // See media::VideoEncodeAccelerator::Error
+  enum Error {
+    ILLEGAL_STATE,
+    INVALID_ARGUMENT,
+    PLATFORM_FAILURE
+  };
+
+  // Responded by VideoEncodeAcceleratorClient.RequireBitstreamBuffers().
+  // TODO(mcasas): Update to asynchronous, https://crbug.com/744210.
+  [Sync]
+  Initialize(VideoPixelFormat input_format,
+             gfx.mojom.Size input_visible_size,
+             VideoCodecProfile output_profile,
+             uint32 initial_bitrate,
+             VideoEncodeAcceleratorClient client)
+      => (bool result);
+
+  // Encodes a |frame|, being completely done with it after its callback.
+  Encode(VideoFrame frame, bool force_keyframe) => ();
+
+  UseOutputBitstreamBuffer(int32 bitstream_buffer_id,
+                           handle<shared_buffer> buffer);
+
+  RequestEncodingParametersChange(uint32 bitrate, uint32 framerate);
+};
+
+interface VideoEncodeAcceleratorClient {
+  // Response to VideoEncodeAccelerator.Initialize().
+  RequireBitstreamBuffers(uint32 input_count,
+                          gfx.mojom.Size input_coded_size,
+                          uint32 output_buffer_size);
+
+  BitstreamBufferReady(int32 bitstream_buffer_id, uint32 payload_size,
+                       bool key_frame, mojo.common.mojom.TimeDelta timestamp);
+
+  NotifyError(VideoEncodeAccelerator.Error error);
+};

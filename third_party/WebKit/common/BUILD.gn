@@ -1,0 +1,149 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/buildflag_header.gni")
+import("//build/config/compiler/compiler.gni")
+import("//build/config/features.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
+import("//testing/test.gni")
+
+component("blink_common") {
+  output_name = "blink_common"
+
+  visibility = [
+    "//chrome/*",
+    "//content/*",
+    "//third_party/WebKit/*",
+    "//components/*",
+    ":*",
+  ]
+
+  defines = [ "BLINK_COMMON_IMPLEMENTATION=1" ]
+
+  sources = [
+    "associated_interfaces/associated_interface_provider.h",
+    "associated_interfaces/associated_interface_registry.h",
+    "client_hints/client_hints.cc",
+    "client_hints/client_hints.h",
+    "common_export.h",
+    "device_memory/approximated_device_memory.cc",
+    "device_memory/approximated_device_memory.h",
+    "feature_policy/feature_policy.cc",
+    "feature_policy/feature_policy.h",
+    "frame_policy.cc",
+    "frame_policy.h",
+    "message_port/cloneable_message.cc",
+    "message_port/cloneable_message.h",
+    "message_port/cloneable_message_struct_traits.cc",
+    "message_port/cloneable_message_struct_traits.h",
+    "message_port/message_port_channel.cc",
+    "message_port/message_port_channel.h",
+    "message_port/transferable_message.cc",
+    "message_port/transferable_message.h",
+    "message_port/transferable_message_struct_traits.cc",
+    "message_port/transferable_message_struct_traits.h",
+    "mime_util/mime_util.cc",
+    "mime_util/mime_util.h",
+    "origin_manifest/origin_manifest.cc",
+    "origin_manifest/origin_manifest.h",
+    "origin_trials/trial_token.cc",
+    "origin_trials/trial_token.h",
+    "origin_trials/trial_token_validator.cc",
+    "origin_trials/trial_token_validator.h",
+    "sandbox_flags.h",
+  ]
+
+  public_deps = [
+    ":mojo_bindings",
+    ":mojo_platform_bindings",
+  ]
+
+  deps = [
+    "//base",
+    "//mojo/common:common_base",
+    "//mojo/public/cpp/system",
+    "//net",
+  ]
+
+  # iOS doesn't use and must not depend on //media
+  if (!is_ios) {
+    deps += [ "//media" ]
+  }
+}
+
+test("blink_common_unittests") {
+  visibility = [ "*" ]
+
+  sources = [
+    "device_memory/approximated_device_memory_unittest.cc",
+    "feature_policy/feature_policy_unittest.cc",
+    "mime_util/mime_util_unittest.cc",
+    "origin_manifest/origin_manifest_unittest.cc",
+    "origin_trials/trial_token_unittest.cc",
+    "origin_trials/trial_token_validator_unittest.cc",
+    "test/run_all_unittests.cc",
+  ]
+
+  deps = [
+    ":blink_common",
+    "//base",
+    "//base/test:test_support",
+    "//net",
+    "//testing/gtest",
+    "//third_party/boringssl",
+  ]
+}
+
+# This target includes all mojom interfaces which can be used from
+# Source/platform. In particular these mojom interfaces can't use types that
+# are typemapped to a type in Source/core.
+mojom("mojo_platform_bindings") {
+  sources = [
+    "blob/blob.mojom",
+    "blob/blob_registry.mojom",
+    "page/page_visibility_state.mojom",
+    "service_worker/service_worker_client.mojom",
+    "service_worker/service_worker_provider_type.mojom",
+  ]
+
+  public_deps = [
+    "//mojo/common:common_custom_types",
+    "//url/mojo:url_mojom_gurl",
+  ]
+
+  export_class_attribute = "BLINK_COMMON_EXPORT"
+  export_define = "BLINK_COMMON_IMPLEMENTATION=1"
+  export_header = "third_party/WebKit/common/common_export.h"
+
+  export_class_attribute_blink = "PLATFORM_EXPORT"
+  export_define_blink = "BLINK_PLATFORM_IMPLEMENTATION=1"
+  export_header_blink = "third_party/WebKit/Source/platform/PlatformExport.h"
+}
+
+# This target can include mojom interfaces which do use types that are
+# typemapped to a type in Source/core. This also means these interfaces are not
+# available from Source/platform.
+mojom("mojo_bindings") {
+  sources = [
+    "message_port/message_port.mojom",
+  ]
+
+  public_deps = [
+    ":mojo_platform_bindings",
+  ]
+
+  overridden_deps = [ ":mojo_platform_bindings" ]
+  component_deps = []
+
+  overridden_deps_blink = [ ":mojo_platform_bindings" ]
+  component_deps_blink = [ "//third_party/WebKit/Source/platform" ]
+
+  export_class_attribute = "BLINK_COMMON_EXPORT"
+  export_define = "BLINK_COMMON_IMPLEMENTATION=1"
+  export_header = "third_party/WebKit/common/common_export.h"
+
+  export_class_attribute_blink = "CORE_EXPORT"
+  export_define_blink = "BLINK_CORE_IMPLEMENTATION=1"
+  export_header_blink = "third_party/WebKit/Source/core/CoreExport.h"
+}

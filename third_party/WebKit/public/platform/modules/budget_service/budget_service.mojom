@@ -1,0 +1,40 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module blink.mojom;
+
+import "url/mojo/origin.mojom";
+
+enum BudgetOperationType {
+  SILENT_PUSH,
+  INVALID_OPERATION
+};
+
+enum BudgetServiceErrorType {
+  NONE,
+  // Returned if there is an issue reading or writing the budget database.
+  DATABASE_ERROR,
+  // Returned if functionality is called which is not yet implemented.
+  NOT_SUPPORTED
+};
+
+// Structure representing the budget at points in time in the future.
+struct BudgetState {
+  // Amount of budget that will be available. This should be the lower bound of
+  // the budget between this time and the previous time.
+  double budget_at;
+
+  // Time at which the budget is available, in milliseconds since 00:00:00 UTC
+  // on 1 January 1970, at which the budget_at will be valid.
+  double time;
+};
+
+// Service through which Blink can query for the cost of particular actions and
+// for the budget available for an origin.
+interface BudgetService {
+  GetCost(BudgetOperationType operation) => (double cost);
+  GetBudget(url.mojom.Origin origin) => (BudgetServiceErrorType error_type, array<BudgetState> budget);
+  Reserve(url.mojom.Origin origin, BudgetOperationType operation) => (BudgetServiceErrorType error_type, bool success);
+};
+
