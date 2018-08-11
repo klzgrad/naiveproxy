@@ -1,0 +1,43 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/linux/pkg_config.gni")
+
+assert(is_linux, "This file should only be referenced on Linux")
+
+# Depend on //build/config/linux/gtk3 to use GTKv3. Depend on
+# //build/config/linux/gtk to get GTK 2 or 3 depending on the build flags.
+#
+# GN doesn't check visibility for configs so we give this an obviously internal
+# name to discourage random targets from accidentally depending on this and
+# bypassing the GTK target's visibility.
+pkg_config("gtk3_internal_config") {
+  # Gtk requires gmodule, but it does not list it as a dependency in some
+  # misconfigured systems.
+  packages = [
+    "gmodule-2.0",
+    "gtk+-3.0",
+    "gthread-2.0",
+  ]
+}
+
+# Basically no parts of Chrome should depend on GTK. To prevent accidents, the
+# parts that explicitly need GTK3 are whitelisted on this target.
+group("gtk3") {
+  visibility = [
+    "//build/config/linux/gtk",
+    "//chrome/browser/ui/libgtkui:*",
+  ]
+  public_configs = [ ":gtk3_internal_config" ]
+}
+
+# Depend on "gtkprint3" to get this.
+pkg_config("gtkprint3_internal_config") {
+  packages = [ "gtk+-unix-print-3.0" ]
+}
+
+group("gtkprint3") {
+  visibility = [ "//chrome/browser/ui/libgtkui:libgtk3ui" ]
+  public_configs = [ ":gtkprint3_internal_config" ]
+}

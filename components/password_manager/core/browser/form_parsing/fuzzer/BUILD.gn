@@ -1,0 +1,75 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//testing/libfuzzer/fuzzer_test.gni")
+import("//third_party/protobuf/proto_library.gni")
+
+static_library("fuzzer_support") {
+  sources = [
+    "data_accessor.cc",
+    "data_accessor.h",
+  ]
+
+  deps = [
+    "//base",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "data_accessor_unittest.cc",
+  ]
+
+  deps = [
+    ":fuzzer_support",
+    "//base",
+    "//testing/gtest",
+  ]
+}
+
+fuzzer_test("password_manager_form_parser_fuzzer") {
+  sources = [
+    "form_data_producer.cc",
+    "form_data_producer.h",
+    "form_parser_fuzzer.cc",
+  ]
+
+  deps = [
+    ":fuzzer_support",
+    "//base",
+    "//base:i18n",
+    "//components/autofill/core/common",
+    "//components/password_manager/core/browser/form_parsing",
+    "//url",
+  ]
+
+  dict = "form_parser_fuzzer.dict"
+}
+
+fuzzer_test("password_manager_form_parser_proto_fuzzer") {
+  sources = [
+    "form_data_proto_producer.cc",
+    "form_data_proto_producer.h",
+    "form_parser_proto_fuzzer.cc",
+  ]
+
+  deps = [
+    ":form_data_essentials_proto",
+    "//base",
+    "//base:i18n",
+    "//components/autofill/core/common",
+    "//components/password_manager/core/browser/form_parsing",
+    "//third_party/libprotobuf-mutator",
+    "//url",
+  ]
+
+  dict = "form_parser_fuzzer.dict"
+}
+
+proto_library("form_data_essentials_proto") {
+  sources = [
+    "form_data_essentials.proto",
+  ]
+}

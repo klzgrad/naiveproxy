@@ -1,0 +1,94 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//services/service_manager/public/cpp/service.gni")
+import("//services/service_manager/public/service_manifest.gni")
+import("//services/service_manager/public/tools/test/service_test.gni")
+
+assert(is_chromeos, "Non-ChromeOS builds cannot depend on //chromeos")
+
+static_library("device_sync") {
+  sources = [
+    "cryptauth_client_factory_impl.cc",
+    "cryptauth_client_factory_impl.h",
+    "cryptauth_enroller_factory_impl.cc",
+    "cryptauth_enroller_factory_impl.h",
+    "cryptauth_token_fetcher_impl.cc",
+    "cryptauth_token_fetcher_impl.h",
+    "device_sync_impl.cc",
+    "device_sync_impl.h",
+    "device_sync_service.cc",
+    "device_sync_service.h",
+  ]
+
+  public_deps = [
+    "//chromeos/components/proximity_auth/logging",
+    "//chromeos/services/device_sync/public/mojom",
+    "//components/cryptauth",
+    "//services/identity/public/mojom",
+    "//services/service_manager/public/cpp",
+  ]
+
+  deps = [
+    "//base",
+    "//chromeos/components/proximity_auth/logging",
+    "//chromeos/services/device_sync/public/mojom",
+    "//net",
+    "//services/identity/public/cpp",
+    "//services/preferences/public/cpp",
+    "//services/service_manager/public/cpp",
+  ]
+}
+
+service_manifest("manifest") {
+  name = "device_sync"
+  source = "manifest.json"
+}
+
+static_library("test_support") {
+  testonly = true
+
+  sources = [
+    "fake_device_sync_observer.cc",
+    "fake_device_sync_observer.h",
+  ]
+
+  public_deps = [
+    ":device_sync",
+  ]
+
+  deps = [
+    ":device_sync",
+    "//base",
+    "//chromeos/services/device_sync/public/mojom",
+    "//testing/gtest",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+
+  sources = [
+    "cryptauth_token_fetcher_impl_unittest.cc",
+    "device_sync_service_unittest.cc",
+  ]
+
+  deps = [
+    ":device_sync",
+    ":test_support",
+    "//base",
+    "//base/test:test_support",
+    "//chromeos",
+    "//chromeos/services/device_sync/public/mojom",
+    "//chromeos/services/device_sync/public/mojom:unit_tests",
+    "//components/cryptauth",
+    "//components/cryptauth:test_support",
+    "//components/gcm_driver:test_support",
+    "//components/prefs:test_support",
+    "//services/identity/public/cpp:test_support",
+    "//services/service_manager/public/cpp:service_test_support",
+    "//services/service_manager/public/cpp/test:test_support",
+    "//testing/gtest",
+  ]
+}

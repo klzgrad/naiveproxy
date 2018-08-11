@@ -1,0 +1,47 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module drivefs.mojom;
+
+// This file tracks platform/drivefs/mojom/drivefs.mojom. Changes should be made
+// there first and then replicated here.
+
+// Implemented by DriveFS, used from Chrome.
+interface DriveFsBootstrap {
+  // Initialize a DriveFS instance with its configuration and mojo connections
+  // to the browser.
+  Init(DriveFsConfiguration config, DriveFs& drive_fs,
+       DriveFsDelegate delegate);
+};
+
+// Implemented by DriveFS, used from Chrome.
+interface DriveFs {
+};
+
+// Implemented by Chrome, used from DriveFS.
+interface DriveFsDelegate {
+  // Get an access token for |client_id| and |app_id| with access to |scopes|.
+  // |access_token| is only valid if |status| is kSuccess.
+  GetAccessToken(string client_id, string app_id, array<string> scopes) => (
+      AccessTokenStatus status, string access_token);
+
+  // Invoked when the mount is ready for use.
+  OnMounted();
+};
+
+struct DriveFsConfiguration {
+  string user_email;
+};
+
+enum AccessTokenStatus {
+  // Getting an access token succeeded.
+  kSuccess,
+
+  // Getting an access token failed due to a transient error (e.g. network
+  // access is unavailable).
+  kTransientError,
+
+  // Getting an access token failed due to an auth error.
+  kAuthError,
+};

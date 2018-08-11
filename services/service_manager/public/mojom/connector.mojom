@@ -1,0 +1,200 @@
+// Copyright 2014 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module service_manager.mojom;
+
+import "services/service_manager/public/mojom/constants.mojom";
+import "services/service_manager/public/mojom/interface_provider.mojom";
+
+// TODO(beng): Evalute the utility of this enum. There are some inconsistencies
+//             in its use with BindInterface/StartService.
+enum ConnectResult {
+  // The operation was established successfully.
+  SUCCEEDED,
+
+  // The name or user id supplied was malformed, or the service specified by
+  // |name| could not be loaded.
+  INVALID_ARGUMENT,
+
+  // Policy prevented the successful completion of this operation. Either
+  // requests to bind to |name| are forbidden from the calling service by its
+  // manifest, or the service attempted to connect using a user id other than
+  // its own, |kInheritUserID| or |kRootUserID|.
+  ACCESS_DENIED
+};
+
+// A collection of metadata that disambiguates instances in the service manager.
+struct Identity {
+  // A name identifying a service.
+  string name;
+
+  // The user id of the target service instance to bind to. If no such instance
+  // exists, the service manager may start one. This user id will be passed to
+  // the new instance via Initialize().
+  //
+  // When binding to other services, services must generally pass kInheritUserID
+  // for this value, and the service manager will either bind to an existing
+  // instance matching the caller's user id, create a new instance matching the
+  // caller's user id, or bind to an existing instance running as kRootUserID.
+  // By default, services do not have the ability to set arbitrary values to
+  // this field, and doing so will result in an error response.
+  //
+  // A service with the ability to launch other services with arbitrary user ids
+  // (e.g. a login service) may set this value. The user id string is a valid
+  // guid of the form "%08X-%04X-%04X-%04X-%012llX", and (aside from the root
+  // user whose guid is defined above) intended to be not-guessable.
+  //
+  // When a service is initialized or receives a bind request from another
+  // service, this value is always the resolved user id, never |kInheritUserID|.
+  string user_id;
+
+  // A service may spawn multiple instances with the same (name, user_id)
+  // pair, provided they are started with unique values of this field.
+  // TODO(beng): enforce the emptiness of this parameter unless the client bears
+  //             the appropriate capability.
+  string instance;
+};
+
+// Implemented by an object in the service manager associated with a specific
+// instance. Tells the service manager the PID for a process launched by the
+// client. See |ClientProcessConnection|.
+interface PIDReceiver {
+  SetPID(uint32 pid);
+};
+
+// An interface that allows the holder to start other services & bind to
+// interfaces exposed by them.
+interface Connector {
+  // Asks the service manager to route a request to bind an implementation of
+  // the interface to a named service instance.
+  //
+  // A service's ability to bind interfaces exposed by another is controlled by
+  // policy set out in each service's manifest. See
+  // //services/service_manager/README.md for more information on manifests.
+  // If policy prevents the requesting service from binding the specified
+  // interface, the request pipe will be closed.
+  //
+  // Parameters:
+  //
+  //  target
+  //    The identity of the service instance to route the request to. If no
+  //    instance exists, the service will be started.
+  //
+  //  interface_name
+  //    The name of the interface to be bound. If the target service does not
+  //    expose an interface of this name, the request pipe will be closed.
+  //
+  //  interface_pipe
+  //    A message pipe endpoint encapsulating a request for an interface named
+  //    |interface_name|.
+  //
+  // Response parameters:
+  //
+  //  result
+  //    Indicates the result of the BindInterface() operation.
+  //
+  //  identity
+  //    The fully resolved identity of the instance in the service manager, with
+  //    a resolved user id. Typically the client passes |kInheritUserID| as the
+  //    user id to BindInterface(), which will be resolved by the service
+  //    manager into a concrete user id.
+  //
+  BindInterface(Identity target,
+                string interface_name,
+                handle<message_pipe> interface_pipe) =>
+      (ConnectResult result, Identity user_id);
+
+  // Asks the service manager whether it knows how to manage a given service,
+  // and how the service is to be sandboxed per the mainifest. No processes are
+  // started as a result. QueryService() is typically used before a call to
+  // StartProcessWithService() so the client can determine how to launch a
+  // process.
+  //
+  // Parameters:
+  //
+  //  target
+  //    The identity of the service to query.
+  //
+  // Response parameters:
+  //
+  //  result
+  //    Indicates the result of the QueryService() operation.
+  //
+  //  sandbox_type
+  //    A string describing the kind of sandboxing the service has declared
+  //    for itself in the manifest.
+  //
+  QueryService(Identity target) => (ConnectResult result, string sandbox_type);
+
+  // Asks the service manager to create an instance for a service. No action is
+  // taken if an instance is already present. If the service is not yet running,
+  // it will be initialized and its OnStart() method will be called. A process
+  // may be allocated.
+  //
+  // Parameters:
+  //
+  //  target
+  //    The identity of the service to start.
+  //
+  // Response parameters:
+  //
+  //  result
+  //    Indicates the result of the StartService() operation.
+  //
+  //  identity
+  //    The fully resolved identity of the instance in the service manager, with
+  //    a resolved user id. Typically the client passes |kInheritUserID| as the
+  //    user id to BindInterface(), which will be resolved by the service
+  //    manager into a concrete user id.
+  //
+  StartService(Identity target) => (ConnectResult result, Identity identity);
+
+  // Typically, the service manager will start a process for a service the first
+  // time it receives a bind interface request for it, or when StartService() is
+  // called. This struct allows a client to start the process itself and provide
+  // the service manager the pipes it needs to communicate with it. When this
+  // function is called, the client owns the lifetime of the child process it
+  // started, not the service manager. The service manager binds the |service|
+  // pipe, and when it closes destroys the associated instance but the process
+  // stays alive.
+  //
+  // Parameters:
+  //
+  //  target
+  //    The identity of the service to create the instance for.
+  //
+  //  service
+  //    A pipe to an implementation of Service that the service manager can use
+  //    to communicate with the service.
+  //
+  //  pid_receiver_request
+  //   Allows the client process launcher to tell the service manager the PID of
+  //   the process it created (the pid isn't supplied directly here as the
+  //   process may not have been launched by the time BindInterface() is
+  //   called.)
+  //
+  StartServiceWithProcess(Identity target,
+                          handle<message_pipe> service,
+                          PIDReceiver& pid_receiver_request) =>
+      (ConnectResult result, Identity identity);
+
+  // Clones this Connector so it can be passed to another thread.
+  Clone(Connector& request);
+
+  // Filter interface requests received from |source| according to the policy
+  // specified in this service's manifest in an InterfaceProviderSpec named
+  // |spec|.
+  //
+  // The flow is basically - remote service wishes to (generically) request
+  // interfaces from this service, and so sends us an InterfaceProvider request
+  // (|source_request|) which it would like us to bind. We forward this request
+  // to the Service Manager, passing our actual InterfaceProvider implementation
+  // in |target|. The Service Manager will only forward interface requests that
+  // were permitted by intersecting |source|'s manifest requirements with the
+  // contents of |spec|.
+  FilterInterfaces(string spec,
+                   Identity source,
+                   InterfaceProvider& source_request,
+                   InterfaceProvider target);
+};

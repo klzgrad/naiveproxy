@@ -1,0 +1,77 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module network.mojom;
+
+import "net/interfaces/ip_endpoint.mojom";
+import "services/network/public/mojom/tls_socket.mojom";
+import "services/network/public/mojom/network_param.mojom";
+import "services/network/public/mojom/mutable_network_traffic_annotation_tag.mojom";
+
+// Represents a connected TCP socket. Writes and Reads are through the data
+// pipes supplied upon construction. Consumer should use
+// SocketObserver interface to get notified about any error occurred
+// during reading or writing to data pipes. Consumer can close the socket by
+// destroying the interface pointer.
+interface TCPConnectedSocket {
+  // Gets the local address of this connected socket. On success, |net_error| is
+  // net::OK and |local_addr| contains the local address of the socket. On
+  // failure, |local_addr| is null and |net_error| is a net error code.
+  GetLocalAddress() => (int32 net_error, net.interfaces.IPEndPoint? local_addr);
+
+  // Upgrades a TCP socket to a TLS client socket.
+  // IMPORTANT: Caller needs close the previous send and receive pipes before
+  // this method can complete asynchronously.
+  //
+  // On success, |net_error| is net::OK. Caller is to use |send_stream| to send
+  // data and |receive_stream| to receive data over the connection. On failure,
+  // |result| is a network error code.
+  UpgradeToTLS(HostPortPair host_port_pair,
+               MutableNetworkTrafficAnnotationTag traffic_annotation,
+               TLSClientSocket& request,
+               SocketObserver? observer)
+      => (int32 net_error,
+          handle<data_pipe_consumer>? receive_stream,
+          handle<data_pipe_producer>? send_stream);
+};
+
+// Interface to listen for network connection error on a TCPConnectedSocket or
+// a TLSClientSocket. Because data pipe doesn't surface any network connection
+// error, if a network error happens during a read or a write, consumer can find
+// out about it by implementing this interface.
+interface SocketObserver {
+  // Called when an error occurs during reading from the network. The producer
+  // side of |receive_stream| will be closed.
+  OnReadError(int32 net_error);
+
+  // Called when an error occurs during sending to the network. The consumer
+  // side of |send_stream| will be closed.
+  OnWriteError(int32 net_error);
+};
+
+// Represents a TCP server socket that has been successfully bound to a local
+// address. Caller can close the socket by destroying the interface pointer.
+interface TCPServerSocket {
+  // Waits for an incoming connection request. |observer| if non-null will be
+  // used to listen for any network connection error on the newly established
+  // connection. On success, returns net::OK, |remote_addr| represents the peer
+  // address, |connected_socket| is the new connection established. Caller uses
+  // |send_stream| to send data and |receive_stream| for receiving data over the
+  // new connection. On failure, |net_error| is a net error code and other
+  // fields are null. Up to |backlog| Accept()s can be pending at a time.
+  // |backlog| is a number that is specified when requesting TCPServerSocket. If
+  // more than |backlog| number of Accept()s are outstanding,
+  // net::ERR_INSUFFICIENT_RESOUCES will be returned.
+  Accept(SocketObserver? observer)
+      => (int32 net_error,
+          net.interfaces.IPEndPoint? remote_addr,
+          TCPConnectedSocket? connected_socket,
+          handle<data_pipe_consumer>? send_stream,
+          handle<data_pipe_producer>? receive_stream);
+
+  // Gets the local address of this server socket. On success, |net_error| is
+  // net::OK and |local_addr| contains the local address of the socket. On
+  // failure, |local_addr| is null and |net_error| is a net error code.
+  GetLocalAddress() => (int32 net_error, net.interfaces.IPEndPoint? local_addr);
+};

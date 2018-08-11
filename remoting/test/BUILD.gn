@@ -1,0 +1,255 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//remoting/remoting_options.gni")
+
+static_library("test_support") {
+  testonly = true
+
+  sources = [
+    "access_token_fetcher.cc",
+    "access_token_fetcher.h",
+    "app_remoting_report_issue_request.cc",
+    "app_remoting_report_issue_request.h",
+    "app_remoting_service_urls.cc",
+    "app_remoting_service_urls.h",
+    "chromoting_test_driver_environment.cc",
+    "chromoting_test_driver_environment.h",
+    "connection_setup_info.cc",
+    "connection_setup_info.h",
+    "connection_time_observer.cc",
+    "connection_time_observer.h",
+    "cyclic_frame_generator.cc",
+    "cyclic_frame_generator.h",
+    "fake_access_token_fetcher.cc",
+    "fake_access_token_fetcher.h",
+    "fake_app_remoting_report_issue_request.cc",
+    "fake_app_remoting_report_issue_request.h",
+    "fake_host_list_fetcher.cc",
+    "fake_host_list_fetcher.h",
+    "fake_network_dispatcher.cc",
+    "fake_network_dispatcher.h",
+    "fake_network_manager.cc",
+    "fake_network_manager.h",
+    "fake_port_allocator.cc",
+    "fake_port_allocator.h",
+    "fake_refresh_token_store.cc",
+    "fake_refresh_token_store.h",
+    "fake_remote_host_info_fetcher.cc",
+    "fake_remote_host_info_fetcher.h",
+    "fake_socket_factory.cc",
+    "fake_socket_factory.h",
+    "frame_generator_util.cc",
+    "frame_generator_util.h",
+    "host_info.cc",
+    "host_info.h",
+    "host_list_fetcher.cc",
+    "host_list_fetcher.h",
+    "mock_access_token_fetcher.cc",
+    "mock_access_token_fetcher.h",
+    "refresh_token_store.cc",
+    "refresh_token_store.h",
+    "remote_application_details.h",
+    "remote_connection_observer.h",
+    "remote_host_info.cc",
+    "remote_host_info.h",
+    "remote_host_info_fetcher.cc",
+    "remote_host_info_fetcher.h",
+    "rgb_value.cc",
+    "rgb_value.h",
+    "scroll_frame_generator.cc",
+    "scroll_frame_generator.h",
+    "test_chromoting_client.cc",
+    "test_chromoting_client.h",
+    "test_video_renderer.cc",
+    "test_video_renderer.h",
+    "video_frame_writer.cc",
+    "video_frame_writer.h",
+  ]
+
+  public_deps = [
+    "//base",
+    "//net",
+    "//remoting/base",
+    "//remoting/client",
+    "//remoting/client/audio",
+    "//remoting/codec:decoder",
+    "//remoting/codec:encoder",
+    "//remoting/protocol",
+    "//remoting/signaling",
+    "//third_party/webrtc/modules/desktop_capture",
+    "//ui/gfx",
+  ]
+
+  deps = [
+    "//google_apis",
+    "//skia",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//third_party/webrtc_overrides",
+  ]
+}
+
+executable("chromoting_test_driver") {
+  testonly = true
+
+  sources = [
+    "chromoting_test_driver.cc",
+    "chromoting_test_driver_tests.cc",
+    "chromoting_test_fixture.cc",
+    "chromoting_test_fixture.h",
+  ]
+
+  deps = [
+    ":test_support",
+    "//base/test:test_support",
+    "//build/config:exe_and_shlib_deps",
+    "//build/win:default_exe_manifest",
+    "//testing/gtest",
+  ]
+}
+
+static_library("ar_test_driver_common") {
+  testonly = true
+
+  sources = [
+    "app_remoting_connected_client_fixture.cc",
+    "app_remoting_connected_client_fixture.h",
+    "app_remoting_connection_helper.cc",
+    "app_remoting_connection_helper.h",
+    "app_remoting_latency_test_fixture.cc",
+    "app_remoting_latency_test_fixture.h",
+    "app_remoting_test_driver_environment.cc",
+    "app_remoting_test_driver_environment.h",
+  ]
+
+  deps = [
+    ":test_support",
+    "//testing/gtest",
+    "//third_party/webrtc/modules/desktop_capture",
+  ]
+}
+
+# An external version of the test driver tool which includes minimal tests
+executable("ar_sample_test_driver") {
+  testonly = true
+
+  sources = [
+    "app_remoting_sample_test_driver_environment.cc",
+    "app_remoting_test_driver.cc",
+  ]
+
+  deps = [
+    ":ar_test_driver_common",
+    "//base/test:test_support",
+    "//build/config:exe_and_shlib_deps",
+    "//build/win:default_exe_manifest",
+    "//testing/gtest",
+  ]
+}
+
+if (enable_remoting_host && !is_android && !is_chromeos) {
+  static_library("fake_connection_event_logger") {
+    testonly = true
+
+    sources = [
+      "fake_connection_event_logger.cc",
+      "fake_connection_event_logger.h",
+    ]
+
+    deps = [
+      "//remoting/host",
+      "//remoting/protocol:test_support",
+    ]
+  }
+
+  static_library("it2me_standalone_host") {
+    testonly = true
+
+    sources = [
+      "it2me_standalone_host.cc",
+      "it2me_standalone_host.h",
+    ]
+
+    deps = [
+      ":fake_connection_event_logger",
+      "//base/test:test_support",
+      "//third_party/webrtc/modules/desktop_capture",
+    ]
+
+    public_deps = [
+      "//remoting/host:test_support",
+      "//testing/gmock",
+    ]
+  }
+
+  executable("it2me_standalone_host_main") {
+    testonly = true
+    defines = []
+    libs = []
+
+    sources = [
+      "it2me_standalone_host_main.cc",
+    ]
+
+    deps = [
+      ":it2me_standalone_host",
+      "//build/config:exe_and_shlib_deps",
+    ]
+
+    if (is_desktop_linux) {
+      deps += [ "//build/config/linux/gtk" ]
+    }
+
+    if (is_win) {
+      defines += [ "_ALT_NO_EXCEPTIONS" ]
+      deps += [ "//remoting/host/win:dpi_aware_exe_manifest" ]
+      libs += [
+        "rpcrt4.lib",
+        "wtsapi32.lib",
+      ]
+    }
+  }
+
+  # A binary with a specific version of EvaluateCapabilityLocally() for test
+  # purpose only.
+  executable("capability_test_stub") {
+    testonly = true
+    sources = [
+      "capability_test_stub_main.cc",
+    ]
+
+    deps = [
+      "//base",
+      "//build/config:exe_and_shlib_deps",
+    ]
+  }
+}
+
+source_set("unit_tests") {
+  testonly = true
+
+  sources = [
+    "access_token_fetcher_unittest.cc",
+    "app_remoting_report_issue_request_unittest.cc",
+    "app_remoting_test_driver_environment_unittest.cc",
+    "chromoting_test_driver_environment_unittest.cc",
+    "connection_time_observer_unittest.cc",
+    "host_list_fetcher_unittest.cc",
+    "remote_host_info_fetcher_unittest.cc",
+    "test_chromoting_client_unittest.cc",
+    "test_video_renderer_unittest.cc",
+  ]
+
+  deps = [
+    ":ar_test_driver_common",
+    ":test_support",
+    "//base",
+    "//net:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//third_party/libyuv",
+    "//third_party/webrtc/modules/desktop_capture",
+  ]
+}

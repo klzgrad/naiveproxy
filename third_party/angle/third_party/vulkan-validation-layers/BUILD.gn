@@ -1,0 +1,637 @@
+# Copyright 2018 The ANGLE Project Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("../../gni/angle.gni")
+
+vulkan_undefine_configs = []
+if (is_win) {
+  vulkan_undefine_configs += [
+    "//build/config/win:nominmax",
+    "//build/config/win:unicode",
+  ]
+}
+
+raw_vulkan_layers_dir = rebase_path("src", root_build_dir)
+
+vulkan_gen_dir = "$target_gen_dir/angle/vulkan"
+raw_vulkan_gen_dir = rebase_path(vulkan_gen_dir, root_build_dir)
+
+# Vulkan helper scripts
+# ---------------------
+
+helper_script_and_deps = [
+  [
+    "vulkan_gen_dispatch_table_helper_h",
+    "vk_dispatch_table_helper.h",
+    "dispatch_table_helper_generator.py",
+  ],
+  [
+    "vulkan_gen_enum_string_helper",
+    "vk_enum_string_helper.h",
+    "helper_file_generator.py",
+  ],
+  [
+    "vulkan_gen_extension_helper",
+    "vk_extension_helper.h",
+    "helper_file_generator.py",
+  ],
+  [
+    "vulkan_gen_layer_dispatch_table_h",
+    "vk_layer_dispatch_table.h",
+    "loader_extension_generator.py",
+  ],
+  [
+    "vulkan_gen_loader_extensions_c",
+    "vk_loader_extensions.c",
+    "loader_extension_generator.py",
+  ],
+  [
+    "vulkan_gen_loader_extensions_h",
+    "vk_loader_extensions.h",
+    "loader_extension_generator.py",
+  ],
+  [
+    "vulkan_gen_object_types_h",
+    "vk_object_types.h",
+    "helper_file_generator.py",
+  ],
+  [
+    "vulkan_gen_safe_struct_cpp",
+    "vk_safe_struct.cpp",
+    "helper_file_generator.py",
+  ],
+  [
+    "vulkan_gen_safe_struct_h",
+    "vk_safe_struct.h",
+    "helper_file_generator.py",
+  ],
+  [
+    "vulkan_gen_thread_check_helper",
+    "thread_check.h",
+    "threading_generator.py",
+  ],
+  [
+    "vulkan_gen_typemap_helper",
+    "vk_typemap_helper.h",
+    "helper_file_generator.py",
+  ],
+  [
+    "vulkan_gen_object_tracker_cpp",
+    "object_tracker.cpp",
+    "object_tracker_generator.py",
+  ],
+  [
+    "vulkan_gen_parameter_validation_cpp",
+    "parameter_validation.cpp",
+    "parameter_validation_generator.py",
+  ],
+  [
+    "vulkan_gen_unique_objects_wrappers_helper",
+    "unique_objects_wrappers.h",
+    "unique_objects_generator.py",
+  ],
+  [
+    "vulkan_mock_icd_cpp",
+    "mock_icd.cpp",
+    "mock_icd_generator.py",
+  ],
+  [
+    "vulkan_mock_icd_h",
+    "mock_icd.h",
+    "mock_icd_generator.py",
+  ],
+]
+
+foreach(script_and_dep, helper_script_and_deps) {
+  target_name = script_and_dep[0]
+  file = script_and_dep[1]
+  dep = script_and_dep[2]
+  target("action", target_name) {
+    script = "src/scripts/lvl_genvk.py"
+    inputs = [
+      "src/scripts/$dep",
+      "src/scripts/cgenerator.py",
+      "src/scripts/common_codegen.py",
+      "src/scripts/generator.py",
+      "src/scripts/reg.py",
+      "src/scripts/vuid_mapping.py",
+      "src/layers/vk_validation_error_messages.h",
+      "src/scripts/vk.xml",
+    ]
+    outputs = [
+      "$vulkan_gen_dir/$file",
+    ]
+    args = [
+      "-o",
+      raw_vulkan_gen_dir,
+      "-registry",
+      "$raw_vulkan_layers_dir/scripts/vk.xml",
+      "$file",
+      "-quiet",
+    ]
+  }
+}
+
+config("vulkan_headers_config") {
+  include_dirs = [ "src/include" ]
+}
+
+# Vulkan headers only, no compiled sources.
+source_set("vulkan_headers") {
+  sources = [
+    "src/include/vulkan/vk_icd.h",
+    "src/include/vulkan/vk_layer.h",
+    "src/include/vulkan/vk_platform.h",
+    "src/include/vulkan/vk_sdk_platform.h",
+    "src/include/vulkan/vulkan.h",
+    "src/include/vulkan/vulkan.hpp",
+  ]
+  public_configs = [ ":vulkan_headers_config" ]
+}
+
+raw_spirv_tools_dir = rebase_path("../spirv-tools/src", root_build_dir)
+
+spirv_git_is_present = exec_script("$angle_root/src/commit_id.py",
+                                   [
+                                     "check",
+                                     raw_spirv_tools_dir,
+                                   ],
+                                   "value")
+
+spirv_use_commit_id = spirv_git_is_present == 1
+
+if (spirv_use_commit_id) {
+  # This could be generalized to a foreach if other revisions are added.
+  action("spirv_tools_external_revision_generate") {
+    script = "src/scripts/external_revision_generator.py"
+    inputs = [
+      "$angle_root/DEPS",
+    ]
+    outputs = [
+      "$vulkan_gen_dir/spirv_tools_commit_id.h",
+    ]
+    args = [
+      "--git_dir",
+      "$raw_spirv_tools_dir",
+      "-s",
+      "SPIRV_TOOLS_COMMIT_ID",
+      "-o",
+      "$raw_vulkan_gen_dir/spirv_tools_commit_id.h",
+    ]
+  }
+} else {
+  copy("spirv_tools_external_revision_generate") {
+    sources = [
+      "dummy_spirv_tools_commit_id.h",
+    ]
+    outputs = [
+      "$vulkan_gen_dir/spirv_tools_commit_id.h",
+    ]
+  }
+}
+
+config("vulkan_generated_files_config") {
+  include_dirs = [ vulkan_gen_dir ]
+}
+
+group("vulkan_generate_helper_files") {
+  public_deps = [
+    ":spirv_tools_external_revision_generate",
+    ":vulkan_headers",
+  ]
+  public_configs = [ ":vulkan_generated_files_config" ]
+  foreach(script_and_dep, helper_script_and_deps) {
+    target_name = script_and_dep[0]
+    public_deps += [ ":$target_name" ]
+  }
+}
+
+config("vulkan_config") {
+  if (is_win) {
+    defines = [
+      "VK_USE_PLATFORM_WIN32_KHR",
+      "VK_USE_PLATFORM_WIN32_KHX",
+    ]
+  }
+  if (is_linux) {
+    defines = [
+      "VK_USE_PLATFORM_XCB_KHR",
+      "VK_USE_PLATFORM_XCB_KHX",
+    ]
+  }
+  if (is_android) {
+    defines = [
+      "VK_USE_PLATFORM_ANDROID_KHR",
+      "VK_USE_PLATFORM_ANDROID_KHX",
+    ]
+    libs = [ "vulkan" ]
+  }
+}
+
+config("vulkan_internal_config") {
+  defines = [ "VULKAN_NON_CMAKE_BUILD" ]
+  if (is_clang || !is_win) {
+    cflags = [ "-Wno-unused-function" ]
+  }
+  if (is_linux) {
+    defines += [
+      "SYSCONFDIR=\"/etc\"",
+      "FALLBACK_CONFIG_DIRS=\"/etc/xdg\"",
+      "FALLBACK_DATA_DIRS=\"/usr/local/share:/usr/share\"",
+    ]
+  }
+}
+
+# Vulkan loader
+# -------------
+
+config("vulkan_loader_config") {
+  include_dirs = [
+    vulkan_gen_dir,
+    "src/include",
+    "src/loader",
+  ]
+  defines = [
+    "ANGLE_VK_DATA_DIR=\"$data_dir\"",
+    "ANGLE_VK_ICD_JSON=\"$data_dir/VkICD_mock_icd.json\"",
+    "API_NAME=\"Vulkan\"",
+  ]
+
+  if (is_win) {
+    cflags = [ "/wd4201" ]
+  }
+  if (is_linux) {
+    # assume secure_getenv() is available
+    defines += [ "HAVE_SECURE_GETENV" ]
+  }
+}
+
+if (!is_android) {
+  if (angle_shared_libvulkan) {
+    library_type = "shared_library"
+  } else {
+    library_type = "static_library"
+  }
+
+  target(library_type, "libvulkan") {
+    sources = [
+      "src/loader/cJSON.c",
+      "src/loader/cJSON.h",
+      "src/loader/debug_utils.c",
+      "src/loader/debug_utils.h",
+      "src/loader/dev_ext_trampoline.c",
+      "src/loader/extension_manual.c",
+      "src/loader/extension_manual.h",
+      "src/loader/gpa_helper.h",
+      "src/loader/loader.c",
+      "src/loader/loader.h",
+      "src/loader/murmurhash.c",
+      "src/loader/murmurhash.h",
+      "src/loader/phys_dev_ext.c",
+      "src/loader/trampoline.c",
+
+      # TODO(jmadill): Use assembler where available.
+      "src/loader/unknown_ext_chain.c",
+      "src/loader/vk_loader_platform.h",
+      "src/loader/wsi.c",
+      "src/loader/wsi.h",
+    ]
+    if (is_win) {
+      sources += [
+        "src/loader/dirent_on_windows.c",
+        "src/loader/dirent_on_windows.h",
+      ]
+      if (!is_clang) {
+        cflags = [
+          "/wd4054",  # Type cast from function pointer
+          "/wd4055",  # Type cast from data pointer
+          "/wd4100",  # Unreferenced formal parameter
+          "/wd4152",  # Nonstandard extension used (pointer conversion)
+          "/wd4201",  # Nonstandard extension used: nameless struct/union
+          "/wd4214",  # Nonstandard extension used: bit field types other than int
+          "/wd4232",  # Nonstandard extension used: address of dllimport is not static
+          "/wd4305",  # Type cast truncation
+          "/wd4706",  # Assignment within conditional expression
+          "/wd4996",  # Unsafe stdlib function
+        ]
+      }
+    }
+    deps = [
+      ":vulkan_generate_helper_files",
+    ]
+    public_deps = [
+      ":vulkan_headers",
+    ]
+    configs -= [ "//build/config/compiler:chromium_code" ]
+    configs += [ "//build/config/compiler:no_chromium_code" ]
+    configs += [ ":vulkan_internal_config" ]
+    public_configs = [
+      ":vulkan_config",
+      ":vulkan_loader_config",
+    ]
+    configs -= vulkan_undefine_configs
+  }
+}
+
+# The validation layers
+# ---------------------
+
+config("vulkan_layer_config") {
+  include_dirs = [ "src/layers" ]
+}
+
+source_set("vulkan_layer_table") {
+  configs -= vulkan_undefine_configs
+  public_deps = [
+    ":vulkan_generate_helper_files",
+  ]
+  public_configs = [
+    ":vulkan_config",
+    ":vulkan_layer_config",
+    ":vulkan_internal_config",
+  ]
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [ "//build/config/compiler:no_chromium_code" ]
+  sources = [
+    "$target_gen_dir/angle/vulkan/vk_dispatch_table_helper.h",
+    "$target_gen_dir/angle/vulkan/vk_enum_string_helper.h",
+    "src/layers/vk_layer_table.cpp",
+    "src/layers/vk_layer_table.h",
+  ]
+}
+
+core_validation_sources = [
+  # This file is manually included in the layer
+  # "$vulkan_gen_dir/vk_safe_struct.cpp",
+  "$vulkan_gen_dir/vk_safe_struct.h",
+  "src/layers/buffer_validation.cpp",
+  "src/layers/buffer_validation.h",
+  "src/layers/core_validation.cpp",
+  "src/layers/core_validation.h",
+  "src/layers/descriptor_sets.cpp",
+  "src/layers/descriptor_sets.h",
+  "src/layers/shader_validation.cpp",
+  "src/layers/shader_validation.h",
+  "src/layers/xxhash.c",
+  "src/layers/xxhash.h",
+]
+
+object_tracker_sources = [
+  "$vulkan_gen_dir/object_tracker.cpp",
+  "src/layers/object_tracker.h",
+  "src/layers/object_tracker_utils.cpp",
+]
+
+parameter_validation_sources = [
+  "$vulkan_gen_dir/parameter_validation.cpp",
+  "src/layers/parameter_validation.h",
+  "src/layers/parameter_validation_utils.cpp",
+]
+
+threading_sources = [
+  "$vulkan_gen_dir/thread_check.h",
+  "src/layers/threading.cpp",
+  "src/layers/threading.h",
+]
+
+unique_objects_sources = [
+  "$vulkan_gen_dir/unique_objects_wrappers.h",
+
+  # This file is manually included in the layer
+  # "$vulkan_gen_dir/vk_safe_struct.cpp",
+  "$vulkan_gen_dir/vk_safe_struct.h",
+  "src/layers/unique_objects.cpp",
+  "src/layers/unique_objects.h",
+]
+
+layers = [
+  [
+    "core_validation",
+    core_validation_sources,
+    ":vulkan_core_validation_glslang",
+  ],
+  [
+    "object_tracker",
+    object_tracker_sources,
+    ":vulkan_gen_object_tracker_cpp",
+  ],
+  [
+    "parameter_validation",
+    parameter_validation_sources,
+    ":vulkan_gen_parameter_validation",
+  ],
+  [
+    "threading",
+    threading_sources,
+    ":vulkan_gen_thread_check_helper",
+  ],
+  [
+    "unique_objects",
+    unique_objects_sources,
+    ":vulkan_gen_unique_objects_wrappers_helper",
+  ],
+]
+
+if (!is_android) {
+  vulkan_gen_json_files_outputs = [
+    "$root_out_dir/$data_dir/VkLayer_core_validation.json",
+    "$root_out_dir/$data_dir/VkLayer_object_tracker.json",
+    "$root_out_dir/$data_dir/VkLayer_parameter_validation.json",
+    "$root_out_dir/$data_dir/VkLayer_standard_validation.json",
+    "$root_out_dir/$data_dir/VkLayer_threading.json",
+    "$root_out_dir/$data_dir/VkLayer_unique_objects.json",
+  ]
+
+  action("vulkan_gen_json_files") {
+    script = "$angle_root/scripts/generate_vulkan_layers_json.py"
+    if (is_win) {
+      sources = [
+        "src/layers/windows/VkLayer_core_validation.json",
+        "src/layers/windows/VkLayer_object_tracker.json",
+        "src/layers/windows/VkLayer_parameter_validation.json",
+        "src/layers/windows/VkLayer_standard_validation.json",
+        "src/layers/windows/VkLayer_threading.json",
+        "src/layers/windows/VkLayer_unique_objects.json",
+      ]
+      args = [ "$raw_vulkan_layers_dir/layers/windows" ]
+    }
+    if (is_linux) {
+      sources = [
+        "src/layers/linux/VkLayer_core_validation.json",
+        "src/layers/linux/VkLayer_object_tracker.json",
+        "src/layers/linux/VkLayer_parameter_validation.json",
+        "src/layers/linux/VkLayer_standard_validation.json",
+        "src/layers/linux/VkLayer_threading.json",
+        "src/layers/linux/VkLayer_unique_objects.json",
+      ]
+      args = [ "$raw_vulkan_layers_dir/layers/linux" ]
+    }
+
+    # The layer JSON files are part of the necessary data deps.
+    outputs = vulkan_gen_json_files_outputs
+    data = vulkan_gen_json_files_outputs
+    args += [ rebase_path("$root_out_dir/$data_dir", root_build_dir) ]
+  }
+
+  # Vulkan Mock ICD
+  # ---------------
+  group("vulkan_generate_mock_icd_files") {
+    public_deps = [
+      ":vulkan_generate_helper_files",
+      ":vulkan_mock_icd_cpp",
+      ":vulkan_mock_icd_h",
+    ]
+  }
+
+  mock_icd_sources = [
+    "$vulkan_gen_dir/mock_icd.cpp",
+    "$vulkan_gen_dir/mock_icd.h",
+  ]
+
+  shared_library("VkICD_mock_icd") {
+    configs -= vulkan_undefine_configs
+    public_configs = [ ":vulkan_config" ]
+    deps = [
+      "//build/config:exe_and_shlib_deps",
+    ]
+    deps += [ ":vulkan_generate_mock_icd_files" ]
+    data_deps = [
+      ":vulkan_gen_icd_json_file",
+    ]
+    sources = mock_icd_sources
+    if (is_win) {
+      sources += [ "src/icd/VkICD_mock_icd.def" ]
+    }
+    configs -= [ "//build/config/compiler:chromium_code" ]
+    configs += [ "//build/config/compiler:no_chromium_code" ]
+  }
+
+  action("vulkan_gen_icd_json_file") {
+    script = "$angle_root/scripts/generate_vulkan_layers_json.py"
+    if (is_win) {
+      sources = [
+        "src/icd/windows/VkICD_mock_icd.json",
+      ]
+      args = [ "$raw_vulkan_layers_dir/icd/windows" ]
+    }
+    if (is_linux) {
+      sources = [
+        "src/icd/linux/VkICD_mock_icd.json",
+      ]
+      args = [ "$raw_vulkan_layers_dir/icd/linux" ]
+    }
+
+    # The layer JSON files are part of the necessary data deps.
+    outputs = [
+      "$root_out_dir/$data_dir/VkICD_mock_icd.json",
+    ]
+    data = [
+      "$root_out_dir/$data_dir/VkICD_mock_icd.json",
+    ]
+    args += [ rebase_path("$root_out_dir/$data_dir", root_build_dir) ]
+  }
+}
+
+source_set("vulkan_layer_utils") {
+  sources = [
+    "src/layers/vk_format_utils.cpp",
+    "src/layers/vk_format_utils.h",
+    "src/layers/vk_layer_config.cpp",
+    "src/layers/vk_layer_config.h",
+    "src/layers/vk_layer_extension_utils.cpp",
+    "src/layers/vk_layer_extension_utils.h",
+    "src/layers/vk_layer_utils.cpp",
+    "src/layers/vk_layer_utils.h",
+  ]
+  public_configs = [
+    ":vulkan_config",
+    ":vulkan_loader_config",
+    ":vulkan_internal_config",
+  ]
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [ "//build/config/compiler:no_chromium_code" ]
+  public_deps = [
+    ":vulkan_generate_helper_files",
+  ]
+  configs -= vulkan_undefine_configs
+}
+
+config("vulkan_core_validation_config") {
+  include_dirs = [ "../glslang/src" ]
+}
+
+source_set("vulkan_core_validation_glslang") {
+  public_deps = [
+    "../spirv-tools:spirv_tools",
+  ]
+  public_configs = [ ":vulkan_core_validation_config" ]
+}
+
+config("vulkan_parameter_validation_config") {
+  if (is_clang) {
+    cflags_cc = [ "-Wno-unused-const-variable" ]
+  }
+}
+
+# This special action is needed to remove the generated param header.
+# Otherwise the param gen cpp file will pick up the old file and the
+# build will fail. It's a bit unfortunate but necessary.
+action("vulkan_clean_parameter_gen_header") {
+  script = "$angle_root/scripts/remove_file_if_exists.py"
+  inputs = parameter_validation_sources
+  deps = [
+    ":vulkan_gen_parameter_validation_cpp",
+  ]
+  outputs = [
+    "$vulkan_gen_dir/parameter_validation_h_is_removed",
+  ]
+  args = [
+    "$raw_vulkan_gen_dir/parameter_validation.h",
+    "$raw_vulkan_gen_dir/parameter_validation_h_is_removed",
+  ]
+}
+
+source_set("vulkan_gen_parameter_validation") {
+  deps = [
+    ":vulkan_clean_parameter_gen_header",
+    ":vulkan_gen_parameter_validation_cpp",
+  ]
+  public_configs = [ ":vulkan_parameter_validation_config" ]
+}
+
+foreach(layer_info, layers) {
+  name = layer_info[0]
+  shared_library("VkLayer_$name") {
+    configs -= [ "//build/config/compiler:chromium_code" ]
+    configs += [ "//build/config/compiler:no_chromium_code" ]
+    configs -= vulkan_undefine_configs
+    deps = [
+      ":vulkan_layer_table",
+      ":vulkan_layer_utils",
+      "//build/config:exe_and_shlib_deps",
+    ]
+    if (layer_info[2] != "") {
+      deps += [ layer_info[2] ]
+    }
+    sources = layer_info[1]
+    if (is_win) {
+      sources += [ "src/layers/VkLayer_$name.def" ]
+    }
+    if (is_linux || is_android) {
+      ldflags = [ "-Wl,-Bsymbolic,--exclude-libs,ALL" ]
+    }
+    if (is_android) {
+      libs = [ "log" ]
+      configs -= [ "//build/config/android:hide_all_but_jni_onload" ]
+    }
+  }
+}
+
+group("vulkan_validation_layers") {
+  data_deps = []
+  foreach(layer_info, layers) {
+    name = layer_info[0]
+    data_deps += [ ":VkLayer_$name" ]
+  }
+}

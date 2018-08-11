@@ -1,0 +1,212 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//base/android/linker/config.gni")
+import("//build/config/android/rules.gni")
+import("//build/config/locales.gni")
+import("//build/config/android/extract_unwind_tables.gni")
+import("//build/config/compiler/compiler.gni")
+import("//chrome/common/features.gni")
+import("//device/vr/buildflags/buildflags.gni")
+import("//third_party/leakcanary/config.gni")
+import("channel.gni")
+
+declare_args() {
+  # Enables ProGuard obfuscation of Chromium packages.
+  enable_proguard_obfuscation = true
+
+  # Enable multidex in release builds.
+  multidex_in_release = false
+}
+
+default_chrome_public_jinja_variables = [
+  "channel=$android_channel",
+  "enable_arcore=$enable_arcore",
+  "enable_leakcanary=$enable_leakcanary",
+  "enable_vr=$enable_vr",
+]
+
+template("chrome_public_apk_tmpl") {
+  # Adds unwind table asset to the chrome apk for the given library target. This
+  # is not part of generic apk assets target since it depends on the main shared
+  # library of the apk, to extract unwind tables.
+  if (defined(invoker.add_unwind_tables_in_apk) &&
+      invoker.add_unwind_tables_in_apk) {
+    _unwind_asset = "${target_name}_unwind_assets"
+    unwind_table_asset(_unwind_asset) {
+      if (defined(invoker.testonly)) {
+        testonly = invoker.testonly
+      }
+
+      library_target = invoker.shared_library_for_unwind_asset
+      deps = invoker.shared_libraries
+    }
+  }
+
+  android_apk(target_name) {
+    forward_variables_from(invoker, "*")
+    exclude_xxxhdpi = true
+
+    # Use zh-TW strings for zh-HK (https://crbug.com/780847).
+    support_zh_hk = true
+
+    # Whitelist rationale in https://crbug.com/691733.
+    xxxhdpi_whitelist = [
+      "*shadow*",  # Combination of gradient & transparency cause pixelation.
+      "*.9.*",  # Most nine-patches contain shadows.
+      "*ic_file_download_white*",  # Bottom edge seems misaligned.
+      "*ic_lock.*",  # Bottom edge seems misaligned.
+    ]
+
+    if (defined(shared_libraries) && shared_libraries != []) {
+      _native_lib_file =
+          rebase_path("$root_gen_dir/CHROME_VERSION.json", root_out_dir)
+      native_lib_version_arg = "@FileArg($_native_lib_file:full-quoted)"
+      native_lib_version_rule = "//build/util:chrome_version_json"
+    }
+    if (!defined(aapt_locale_whitelist)) {
+      aapt_locale_whitelist = locales - android_chrome_omitted_locales
+    }
+
+    if (is_java_debug || multidex_in_release) {
+      enable_multidex = true
+      if (!defined(negative_main_dex_globs)) {
+        negative_main_dex_globs = [
+          "*ApplicationStatus*",  # Doesn't work in non-browser process.
+          "*ChromeActivity*",  # Pulls in the world, so ensure it doesn't slip in.
+          "*GoogleApiAvailability*",  # Play Services only in browser process.
+          "*R\$*",  # Should not use resources from non-browser process.
+        ]
+      }
+    }
+    if (!is_java_debug) {
+      proguard_enabled = true
+      if (!defined(proguard_configs)) {
+        proguard_configs = []
+      }
+      proguard_configs += [
+        "//chrome/android/java/proguard.flags",
+        "//base/android/proguard/chromium_apk.flags",
+        "//base/android/proguard/chromium_code.flags",
+      ]
+      if (enable_proguard_obfuscation) {
+        proguard_configs +=
+            [ "//base/android/proguard/enable_obfuscation.flags" ]
+      } else {
+        proguard_configs +=
+            [ "//base/android/proguard/disable_chromium_obfuscation.flags" ]
+      }
+    }
+
+    if (!defined(use_chromium_linker)) {
+      use_chromium_linker = chromium_linker_supported
+    }
+
+    if (use_chromium_linker) {
+      if (!defined(load_library_from_apk)) {
+        # Whether native libraries should be loaded from within the apk.
+        # Only attempt loading the library from the APK for 64 bit devices
+        # until the number of 32 bit devices which don't support this
+        # approach falls to a minimal level -  http://crbug.com/390618.
+        load_library_from_apk = chromium_linker_supported &&
+                                (current_cpu == "arm64" || current_cpu == "x64")
+      }
+    }
+    if (!defined(pack_relocations)) {
+      if (!defined(requires_sdk_api_level_23)) {
+        requires_sdk_api_level_23 = false
+      }
+      pack_relocations =
+          !use_lld && (use_chromium_linker || requires_sdk_api_level_23)
+    }
+    command_line_flags_file = "chrome-command-line"
+    product_version_resources_dep = "//chrome/android:product_version_resources"
+
+    if (defined(invoker.add_unwind_tables_in_apk) &&
+        invoker.add_unwind_tables_in_apk) {
+      deps += [ ":$_unwind_asset" ]
+    }
+  }
+}
+
+template("monochrome_public_apk_tmpl") {
+  chrome_public_apk_tmpl(target_name) {
+    # Always build 64-bit //android_webview:monochrome because Chrome runs
+    # in 32-bit mode.
+    if (android_64bit_target_cpu) {
+      shared_libraries = [ "//android_webview:monochrome" ]
+    } else {
+      shared_libraries = [ "//chrome/android:monochrome" ]
+    }
+    if (android_64bit_target_cpu && build_apk_secondary_abi) {
+      secondary_abi_shared_libraries =
+          [ "//chrome/android:monochrome_secondary_abi_lib" ]
+    }
+
+    alternative_android_sdk_dep = webview_framework_dep
+    app_as_shared_lib = true
+    use_chromium_linker = false
+    requires_sdk_api_level_23 = true
+
+    # Webview supports all locales (has no omitted ones).
+    aapt_locale_whitelist = locales
+
+    # Incremental install doesn't work for monochrome. See crbug.com/663492.
+    never_incremental = true
+
+    # Strip xml namespaces for monochrome. This should only be done for apks
+    # targeting API > 21 which for chrome is only Monochrome. This is due to
+    # how android public and private resource ids are namespaced.
+    no_xml_namespaces = true
+
+    # Configrations to make android load shared library from APK.
+    uncompress_shared_libraries = true
+
+    forward_variables_from(invoker, "*")
+
+    # Android N+ better supports multiple locales (https://crbug.com/780847).
+    support_zh_hk = false
+
+    if (!defined(deps)) {
+      deps = []
+    }
+    deps += [
+      "//android_webview:monochrome_webview_assets",
+      "//android_webview/apk:webview_license_activity_java",
+      "//android_webview/glue",
+      "//chrome/android:chrome_public_non_pak_assets",
+      "//chrome/android:monochrome_pak_assets",
+      "//chrome/android/monochrome:monochrome_license_provider_java",
+    ]
+
+    if ((is_java_debug || multidex_in_release) &&
+        !defined(invoker.negative_main_dex_globs)) {
+      # WebView pulls play services into the main dex.
+      negative_main_dex_globs = [
+        # TODO(agrieve): Add ApplicationStatus to this list. It's currently
+        #     included because of ActivityWindowAndroid, but is never used at
+        #     runtime by webview.
+        "*ChromeActivity*",  # Pulls in the world, so ensure it doesn't slip in.
+      ]
+    }
+
+    if (!is_java_debug) {
+      if (!defined(proguard_configs)) {
+        proguard_configs = []
+      }
+      proguard_configs += [ "//android_webview/apk/java/proguard.flags" ]
+      png_to_webp = true
+    }
+
+    if (enable_arcore) {
+      deps += [ "//third_party/arcore-android-sdk:libdynamite_client_java" ]
+    }
+    if (package_arcore) {
+      deps += [ "//third_party/arcore-android-sdk:libarcore_library" ]
+
+      # We store this as a separate .so in the APK and only load as needed.
+      loadable_modules = [ "${root_out_dir}/libarcore_sdk_c_minimal.so" ]
+    }
+  }
+}

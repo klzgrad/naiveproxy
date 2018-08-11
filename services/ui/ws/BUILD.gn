@@ -1,0 +1,343 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ui.gni")
+import("//testing/test.gni")
+import("//services/catalog/public/tools/catalog.gni")
+import("//services/service_manager/public/cpp/service.gni")
+import("//services/service_manager/public/service_manifest.gni")
+import("//services/service_manager/public/tools/test/service_test.gni")
+
+# In external window mode, top-level windows are native platform windows i.e.
+# not children of a Chrome OS window manager's root window.
+is_external_mode = use_ozone && !is_chromeos
+
+static_library("lib") {
+  sources = [
+    "accelerator.cc",
+    "accelerator.h",
+    "access_policy.h",
+    "access_policy_delegate.h",
+    "accessibility_manager.cc",
+    "accessibility_manager.h",
+    "async_event_dispatcher.h",
+    "async_event_dispatcher_lookup.h",
+    "compositor_frame_sink_client_binding.cc",
+    "compositor_frame_sink_client_binding.h",
+    "cursor_location_manager.cc",
+    "cursor_location_manager.h",
+    "cursor_state.cc",
+    "cursor_state.h",
+    "cursor_state_delegate.h",
+    "debug_utils.cc",
+    "debug_utils.h",
+    "default_access_policy.cc",
+    "default_access_policy.h",
+    "display.cc",
+    "display.h",
+    "display_binding.cc",
+    "display_binding.h",
+    "display_creation_config.h",
+    "display_manager.cc",
+    "display_manager.h",
+    "drag_controller.cc",
+    "drag_controller.h",
+    "drag_cursor_updater.h",
+    "drag_source.h",
+    "drag_target_connection.h",
+    "event_dispatcher.h",
+    "event_dispatcher_delegate.h",
+    "event_dispatcher_impl.cc",
+    "event_dispatcher_impl.h",
+    "event_injector.cc",
+    "event_injector.h",
+    "event_location.h",
+    "event_matcher.cc",
+    "event_matcher.h",
+    "event_processor.cc",
+    "event_processor.h",
+    "event_processor_delegate.h",
+    "event_targeter.cc",
+    "event_targeter.h",
+    "event_targeter_delegate.h",
+    "focus_controller.cc",
+    "focus_controller.h",
+    "focus_controller_observer.h",
+    "frame_generator.cc",
+    "frame_generator.h",
+    "gpu_client.cc",
+    "gpu_client.h",
+    "gpu_host.cc",
+    "gpu_host.h",
+    "gpu_host_delegate.h",
+    "modal_window_controller.cc",
+    "modal_window_controller.h",
+    "operation.cc",
+    "operation.h",
+    "platform_display.cc",
+    "platform_display.h",
+    "platform_display_default.cc",
+    "platform_display_default.h",
+    "platform_display_delegate.h",
+    "platform_display_factory.h",
+    "platform_display_mirror.cc",
+    "platform_display_mirror.h",
+    "server_window.cc",
+    "server_window.h",
+    "server_window_delegate.h",
+    "server_window_drawn_tracker.cc",
+    "server_window_drawn_tracker.h",
+    "server_window_drawn_tracker_observer.h",
+    "server_window_observer.h",
+    "server_window_tracker.h",
+    "threaded_image_cursors.cc",
+    "threaded_image_cursors.h",
+    "threaded_image_cursors_factory.h",
+    "user_activity_monitor.cc",
+    "user_activity_monitor.h",
+    "user_display_manager.cc",
+    "user_display_manager.h",
+    "user_display_manager_delegate.h",
+    "video_detector_impl.cc",
+    "video_detector_impl.h",
+    "window_coordinate_conversions.cc",
+    "window_coordinate_conversions.h",
+    "window_finder.cc",
+    "window_finder.h",
+    "window_manager_access_policy.cc",
+    "window_manager_access_policy.h",
+    "window_manager_display_root.cc",
+    "window_manager_display_root.h",
+    "window_manager_state.cc",
+    "window_manager_state.h",
+    "window_manager_window_tree_factory.cc",
+    "window_manager_window_tree_factory.h",
+    "window_manager_window_tree_factory_observer.h",
+    "window_server.cc",
+    "window_server.h",
+    "window_server_delegate.cc",
+    "window_server_delegate.h",
+    "window_tree.cc",
+    "window_tree.h",
+    "window_tree_binding.cc",
+    "window_tree_binding.h",
+    "window_tree_factory.cc",
+    "window_tree_factory.h",
+    "window_tree_host_factory.cc",
+    "window_tree_host_factory.h",
+  ]
+
+  deps = [
+    "//components/discardable_memory/service",
+    "//components/viz/service/main",  # TODO(sad): Temporary until GPU process split.
+    "//gpu/command_buffer/client",
+    "//gpu/command_buffer/client:gles2_interface",
+    "//gpu/ipc/client",
+    "//gpu/ipc/common",
+    "//services/viz/privileged/interfaces",
+  ]
+
+  public_deps = [
+    "//base",
+    "//cc",
+    "//components/viz/common",
+    "//components/viz/host",
+    "//components/viz/service",
+    "//mojo/public/cpp/bindings",
+    "//mojo/public/cpp/system",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/mojom",
+    "//services/ui/common:mus_common",
+    "//services/ui/display",
+    "//services/ui/public/interfaces",
+    "//services/viz/privileged/interfaces/compositing",
+    "//ui/base",
+    "//ui/display",
+    "//ui/events",
+    "//ui/events/devices",
+    "//ui/events/platform",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+    "//ui/gfx/geometry/mojo",
+    "//ui/gl",
+    "//ui/platform_window",
+    "//ui/platform_window:platform_impls",
+    "//ui/platform_window/mojo",
+  ]
+
+  if (use_ozone) {
+    public_deps += [ "//ui/ozone" ]
+  }
+  if (is_chromeos) {
+    sources += [
+      "arc_client.cc",
+      "arc_client.h",
+    ]
+    public_deps += [ "//ui/chromeos/events" ]
+    if (use_ozone) {
+      public_deps += [ "//ui/events/ozone:events_ozone" ]
+    }
+  }
+
+  # ui service should not depend on below components.
+  assert_no_deps = [
+    "//ash",
+    "//content/public/browser",
+    "//content/public/common",
+    "//ui/aura",
+    "//ui/views",
+  ]
+}
+
+static_library("test_interface") {
+  sources = [
+    "window_server_test_impl.cc",
+    "window_server_test_impl.h",
+  ]
+
+  deps = [
+    ":lib",
+    "//mojo/public/cpp/bindings:bindings",
+    "//services/ui/public/interfaces",
+    "//ui/gfx",
+  ]
+}
+
+static_library("test_support") {
+  testonly = true
+
+  sources = [
+    "test_change_tracker.cc",
+    "test_change_tracker.h",
+    "window_server_service_test_base.cc",
+    "window_server_service_test_base.h",
+  ]
+
+  if (!is_external_mode) {
+    # WindowServerTestBase assumes an initial display (and root) is provided
+    # at startup, which is not the case on platforms running external window
+    # mode.
+    sources += [
+      "window_server_test_base.cc",
+      "window_server_test_base.h",
+    ]
+  }
+
+  deps = [
+    "//base",
+    "//base/test:test_config",
+    "//base/test:test_support",
+    "//components/viz/test:test_support",
+    "//mojo/public/cpp/bindings:bindings",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/cpp:service_test_support",
+    "//services/ui/common:mus_common",
+    "//services/ui/public/cpp",
+    "//services/ui/public/interfaces",
+    "//testing/gtest",
+    "//ui/aura",
+    "//ui/display:test_support",
+    "//ui/gfx/geometry/mojo",
+    "//ui/gl",
+    "//ui/wm",
+  ]
+
+  data_deps = [
+    "//services/ui/ime/test_ime_driver",
+  ]
+}
+
+source_set("tests") {
+  testonly = true
+
+  sources = [
+    "cursor_location_manager_unittest.cc",
+    "cursor_state_unittest.cc",
+    "cursor_unittest.cc",
+    "display_unittest.cc",
+    "drag_controller_unittest.cc",
+    "event_dispatcher_impl_test_api.cc",
+    "event_dispatcher_impl_test_api.h",
+    "event_matcher_unittest.cc",
+    "event_processor_unittest.cc",
+    "focus_controller_unittest.cc",
+    "frame_generator_unittest.cc",
+    "gpu_host_unittest.cc",
+    "modal_window_controller_unittest.cc",
+    "server_window_drawn_tracker_unittest.cc",
+    "test_gpu_host.cc",
+    "test_gpu_host.h",
+    "test_server_window_delegate.cc",
+    "test_server_window_delegate.h",
+    "test_utils.cc",
+    "test_utils.h",
+    "transient_windows_unittest.cc",
+    "user_activity_monitor_unittest.cc",
+    "user_display_manager_unittest.cc",
+    "window_coordinate_conversions_unittest.cc",
+    "window_finder_unittest.cc",
+    "window_manager_state_unittest.cc",
+    "window_tree_client_unittest.cc",
+    "window_tree_unittest.cc",
+  ]
+
+  if (!is_external_mode) {
+    # A window manager client is not needed on platforms running external
+    # window mode, since the host system is always the window manager.
+    sources += [ "window_manager_client_unittest.cc" ]
+  }
+
+  # TODO(jamescook): Run this test on non-ozone platforms. This will require
+  # initializing all the platform-specific windowing support.
+  if (use_ozone) {
+    sources += [ "platform_display_default_unittest.cc" ]
+  }
+
+  deps = [
+    ":lib",
+    ":test_support",
+    "//base",
+    "//base/test:test_config",
+    "//base/test:test_support",
+    "//cc:cc",
+    "//cc:test_support",
+    "//components/discardable_memory/service",
+    "//components/viz/service/main",
+    "//components/viz/test:test_support",
+    "//gpu/ipc/client",
+    "//mojo/public/cpp/bindings:bindings",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/cpp:service_test_support",
+    "//services/service_manager/public/mojom",
+    "//services/ui/common:mus_common",
+    "//services/ui/common:task_runner_test_base",
+    "//services/ui/public/cpp",
+    "//services/ui/public/interfaces",
+    "//testing/gtest",
+    "//third_party/mesa:osmesa",
+    "//ui/aura",
+    "//ui/aura:test_support",
+    "//ui/events",
+    "//ui/gfx",
+    "//ui/gfx:test_support",
+    "//ui/gfx/geometry",
+    "//ui/gfx/geometry/mojo",
+    "//ui/gl",
+    "//ui/gl/init",
+  ]
+
+  data_deps = [
+    "//services/ui",
+  ]
+}
+
+service_manifest("unittests_manifest") {
+  name = "ui_service_unittests"
+  source = "test_manifest.json"
+}
+
+catalog("tests_catalog") {
+  testonly = true
+  embedded_services = [ ":unittests_manifest" ]
+}

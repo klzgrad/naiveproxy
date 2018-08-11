@@ -1,0 +1,168 @@
+# Copyright (c) 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# absl specific compiler flags.
+#
+# Flags specified here must not impact ABI. Code compiled with and without these
+# opts will be linked together, and in some cases headers compiled with and
+# without these options will be part of the same program.
+
+group("default") {
+  deps = [
+    "absl/types:any",
+    "absl/types:bad_any_cast",
+    "absl/types:span",
+    "absl/types:optional",
+    "absl/types:bad_optional_access",
+  ]
+}
+
+config("absl_include_config") {
+  # Using -isystem (with clang and GCC) and -imsvc (with clang-cl) instead of
+  # include_dirs (-I), so we don't need to suppress warnings coming from
+  # Abseil. Doing so would mask warnings in our own code.
+  if (is_win) {
+    if (is_clang) {
+      # clang-cl:
+      cflags = [
+        "-imsvc",
+        rebase_path(".", root_build_dir),
+      ]
+    } else {
+      # MSVC doesn't have -isystem, in that case we fallback to include_dirs and
+      # we use the warning suppression flags defined in :absl_default_cflags_cc.
+      include_dirs = [ "." ]
+    }
+  } else {
+    # GCC or clang:
+    cflags = [
+      "-isystem",
+      rebase_path(".", root_build_dir),
+    ]
+  }
+}
+
+config("absl_define_config") {
+  defines = [ "ABSL_ALLOCATOR_NOTHROW=1" ]
+}
+
+config("absl_default_cflags_cc") {
+  if (is_clang) {
+    cflags_cc = [
+      # Abseil does not support C++98
+      "-Wno-c++98-compat-pedantic",
+      # Turns off all implicit conversion warnings. Most are re-enabled below.
+      "-Wno-conversion",
+      "-Wno-covered-switch-default",
+      "-Wno-deprecated",
+      "-Wno-disabled-macro-expansion",
+      "-Wno-double-promotion",
+      ###
+      # Turned off as they include valid C++ code.
+      "-Wno-comma",
+      "-Wno-extra-semi",
+      "-Wno-packed",
+      "-Wno-padded",
+      ###
+      "-Wno-float-conversion",
+      "-Wno-float-equal",
+      "-Wno-format-nonliteral",
+      # Too aggressive: warns on Clang extensions enclosed in Clang-only
+      # compilation paths.
+      "-Wno-gcc-compat",
+      ###
+      # Some internal globals are necessary. Don't do this at home.
+      "-Wno-global-constructors",
+      "-Wno-exit-time-destructors",
+      ###
+      "-Wno-nested-anon-types",
+      "-Wno-non-modular-include-in-module",
+      "-Wno-old-style-cast",
+      # Warns on preferred usage of non-POD types such as string_view
+      "-Wno-range-loop-analysis",
+      "-Wno-reserved-id-macro",
+      "-Wno-shorten-64-to-32",
+      "-Wno-switch-enum",
+      "-Wno-thread-safety-negative",
+      "-Wno-undef",
+      "-Wno-unknown-warning-option",
+      "-Wno-unreachable-code",
+      # Causes warnings on include guards
+      "-Wno-unused-macros",
+      "-Wno-weak-vtables",
+      ###
+      # Implicit conversion warnings turned off by -Wno-conversion
+      # which are re-enabled below.
+      "-Wbitfield-enum-conversion",
+      "-Wbool-conversion",
+      "-Wconstant-conversion",
+      "-Wenum-conversion",
+      "-Wint-conversion",
+      "-Wliteral-conversion",
+      "-Wnon-literal-null-conversion",
+      "-Wnull-conversion",
+      "-Wobjc-literal-conversion",
+      "-Wno-sign-conversion",
+      "-Wstring-conversion",
+      ###
+    ]
+  } else {
+    if (is_linux) {
+      # GCC flags:
+      cflags_cc = [
+        # Google style does not use unsigned integers, though STL containers
+        # have unsigned types.
+        "-Wno-sign-compare",
+      ]
+    }
+    if (is_win) {
+      # MSVC flags:
+      cflags_cc = [
+        "/wd4005",  # macro-redefinition
+        "/wd4068",  # unknown pragma
+        "/wd4702",  # unreachable code
+      ]
+    }
+  }
+}
+
+config("absl_test_cflags_cc") {
+  if (is_clang) {
+    cflags_cc = [
+      "-Wno-c99-extensions",
+      "-Wno-missing-noreturn",
+      "-Wno-missing-prototypes",
+      "-Wno-null-conversion",
+      "-Wno-shadow",
+      "-Wno-shift-sign-overflow",
+      "-Wno-sign-compare",
+      "-Wno-unused-function",
+      "-Wno-unused-member-function",
+      "-Wno-unused-parameter",
+      "-Wno-unused-private-field",
+      "-Wno-unused-template",
+      "-Wno-used-but-marked-unused",
+      "-Wno-zero-as-null-pointer-constant",
+    ]
+  } else {
+    if (is_linux) {
+      # GCC flags:
+      cflags_cc = [
+        "-Wno-conversion-null",
+        "-Wno-missing-declarations",
+        "-Wno-sign-compare",
+        "-Wno-unused-function",
+        "-Wno-unused-parameter",
+        "-Wno-unused-private-field",
+      ]
+    }
+    if (is_win) {
+      # MSVC flags:
+      cflags_cc = [
+        "/wd4018",  # signed/unsigned mismatch
+        "/wd4101",  # unreferenced local variable
+      ]
+    }
+  }
+}

@@ -1,0 +1,345 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// TODO: This will move to //third_party/WebKit when //content/child/indexed_db
+// is deleted but for now this will depend on //content/common types and so
+// so belongs here.
+
+module indexed_db.mojom;
+
+import "mojo/public/mojom/base/file_path.mojom";
+import "mojo/public/mojom/base/string16.mojom";
+import "mojo/public/mojom/base/string16.mojom";
+import "mojo/public/mojom/base/time.mojom";
+import "third_party/blink/public/mojom/blob/blob.mojom";
+import "url/mojom/origin.mojom";
+
+enum CursorDirection {
+  Next,
+  NextNoDuplicate,
+  Prev,
+  PrevNoDuplicate,
+};
+
+enum DataLoss {
+  None,
+  Total,
+};
+
+// Represents key types that hold no data and so cannot be options in the
+// KeyData union.
+// TODO(jsbell): These types should be cleaned up end-to-end, leaving only the
+// dataful options.
+enum DatalessKeyType {
+  Invalid,
+  Null,
+};
+
+union KeyData {
+  array<Key> key_array;
+  array<uint8> binary;
+  mojo_base.mojom.String16 string;
+  double date;
+  double number;
+  DatalessKeyType other;
+};
+
+// Defined as a structure so that it can by typemapped with StructTraits.
+struct Key {
+  KeyData data;
+};
+
+// Represents WebIDBKeyPathTypeString and WebIDBKeyPathTypeArray in a key path.
+union KeyPathData {
+  mojo_base.mojom.String16 string;
+  array<mojo_base.mojom.String16> string_array;
+};
+
+struct KeyPath {
+  // A null value here corresponds to WebIDBKeyPathTypeNull.
+  KeyPathData? data;
+};
+
+struct KeyRange {
+  Key lower;
+  Key upper;
+  bool lower_open;
+  bool upper_open;
+};
+
+enum OperationType {
+  Add,
+  Put,
+  Delete,
+  Clear,
+};
+
+enum PutMode {
+  AddOrUpdate,
+  AddOnly,
+  CursorUpdate,
+};
+
+enum TaskType {
+  Normal,
+  Preemptive,
+};
+
+enum TransactionMode {
+  ReadOnly,
+  ReadWrite,
+  VersionChange,
+};
+
+enum Status {
+  OK,
+  NotFound,
+  Corruption,
+  NotSupported,
+  InvalidArgument,
+  IOError,
+};
+
+struct IndexMetadata {
+  int64 id;
+  mojo_base.mojom.String16 name;
+  KeyPath key_path;
+  bool unique;
+  bool multi_entry;
+};
+
+struct ObjectStoreMetadata {
+  int64 id;
+  mojo_base.mojom.String16 name;
+  KeyPath key_path;
+  bool auto_increment;
+  int64 max_index_id;
+  array<IndexMetadata> indexes;
+};
+
+struct DatabaseMetadata {
+  int64 id;
+  mojo_base.mojom.String16 name;
+  int64 version;
+  int64 max_object_store_id;
+  array<ObjectStoreMetadata> object_stores;
+};
+
+struct IndexKeys {
+  int64 index_id;
+  array<Key> index_keys;
+};
+
+struct FileInfo {
+  mojo_base.mojom.FilePath path;
+  mojo_base.mojom.String16 name;
+  mojo_base.mojom.Time last_modified;
+};
+
+struct BlobInfo {
+  blink.mojom.Blob blob;
+  string uuid;
+  mojo_base.mojom.String16 mime_type;
+  int64 size;
+  FileInfo? file;
+};
+
+struct Value {
+  string bits;
+  array<BlobInfo> blob_or_file_info;
+};
+
+struct ReturnValue {
+  Value value;
+  Key primary_key;
+  KeyPath key_path;
+};
+
+struct Observation {
+  int64 object_store_id;
+  OperationType type;
+  KeyRange key_range;
+  Value? value;
+};
+
+struct ObserverTransaction {
+  int64 id;
+  array<int64> scope;
+};
+
+struct ObserverChanges {
+  map<int32, array<int32>> observation_index_map;
+  map<int32, ObserverTransaction> transaction_map;
+  array<Observation> observations;
+};
+
+// The Callbacks interface is used to return results for individual requests.
+// Some requests may return multiple results before completion, such as
+// UpgradeNeeded before SuccessDatabase.
+//
+// TODO(https://crbug.com/627484): Many of these could be replaced with
+// replies associated with particular messages.
+interface Callbacks {
+  Error(int32 code, mojo_base.mojom.String16 message);
+
+  // Factory::GetDatabaseNames
+  SuccessStringList(array<mojo_base.mojom.String16> value);
+
+  // Factory::Open / DeleteDatabase
+  Blocked(int64 existing_version);
+
+  // Factory::Open
+  UpgradeNeeded(associated Database database, int64 old_version,
+                DataLoss data_loss, string data_loss_message,
+                DatabaseMetadata db_metadata);
+  SuccessDatabase(associated Database? database, DatabaseMetadata metadata);
+
+  // Database::OpenCursor
+  SuccessCursor(associated Cursor cursor,
+                Key key,
+                Key primary_key,
+                Value? value);
+
+  // Database::Get / Cursor::Advance
+  SuccessValue(ReturnValue? value);
+
+  // Cursor::Continue / Advance
+  SuccessCursorContinue(Key key, Key primary_key, Value? value);
+
+  // Cursor::Prefetch
+  SuccessCursorPrefetch(array<Key> keys,
+                        array<Key> primary_keys,
+                        array<Value> values);
+
+  // Database::GetAll
+  SuccessArray(array<ReturnValue> values);
+
+  // Database::Put / Cursor::Update
+  SuccessKey(Key key);
+
+  // Database::Count / DeleteRange
+  // Factory::DeleteDatabase
+  SuccessInteger(int64 value);
+
+  // Cursor::Continue / Advance
+  Success();
+};
+
+// The DatabaseCallbacks interface is used to notification of events out of
+// band to individual requests. A single instance is used for the lifetime of
+// a database connection.
+interface DatabaseCallbacks {
+  ForcedClose();
+  VersionChange(int64 old_version, int64 new_version);
+  Abort(int64 transaction_id, int32 code,
+        mojo_base.mojom.String16 message);
+  Complete(int64 transaction_id);
+  Changes(ObserverChanges changes);
+};
+
+interface Cursor {
+  Advance(uint32 count, associated Callbacks callbacks);
+  Continue(Key key, Key primary_key, associated Callbacks callbacks);
+  Prefetch(int32 count, associated Callbacks callbacks);
+  PrefetchReset(int32 used_prefetches, int32 unused_prefetches);
+};
+
+interface Database {
+  CreateObjectStore(int64 transaction_id,
+                    int64 object_store_id,
+                    mojo_base.mojom.String16 name,
+                    KeyPath key_path,
+                    bool auto_increment);
+  DeleteObjectStore(int64 transaction_id,
+                    int64 object_store_id);
+  RenameObjectStore(int64 transaction_id,
+                    int64 object_store_id,
+                    mojo_base.mojom.String16 new_name);
+  CreateTransaction(int64 transaction_id,
+                    array<int64> object_store_ids,
+                    TransactionMode mode);
+  Close();
+  VersionChangeIgnored();
+  AddObserver(int64 transaction_id,
+              int32 observer_id,
+              bool include_transaction,
+              bool no_records,
+              bool values,
+              uint16 operation_types);
+  RemoveObservers(array<int32> observers);
+  Get(int64 transaction_id,
+      int64 object_store_id,
+      int64 index_id,
+      KeyRange key_range,
+      bool key_only,
+      associated Callbacks callbacks);
+  GetAll(int64 transaction_id,
+         int64 object_store_id,
+         int64 index_id,
+         KeyRange key_range,
+         bool key_only,
+         int64 max_count,
+         associated Callbacks callbacks);
+  Put(int64 transaction_id,
+      int64 object_store_id,
+      Value value,
+      Key key,
+      PutMode mode,
+      array<IndexKeys> index_keys,
+      associated Callbacks callbacks);
+  SetIndexKeys(int64 transaction_id,
+               int64 object_store_id,
+               Key primary_key,
+               array<IndexKeys> index_keys);
+  SetIndexesReady(int64 transaction_id,
+                  int64 object_store_id,
+                  array<int64> index_ids);
+  OpenCursor(int64 transaction_id,
+             int64 object_store_id,
+             int64 index_id,
+             KeyRange key_range,
+             CursorDirection direction,
+             bool key_only,
+             TaskType task_type,
+             associated Callbacks callbacks);
+  Count(int64 transaction_id,
+        int64 object_store_id,
+        int64 index_id,
+        KeyRange key_range,
+        associated Callbacks callbacks);
+  DeleteRange(int64 transaction_id,
+              int64 object_store_id,
+              KeyRange key_range,
+              associated Callbacks callbacks);
+  Clear(int64 transaction_id,
+        int64 object_store_id,
+        associated Callbacks callbacks);
+  CreateIndex(int64 transaction_id,
+              int64 object_store_id,
+              int64 index_id,
+              mojo_base.mojom.String16 name,
+              KeyPath key_path,
+              bool unique,
+              bool multi_entry);
+  DeleteIndex(int64 transaction_id,
+              int64 object_store_id,
+              int64 index_id);
+  RenameIndex(int64 transaction_id,
+              int64 object_store_id,
+              int64 index_id,
+              mojo_base.mojom.String16 new_name);
+  Abort(int64 transaction_id);
+  Commit(int64 transaction_id);
+};
+
+interface Factory {
+  GetDatabaseNames(associated Callbacks callbacks, url.mojom.Origin origin);
+  Open(associated Callbacks callbacks,
+       associated DatabaseCallbacks database_callbacks, url.mojom.Origin origin,
+       mojo_base.mojom.String16 name, int64 version, int64 transaction_id);
+  DeleteDatabase(associated Callbacks callbacks, url.mojom.Origin origin,
+                 mojo_base.mojom.String16 name, bool force_close);
+  AbortTransactionsAndCompactDatabase(url.mojom.Origin origin) => (Status status);
+  AbortTransactionsForDatabase(url.mojom.Origin origin) => (Status status);
+};

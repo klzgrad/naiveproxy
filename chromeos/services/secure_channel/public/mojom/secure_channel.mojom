@@ -1,0 +1,75 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module chromeos.secure_channel.mojom;
+
+enum ConnectionAttemptFailureReason {
+  AUTHENTICATION_ERROR,
+  GATT_CONNECTION_ERROR,
+  REMOTE_DEVICE_INVALID_PUBLIC_KEY,
+  REMOTE_DEVICE_INVALID_BEACON_SEEDS,
+  REMOTE_DEVICE_INVALID_PSK,
+  TIMEOUT_FINDING_DEVICE
+};
+
+enum ConnectionCreationDetail {
+  REMOTE_DEVICE_USED_BACKGROUND_BLE_ADVERTISING,
+  REMOTE_DEVICE_USED_FOREGROUND_BLE_ADVERTISING
+};
+
+struct ConnectionMetadata {
+  const double kNoRssiAvailable = 1000;
+
+  // Details which describe how the connection was created. If no
+  // ConnectionCreationDetails apply to this connection, the array is empty.
+  array<ConnectionCreationDetail> creation_details;
+
+  // Rolling average of the RSSI of the channel. This value is only valid if
+  // the corresponding connection is in BLE central role.
+  //
+  // If no RSSI is available (e.g., if this is not a BLE central connection),
+  // this value is set to kNoRssiAvailable.
+  double rssi_rolling_average;
+};
+
+interface Channel {
+  // If the connection is dropped (e.g., by the remote device or due to
+  // connection instability), this reason is supplied to the
+  // connection_error_with_reason_handler.
+  const int32 kConnectionDroppedReason = 1;
+
+  // Sends an encrypted message over the connection. The message is sent
+  // along with metadata indicating the feature used to create this
+  // connection. The callback is invoked when the message has been sent
+  // successfully. If the message fails to be sent, the entire Channel is
+  // disconnected with reason |kConnectionDroppedReason|, and the SendMessage()
+  // callback is never invoked.
+  SendMessage(string message) => ();
+
+  GetConnectionMetadata() => (ConnectionMetadata metadata);
+};
+
+interface MessageReceiver {
+  // Invoked when a message is received over the connection. Only messages
+  // corresponding to the feature used when creating the connection are
+  // passed to this callback.
+  OnMessageReceived(string message);
+};
+
+// Delegate interface used to handle connection attempt successes/failures. Note
+// that this interface is intended to be implemented by clients of the
+// DeviceSync service.
+interface ConnectionDelegate {
+  // Invoked when a connection attempt failed (i.e., the failure occurred before
+  // a connection could be established).
+  OnConnectionAttemptFailure(ConnectionAttemptFailureReason reason);
+
+  // Invoked when a connection is established. The channel is authenticated
+  // with account credentials, and all messages sent over the channel are
+  // encrypted. Client should set a connection_error_with_reason_handler on
+  // |channel| to be notified when it has been invalidated due to a dropped
+  // connection. Note that clients are expected to hold the reference to
+  // |channel| until they are done using the connection.
+  OnConnection(Channel channel, MessageReceiver& message_receiver);
+};

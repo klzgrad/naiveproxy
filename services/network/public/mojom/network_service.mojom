@@ -1,0 +1,113 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module network.mojom;
+
+import "services/network/public/mojom/network_change_manager.mojom";
+import "services/network/public/mojom/network_context.mojom";
+import "services/network/public/mojom/url_loader.mojom";
+import "services/network/public/mojom/network_param.mojom";
+import "services/network/public/mojom/signed_tree_head.mojom";
+import "services/network/public/mojom/url_loader_factory.mojom";
+import "url/mojom/origin.mojom";
+import "url/mojom/url.mojom";
+
+// The content/browser implementation of this SSLPrivateKey interface wraps the
+// scoped_refptr<net::SSLPrivateKey> that is received from
+// SSLClientAuthDelegate::ContinueWithCertificate(), and this mojo interface is
+// sent from content/browser to services/network so that services/network can
+// have its own net::SSLPrivateKey implementation that internally uses this mojo
+// interface.
+// The |algorithm| and |input| parameters correspond to the |algorithm| and
+// |input| parameters in net::SSLPrivateKey::Sign().
+// The |net_error| and |signature| parameters correspond to the parameters in
+// net::SSLPrivateKey::SignCallback.
+interface SSLPrivateKey {
+  Sign(uint16 algorithm,
+       array<uint8> input) => (int32 net_error, array<uint8> signature);
+};
+
+// The |credentials| output parameter is given to URLRequest::SetAuth()
+// through this mojo interface. It is not set when URLRequest::CancelAuth()
+// needs to be called.
+interface AuthChallengeResponder {
+   OnAuthCredentials(AuthCredentials? credentials);
+};
+
+// Network service interface to the browser.
+interface NetworkServiceClient {
+  // Called when we receive an authentication failure.
+  // The |auth_challenge_responder| will respond to auth challenge with
+  // credentials.
+  OnAuthRequired(uint32 process_id,
+                 uint32 routing_id,
+                 uint32 request_id,
+                 url.mojom.Url url,
+                 url.mojom.Url site_for_cookies,
+                 bool first_auth_attempt,
+                 AuthChallengeInfo auth_info,
+                 int32 resource_type,
+                 AuthChallengeResponder auth_challenge_responder);
+  // Called when an SSL certificate requested message is received for client
+  // authentication.
+  // The |algorithm_preferences| parameter corresponds to the return value
+  // of net::SSLPrivateKey::GetAlgorithmPreferences().
+  // The |cancel_certificate_selection| parameter is used to distinguish
+  // between the following two cases because the |x509_certificate| will be
+  // nullptr in both cases:
+  // 1. The connection is continued with no client cert,
+  // net::URLRequest::ContinueWithCertificate(nullptr, nullptr) needs to be
+  // called.
+  // 2. The request is aborted, net::URLRequest::CancelWithError() needs to be
+  // called.
+  OnCertificateRequested(uint32 process_id,
+                         uint32 routing_id,
+                         uint32 request_id,
+                         network.mojom.SSLCertRequestInfo cert_info) => (
+                             network.mojom.X509Certificate x509_certificate,
+                             array<uint16> algorithm_preferences,
+                             SSLPrivateKey ssl_private_key,
+                             bool cancel_certificate_selection);
+  // Called when an SSL certificate is encountered.
+  // The callback argument is a net::ERROR value. If it's net::OK, then the
+  // request is resumed. Otherwise it's cancelled with the given error.
+  OnSSLCertificateError(uint32 process_id,
+                        uint32 routing_id,
+                        uint32 request_id,
+                        int32 resource_type,
+                        url.mojom.Url url,
+                        SSLInfo ssl_info,
+                        bool fatal) => (int32 net_error);
+};
+
+// Browser interface to the network service.
+interface NetworkService {
+  SetClient(NetworkServiceClient client);
+
+  // Creates a new network context with the given parameters.
+  CreateNetworkContext(NetworkContext& context,
+                       NetworkContextParams params);
+
+  // Disables QUIC for the NetworkService. Affects all existing NetworkContexts,
+  // and all new ones that are created. Once called, QUIC cannot be re-enabled.
+  DisableQuic();
+
+  // Specifies whether requests for raw headers coming through URLLoaderFactory
+  // associated with the specified process will be granted. Granting such a
+  // permission increases risks in case the child process becomes compromised,
+  // so this should be done only in specific cases (e.g. DevTools attached).
+  SetRawHeadersAccess(uint32 process_id, bool allow);
+
+  // Gets the NetworkChangeManager.
+  GetNetworkChangeManager(
+      NetworkChangeManager& network_change_manager);
+
+  // Gets the accumulated network usage since the start/restart of the service.
+  GetTotalNetworkUsages() => (array<NetworkUsage> total_network_usages);
+
+  // Update Signed Tree Heads (STH) used in the handling of Certificate
+  // Transparency. Broadcast to each NetworkContext using the NetworkService.
+  // NetworkContextes ignore STHs from unrecognized logs.
+  UpdateSignedTreeHead(SignedTreeHead signed_tree_head);
+};

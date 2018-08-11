@@ -1,0 +1,59 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module blink.mojom;
+
+import "mojo/public/mojom/base/time.mojom";
+import "services/network/public/mojom/fetch_api.mojom";
+import "third_party/blink/public/mojom/blob/serialized_blob.mojom";
+import "third_party/blink/public/mojom/service_worker/service_worker_error_type.mojom";
+import "url/mojom/url.mojom";
+
+// Represents a response to a fetch operation. ServiceWorker uses this to
+// respond to a FetchEvent dispatched by the browser. It is currently used by
+// the Cache API, and the plan is for the fetch() API to also use it. It's
+// currently typemapped to content::ServiceWorkerResponse.
+struct FetchAPIResponse {
+  // List of URLs that originally generated this response, it includes all URLs
+  // in case of HTTP redirect, first URL on redirect chain is on position 0.
+  // It can be empty if respones was generated programatically as in
+  // responsdWith(new Response()).
+  array<url.mojom.Url> url_list;
+
+  // Status code as number, e.g.: 200, 404.
+  int32 status_code;
+
+  // Status code as text. e.g.: "OK", "Not Found".
+  string status_text;
+
+  // Corresponds to response types from the Fetch spec:
+  // https://fetch.spec.whatwg.org/#concept-response-type
+  network.mojom.FetchResponseType response_type;
+
+  // The response headers. It's case insensitive for header name as key.
+  map<string, string> headers;
+
+  // Mojo interface to read the response payload.
+  SerializedBlob? blob;
+
+  // Error codes for service worker APIs. This enum is used by
+  ServiceWorkerResponseError error;
+
+  // The time at which the response headers were received.  For cached
+  // responses, this time could be "far" in the past.
+  mojo_base.mojom.Time response_time;
+
+  // Name of cache where this response was retrieved, empty otherwise.
+  string? cache_storage_cache_name;
+
+  // In case this is a CORS response fetched by a ServiceWorker, this is the
+  // set of headers that should be exposed.
+  array<string> cors_exposed_header_names;
+
+  // True when the response was retrieved from Cache Storage.
+  bool is_in_cache_storage;
+
+  // Side data is used to pass the metadata of the response (eg. V8 code cache).
+  SerializedBlob? side_data_blob;
+};

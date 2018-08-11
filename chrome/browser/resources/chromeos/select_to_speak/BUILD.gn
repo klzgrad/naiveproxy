@@ -1,0 +1,162 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/features.gni")
+import("//testing/test.gni")
+import("//chrome/test/base/js2gtest.gni")
+import("//chrome/browser/resources/chromeos/chromevox/run_jsbundler.gni")
+
+assert(is_chromeos)
+
+select_to_speak_out_dir = "$root_out_dir/resources/chromeos/select_to_speak"
+
+group("select_to_speak") {
+  deps = [
+    ":select_to_speak_copied_files",
+    ":select_to_speak_guest_manifest",
+    ":select_to_speak_manifest",
+    "//chrome/browser/resources/chromeos/select_to_speak/strings:select_to_speak_strings",
+  ]
+}
+
+# Instead of setting up one copy target for each subdirectory, use a script
+# to copy all files.
+run_jsbundler("select_to_speak_copied_files") {
+  mode = "copy"
+  dest_dir = select_to_speak_out_dir
+  sources = [
+    "../chromevox/cvox2/background/automation_predicate.js",
+    "../chromevox/cvox2/background/automation_util.js",
+    "../chromevox/cvox2/background/constants.js",
+    "../chromevox/cvox2/background/tree_walker.js",
+    "checked.png",
+    "closure_shim.js",
+    "earcons/null_selection.ogg",
+    "node_utils.js",
+    "options.css",
+    "options.html",
+    "paragraph_utils.js",
+    "rect_utils.js",
+    "select_to_speak.js",
+    "select_to_speak_gdocs_script.js",
+    "select_to_speak_main.js",
+    "select_to_speak_options.js",
+    "unchecked.png",
+    "word_utils.js",
+  ]
+  rewrite_rules = [
+    rebase_path(".", root_build_dir) + ":",
+    rebase_path(closure_library_dir, root_build_dir) + ":closure",
+    rebase_path("../chromevox/cvox2/background", root_build_dir) + ":",
+  ]
+}
+
+# TODO: refactor this into another file like generate_manifest.gni
+# to share with other extensions.
+template("manifest") {
+  version_file = "//chrome/VERSION"
+  version_script = "//build/util/version.py"
+  template_file = "manifest.json.jinja2"
+  output_file = invoker.output_file
+  key = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAukZ6JJWr0jHmFTkn0pcigpjI+cP0FqTo8FRIcCwy2fPeM+Ymf+7C9MK642i+Nhdr2qSsRF26AMIKbBdSDUnh04bfg5J/rKa/VO88LvXENYQMGhTo1y9mVg2OsbQJtEL9aTLU2G0SoKcr3g/+lggBKR5ydW1Qa0WGGAM9XrLm8iu/wn2uF4mfcMii6KfyEsAwWalpr/Td5WbtIoNNDpNeKO4ZSZJis1n9PZXqaOKpW7PqFDpEHw2PnPATxkcqj/wIx+Shgada0fhrzMlhXLhhj7ThSSWbuTz5n5NebuQ49/Z2ATgpBCSzYBVXEXMDe6LBBtGiZ/QR9UkA8Lz8bP6xIQIDAQAB"
+  action(target_name) {
+    script = "//chrome/browser/resources/chromeos/chromevox/tools/generate_manifest.py"
+    inputs = [
+      version_file,
+      version_script,
+    ]
+    sources = [
+      template_file,
+    ]
+    outputs = [
+      output_file,
+    ]
+    args = [
+      "--key=$key",
+      "--version_file=" + rebase_path(version_file, root_build_dir),
+      "--output_manifest=" + rebase_path(output_file, root_build_dir),
+    ]
+    if (defined(invoker.is_guest_manifest) && invoker.is_guest_manifest) {
+      args += [ "--is_guest_manifest=1" ]
+    }
+    args += rebase_path(sources, root_build_dir)
+  }
+}
+
+manifest("select_to_speak_manifest") {
+  output_file = "$select_to_speak_out_dir/manifest.json"
+}
+
+manifest("select_to_speak_guest_manifest") {
+  output_file = "$select_to_speak_out_dir/manifest_guest.json"
+  is_guest_manifest = true
+}
+
+test("select_to_speak_extension_tests") {
+  sources = [
+    "//chrome/browser/extensions/browsertest_util.cc",
+    "//chrome/browser/extensions/browsertest_util.h",
+    "//chrome/browser/ui/webui/web_ui_test_handler.cc",
+    "//chrome/browser/ui/webui/web_ui_test_handler.h",
+    "//chrome/test/base/extension_js_browser_test.cc",
+    "//chrome/test/base/extension_js_browser_test.h",
+    "//chrome/test/base/extension_load_waiter_one_shot.cc",
+    "//chrome/test/base/extension_load_waiter_one_shot.h",
+    "//chrome/test/base/javascript_browser_test.cc",
+    "//chrome/test/base/javascript_browser_test.h",
+    "//chrome/test/base/test_chrome_web_ui_controller_factory.cc",
+    "//chrome/test/base/test_chrome_web_ui_controller_factory.h",
+    "//chrome/test/base/web_ui_browser_test.cc",
+    "//chrome/test/base/web_ui_browser_test.h",
+  ]
+
+  deps = [
+    ":select_to_speak_extjs_tests",
+    "//base",
+    "//base/test:test_support",
+    "//chrome:browser_tests_pak",
+    "//chrome:packed_resources",
+    "//chrome:resources",
+    "//chrome/browser",
+    "//chrome/renderer",
+    "//chrome/test:browser_tests_runner",
+    "//chrome/test:test_support",
+    "//chrome/test:test_support_ui",
+    "//content/test:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+
+  data = [
+    "$root_out_dir/chrome_100_percent.pak",
+    "$root_out_dir/chrome_200_percent.pak",
+    "$root_out_dir/locales/en-US.pak",
+    "$root_out_dir/resources.pak",
+    "$root_out_dir/resources/chromeos/select_to_speak/",
+    "$root_out_dir/test_data/chrome/browser/resources/chromeos/select_to_speak/",
+
+    # The test uses data from the original location, not the copied one.
+    "//chrome/browser/resources/chromeos/chromevox/",
+    "//chrome/browser/resources/chromeos/select_to_speak/",
+    "//chrome/test/data/webui/test_api.js",
+    "//chrome/third_party/mock4js/",
+    "//third_party/accessibility-audit/axs_testing.js",
+    "//third_party/chaijs/chai.js",
+  ]
+}
+
+js2gtest("select_to_speak_extjs_tests") {
+  test_type = "extension"
+  sources = [
+    "select_to_speak_keystroke_selection_test.extjs",
+    "select_to_speak_mouse_selection_test.extjs",
+  ]
+  gen_include_files = [
+    "../chromevox/testing/callback_helper.js",
+    "mock_tts.js",
+    "select_to_speak_e2e_test_base.js",
+    "pipe.jpg",
+  ]
+  defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+}

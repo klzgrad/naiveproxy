@@ -1,0 +1,157 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/chromecast_build.gni")
+
+group("webrtc_overrides") {
+  public_deps = [
+    ":webrtc",
+  ]
+}
+
+config("jingle_unexported_configs") {
+  include_dirs = [
+    "../../third_party/webrtc_overrides",
+    "../../testing/gtest/include",
+    "../../third_party/libyuv/include",
+    "../../third_party/usrsctp/usrsctplib",
+    "../../third_party/webrtc",
+  ]
+}
+
+config("jingle_public_configs") {
+  include_dirs = [
+    "../../third_party/webrtc_overrides",
+    "../../testing/gtest/include",
+    "../../third_party/webrtc",
+  ]
+}
+
+group("jingle_deps") {
+  public_deps = [
+    "//third_party/expat",
+  ]
+  deps = [
+    "//base",
+    "//crypto:platform",
+    "//net",
+  ]
+}
+
+static_library("webrtc") {
+  # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+  configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+
+  public_deps = [
+    ":jingle_deps",
+
+    # TODO(kjellander): Start cleaning up this target as soon as
+    # https://codereview.chromium.org/2022833002/ is landed. The target should
+    # be removed entirely if possible.
+    "//third_party/libjingle_xmpp:rtc_task_runner",
+    "//third_party/webrtc/rtc_base:rtc_base_approved",
+  ]
+  deps = [
+    "//third_party/webrtc/p2p:rtc_p2p",
+  ]
+
+  if (is_win) {
+    cflags = [ "/wd4005" ]
+  }
+
+  if (is_nacl) {
+    # For NACL, we have to add a default implementation for field_trial and
+    # runtime_enabled_features.
+    deps += [
+      "//native_client_sdk/src/libraries/nacl_io",
+      "//third_party/webrtc/system_wrappers:field_trial_default",
+      "//third_party/webrtc/system_wrappers:runtime_enabled_features_default",
+    ]
+  } else if (is_chromecast) {
+    # Cast builds use the default implementation for field_trial and
+    # runtime_enabled_features.
+    deps += [
+      "//third_party/webrtc/system_wrappers:field_trial_default",
+      "//third_party/webrtc/system_wrappers:runtime_enabled_features_default",
+    ]
+  } else {
+    # Otherwise, we just add the field_trial which redirects to base and
+    # runtime_enabled_features which redirects to content/public/common.
+    sources = [
+      "field_trial.cc",
+      "runtime_enabled_features.cc",
+    ]
+    deps += [
+      "//base",
+      "//third_party/webrtc/system_wrappers:runtime_enabled_features_api",
+    ]
+  }
+
+  configs += [
+    ":jingle_unexported_configs",
+    "//third_party/webrtc:common_config",
+  ]
+  public_configs = [
+    ":jingle_public_configs",
+    "//third_party/webrtc:common_inherited_config",
+  ]
+}
+
+static_library("init_webrtc") {
+  sources = [
+    "init_webrtc.cc",
+    "init_webrtc.h",
+  ]
+  configs += [
+    ":jingle_unexported_configs",
+    "//third_party/webrtc:common_config",
+  ]
+  public_configs = [
+    ":jingle_public_configs",
+    "//third_party/webrtc:common_inherited_config",
+  ]
+  public_deps = [
+    ":libjingle_webrtc_common",
+  ]
+  deps = [
+    ":task_queue_impl",
+    "//base",
+    "//third_party/webrtc/rtc_base",
+    "//third_party/webrtc/system_wrappers",
+  ]
+}
+
+source_set("libjingle_webrtc_common") {
+  configs += [
+    ":jingle_unexported_configs",
+    "//third_party/webrtc:common_config",
+  ]
+  public_configs = [
+    ":jingle_public_configs",
+    "//third_party/webrtc:common_inherited_config",
+  ]
+
+  deps = [
+    ":webrtc",
+    "//third_party/libsrtp",
+    "//third_party/usrsctp",
+    "//third_party/webrtc/media:rtc_media",
+    "//third_party/webrtc/media:rtc_media_base",
+    "//third_party/webrtc/modules/video_capture",
+    "//third_party/webrtc/pc:libjingle_peerconnection",
+    "//third_party/webrtc/pc:rtc_pc",
+    "//third_party/webrtc/system_wrappers",
+  ]
+}
+
+source_set("task_queue_impl") {
+  sources = [
+    "rtc_base/task_queue.cc",
+  ]
+  deps = [
+    "//base",
+    "//third_party/webrtc/rtc_base:refcount",
+    "//third_party/webrtc/rtc_base:rtc_task_queue_api",
+  ]
+}

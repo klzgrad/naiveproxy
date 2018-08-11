@@ -1,0 +1,160 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ui.gni")
+import("//testing/test.gni")
+import("//services/catalog/public/tools/catalog.gni")
+import("//services/service_manager/public/cpp/service.gni")
+import("//services/service_manager/public/service_manifest.gni")
+import("//services/service_manager/public/tools/test/service_test.gni")
+
+component("lib") {
+  friend = [
+    ":tests",
+    ":test_support",
+  ]
+  public = [
+    "gpu_support.h",
+    "ids.h",
+    "window_service.h",
+    "window_service_client.h",
+    "window_service_client_binding.h",
+    "window_service_delegate.h",
+    "window_tree_factory.h",
+  ]
+  sources = [
+    "client_change.cc",
+    "client_change.h",
+    "client_change_tracker.cc",
+    "client_change_tracker.h",
+    "client_root.cc",
+    "client_root.h",
+    "client_window.cc",
+    "client_window.h",
+    "embedding.cc",
+    "embedding.h",
+    "focus_handler.cc",
+    "focus_handler.h",
+    "pointer_watcher.cc",
+    "pointer_watcher.h",
+    "screen_provider.cc",
+    "screen_provider.h",
+    "window_delegate_impl.cc",
+    "window_delegate_impl.h",
+    "window_host_frame_sink_client.cc",
+    "window_host_frame_sink_client.h",
+    "window_service.cc",
+    "window_service_client.cc",
+    "window_service_client_binding.cc",
+    "window_tree_factory.cc",
+  ]
+
+  public_deps = [
+    "//components/discardable_memory/public/interfaces",
+    "//components/viz/host",
+    "//services/service_manager/public/cpp",
+    "//services/ui/common:mus_common",
+    "//services/ui/ime:lib",
+    "//services/ui/input_devices",
+    "//services/ui/public/interfaces",
+    "//ui/aura",
+    "//ui/wm",
+  ]
+
+  defines = [ "IS_WINDOW_SERVICE_IMPL" ]
+}
+
+static_library("test_support") {
+  testonly = true
+
+  sources = [
+    "client_window_test_helper.cc",
+    "client_window_test_helper.h",
+    "event_test_utils.cc",
+    "event_test_utils.h",
+    "test_change_tracker.cc",
+    "test_change_tracker.h",
+    "test_window_service_delegate.cc",
+    "test_window_service_delegate.h",
+    "test_window_tree_client.cc",
+    "test_window_tree_client.h",
+    "window_server_service_test_base.cc",
+    "window_server_service_test_base.h",
+    "window_service_client_test_helper.cc",
+    "window_service_client_test_helper.h",
+    "window_service_test_setup.cc",
+    "window_service_test_setup.h",
+  ]
+
+  deps = [
+    ":lib",
+    "//base",
+    "//base/test:test_config",
+    "//base/test:test_support",
+    "//components/viz/test:test_support",
+    "//mojo/public/cpp/bindings:bindings",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/cpp:service_test_support",
+    "//services/ui/common:mus_common",
+    "//services/ui/public/cpp",
+    "//services/ui/public/interfaces",
+    "//testing/gtest",
+    "//ui/aura",
+    "//ui/aura:test_support",
+    "//ui/compositor:test_support",
+    "//ui/display:test_support",
+    "//ui/gfx/geometry/mojo",
+    "//ui/gl",
+    "//ui/gl:test_support",
+    "//ui/wm",
+  ]
+
+  data_deps = [
+    "//services/ui/ime/test_ime_driver",
+  ]
+}
+
+service_manifest("unittests_manifest") {
+  name = "ui_ws2_service_unittests"
+  source = "test_manifest.json"
+}
+
+catalog("tests_catalog") {
+  testonly = true
+  embedded_services = [ ":unittests_manifest" ]
+  standalone_services = [ "//services/ui/test_ws:manifest" ]
+}
+
+source_set("tests") {
+  testonly = true
+
+  sources = [
+    "embedding_unittest.cc",
+    "focus_handler_unittest.cc",
+    "screen_provider_unittest.cc",
+    "window_service_client_unittest.cc",
+    "window_tree_client_unittest.cc",
+  ]
+
+  deps = [
+    ":lib",
+    ":test_support",
+    "//base",
+    "//components/viz/common",
+    "//mojo/public/cpp/bindings",
+    "//services/service_manager/public/cpp:service_test_support",
+    "//services/service_manager/public/mojom",
+    "//services/ui/common:task_runner_test_base",
+    "//services/ui/public/cpp",
+    "//services/ui/public/interfaces",
+    "//testing/gtest",
+    "//third_party/mesa:osmesa",
+    "//ui/aura:test_support",
+    "//ui/events:test_support",
+  ]
+
+  data_deps = [
+    "//services/ui/test_ws",
+  ]
+}

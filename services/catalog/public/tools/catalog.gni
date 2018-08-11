@@ -1,0 +1,203 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/dcheck_always_on.gni")
+
+# Generates a static catalog manifest to be loaded at runtime. This manifest
+# contains the union of all individual service manifests specified by the
+# template parameters.
+#
+# The output of a catalog rule is always a file named:
+#
+#     ${target_gen_dir}/${target_name}.json
+#
+# A Service Manager embedder uses a catalog manifest as its singular source of
+# truth regarding available services in the system.
+#
+# Parameters:
+#
+#   embedded_services (optional)
+#       A list of service manifest targets whose outputs correspond to services
+#       embedded by the Service Manager embedder's binary. Outputs of targets
+#       listed here will be embedded in the catalog within its
+#       "embedded_services" list.
+#
+#   standalone_services (optional)
+#       A list of service manifest targets whose outputs correspond to services
+#       with standalone binaries which must be available to the Service Manager
+#       at runtime. Outputs of targets listed here will be embedded in the
+#       catalog within its "standalone_services" list.
+#
+#       Typically a standalone service binary is expected to live next to
+#       the Service Manager embedder's binary, with the name
+#       "${service_name}.service", with an additional ".exe" suffix on Windows.
+#       Binaries following this naming scheme are typically output by "service"
+#       targets (see //services/service_manager/public/cpp/service.gni).
+#
+#    executable_overrides (optional)
+#       A list of overrides to apply in catalog metadata for individual
+#       services. An override string must be of the form
+#
+#           "<service_name>:<executable_path>"
+#
+#       The special token @EXE_DIR may be used in |executable_path| to denote
+#       a path relative to the Service Manager embedder's binary, substituted
+#       at runtime. For example:
+#
+#           "content_browser:@EXE_DIR/chrome"
+#
+#       would indicate to the Service Manager embedder that the
+#       "content_browser" service can be started by running the "chrome"
+#       executable in the embedder's own directory.
+#
+#       This overrides the default binary name expectation described in
+#       |standalone_services| above.
+#
+#    catalog_deps (optional)
+#       A list of other catalog targets whose outputs will be included within
+#       this catalog. Targets in this list
+#
+template("catalog") {
+  output_filename = "$target_gen_dir/${target_name}.json"
+  action(target_name) {
+    testonly = defined(invoker.testonly) && invoker.testonly
+
+    script = "//services/catalog/public/tools/generate_manifest.py"
+
+    inputs = []
+    outputs = [
+      output_filename,
+    ]
+
+    args = [ "--output=" + rebase_path(output_filename, root_build_dir) ]
+
+    if (is_debug || dcheck_always_on) {
+      args += [ "--pretty" ]
+    }
+
+    deps = []
+    if (defined(invoker.deps)) {
+      deps += invoker.deps
+    }
+
+    if (defined(invoker.embedded_services)) {
+      args += [ "--embedded-services" ]
+      foreach(manifest_target, invoker.embedded_services) {
+        manifest_target_dir = get_label_info(manifest_target, "target_gen_dir")
+        manifest_target_name = get_label_info(manifest_target, "name")
+        manifest_filename = "$manifest_target_dir/${manifest_target_name}.json"
+
+        inputs += [ "$manifest_filename" ]
+        deps += [ manifest_target ]
+        args += [ rebase_path(manifest_filename, root_build_dir) ]
+
+        # Ensure that each entry does in fact reference a service manifest rule.
+        label_no_toolchain =
+            get_label_info(manifest_target, "label_no_toolchain")
+        toolchain = get_label_info(manifest_target, "toolchain")
+        deps += [ "${label_no_toolchain}__is_service_manifest(${toolchain})" ]
+      }
+    }
+
+    if (defined(invoker.standalone_services)) {
+      args += [ "--standalone-services" ]
+      foreach(manifest_target, invoker.standalone_services) {
+        manifest_target_dir = get_label_info(manifest_target, "target_gen_dir")
+        manifest_target_name = get_label_info(manifest_target, "name")
+        manifest_filename = "$manifest_target_dir/${manifest_target_name}.json"
+
+        inputs += [ "$manifest_filename" ]
+        deps += [ manifest_target ]
+        args += [ rebase_path(manifest_filename, root_build_dir) ]
+
+        # Ensure that each entry does in fact reference a service manifest rule.
+        label_no_toolchain =
+            get_label_info(manifest_target, "label_no_toolchain")
+        toolchain = get_label_info(manifest_target, "toolchain")
+        deps += [ "${label_no_toolchain}__is_service_manifest(${toolchain})" ]
+      }
+    }
+
+    if (defined(invoker.executable_overrides)) {
+      args +=
+          [ "--override-service-executables" ] + invoker.executable_overrides
+    }
+
+    if (defined(invoker.catalog_deps)) {
+      args += [ "--include-catalogs" ]
+      foreach(catalog_target, invoker.catalog_deps) {
+        catalog_target_dir = get_label_info(catalog_target, "target_gen_dir")
+        catalog_target_name = get_label_info(catalog_target, "name")
+        catalog_filename = "$catalog_target_dir/${catalog_target_name}.json"
+
+        inputs += [ "$catalog_filename" ]
+        deps += [ catalog_target ]
+        args += [ rebase_path(catalog_filename, root_build_dir) ]
+      }
+    }
+  }
+}
+
+# Generates a source_set target which defines a single string constant
+# containing the contents of a compiled catalog manifest.
+#
+# Parameters:
+#
+#   catalog
+#       The catalog target whose output should be stringified.
+#
+#   generated_function_name
+#       The fully qualified symbol name of the C++ string constant to define in
+#       the generate source_set.
+#
+template("catalog_cpp_source") {
+  assert(defined(invoker.catalog), "catalog is required")
+  assert(defined(invoker.generated_function_name),
+         "generated_function_name is required")
+
+  catalog_target = invoker.catalog
+  catalog_target_dir = get_label_info(catalog_target, "target_gen_dir")
+  catalog_target_name = get_label_info(catalog_target, "name")
+  catalog_filename = "$catalog_target_dir/${catalog_target_name}.json"
+
+  generator_target_name = "${target_name}__generator"
+  generated_filename_base = "${target_gen_dir}/${target_name}"
+
+  action(generator_target_name) {
+    testonly = defined(invoker.testonly) && invoker.testonly
+    script = "//services/catalog/public/tools/sourcify_manifest.py"
+    inputs = [
+      catalog_filename,
+
+      "//services/catalog/public/tools/catalog.cc.tmpl",
+      "//services/catalog/public/tools/catalog.h.tmpl",
+    ]
+    outputs = [
+      "${generated_filename_base}.cc",
+      "${generated_filename_base}.h",
+    ]
+    args = [
+      "--input=" + rebase_path(catalog_filename, root_build_dir),
+      "--output-filename-base=" +
+          rebase_path(generated_filename_base, root_build_dir),
+      "--output-function-name=" + invoker.generated_function_name,
+      "--module-path=" + rebase_path(generated_filename_base, root_gen_dir),
+    ]
+    if (is_debug || dcheck_always_on) {
+      args += [ "--pretty" ]
+    }
+    deps = [
+      catalog_target,
+    ]
+  }
+
+  source_set(target_name) {
+    testonly = defined(invoker.testonly) && invoker.testonly
+    sources = get_target_outputs(":$generator_target_name")
+    deps = [
+      ":$generator_target_name",
+      "//base",
+    ]
+  }
+}

@@ -1,0 +1,60 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// Utility process interface exposed to the browser process on OS_WIN, for
+// calling OS_WIN task pinning and file open/save dialog API.
+
+module chrome.mojom;
+
+import "mojo/public/mojom/base/file_path.mojom";
+import "mojo/public/mojom/base/string16.mojom";
+
+interface ShellUtilWin {
+  // Returns the pinned state of the current executable.
+  IsPinnedToTaskbar() => (bool succeeded, bool is_pinned_to_taskbar);
+
+  // Calls OS_WIN ::GetOpenFileName() with parameters:
+  // |owner| HWND to use as the parent of the modal dialog.
+  // |flags| OFN_* flags to use with OPENFILENAME.
+  // |filters| constrains the user's file type selections.
+  // |initial_directory| initial directory to be displayed.
+  // |initial_filename| file name initially selected.
+  //
+  // Returns the list of selected |files| from |directory|. On cancelation
+  // or failure, |files| will be empty.
+  [Sync]
+  CallGetOpenFileName(uint32 owner,
+                      uint32 flags,
+                      FileExtensionFilters filters,
+                      mojo_base.mojom.FilePath initial_directory,
+                      mojo_base.mojom.FilePath initial_filename) =>
+      (mojo_base.mojom.FilePath directory,
+       array<mojo_base.mojom.FilePath> files);
+
+  // Calls OS_WIN ::GetSaveFileName() with parameters:
+  // |owner| HWND to use as the parent of the modal dialog.
+  // |flags| OFN_* flags to use with OPENFILENAME.
+  // |filters| constrains the user's file type selections.
+  // |one_based_filter_index| index of the selected filter in |filters|.
+  // |initial_directory| initial directory to be displayed.
+  // |suggested_filename| save file name to suggest.
+  // |default_extension| file extension to use if the user doesn't type one.
+  //
+  // Returns the save file |path| selected, and the |filter_index| of the
+  // filter selected, by the user. On cancelation or failure, |path| will
+  // be empty.
+  [Sync]
+  CallGetSaveFileName(uint32 owner,
+                      uint32 flags,
+                      FileExtensionFilters filters,
+                      uint32 one_based_filter_index,
+                      mojo_base.mojom.FilePath initial_directory,
+                      mojo_base.mojom.FilePath suggested_filename,
+                      mojo_base.mojom.String16 default_extension) =>
+      (mojo_base.mojom.FilePath path,
+       uint32 filter_index);
+};
+
+[Native]
+struct FileExtensionFilters;

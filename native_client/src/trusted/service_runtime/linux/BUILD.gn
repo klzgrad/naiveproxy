@@ -1,0 +1,177 @@
+# Copyright (c) 2014 The Native Client Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# We use a special toolchain to build nacl_helper_bootstrap.  This
+# seems a bit excessive for compiling one source file.  But it is
+# the most reasonable way to instantiate the configs with different
+# settings such as use_gold=false.  The minimal set of configs used
+# for that file (see below) will sometimes try to use the switch
+# -gsplit-dwarf under use_gold=true.  But without some other configs
+# that add a -B option pointing at a custom-built binutils, on some
+# builders (e.g. on older bots) Clang will fail with -gsplit-dwarf.
+# Fortunately, -gsplit-dwarf is pointless for this build anyway
+# since there is just one small file.  And we're not actually using
+# Gold for the link, so use_gold=true is a false statement and might
+# cause other problems.
+
+here = get_label_info(".", "dir")
+bootstrap_toolchain = here + "/toolchain:nacl_bootstrap_" + target_cpu
+compiler = "g++"
+
+if (default_toolchain == "//build/toolchain/cros:target") {
+  import("//build/toolchain/cros_toolchain.gni")
+  bootstrap_toolchain = "//build/toolchain/cros:nacl_bootstrap"
+  compiler = cros_target_cxx
+} else if (current_cpu == "arm" && !is_android) {
+  compiler = "arm-linux-gnueabihf-g++"
+} else if (current_cpu == "mipsel" && !is_android) {
+  compiler = "mipsel-linux-gnu-g++"
+}
+
+if (current_toolchain == bootstrap_toolchain) {
+  bootstrap_lib_path = "$target_out_dir/libnacl_bootstrap_lib.a"
+  bootstrap_raw_path = "$target_out_dir/nacl_bootstrap_raw"
+  bootstrap_exe_path = "$root_out_dir/nacl_helper_bootstrap"
+
+  linker_script_path = rebase_path("nacl_bootstrap.x")
+
+  if (current_cpu == "x64") {
+    nacl_reserve_top = "0x0"
+    linker_emulation = "elf_x86_64"
+  }
+  if (current_cpu == "x86") {
+    nacl_reserve_top = "0x40000000"
+    linker_emulation = "elf_i386"
+  }
+  if (current_cpu == "arm") {
+    nacl_reserve_top = "0x40002000"
+    linker_emulation = "armelf_linux_eabi"
+  }
+  if (current_cpu == "mipsel") {
+    nacl_reserve_top = "0x40008000"
+    linker_emulation = "elf32ltsmip"
+  }
+
+  static_library("nacl_bootstrap_lib") {
+    # This code has very specific requirements related to its static
+    # linking and minimal libc use.  It cannot support the normal variety
+    # of build configs that the rest of the code is built with.  So it
+    # resets the list of configsto empty, and then builds up from scratch
+    # using only the basics that work here.
+    configs = []
+    configs += [
+      "//build/config/compiler:compiler_cpu_abi",
+      "//build/config/compiler:runtime_library",
+      "//build/config/compiler:chromium_code",
+      "//build/config/compiler:default_optimization",
+      "//build/config/compiler:default_symbols",
+    ]
+
+    include_dirs = [ "//" ]
+
+    cflags = [
+      "-fno-builtin",
+
+      # These might be the defaults in the compiler configuration,
+      # but we want them all disabled for this build.
+      "-fno-stack-protector",
+      "-fno-pic",
+      "-fno-PIC",
+      "-fno-pie",
+      "-fno-PIE",
+    ]
+
+    sources = [
+      "nacl_bootstrap.c",
+    ]
+
+    deps = [
+      "//build/config/nacl:nacl_base",
+    ]
+  }
+
+  action("nacl_bootstrap_raw") {
+    deps = [
+      ":nacl_bootstrap_lib",
+    ]
+    script = "ld_bfd.py"
+
+    sources = [
+      bootstrap_lib_path,
+      linker_script_path,
+    ]
+    outputs = [
+      bootstrap_raw_path,
+    ]
+    args = [
+      "--compiler",
+      compiler,
+      "-m",
+      linker_emulation,
+      "--build-id",
+
+      # This program is (almost) entirely
+      # standalone.  It has its own startup code, so
+      # no crt1.o for it.  It is statically linked,
+      # and on x86 it does not use libc at all.
+      # However, on ARM it needs a few (safe) things
+      # from libc.
+      "-static",
+
+      # On x86-64, the default page size with some linkers is 2M
+      # rather than the real Linux page size of 4K.  And on ARM, the
+      # default page size is 32K.  A larger page size is
+      # incompatible with our custom linker script's special layout.
+      # NOTE: It's important that this option come before --script!
+      "-z",
+      "max-page-size=0x1000",
+
+      # Link with custom linker script for special
+      # layout.  The script uses the symbol RESERVE_TOP.
+      "--defsym",
+      "RESERVE_TOP=" + nacl_reserve_top,
+      "--script=" + rebase_path(linker_script_path, root_build_dir),
+      "-o",
+      rebase_path(bootstrap_raw_path, root_build_dir),
+
+      "--whole-archive",
+      rebase_path(bootstrap_lib_path, root_build_dir),
+      "--no-whole-archive",
+    ]
+  }
+
+  action("munge_nacl_helper_bootstrap") {
+    deps = [
+      ":nacl_bootstrap_raw",
+    ]
+
+    script = "nacl_bootstrap_munge_phdr.py"
+    inputs = [
+      bootstrap_raw_path,
+    ]
+    outputs = [
+      bootstrap_exe_path,
+    ]
+    args = rebase_path(inputs + outputs, root_build_dir)
+  }
+} else if (is_linux) {
+  copy("bootstrap") {
+    bootstrap = ":munge_nacl_helper_bootstrap($bootstrap_toolchain)"
+
+    bootstrap_out_dir = get_label_info(bootstrap, "root_out_dir")
+
+    deps = [
+      bootstrap,
+    ]
+    sources = [
+      "$bootstrap_out_dir/nacl_helper_bootstrap",
+    ]
+    outputs = [
+      "$root_out_dir/nacl_helper_bootstrap",
+    ]
+  }
+
+  # Mark the compiler arg as used.
+  compiler = compiler
+}

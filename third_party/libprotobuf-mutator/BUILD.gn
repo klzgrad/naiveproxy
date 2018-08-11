@@ -1,0 +1,122 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+import("//build/config/sanitizers/sanitizers.gni")
+import("//testing/libfuzzer/fuzzer_test.gni")
+import("//third_party/protobuf/proto_library.gni")
+
+config("include_config") {
+  include_dirs = [ "src/" ]
+}
+
+source_set("libprotobuf-mutator") {
+  testonly = true
+
+  # Dont allow building on windows to avoid tryjob failure. This is OK since
+  # libFuzzer doesn't build on windows anyway.
+  if (!is_win) {
+    configs += [ ":include_config" ]
+
+    # Remove *San and coverage for a performance boost.
+    configs -= not_fuzzed_remove_configs
+    configs += [ "//build/config/sanitizers:not_fuzzed" ]
+
+    public_configs = [ ":include_config" ]
+    sources = [
+      "src/src/binary_format.cc",
+      "src/src/libfuzzer/libfuzzer_macro.cc",
+      "src/src/libfuzzer/libfuzzer_mutator.cc",
+      "src/src/mutator.cc",
+      "src/src/text_format.cc",
+      "src/src/utf8_fix.cc",
+    ]
+
+    # Allow users of LPM to use protobuf reflection and other features from
+    # protobuf_full.
+    public_deps = [
+      "//third_party/protobuf:protobuf_full",
+    ]
+
+    # Let ClusterFuzz builders know to not build targets that depend on
+    # libprotobuf-mutator for AFL.
+    if (use_afl) {
+      all_dependent_configs = [ "//testing/libfuzzer:no_clusterfuzz" ]
+    }
+  }
+}
+
+# This protoc plugin, like the compiler, should only be built for the host
+# architecture.
+if (current_toolchain == host_toolchain) {
+  # This plugin will be needed to fuzz most protobuf code in Chromium. That's
+  # because production protobuf code must contain the line:
+  # "option optimize_for = LITE_RUNTIME", which instructs the proto compiler not
+  # to compile the proto using the full protobuf runtime. This allows Chromium
+  # not to depend on the full protobuf library, but prevents
+  # libprotobuf-mutator from fuzzing because the lite runtime lacks needed
+  # features (such as reflection).  The plugin simply compiles a proto library
+  # as normal but ensures that is compiled with the full protobuf runtime.
+  executable("override_lite_runtime_plugin") {
+    sources = [
+      "protoc_plugin/protoc_plugin.cc",
+    ]
+    deps = [
+      "//third_party/protobuf:protoc_lib",
+    ]
+    public_configs = [ "//third_party/protobuf:protobuf_config" ]
+  }
+  # To use the plugin in a proto_library you want to fuzz, add these lines to
+  # the proto_library definition (note the "=" in second to last line in the
+  # comment will need to be changed to "+=" if you have already defined
+  # deps):
+  # if (use_libfuzzer && current_toolchain == host_toolchain) {
+  #   generator_plugin_label =
+  #     "//third_party/libprotobuf-mutator:override_lite_runtime_plugin"
+  #   generator_plugin_suffix = ".pb"
+  #   # The plugin will generate cc, so don't ask for it to be done by protoc.
+  #   generate_cc = false
+  #   deps = ["//third_party/libprotobuf-mutator:override_lite_runtime_plugin"]
+  # }
+}
+
+# The CQ will try building this target without "use_libfuzzer" if it is defined.
+# That will cause the build to fail, so don't define it when "use_libfuzzer" is
+# is false.
+if (use_libfuzzer) {
+  # Test that override_lite_runtime_plugin is working when built. This target
+  # contains files that are optimized for LITE_RUNTIME and which import other
+  # files that are also optimized for LITE_RUNTIME.
+  fuzzer_test("override_lite_runtime_plugin_test_fuzzer") {
+    sources = [
+      "protoc_plugin/test_fuzzer.cc",
+    ]
+    deps = [
+      ":libprotobuf-mutator",
+      ":override_lite_runtime_plugin_test_fuzzer_proto",
+    ]
+
+    # Don't actually run this on CF. It's only a test to ensure builds work.
+    additional_configs = [ "//testing/libfuzzer:no_clusterfuzz" ]
+  }
+}
+
+# Proto library for override_lite_runtime_plugin_test_fuzzer
+proto_library("override_lite_runtime_plugin_test_fuzzer_proto") {
+  sources = [
+    "protoc_plugin/imported.proto",
+    "protoc_plugin/imported_publicly.proto",
+    "protoc_plugin/test_fuzzer_input.proto",
+  ]
+
+  # TODO(metzman): Figure out how we can avoid using this toolchain check
+  # (maybe remove compilation from the plugin).
+  if (use_libfuzzer && current_toolchain == host_toolchain) {
+    generator_plugin_label =
+        "//third_party/libprotobuf-mutator:override_lite_runtime_plugin"
+    generator_plugin_suffix = ".pb"
+
+    # The plugin will generate cc, so don't ask for it to be done by protoc.
+    generate_cc = false
+    deps = [
+      "//third_party/libprotobuf-mutator:override_lite_runtime_plugin",
+    ]
+  }
+}

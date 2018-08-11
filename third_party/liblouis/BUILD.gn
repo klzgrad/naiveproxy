@@ -1,0 +1,202 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/nacl/config.gni")
+import("//build/config/nacl/rules.gni")
+
+if (current_toolchain == default_toolchain) {
+  chromevox_test_data_dir = "$root_build_dir/chromevox_test_data/braille"
+
+  # Build Liblouis library
+  #
+  # This target is used to build and assemble Liblouis braille translator
+  # including Native Client executable, manifest and translation tables.
+  #
+  # Variables:
+  #   dest_dir: destination path for all translator files
+  #   deps: private linked dependencies
+  #   testonly: a target must only be used for testing
+  template("liblouis_library") {
+    assert(defined(invoker.dest_dir), "Must define dest_dir")
+    forward_variables_from(invoker, [ "dest_dir" ])
+
+    tables_target_name = "${target_name}_tables"
+    tables_json_target_name = "${target_name}_tables_json"
+    nexe_target_name = "${target_name}_nexe"
+    nmf_target_name = "${target_name}_nmf"
+    final_target_name = target_name
+
+    action(tables_target_name) {
+      forward_variables_from(invoker, [ "testonly" ])
+      visibility = [ ":$final_target_name" ]
+      script = "copy_tables.py"
+      inputs = [
+        "liblouis_list_tables.py",
+      ]
+      depfile = "$target_gen_dir/$target_name.d"
+      sources = [
+        "tables.json",
+      ]
+      outputs = [
+        "$depfile.stamp",
+      ]
+      args = [
+               "-D",
+               rebase_path(".", root_build_dir),
+               "-D",
+               rebase_path("src/tables", root_build_dir),
+               "-d",
+               rebase_path("$dest_dir/tables", root_build_dir),
+               "-e",
+               "cvox-common.cti",
+               "--depfile",
+               rebase_path(depfile, root_build_dir),
+             ] + rebase_path(sources, root_build_dir)
+    }
+
+    copy(tables_json_target_name) {
+      forward_variables_from(invoker, [ "testonly" ])
+      visibility = [ ":$final_target_name" ]
+      sources = [
+        "tables.json",
+      ]
+      outputs = [
+        "$dest_dir/{{source_file_part}}",
+      ]
+    }
+
+    copy(nexe_target_name) {
+      forward_variables_from(invoker, [ "testonly" ])
+      visibility = [
+        ":$final_target_name",
+        ":$nmf_target_name",
+      ]
+      nacl_wrapper = "liblouis_nacl_wrapper(//build/toolchain/nacl:clang_newlib_${target_cpu})"
+      path = get_label_info(":$nacl_wrapper", "root_out_dir")
+      sources = [
+        "${path}/liblouis_nacl.nexe",
+      ]
+
+      if (current_cpu == "x86") {
+        nmf_cpu = "x86_32"
+      } else if (current_cpu == "x64") {
+        nmf_cpu = "x86_64"
+      } else {
+        nmf_cpu = current_cpu
+      }
+      outputs = [
+        "$dest_dir/{{source_name_part}}_${nmf_cpu}.nexe",
+      ]
+      deps = [
+        ":$nacl_wrapper",
+      ]
+    }
+
+    generate_nmf(nmf_target_name) {
+      forward_variables_from(invoker, [ "testonly" ])
+      visibility = [ ":$final_target_name" ]
+      executables = get_target_outputs(":$nexe_target_name")
+      nmf = "$dest_dir/liblouis_nacl.nmf"
+      deps = [
+        ":$nexe_target_name",
+      ]
+    }
+
+    group(target_name) {
+      forward_variables_from(invoker, [ "testonly" ])
+      deps = [
+        ":$nexe_target_name",
+        ":$nmf_target_name",
+        ":$tables_json_target_name",
+        ":$tables_target_name",
+      ]
+      if (defined(invoker.deps)) {
+        deps += invoker.deps
+      }
+    }
+  }
+
+  liblouis_library("liblouis") {
+    dest_dir = "$root_build_dir/resources/chromeos/chromevox/braille"
+  }
+
+  liblouis_library("liblouis_test_data") {
+    testonly = true
+    dest_dir = chromevox_test_data_dir
+    deps = [
+      ":liblouis_test_files",
+    ]
+  }
+
+  copy("liblouis_test_files") {
+    visibility = [ ":liblouis_test_data" ]
+    testonly = true
+    sources = [
+      "//chrome/test/data/chromeos/liblouis_nacl/manifest.json",
+      "//chrome/test/data/chromeos/liblouis_nacl/test.js",
+    ]
+    outputs = [
+      "${chromevox_test_data_dir}/{{source_file_part}}",
+    ]
+  }
+}
+
+if (is_nacl) {
+  config("liblouis_nacl_config") {
+    cflags = [
+      "-Wno-sign-compare",
+
+      # Needed for target_arch=mipsel
+      # src/liblouis/compileTranslationTable.c:1414
+      "-Wno-tautological-compare",
+
+      # Needed for target_arch=mipsel
+      # src/liblouis/logging.c:58
+      "-Wno-non-literal-null-conversion",
+    ]
+  }
+
+  source_set("liblouis_nacl") {
+    visibility = [ ":liblouis_nacl_wrapper" ]
+    sources = [
+      "overrides/liblouis/config.h",
+      "overrides/liblouis/liblouis.h",
+      "src/liblouis/compileTranslationTable.c",
+      "src/liblouis/logging.c",
+      "src/liblouis/lou_backTranslateString.c",
+      "src/liblouis/lou_translateString.c",
+      "src/liblouis/transcommon.ci",
+      "src/liblouis/wrappers.c",
+    ]
+    include_dirs = [
+      "overrides/liblouis",
+      "src/liblouis",
+      ".",
+      "../..",
+    ]
+    configs += [ ":liblouis_nacl_config" ]
+  }
+
+  executable("liblouis_nacl_wrapper") {
+    visibility = [ ":*" ]
+    output_name = "liblouis_nacl"
+    sources = [
+      "nacl_wrapper/liblouis_instance.cc",
+      "nacl_wrapper/liblouis_instance.h",
+      "nacl_wrapper/liblouis_module.cc",
+      "nacl_wrapper/liblouis_module.h",
+      "nacl_wrapper/liblouis_wrapper.cc",
+      "nacl_wrapper/liblouis_wrapper.h",
+      "nacl_wrapper/translation_params.h",
+      "nacl_wrapper/translation_result.h",
+    ]
+    deps = [
+      ":liblouis_nacl",
+      "//native_client_sdk/src/libraries/nacl_io",
+      "//ppapi/cpp",
+      "//ppapi/native_client:ppapi_lib",
+      "//third_party/jsoncpp",
+    ]
+  }
+}

@@ -1,0 +1,232 @@
+unchanged:
+--- protobuf-cleaned/src/google/protobuf/stubs/status.cc	2015-12-30 13:21:46.000000000 -0800
++++ protobuf-patched/src/google/protobuf/stubs/status.cc	2016-03-31 13:25:40.888006485 -0700
+@@ -82,9 +82,9 @@
+ }
+ }  // namespace error.
+ 
+-const Status Status::OK = Status();
+-const Status Status::CANCELLED = Status(error::CANCELLED, "");
+-const Status Status::UNKNOWN = Status(error::UNKNOWN, "");
++const StatusPod Status::OK = { error::OK };
++const StatusPod Status::CANCELLED = { error::CANCELLED };
++const StatusPod Status::UNKNOWN = { error::UNKNOWN };
+ 
+ Status::Status() : error_code_(error::OK) {
+ }
+@@ -100,6 +100,9 @@
+     : error_code_(other.error_code_), error_message_(other.error_message_) {
+ }
+ 
++Status::Status(const StatusPod& status_pod) : error_code_(status_pod.code) {
++}
++
+ Status& Status::operator=(const Status& other) {
+   error_code_ = other.error_code_;
+   error_message_ = other.error_message_;
+unchanged:
+--- protobuf-cleaned/src/google/protobuf/stubs/status.h	2015-12-30 13:21:46.000000000 -0800
++++ protobuf-patched/src/google/protobuf/stubs/status.h	2016-03-31 13:25:40.888006485 -0700
+@@ -62,6 +62,10 @@
+ };
+ }  // namespace error
+ 
++struct StatusPod {
++  error::Code code;
++};
++
+ class LIBPROTOBUF_EXPORT Status {
+  public:
+   // Creates a "successful" status.
+@@ -73,13 +77,14 @@
+   // constructed.
+   Status(error::Code error_code, StringPiece error_message);
+   Status(const Status&);
++  Status(const StatusPod&);
+   Status& operator=(const Status& x);
+   ~Status() {}
+ 
+   // Some pre-defined Status objects
+-  static const Status OK;             // Identical to 0-arg constructor
+-  static const Status CANCELLED;
+-  static const Status UNKNOWN;
++  static const StatusPod OK;
++  static const StatusPod CANCELLED;
++  static const StatusPod UNKNOWN;
+ 
+   // Accessor
+   bool ok() const {
+only in patch2:
+unchanged:
+unchanged:
+--- protobuf-cleaned/src/google/protobuf/stubs/atomicops_internals_x86_gcc.cc
++++ protobuf-patched/src/google/protobuf/stubs/atomicops_internals_x86_gcc.cc
+@@ -67,14 +67,12 @@ namespace internal {
+ // Set the flags so that code will run correctly and conservatively, so even
+ // if we haven't been initialized yet, we're probably single threaded, and our
+ // default values should hopefully be pretty safe.
+-struct AtomicOps_x86CPUFeatureStruct AtomicOps_Internalx86CPUFeatures = {
++AtomicOps_x86CPUFeatureStruct AtomicOps_x86CPUFeatures_Private = {
++  false,          // uninitialized
+   false,          // bug can't exist before process spawns multiple threads
+   false,          // no SSE2
+ };
+ 
+-namespace {
+-
+-// Initialize the AtomicOps_Internalx86CPUFeatures struct.
+ void AtomicOps_Internalx86CPUFeaturesInit() {
+   uint32_t eax;
+   uint32_t ebx;
+@@ -99,6 +97,13 @@ void AtomicOps_Internalx86CPUFeaturesInit() {
+     model += ((eax >> 16) & 0xf) << 4;
+   }
+ 
++  // Rarely, this function may be called from multiple threads at the same time.
++  // To prevent races, do the initialization in a temporary struct and do a
++  // lock-free assignment at the end.  The assignment will be atomic since the
++  // struct can fit into a single byte.
++  AtomicOps_x86CPUFeatureStruct New_AtomicOps_x86CPUFeatures_Private;
++  New_AtomicOps_x86CPUFeatures_Private.initialized = true;
++
+   // Opteron Rev E has a bug in which on very rare occasions a locked
+   // instruction doesn't act as a read-acquire barrier if followed by a
+   // non-locked read-modify-write instruction.  Rev F has this bug in
+@@ -107,27 +112,17 @@ void AtomicOps_Internalx86CPUFeaturesInit() {
+   if (strcmp(vendor, "AuthenticAMD") == 0 &&       // AMD
+       family == 15 &&
+       32 <= model && model <= 63) {
+-    AtomicOps_Internalx86CPUFeatures.has_amd_lock_mb_bug = true;
++    New_AtomicOps_x86CPUFeatures_Private.has_amd_lock_mb_bug = true;
+   } else {
+-    AtomicOps_Internalx86CPUFeatures.has_amd_lock_mb_bug = false;
++    New_AtomicOps_x86CPUFeatures_Private.has_amd_lock_mb_bug = false;
+   }
+ 
+   // edx bit 26 is SSE2 which we use to tell use whether we can use mfence
+-  AtomicOps_Internalx86CPUFeatures.has_sse2 = ((edx >> 26) & 1);
++  New_AtomicOps_x86CPUFeatures_Private.has_sse2 = ((edx >> 26) & 1);
++
++  AtomicOps_x86CPUFeatures_Private = New_AtomicOps_x86CPUFeatures_Private;
+ }
+ 
+-class AtomicOpsx86Initializer {
+- public:
+-  AtomicOpsx86Initializer() {
+-    AtomicOps_Internalx86CPUFeaturesInit();
+-  }
+-};
+-
+-// A global to get use initialized on startup via static initialization :/
+-AtomicOpsx86Initializer g_initer;
+-
+-}  // namespace
+-
+ }  // namespace internal
+ }  // namespace protobuf
+ }  // namespace google
+unchanged:
+--- protobuf-cleaned/src/google/protobuf/stubs/atomicops_internals_x86_gcc.h
++++ protobuf-patched/src/google/protobuf/stubs/atomicops_internals_x86_gcc.h
+@@ -33,20 +33,39 @@
+ #ifndef GOOGLE_PROTOBUF_ATOMICOPS_INTERNALS_X86_GCC_H_
+ #define GOOGLE_PROTOBUF_ATOMICOPS_INTERNALS_X86_GCC_H_
+ 
++#include <google/protobuf/stubs/port.h>
++
+ namespace google {
+ namespace protobuf {
+ namespace internal {
+ 
+-// This struct is not part of the public API of this module; clients may not
+-// use it.
+-// Features of this x86.  Values may not be correct before main() is run,
+-// but are set conservatively.
++// This struct and its associated functions are not part of the public API of
++// this module; clients may not use it.
++//
++// Features of this x86.
+ struct AtomicOps_x86CPUFeatureStruct {
+-  bool has_amd_lock_mb_bug;  // Processor has AMD memory-barrier bug; do lfence
+-                             // after acquire compare-and-swap.
+-  bool has_sse2;             // Processor has SSE2.
++  // Whether AtomicOps_Internalx86CPUFeaturesInit was called.
++  bool initialized : 1;
++
++  // Processor has AMD memory-barrier bug; do lfence after acquire
++  // compare-and-swap.
++  bool has_amd_lock_mb_bug : 1;
++
++  // Processor has SSE2.
++  bool has_sse2 : 1;
+ };
+-extern struct AtomicOps_x86CPUFeatureStruct AtomicOps_Internalx86CPUFeatures;
++
++// Initialize |AtomicOps_Internalx86CPUFeatures_Private|.
++void AtomicOps_Internalx86CPUFeaturesInit();
++
++inline const AtomicOps_x86CPUFeatureStruct&
++Get_AtomicOps_Internalx86CPUFeatures() {
++  extern AtomicOps_x86CPUFeatureStruct AtomicOps_x86CPUFeatures_Private;
++  if (GOOGLE_PREDICT_FALSE(!AtomicOps_x86CPUFeatures_Private.initialized)) {
++    AtomicOps_Internalx86CPUFeaturesInit();
++  }
++  return AtomicOps_x86CPUFeatures_Private;
++}
+ 
+ #define ATOMICOPS_COMPILER_BARRIER() __asm__ __volatile__("" : : : "memory")
+ 
+@@ -89,7 +108,7 @@ inline Atomic32 Barrier_AtomicIncrement(volatile Atomic32* ptr,
+                        : "+r" (temp), "+m" (*ptr)
+                        : : "memory");
+   // temp now holds the old value of *ptr
+-  if (AtomicOps_Internalx86CPUFeatures.has_amd_lock_mb_bug) {
++  if (Get_AtomicOps_Internalx86CPUFeatures().has_amd_lock_mb_bug) {
+     __asm__ __volatile__("lfence" : : : "memory");
+   }
+   return temp + increment;
+@@ -99,7 +118,7 @@ inline Atomic32 Acquire_CompareAndSwap(volatile Atomic32* ptr,
+                                        Atomic32 old_value,
+                                        Atomic32 new_value) {
+   Atomic32 x = NoBarrier_CompareAndSwap(ptr, old_value, new_value);
+-  if (AtomicOps_Internalx86CPUFeatures.has_amd_lock_mb_bug) {
++  if (Get_AtomicOps_Internalx86CPUFeatures().has_amd_lock_mb_bug) {
+     __asm__ __volatile__("lfence" : : : "memory");
+   }
+   return x;
+@@ -131,7 +150,7 @@ inline void Acquire_Store(volatile Atomic32* ptr, Atomic32 value) {
+ #else
+ 
+ inline void MemoryBarrierInternal() {
+-  if (AtomicOps_Internalx86CPUFeatures.has_sse2) {
++  if (Get_AtomicOps_Internalx86CPUFeatures().has_sse2) {
+     __asm__ __volatile__("mfence" : : : "memory");
+   } else {  // mfence is faster but not present on PIII
+     Atomic32 x = 0;
+@@ -140,7 +159,7 @@ inline void MemoryBarrierInternal() {
+ }
+ 
+ inline void Acquire_Store(volatile Atomic32* ptr, Atomic32 value) {
+-  if (AtomicOps_Internalx86CPUFeatures.has_sse2) {
++  if (Get_AtomicOps_Internalx86CPUFeatures().has_sse2) {
+     *ptr = value;
+     __asm__ __volatile__("mfence" : : : "memory");
+   } else {
+@@ -213,7 +232,7 @@ inline Atomic64 Barrier_AtomicIncrement(volatile Atomic64* ptr,
+                        : "+r" (temp), "+m" (*ptr)
+                        : : "memory");
+   // temp now contains the previous value of *ptr
+-  if (AtomicOps_Internalx86CPUFeatures.has_amd_lock_mb_bug) {
++  if (Get_AtomicOps_Internalx86CPUFeatures().has_amd_lock_mb_bug) {
+     __asm__ __volatile__("lfence" : : : "memory");
+   }
+   return temp + increment;
+@@ -270,7 +289,7 @@ inline Atomic64 Acquire_CompareAndSwap(volatile Atomic64* ptr,
+                                        Atomic64 old_value,
+                                        Atomic64 new_value) {
+   Atomic64 x = NoBarrier_CompareAndSwap(ptr, old_value, new_value);
+-  if (AtomicOps_Internalx86CPUFeatures.has_amd_lock_mb_bug) {
++  if (Get_AtomicOps_Internalx86CPUFeatures().has_amd_lock_mb_bug) {
+     __asm__ __volatile__("lfence" : : : "memory");
+   }
+   return x;

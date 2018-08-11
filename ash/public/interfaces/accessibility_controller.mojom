@@ -1,0 +1,125 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module ash.mojom;
+
+import "mojo/public/mojom/base/time.mojom";
+import "ui/accessibility/ax_enums.mojom";
+import "ui/gfx/geometry/mojo/geometry.mojom";
+
+// Alert sent to the accessibility api.
+enum AccessibilityAlert {
+  // Default value, indicates no accessibility alert.
+  NONE,
+
+  // When caps lock is turned on.
+  CAPS_ON,
+
+  // When caps lock is turned off.
+  CAPS_OFF,
+
+  // When screen is turned on by tablet power button.
+  SCREEN_ON,
+
+  // When screen is turned off by tablet power button.
+  SCREEN_OFF,
+
+  // When window moved to another display by accelerators.
+  WINDOW_MOVED_TO_ANOTHER_DISPLAY,
+
+  // When the user attempts a keyboard command that requires a window to work,
+  // and none is available.
+  WINDOW_NEEDED,
+
+  // When the user enters window overview mode.
+  WINDOW_OVERVIEW_MODE_ENTERED
+};
+
+enum SelectToSpeakState {
+  // Select to Speak is not actively selecting text or speaking.
+  kSelectToSpeakStateInactive,
+
+  // Select to Speak is being used to actively select a new region. Note that
+  // it might also be speaking, but the selecting state takes precedence.
+  kSelectToSpeakStateSelecting,
+
+  // Select to Speak is currently speaking.
+  kSelectToSpeakStateSpeaking,
+};
+
+// Interface for ash client (e.g. Chrome) to control and query accessibility
+// features.
+interface AccessibilityController {
+  // Sets the client interface.
+  SetClient(AccessibilityControllerClient client);
+
+  // Starts or stops darkening the screen (e.g. to allow chrome a11y extensions
+  // to darken the screen).
+  SetDarkenScreen(bool darken);
+
+  // Called when braille display state is changed.
+  BrailleDisplayStateChanged(bool connected);
+
+  // Sets the focus highlight rect using |bounds_in_screen|. Called when focus
+  // changed in page and a11y focus highlight feature is enabled.
+  SetFocusHighlightRect(gfx.mojom.Rect bounds_in_screen);
+
+  // Sets whether the accessibility panel is filling the entire screen (e.g. to
+  // show the expanded UI for the ChromeVox spoken feedback extension).
+  SetAccessibilityPanelFullscreen(bool fullscreen);
+
+  // Sets the current Select-to-Speak state. This should be used by the Select-
+  // to-Speak extension to inform ash of its updated state.
+  SetSelectToSpeakState(SelectToSpeakState state);
+};
+
+// Interface for ash to request accessibility service from its client (e.g.
+// Chrome).
+interface AccessibilityControllerClient {
+  // Triggers an accessibility alert to give the user feedback.
+  TriggerAccessibilityAlert(AccessibilityAlert alert);
+
+  // Plays an earcon. Earcons are brief and distinctive sounds that indicate
+  // that their mapped event has occurred. The |sound_key| enums can be found in
+  // chromeos/audio/chromeos_sounds.h. This method exists because the browser
+  // owns all media playback.
+  PlayEarcon(int32 sound_key);
+
+  // Initiates play of shutdown sound and returns sound duration. This method
+  // exists because the browser owns all media playback.
+  PlayShutdownSound() => (mojo_base.mojom.TimeDelta sound_duration);
+
+  // Forwards an accessibility gesture from the touch exploration controller to
+  // ChromeVox.
+  HandleAccessibilityGesture(ax.mojom.Gesture gesture);
+
+  // Starts or stops dictation (type what you speak).
+  // Returns the new dictation state after the toggle.
+  ToggleDictation() => (bool dictation_on);
+
+  // Cancels all current and queued speech immediately.
+  SilenceSpokenFeedback();
+
+  // Called when we first detect two fingers are held down, which can be used to
+  // toggle spoken feedback on some touch-only devices.
+  OnTwoFingerTouchStart();
+
+  // Called when the user is no longer holding down two fingers (including
+  // releasing one, holding down three, or moving them).
+  OnTwoFingerTouchStop();
+
+  // Whether or not to enable toggling spoken feedback via holding down two
+  // fingers on the screen.
+  ShouldToggleSpokenFeedbackViaTouch() => (bool should_toggle);
+
+  // Plays tick sound indicating spoken feedback will be toggled after
+  // countdown.
+  PlaySpokenFeedbackToggleCountdown(int32 tick_count);
+
+  // Requests the Select-to-Speak extension to change its state. This lets users
+  // do the same things in tablet mode as with a keyboard. Specifically, if
+  // Select-to-Speak is not speaking, move to capturing state; if
+  // Select-to-Speak is speaking, cancel speaking and move to inactive state.
+  RequestSelectToSpeakStateChange();
+};

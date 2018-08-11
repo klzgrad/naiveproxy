@@ -1,0 +1,95 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//extensions/buildflags/buildflags.gni")
+import("//tools/json_schema_compiler/json_features.gni")
+import("//tools/json_schema_compiler/json_schema_api.gni")
+
+assert(enable_extensions,
+       "Cannot depend on extensions because enable_extensions=false.")
+
+schema_sources = [
+  # TODO(crbug/837773) De-dupe Automation later.
+  "accessibility_private.json",
+  "automation.idl",
+  "automation_internal.idl",
+  "bookmarks.json",
+  "braille_display_private.idl",
+  "history.json",
+  "identity.idl",
+  "i18n.json",
+  "notifications.idl",
+]
+
+root_namespace = "extensions::cast::api::%(namespace)s"
+
+extensions_api_uncompiled_sources = [ "extension.json" ]
+
+json_schema_api("api") {
+  sources = schema_sources
+  uncompiled_sources = extensions_api_uncompiled_sources
+  schemas = true
+  bundle = true
+  bundle_name = "Cast"
+  uncompiled_bundle_schema_sources = [
+    "tts.json",
+    "tts_engine.json",
+  ]
+}
+
+json_schema_api("api_registration") {
+  sources = schema_sources
+  impl_dir = "//chromecast/browser/extensions/api"
+  bundle_registration = true
+  bundle_name = "Cast"
+
+  deps = [
+    ":api",
+    "//extensions/common",
+  ]
+}
+
+json_features("cast_api_features") {
+  feature_type = "APIFeature"
+  provider_class = "CastAPIFeatureProvider"
+  sources = [
+    "../../../extensions/common/api/_api_features.json",
+    "_api_features.json",
+  ]
+}
+
+json_features("cast_permission_features") {
+  feature_type = "PermissionFeature"
+  provider_class = "CastPermissionFeatureProvider"
+  sources = [
+    "../../../extensions/common/api/_permission_features.json",
+    "_permission_features.json",
+  ]
+}
+
+json_features("cast_manifest_features") {
+  feature_type = "ManifestFeature"
+  provider_class = "CastManifestFeatureProvider"
+  sources = [
+    "../../../extensions/common/api/_manifest_features.json",
+    "_manifest_features.json",
+  ]
+}
+
+json_features("cast_behavior_features") {
+  feature_type = "BehaviorFeature"
+  provider_class = "CastBehaviorFeatureProvider"
+  sources = [
+    "../../../extensions/common/api/_behavior_features.json",
+  ]
+}
+
+group("extensions_features") {
+  public_deps = [
+    ":cast_api_features",
+    ":cast_behavior_features",
+    ":cast_manifest_features",
+    ":cast_permission_features",
+  ]
+}

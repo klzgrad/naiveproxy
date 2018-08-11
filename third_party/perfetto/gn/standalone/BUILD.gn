@@ -1,0 +1,216 @@
+# Copyright (C) 2017 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("//gn/standalone/android.gni")
+import("//gn/standalone/wasm.gni")
+import("//gn/standalone/sanitizers/sanitizers.gni")
+
+config("extra_warnings") {
+  cflags = [
+    "-Wall",
+    "-Wextra",
+  ]
+  if (is_clang) {
+    cflags += [
+      "-Weverything",
+      "-Wno-c++98-compat-pedantic",
+      "-Wno-c++98-compat",
+      "-Wno-disabled-macro-expansion",
+      "-Wno-gnu-include-next",
+      "-Wno-gnu-statement-expression",
+      "-Wno-gnu-zero-variadic-macro-arguments",
+      "-Wno-padded",
+      "-Wno-reserved-id-macro",
+    ]
+  }
+}
+
+config("no_exceptions") {
+  cflags_cc = [ "-fno-exceptions" ]
+}
+
+config("no_rtti") {
+  cflags_cc = [ "-fno-rtti" ]
+}
+
+config("visibility_hidden") {
+  cflags = [ "-fvisibility=hidden" ]
+}
+
+config("default") {
+  asmflags = []
+  cflags = []
+  cflags_c = []
+  cflags_cc = []
+  defines = []
+  ldflags = []
+  libs = []
+
+  cflags_cc += [ "-std=c++11" ]
+
+  cflags += [
+    "-fstrict-aliasing",
+    "-fstack-protector",
+    "-fPIC",
+    "-g",
+    "-Wformat",
+    "-Werror",
+  ]
+
+  if (!is_wasm) {
+    cflags += [ "-Wa,--noexecstack" ]
+  }
+
+  if (is_clang) {
+    cflags += [
+      # Color compiler output, see https://github.com/ninja-build/ninja/wiki/FAQ
+      "-fcolor-diagnostics",
+      "-fdiagnostics-show-template-tree",
+    ]
+  }
+
+  if (current_cpu == "arm") {
+    cflags += [
+      "-march=armv7-a",
+      "-mfpu=neon",
+      "-mthumb",
+    ]
+  } else if (current_cpu == "x86") {
+    asmflags += [ "-m32" ]
+    cflags += [
+      "-m32",
+      "-msse2",
+      "-mfpmath=sse",
+    ]
+    ldflags += [ "-m32" ]
+  } else if (current_cpu == "arm64") {
+    cflags += [ "-fno-omit-frame-pointer" ]
+  }
+
+  if (is_linux) {
+    libs += [
+      "pthread",
+      "rt",
+    ]
+  }
+
+  if (is_android) {
+    libs += [ "log" ]
+  }
+
+  if (is_debug) {
+    libs += [ "dl" ]
+  }
+
+  if (is_android) {
+    asmflags += [ "--target=$android_abi_target" ]
+    cflags += [
+      "--sysroot=$android_compile_sysroot",
+      "-isystem$android_compile_sysroot/$android_compile_sysroot_subdir",
+      "-isystem$android_compile_sysroot",
+      "-DANDROID",
+      "-D__ANDROID_API__=21",
+      "--target=$android_abi_target",
+    ]
+    cflags_cc += [
+      "-I$android_ndk_root/sources/cxx-stl/llvm-libc++/include",
+      "-I$android_ndk_root/sources/android/support/include",
+      "-I$android_ndk_root/sources/cxx-stl/llvm-libc++abi/include",
+    ]
+    ldflags += [
+      "-Wl,-z,nocopyreloc",
+      "-gcc-toolchain",
+      "$android_toolchain_root",
+      "--sysroot=$android_ndk_root/$android_link_sysroot_subdir",
+      "--target=$android_abi_target",
+      "-Wl,--exclude-libs,libunwind.a",
+      "-Wl,--exclude-libs,libgcc.a",
+      "-Wl,--exclude-libs,libc++_static.a",
+      "-Wl,--build-id",
+      "-Wl,--no-undefined",
+      "-Wl,-z,noexecstack",
+      "-Wl,-z,relro",
+      "-Wl,-z,now",
+      "-Wl,--warn-shared-textrel",
+      "-Wl,--fatal-warnings",
+    ]
+    lib_dirs = [ "$android_ndk_root/sources/cxx-stl/llvm-libc++/libs/$android_app_abi" ]
+    libs += [
+      "gcc",
+      "c++_static",
+      "c++abi",
+      "android_support",
+    ]
+  }
+}
+
+config("debug_symbols") {
+  cflags = [ "-O0" ]
+  if (is_android || is_linux) {
+    cflags += [ "-funwind-tables" ]
+  }
+}
+
+config("release") {
+  cflags = [
+    "-fdata-sections",
+    "-ffunction-sections",
+  ]
+  if (is_android) {
+    cflags += [ "-Oz" ]
+  } else {
+    cflags += [ "-O3" ]
+  }
+  if (is_mac) {
+    ldflags = [ "-dead_strip" ]
+  } else {
+    ldflags = [
+      "-fuse-ld=gold",
+      "-Wl,--gc-sections",
+      "-Wl,--icf=all",
+      "-Wl,-O1",
+    ]
+  }
+  defines = [ "NDEBUG" ]
+}
+
+config("shared_library") {
+  if (is_android || is_linux) {
+    ldflags = [ "-fPIC" ]
+  }
+}
+
+config("executable") {
+  ldflags = []
+
+  # Android will refuse to run executables if they aren't position independent.
+  # Instead on Linux there isn't any need and they break ASan (goo.gl/paFR6K).
+  if (is_android) {
+    asmflags = [ "-fPIE" ]
+    cflags = [ "-fPIE" ]
+    ldflags += [ "-pie" ]
+  }
+
+  # -rpath stores the path to the linked shared libraries into the binary, so
+  # that they can be launched without passing any LD_LIBRARY_PATH. It's
+  # supported only by Linux, not Android. But concretely we need this only when
+  # use_custom_libcxx=true && custom_libcxx_is_static=false, which happens only
+  # on Linux right now.
+  if (is_linux) {
+    ldflags += [
+      "-Wl,-rpath=\$ORIGIN/.",
+      "-Wl,-rpath-link=.",
+    ]
+  }
+}

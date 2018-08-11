@@ -1,0 +1,166 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/jumbo.gni")
+import("//build/config/ui.gni")
+import("//testing/test.gni")
+import("//third_party/blink/renderer/bindings/bindings.gni")
+import("//third_party/blink/renderer/config.gni")
+import("//third_party/blink/renderer/core/core.gni")
+import("//third_party/blink/renderer/modules/modules.gni")
+
+visibility = [ "//third_party/blink/*" ]
+
+component("controller") {
+  output_name = "blink_controller"
+
+  deps = [
+    "//skia",
+    "//third_party/blink/renderer/core",
+    "//third_party/blink/renderer/modules",
+    "//third_party/blink/renderer/platform",
+    "//v8",
+  ]
+
+  configs += [
+    "//build/config/compiler:wexit_time_destructors",
+    "//third_party/blink/renderer:config",
+    "//third_party/blink/renderer:inside_blink",
+    "//third_party/blink/renderer:non_test_config",
+    "//third_party/blink/renderer/core:blink_core_pch",
+  ]
+
+  defines = [ "BLINK_CONTROLLER_IMPLEMENTATION=1" ]
+
+  sources = [
+    "blink_initializer.cc",
+    "blink_initializer.h",
+    "blink_leak_detector.cc",
+    "blink_leak_detector.h",
+    "bloated_renderer_detector.cc",
+    "bloated_renderer_detector.h",
+    "controller_export.h",
+    "dev_tools_frontend_impl.cc",
+    "dev_tools_frontend_impl.h",
+  ]
+
+  if (is_android) {
+    sources += [
+      "oom_intervention_impl.cc",
+      "oom_intervention_impl.h",
+    ]
+  }
+  if (is_mac) {
+    libs = [
+      "AppKit.framework",
+      "Foundation.framework",
+    ]
+  }
+
+  configs -= [ "//build/config/compiler:default_symbols" ]
+  configs += blink_symbols_config
+}
+
+group("webkit_unit_tests_data") {
+  data = [
+    "../core/testing/data/",
+    "../core/paint/test_data/",
+    "../core/animation/test_data/",
+    "../core/css/test_data/",
+  ]
+}
+
+test("webkit_unit_tests") {
+  deps = [
+    ":webkit_unit_tests_sources",
+  ]
+
+  data_deps = [
+    ":webkit_unit_tests_data",
+    "//content/shell:pak",
+  ]
+
+  if (is_android) {
+    enable_multidex = true
+    deps += [
+      "//base:base_java",
+      "//content/public/android:content_java",
+      "//content/shell/android:content_shell_assets",
+      "//net/android:net_java",
+    ]
+  }
+}
+
+test("blink_perf_tests") {
+  deps = [
+    ":blink_perf_tests_sources",
+  ]
+}
+
+jumbo_source_set("blink_perf_tests_sources") {
+  visibility = []  # Allow re-assignment of list.
+  visibility = [ "*" ]
+  testonly = true
+
+  sources = [
+    "tests/run_all_tests.cc",
+  ]
+
+  deps = [
+    ":controller",
+    "//base",
+    "//content/test:test_support",
+    "//third_party/blink/renderer/core:perf_tests",
+  ]
+
+  configs += [
+    "//third_party/blink/renderer:config",
+    "//third_party/blink/renderer:inside_blink",
+    "//third_party/blink/renderer/core:blink_core_pch",
+  ]
+}
+
+jumbo_source_set("webkit_unit_tests_sources") {
+  visibility = []  # Allow re-assignment of list.
+  visibility = [ "*" ]
+  testonly = true
+
+  sources = [
+    "bloated_renderer_detector_test.cc",
+    "tests/run_all_tests.cc",
+  ]
+  sources += bindings_unittest_files
+  if (is_android) {
+    sources += [ "oom_intervention_impl_test.cc" ]
+  }
+
+  deps = [
+    ":controller",
+    "//base",
+    "//base:i18n",
+    "//base/test:test_support",
+    "//components/payments/mojom:mojom_blink",
+    "//content/test:test_support",
+    "//gpu:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//third_party/blink/renderer/core:unit_tests",
+    "//third_party/blink/renderer/modules:unit_tests",
+    "//third_party/blink/renderer/modules/exported:test_support",
+    "//third_party/blink/renderer/platform",
+    "//third_party/blink/renderer/platform:test_support",
+    "//third_party/blink/renderer/platform:unit_tests",
+    "//third_party/blink/renderer/platform/wtf",
+    "//third_party/libwebp",
+    "//third_party/zlib",
+    "//url",
+    "//v8",
+  ]
+
+  configs += [
+    "//third_party/blink/renderer:config",
+    "//third_party/blink/renderer:inside_blink",
+    "//third_party/blink/renderer/core:blink_core_pch",
+  ]
+}

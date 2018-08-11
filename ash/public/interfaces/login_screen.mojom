@@ -1,0 +1,215 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module ash.mojom;
+
+import "ash/public/interfaces/user_info.mojom";
+import "ash/public/interfaces/login_user_info.mojom";
+import "chromeos/components/proximity_auth/public/interfaces/auth_type.mojom";
+import "components/account_id/interfaces/account_id.mojom";
+import "mojo/public/mojom/base/string16.mojom";
+import "mojo/public/mojom/base/time.mojom";
+
+// Allows clients (e.g. Chrome browser) to control the ash login/lock/user-add
+// screens.
+interface LoginScreen {
+  // Sets the client interface.
+  SetClient(LoginScreenClient client);
+
+  // Displays the lock screen. |did_show| is true iff the lock UI was
+  // successfully displayed.
+  ShowLockScreen() => (bool did_show);
+
+  // Displays the login screen. |did_show| is true iff the login UI was
+  // successfully displayed.
+  ShowLoginScreen() => (bool did_show);
+
+  // Requests to show error message in the ash lock screen.
+  // TODO(xiaoyinh): login_attempts is probabaly not needed from chrome,
+  // remove it when we start to count the login attempts in ash lock screen.
+  // |login_attempts|: The number of the login authentication attempts.
+  // |error_text|:     The error text to be shown in lock screen.
+  // |help_link_text|: The help link to be shown in lock screen.
+  // |help_topic_id|:  The id of the help app topic regarding this error.
+  ShowErrorMessage(int32 login_attempts,
+                   string error_text,
+                   string help_link_text,
+                   int32 help_topic_id);
+
+  // Requests to close any displayed error messages in ash lock screen.
+  ClearErrors();
+
+  // Requests to show the custom icon in the user pod.
+  // |account_id|:  The account id of the user in the user pod.
+  // |icon|:        Information regarding the icon.
+  ShowUserPodCustomIcon(signin.mojom.AccountId account_id,
+                        EasyUnlockIconOptions icon);
+
+  // Requests to hide the custom icon in the user pod.
+  // |account_id|:  The account id of the user in the user pod.
+  HideUserPodCustomIcon(signin.mojom.AccountId account_id);
+
+  // Requests to set the authentication type.
+  // |account_id|:    The account id of the user in the user pod.
+  // |auth_type|:     Authentication type.
+  // |initial_value|: A message shown in the password field of the user pod.
+  SetAuthType(signin.mojom.AccountId account_id,
+              proximity_auth.mojom.AuthType auth_type,
+              mojo_base.mojom.String16 initial_value);
+
+  // Requests to load users in the lock screen.
+  // |users|:      A list of users who can unlock the device.
+  // |show_guest|: Whether to show guest session button.
+  LoadUsers(array<LoginUserInfo> users, bool show_guest);
+
+  // Notification if pin is enabled or disabled for the given user.
+  // |account_id|:   The account id of the user in the user pod.
+  // |is_enabled|:   True if pin unlock is enabled.
+  SetPinEnabledForUser(signin.mojom.AccountId account_id, bool is_enabled);
+
+  // Change the user's avatar. Some avatars may take a long time to load and the
+  // login screen may already be visible.
+  SetAvatarForUser(signin.mojom.AccountId account_id, UserAvatar avatar);
+
+  // Called when auth should be enabled or disabled for the given user. When
+  // auth is disabled, the user cannot unlock the device. Auth is enabled by
+  // default.
+  // |account_id|:            The account id of the user in the user pod.
+  // |is_enabled|:            True if auth is enabled.
+  // |auth_reenabled_time|:   A future time when auth will be enabled. Must be
+  //                          non-null if |is_enabled| is false. This value is
+  //                          for display purpose only and the client should be
+  //                          responsible for calling this method again with
+  //                          is_enabled == true when the time reaches.
+  SetAuthEnabledForUser(signin.mojom.AccountId account_id,
+                        bool is_enabled,
+                        mojo_base.mojom.Time? auth_reenabled_time);
+
+  // Called when focus is reported to be leaving a lock screen app window.
+  // Requests focus to be handed off to the next suitable widget.
+  // |reverse|:   Whether the tab order is reversed.
+  HandleFocusLeavingLockScreenApps(bool reverse);
+
+  // Called when the info shown for dev and canary channels are changed.
+  // |os_version_label_text|: The OS version.
+  // |enterprise_info_text|:  The enterprise info.
+  // |bluetooth_name|:        The name of the bluetooth adapter.
+  SetDevChannelInfo(string os_version_label_text,
+                    string enterprise_info_text,
+                    string bluetooth_name);
+
+  // Check if the login/lock screen is ready for a password.
+  IsReadyForPassword() => (bool is_ready);
+
+  // Set the public session display name for user with |account_id|.
+  SetPublicSessionDisplayName(signin.mojom.AccountId account_id,
+                              string display_name);
+
+  // Set the public session locales for user with |account_id|.
+  // |locales|:            Available locales for this user.
+  // |default_locale|:     Default locale for this user.
+  // |show_advanced_view|: True if we should show the advanced expanded user
+  //                       view for the public session.
+  SetPublicSessionLocales(signin.mojom.AccountId account_id,
+                          array<LocaleItem> locales,
+                          string default_locale,
+                          bool show_advanced_view);
+
+  // Set the public session keyboard layouts for user with |account_id|.
+  // |locale|: The locale that |keyboard_layouts| can be used for.
+  SetPublicSessionKeyboardLayouts(signin.mojom.AccountId account_id,
+                                  string locale,
+                                  array<InputMethodItem> keyboard_layouts);
+
+  // Set the fingerprint unlock state for user with |account_id|.
+  SetFingerprintUnlockState(signin.mojom.AccountId account_id,
+                            FingerprintUnlockState state);
+};
+
+// Allows ash lock screen to control a client (e.g. Chrome browser). Requests
+// often involve preferences or talk to cryptohome that is not available to ash.
+interface LoginScreenClient {
+  // Request user authentication in chrome.
+  // If auth succeeds:
+  // chrome will hide the lock screen and clear any displayed error messages.
+  // If auth fails:
+  // chrome will request lock screen to show error messages.
+  // |account_id|: The AccountId to authenticate against.
+  // |password|: The submitted password.
+  // |authenticated_by_pin|: True if we are using pin to authenticate.
+  //
+  // The result will be set to true if auth was successful, false if not.
+  AuthenticateUser(signin.mojom.AccountId account_id,
+                   string password,
+                   bool authenticated_by_pin) => (bool auth_success);
+
+  // Request to attempt easy unlock in chrome.
+  // |account_id|:   The account id of the user we are authenticating.
+  AttemptUnlock(signin.mojom.AccountId account_id);
+
+  // Request to hard lock the user pod.
+  // |account_id|:    The account id of the user in the user pod.
+  HardlockPod(signin.mojom.AccountId account_id);
+
+  // Record clicks on the lock icon in the user pod.
+  // |account_id|:    The account id of the user in the user pod.
+  RecordClickOnLockIcon(signin.mojom.AccountId account_id);
+
+  // Focus user pod of user with |account_id|.
+  OnFocusPod(signin.mojom.AccountId account_id);
+
+  // Notify that no user pod is focused.
+  OnNoPodFocused();
+
+  // Load wallpaper of user with |account_id|.
+  LoadWallpaper(signin.mojom.AccountId account_id);
+
+  // Sign out current user.
+  SignOutUser();
+
+  // Close add user screen.
+  CancelAddUser();
+
+  // Launches guest mode.
+  LoginAsGuest();
+
+  // User with |account_id| has reached maximum incorrect password attempts.
+  OnMaxIncorrectPasswordAttempted(signin.mojom.AccountId account_id);
+
+  // Should pass the focus to the active lock screen app window, if there is
+  // one. This is called when a lock screen app is reported to be active (using
+  // tray_action mojo interface), and is next in the tab order.
+  // |HandleFocusLeavingLockScreenApps| should be called to return focus to the
+  // lock screen.
+  // |reverse|:   Whether the tab order is reversed.
+  FocusLockScreenApps(bool reverse);
+
+  // Show the gaia sign-in dialog. If available, |account_id| is used for
+  // prefilling information.
+  ShowGaiaSignin(signin.mojom.AccountId? account_id);
+
+  // Notification that the remove user warning was shown.
+  OnRemoveUserWarningShown();
+
+  // Try to remove |account_id|.
+  RemoveUser(signin.mojom.AccountId account_id);
+
+  // Launch a public session for user with |account_id|.
+  // |locale|:       Locale for this user.
+  //                 The value is language code like "en-US", "zh-CN"
+  // |input_method|: Input method for this user.
+  //                 This is the id of InputMethodDescriptor like
+  //                 "t:latn-post", "pinyin".
+  LaunchPublicSession(signin.mojom.AccountId account_id,
+                      string locale,
+                      string input_method);
+
+  // Request public session keyboard layouts for user with |account_id|.
+  // This function send a request to chrome and the result will be returned by
+  // SetPublicSessionKeyboardLayouts.
+  // |locale|: Request a list of keyboard layouts that can be used by this
+  //           locale.
+  RequestPublicSessionKeyboardLayouts(signin.mojom.AccountId account_id,
+                                      string locale);
+};

@@ -1,0 +1,51 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# This target contains only those files that are shared by the Device Sensors
+# implementation and all Device Sensors clients, including Blink. Add a file
+# here only if it meets the following constraints:
+# (1) It is *necessary* to use the file to consume Device Sensors (the
+# current files define structs that are used as a consistent interpretation of
+# shared memory by the Device Sensor and its clients).
+# (2) The file has no dependencies on the STL or Chromium code and will not
+# grow them over time (the current  files are POD structs and will necessarily
+# stay that way due to their above-described purpose).
+# If a file does not meet these constraints, it cannot be used by the Blink
+# client and should be placed in the "generic_sensor" target below. Similarly,
+# clients without Blink's constraints should depend on the "generic_sensor"
+# target below rather than this one.
+# Consult {platform-architecture-dev, services-dev}@chromium.org in the case
+# of any uncertainty.
+source_set("shared_with_blink") {
+  sources = [
+    "motion_data.cc",
+    "motion_data.h",
+    "orientation_data.cc",
+    "orientation_data.h",
+  ]
+  # Do not add deps here per the above comment.
+}
+
+source_set("generic_sensor") {
+  sources = [
+    "platform_sensor_configuration.cc",
+    "platform_sensor_configuration.h",
+    "sensor_reading.cc",
+    "sensor_reading.h",
+    "sensor_reading_shared_buffer_reader.cc",
+    "sensor_reading_shared_buffer_reader.h",
+    "sensor_traits.cc",
+    "sensor_traits.h",
+  ]
+
+  public_deps = [
+    ":shared_with_blink",
+    "//services/device/public/mojom:generic_sensor",
+  ]
+
+  deps = [
+    "//base",
+    "//device/base/synchronization",
+  ]
+}

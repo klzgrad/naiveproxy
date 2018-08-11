@@ -1,0 +1,61 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# Creates a group() that lists Python sources as |data|.
+# Having such targets serves two purposes:
+# 1) Causes files to be included in runtime_deps, so that they are uploaded to
+#    swarming when running tests remotely.
+# 2) Causes "gn analyze" to know about all Python inputs so that tests will be
+#    re-run when relevant Python files change.
+#
+# All non-trivial Python scripts should use a "pydeps" file to track their
+# sources. To create a .pydep file for a target in //example:
+#
+#   build/print_python_deps.py \
+#       --root example \
+#       --output example/$target_name.pydeps \
+#       path/to/your/script.py
+#
+# Keep the .pydep file up-to-date by adding to //PRESUBMIT.py under one of:
+#     _ANDROID_SPECIFIC_PYDEPS_FILES, _GENERIC_PYDEPS_FILES
+#
+# Variables
+#   pydeps_file: Path to .pydeps file to read sources from (optional).
+#   data: Additional files to include in data. E.g. non-.py files needed by the
+#         library, or .py files that are conditionally / lazily imported.
+#
+# Example
+#   python_library("my_library_py") {
+#      pydeps_file = "my_library.pydeps"
+#      data = [ "foo.dat" ]
+#   }
+template("python_library") {
+  group(target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "data_deps",
+                             "deps",
+                             "testonly",
+                             "visibility",
+                           ])
+
+    if (defined(invoker.pydeps_file)) {
+      _py_files = read_file(invoker.pydeps_file, "list lines")
+
+      # Filter out comments.
+      set_sources_assignment_filter([ "#*" ])
+      sources = _py_files
+
+      # Even though the .pydep file is not used at runtime, it must be added
+      # so that "gn analyze" will mark the target as changed when .py files
+      # are removed but none are added or modified.
+      data = sources + [ invoker.pydeps_file ]
+    } else {
+      data = []
+    }
+    if (defined(invoker.data)) {
+      data += invoker.data
+    }
+  }
+}

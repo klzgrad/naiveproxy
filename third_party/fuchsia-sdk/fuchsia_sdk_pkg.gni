@@ -1,0 +1,116 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+assert(is_fuchsia)
+
+import("fidl_library.gni")
+
+# Template for Fuchsia SDK packages. Each package may contain a mix of C++ files
+# and FIDL interfaces. The following parameters can be specified when
+# instantiating this template:
+#   package_name - Name of the library. target_name is used if name
+#                  is not specified explicitly.
+#   fidl_namespace, fidl_namespace_path - FIDL namespace. See fidl_library.gni
+#                  for details.
+#   sources      - List of sources relative to sdk/pkg/${name}.
+#   fidl_sources - List of .fidl files relative to
+#                  sdk/fidl/${fidl_namespace}.${name}.
+#   public_deps  - List of public dependencies which are propagated to
+#                  dependents.
+#   deps         - List of dependencies.
+#   fidl_deps    - List of FIDL dependencies for this package (must be other
+#                  fuchsia_sdk_pkg).
+
+template("fuchsia_sdk_pkg") {
+  _package_name = target_name
+  if (defined(invoker.package_name)) {
+    _package_name = invoker.package_name
+  }
+
+  _has_fidl_files = defined(invoker.fidl_files)
+
+  if (_has_fidl_files) {
+    fidl_library("${target_name}_fidl") {
+      forward_variables_from(invoker,
+                             [
+                               "public_deps",
+                               "testonly",
+                               "visibility",
+                             ])
+
+      library_name = _package_name
+
+      if (defined(invoker.fidl_namespace)) {
+        assert(
+            defined(invoker.fidl_namespace_path),
+            "SDK packages with fidl_namespace must specify fidl_namespace_path")
+        namespace = invoker.fidl_namespace
+        namespace_path = invoker.fidl_namespace_path
+
+        _library_name = "${namespace}.${_package_name}"
+      } else {
+        _library_name = _package_name
+      }
+
+      sources = []
+      foreach(file, invoker.fidl_files) {
+        sources += [ "sdk/fidl/${_library_name}/${file}" ]
+      }
+
+      if (defined(invoker.fidl_deps)) {
+        deps = []
+        foreach(fidl_dep, invoker.fidl_deps) {
+          deps += [ "${fidl_dep}_fidl" ]
+        }
+      }
+    }
+  }
+
+  config("${target_name}_config") {
+    visibility = [ ":${invoker.target_name}" ]
+    include_dirs = [ "sdk/pkg/${_package_name}/include" ]
+  }
+
+  static_library("${target_name}") {
+    forward_variables_from(invoker,
+                           [
+                             "data",
+                             "deps",
+                             "public_deps",
+                             "testonly",
+                             "visibility",
+                           ])
+
+    sources = []
+    if (defined(invoker.sources)) {
+      foreach(src, invoker.sources) {
+        sources += [ "sdk/pkg/${_package_name}/${src}" ]
+      }
+    }
+
+    if (_has_fidl_files) {
+      public_deps = [
+        ":${invoker.target_name}_fidl",
+      ]
+    }
+
+    public_configs = [ ":${invoker.target_name}_config" ]
+
+    if (defined(invoker.libs)) {
+      configs += [ ":sdk_lib_dirs_config" ]
+      libs = invoker.libs
+    }
+  }
+}
+
+template("fuchsia_sdk_lib_pkg") {
+  fuchsia_sdk_pkg(target_name) {
+    forward_variables_from(invoker, "*")
+    if (defined(invoker.package_name)) {
+      libs = [ invoker.package_name ]
+    } else {
+      libs = [ target_name ]
+    }
+  }
+}

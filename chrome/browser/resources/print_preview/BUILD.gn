@@ -1,0 +1,206 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//third_party/closure_compiler/compile_js.gni")
+import("../optimize_webui.gni")
+import("//tools/grit/grit_rule.gni")
+import("//chrome/common/features.gni")
+
+if (optimize_webui) {
+  print_preview_pak_file = "print_preview_resources.pak"
+  unpak_folder = "print_preview_resources.unpak"
+
+  optimize_webui("build") {
+    host = "print"
+    html_in_files = [ "print_preview_new.html" ]
+    html_out_files = [ "vulcanized.html" ]
+    insert_in_head = "<base href=\"chrome://print\">"
+    input = rebase_path("$target_gen_dir/$unpak_folder", root_build_dir)
+    js_out_files = [ "crisper.js" ]
+
+    excludes = [ "pdf/pdf_scripting_api.js" ]
+
+    deps = [
+      ":unpak",
+    ]
+  }
+
+  unpak("unpak") {
+    pak_file = print_preview_pak_file
+    out_folder = unpak_folder
+
+    deps = [
+      ":flattened_resources",
+    ]
+  }
+
+  grit("flattened_resources") {
+    source = "print_preview_resources.grd"
+
+    # The .grd contains references to generated files.
+    source_is_generated = true
+
+    defines = chrome_grit_defines
+    outputs = [
+      "grit/print_preview_resources.h",
+      "grit/print_preview_resources_map.cc",
+      "grit/print_preview_resources_map.h",
+      print_preview_pak_file,
+    ]
+    output_dir = "$root_gen_dir/chrome/browser/resources/print_preview"
+  }
+}
+
+group("closure_compile") {
+  deps = [
+    ":print_preview_resources",
+    "data:closure_compile",
+    "new:closure_compile",
+  ]
+}
+
+js_type_check("print_preview_resources") {
+  deps = [
+    ":cloud_print_interface",
+    ":metrics",
+    ":native_layer",
+    ":print_preview",
+    ":print_preview_utils",
+  ]
+}
+
+js_library("print_preview") {
+  deps = [
+    "../pdf:pdf_scripting_api",
+    "//ui/webui/resources/js:cr",
+    "//ui/webui/resources/js:event_tracker",
+    "//ui/webui/resources/js:load_time_data",
+    "//ui/webui/resources/js:promise_resolver",
+    "//ui/webui/resources/js:util",
+    "//ui/webui/resources/js:webui_listener_tracker",
+    "//ui/webui/resources/js/cr:event_target",
+    "//ui/webui/resources/js/cr:ui",
+    "//ui/webui/resources/js/cr/ui:focus_manager",
+    "//ui/webui/resources/js/cr/ui:focus_outline_manager",
+    "//ui/webui/resources/js/cr/ui:node_utils",
+  ]
+
+  sources = [
+    "cloud_print_interface.js",
+    "common/overlay.js",
+    "common/search_box.js",
+    "common/search_bubble.js",
+    "component.js",
+    "data/app_state.js",
+    "data/capabilities_holder.js",
+    "data/cloud_parsers.js",
+    "data/coordinate2d.js",
+    "data/destination.js",
+    "data/destination_match.js",
+    "data/destination_store.js",
+    "data/document_info.js",
+    "data/invitation.js",
+    "data/invitation_store.js",
+    "data/local_parsers.js",
+    "data/margins.js",
+    "data/measurement_system.js",
+    "data/page_number_set.js",
+    "data/print_ticket_store.js",
+    "data/printable_area.js",
+    "data/size.js",
+    "data/ticket_items/collate.js",
+    "data/ticket_items/color.js",
+    "data/ticket_items/copies.js",
+    "data/ticket_items/css_background.js",
+    "data/ticket_items/custom_margins.js",
+    "data/ticket_items/dpi.js",
+    "data/ticket_items/duplex.js",
+    "data/ticket_items/fit_to_page.js",
+    "data/ticket_items/header_footer.js",
+    "data/ticket_items/landscape.js",
+    "data/ticket_items/margins_type.js",
+    "data/ticket_items/media_size.js",
+    "data/ticket_items/page_range.js",
+    "data/ticket_items/rasterize.js",
+    "data/ticket_items/scaling.js",
+    "data/ticket_items/selection_only.js",
+    "data/ticket_items/ticket_item.js",
+    "data/ticket_items/vendor_items.js",
+    "data/user_info.js",
+    "metrics.js",
+    "native_layer.js",
+    "preview_generator.js",
+    "previewarea/margin_control.js",
+    "previewarea/margin_control_container.js",
+    "previewarea/preview_area.js",
+    "print_header.js",
+    "print_preview.js",
+    "print_preview_animations.js",
+    "print_preview_focus_manager.js",
+    "print_preview_utils.js",
+    "search/destination_list.js",
+    "search/destination_list_item.js",
+    "search/destination_search.js",
+    "search/provisional_destination_resolver.js",
+    "search/recent_destination_list.js",
+    "settings/advanced_options_settings.js",
+    "settings/advanced_settings/advanced_settings.js",
+    "settings/advanced_settings/advanced_settings_item.js",
+    "settings/color_settings.js",
+    "settings/copies_settings.js",
+    "settings/destination_settings.js",
+    "settings/dpi_settings.js",
+    "settings/layout_settings.js",
+    "settings/margin_settings.js",
+    "settings/media_size_settings.js",
+    "settings/more_settings.js",
+    "settings/other_options_settings.js",
+    "settings/page_settings.js",
+    "settings/scaling_settings.js",
+    "settings/settings_section.js",
+    "settings/settings_section_select.js",
+  ]
+
+  externs_list = [ "$externs_path/chrome_send.js" ]
+}
+
+js_library("print_preview_utils") {
+  deps = [
+    "data:coordinate2d",
+    "data:size",
+    "//ui/webui/resources/js:cr",
+  ]
+}
+
+js_library("metrics") {
+  deps = [
+    ":native_layer",
+    "//ui/webui/resources/js:cr",
+  ]
+}
+
+js_library("component") {
+}
+js_library("print_preview_focus_manager") {
+}
+
+js_library("cloud_print_interface") {
+  deps = [
+    ":native_layer",
+    "data:cloud_parsers",
+    "data:destination",
+    "data:document_info",
+    "data:invitation",
+    "data:user_info",
+    "//ui/webui/resources/js:cr",
+  ]
+}
+
+js_library("native_layer") {
+  deps = [
+    "data:destination",
+    "data:measurement_system",
+    "//ui/webui/resources/js:cr",
+  ]
+}

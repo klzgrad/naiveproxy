@@ -1,0 +1,182 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/fuchsia/config.gni")
+import("//build/config/sysroot.gni")
+
+# Creates a Fuchsia .far package file.
+#
+# Parameters are:
+# package_name: The name of the package to build.
+# binary: The name of the executable which should be launched by the package.
+#         Will be renamed as "bin/app" in the package contents.
+# sandbox_policy: A path to the sandbox_policy applied to this package.
+# deps: A list of targets whose output will be included in the package.
+template("package") {
+  pkg = {
+    package_name = target_name
+    forward_variables_from(invoker, "*")
+  }
+  assert(defined(pkg.binary))
+
+  _pm_tool_path = "${fuchsia_sdk}/tools/pm"
+
+  _pkg_out_dir = "$root_out_dir/gen/" + get_label_info(pkg.package_name, "dir")
+  _runtime_deps_file = "$_pkg_out_dir/${pkg.package_name}.runtime_deps"
+  _manifest_file = "$_pkg_out_dir/${pkg.package_name}.archive_manifest"
+  _key_file = "$_pkg_out_dir/signing-key"
+  _meta_far_file = "$_pkg_out_dir/meta.far"
+  _combined_far_file = "$_pkg_out_dir/${pkg.package_name}-0.far"
+  _final_far_file = "$_pkg_out_dir/${pkg.package_name}.far"
+
+  _write_manifest_target = "${pkg.package_name}__write_manifest"
+  _generate_key_target = "${pkg.package_name}__genkey"
+  _package_target = "${pkg.package_name}__pkg"
+  _bundle_target = "${pkg.package_name}__bundle"
+
+  # Generates a manifest file based on the GN runtime deps
+  # suitable for "pm" tool consumption.
+  action(_write_manifest_target) {
+    _depfile = "${target_gen_dir}/${target_name}_stamp.d"
+
+    forward_variables_from(invoker,
+                           [
+                             "deps",
+                             "public_deps",
+                             "testonly",
+                           ])
+
+    script = "//build/config/fuchsia/build_manifest.py"
+
+    inputs = [
+      _runtime_deps_file,
+      "//build/config/fuchsia/sandbox_policy",
+    ]
+
+    outputs = [
+      _manifest_file,
+    ]
+
+    data_deps = pkg.deps
+
+    # Use a depfile to trigger package rebuilds if any of the files (static
+    # assets, shared libraries, etc.) included by the package have changed.
+    depfile = _depfile
+
+    args = [
+      rebase_path("//"),
+      rebase_path(root_out_dir),
+      pkg.package_name,
+      pkg.binary,
+      rebase_path(pkg.sandbox_policy),
+      rebase_path(_runtime_deps_file),
+      rebase_path(_depfile),
+      rebase_path(dist_libroot) + "," + rebase_path("${sysroot}/dist"),
+      rebase_path(_manifest_file),
+    ]
+
+    write_runtime_deps = _runtime_deps_file
+  }
+
+  # Generates a signing key to use for building the package.
+  action(_generate_key_target) {
+    forward_variables_from(invoker, [ "testonly" ])
+
+    script = "//build/gn_run_binary.py"
+
+    outputs = [
+      _key_file,
+    ]
+
+    args = [
+      rebase_path(_pm_tool_path, root_build_dir),
+      "-k",
+      rebase_path(_key_file),
+      "genkey",
+    ]
+  }
+
+  # Creates a signed Fuchsia metadata package.
+  action(_package_target) {
+    forward_variables_from(invoker, [ "testonly" ])
+
+    script = "//build/gn_run_binary.py"
+
+    deps = [
+      ":$_generate_key_target",
+      ":$_write_manifest_target",
+    ]
+
+    inputs = [
+      _key_file,
+    ]
+
+    outputs = [
+      _meta_far_file,
+    ]
+
+    args = [
+      rebase_path(_pm_tool_path, root_build_dir),
+      "-o",
+      rebase_path(_pkg_out_dir),
+      "-k",
+      rebase_path(_key_file),
+      "-m",
+      rebase_path(_manifest_file),
+      "build",
+    ]
+  }
+
+  # Creates a package containing the metadata archive and blob data.
+  action(_bundle_target) {
+    forward_variables_from(invoker, [ "testonly" ])
+
+    script = "//build/gn_run_binary.py"
+
+    deps = [
+      ":$_package_target",
+      ":$_write_manifest_target",
+    ]
+
+    inputs = [
+      _meta_far_file,
+      _manifest_file,
+    ]
+
+    outputs = [
+      _combined_far_file,
+    ]
+
+    args = [
+      rebase_path(_pm_tool_path, root_build_dir),
+      "-o",
+      rebase_path(_pkg_out_dir),
+      "-m",
+      rebase_path(_manifest_file),
+      "archive",
+    ]
+  }
+
+  # Copies the archive to a well-known path.
+  # TODO(kmarshall): Use a 'pm' output flag to write directly to the desired
+  # file path instead.
+  copy(target_name) {
+    forward_variables_from(invoker, [ "testonly" ])
+
+    deps = [
+      ":$_bundle_target",
+    ]
+
+    data = [
+      _final_far_file,
+    ]
+
+    sources = [
+      _combined_far_file,
+    ]
+    outputs = [
+      _final_far_file,
+    ]
+  }
+}

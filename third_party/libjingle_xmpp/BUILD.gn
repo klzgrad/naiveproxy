@@ -1,0 +1,166 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# TODO(kjellander): Remove remaining dependencies on the WebRTC codebase.
+import("../webrtc/webrtc.gni")
+
+group("libjingle_xmpp") {
+  public_deps = [
+    ":rtc_xmllite",
+    ":rtc_xmpp",
+  ]
+}
+
+config("libjingle_xmpp_common_config") {
+  defines = [ "EXPAT_RELATIVE_PATH" ]
+}
+
+rtc_static_library("rtc_task_runner") {
+  visibility = [ "*" ]
+  sources = [
+    "task_runner/task.cc",
+    "task_runner/task.h",
+    "task_runner/taskparent.cc",
+    "task_runner/taskparent.h",
+    "task_runner/taskrunner.cc",
+    "task_runner/taskrunner.h",
+  ]
+}
+
+rtc_static_library("rtc_xmllite") {
+  visibility = [ "*" ]
+  sources = [
+    "xmllite/qname.cc",
+    "xmllite/qname.h",
+    "xmllite/xmlbuilder.cc",
+    "xmllite/xmlbuilder.h",
+    "xmllite/xmlconstants.cc",
+    "xmllite/xmlconstants.h",
+    "xmllite/xmlelement.cc",
+    "xmllite/xmlelement.h",
+    "xmllite/xmlnsstack.cc",
+    "xmllite/xmlnsstack.h",
+    "xmllite/xmlparser.cc",
+    "xmllite/xmlparser.h",
+    "xmllite/xmlprinter.cc",
+    "xmllite/xmlprinter.h",
+  ]
+
+  deps = [
+    "//third_party/webrtc/rtc_base:rtc_base",
+    "//third_party/webrtc_overrides:task_queue_impl",
+  ]
+  public_deps = [
+    "//third_party/expat",
+  ]
+  all_dependent_configs = [
+    ":libjingle_xmpp_common_config",
+    "//third_party/webrtc_overrides:jingle_unexported_configs",
+  ]
+}
+
+config("rtc_xmpp_warnings_config") {
+  # GN orders flags on a target before flags from configs. The default config
+  # adds these flags so to cancel them out they need to come from a config and
+  # cannot be on the target directly.
+  if (is_android) {
+    cflags = [ "-Wno-error" ]
+  }
+}
+
+rtc_static_library("rtc_xmpp") {
+  visibility = [ "*" ]
+  cflags = []
+  sources = [
+    "xmpp/asyncsocket.h",
+    "xmpp/constants.cc",
+    "xmpp/constants.h",
+    "xmpp/jid.cc",
+    "xmpp/jid.h",
+    "xmpp/plainsaslhandler.h",
+    "xmpp/prexmppauth.h",
+    "xmpp/saslcookiemechanism.h",
+    "xmpp/saslhandler.h",
+    "xmpp/saslmechanism.cc",
+    "xmpp/saslmechanism.h",
+    "xmpp/saslplainmechanism.h",
+    "xmpp/xmppclient.cc",
+    "xmpp/xmppclient.h",
+    "xmpp/xmppclientsettings.h",
+    "xmpp/xmppengine.h",
+    "xmpp/xmppengineimpl.cc",
+    "xmpp/xmppengineimpl.h",
+    "xmpp/xmppengineimpl_iq.cc",
+    "xmpp/xmpplogintask.cc",
+    "xmpp/xmpplogintask.h",
+    "xmpp/xmppstanzaparser.cc",
+    "xmpp/xmppstanzaparser.h",
+    "xmpp/xmpptask.cc",
+    "xmpp/xmpptask.h",
+  ]
+
+  defines = []
+
+  deps = [
+    ":rtc_xmllite",
+    "//third_party/webrtc/rtc_base:rtc_base_approved",
+    "//third_party/webrtc_overrides:task_queue_impl",
+  ]
+  public_deps = [
+    ":rtc_task_runner",
+    "//third_party/expat",
+  ]
+  configs += [ ":rtc_xmpp_warnings_config" ]
+  all_dependent_configs = [ ":libjingle_xmpp_common_config" ]
+
+  if (is_nacl) {
+    deps += [ "//native_client_sdk/src/libraries/nacl_io" ]
+  }
+}
+
+config("libjingle_xmpp_unittests_config") {
+  # GN orders flags on a target before flags from configs. The default config
+  # adds -Wall, and this flag have to be after -Wall -- so they need to
+  # come from a config and can"t be on the target directly.
+  if (is_clang) {
+    cflags = [
+      "-Wno-missing-braces",
+      "-Wno-sign-compare",
+      "-Wno-unused-const-variable",
+    ]
+  }
+}
+
+rtc_test("libjingle_xmpp_unittests") {
+  configs += [ ":libjingle_xmpp_unittests_config" ]
+
+  deps = [
+    ":libjingle_xmpp",
+    ":rtc_task_runner",
+    "//base/test:run_all_unittests",
+    "//base/test:test_support",
+
+    # TODO(kjellander): Refactor/remove this dependency. It is needed by
+    # third_party/webrtc_overrides/rtc_base/win32socketinit.cc.
+    "//net",
+    "//testing/gtest",
+  ]
+
+  sources = [
+    "task_runner/task_unittest.cc",
+    "xmllite/qname_unittest.cc",
+    "xmllite/xmlbuilder_unittest.cc",
+    "xmllite/xmlelement_unittest.cc",
+    "xmllite/xmlnsstack_unittest.cc",
+    "xmllite/xmlparser_unittest.cc",
+    "xmllite/xmlprinter_unittest.cc",
+    "xmpp/fakexmppclient.h",
+    "xmpp/jid_unittest.cc",
+    "xmpp/util_unittest.cc",
+    "xmpp/util_unittest.h",
+    "xmpp/xmppengine_unittest.cc",
+    "xmpp/xmpplogintask_unittest.cc",
+    "xmpp/xmppstanzaparser_unittest.cc",
+  ]
+}

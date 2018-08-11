@@ -1,0 +1,46 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module network.mojom;
+
+enum SSLVersion {
+  kTLS1,
+  kTLS11,
+  kTLS12,
+  kTLS13,
+};
+
+// Versions of TLS 1.3 that are supported.
+enum TLS13Variant {
+  kDraft23,
+  kDraft28,
+};
+
+// This contains the subset of net::SSLConfig members that are managed by the
+// net::SSLConfigService. See net::SSLConfig for field descriptions.
+struct SSLConfig {
+  bool rev_checking_enabled = false;
+  bool rev_checking_required_local_anchors = false;
+
+  bool sha1_local_anchors_enabled = false;
+  bool symantec_enforcement_disabled = false;
+
+  // SSL 2.0 and 3.0 are not supported.
+  SSLVersion version_min = kTLS1;
+  SSLVersion version_max = kTLS12;
+
+  TLS13Variant tls13_variant = kDraft23;
+
+  // Though cipher suites are sent in TLS as "uint8_t CipherSuite[2]", in
+  // big-endian form, they should be declared in host byte order, with the
+  // first uint8_t occupying the most significant byte.
+  // Ex: To disable TLS_RSA_WITH_RC4_128_MD5, specify 0x0004, while to
+  // disable TLS_ECDH_ECDSA_WITH_RC4_128_SHA, specify 0xC002.
+  array<uint16> disabled_cipher_suites;
+};
+
+// Receives SSL configuration updates.
+interface SSLConfigClient {
+  OnSSLConfigUpdated(SSLConfig ssl_config);
+};

@@ -1,0 +1,102 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/mac/rules.gni")
+import("//build/util/branding.gni")
+import("//testing/test.gni")
+
+source_set("mac_installer_base") {
+  visibility = [ ":*" ]
+  sources = [
+    "Downloader.h",
+    "Downloader.m",
+    "NSAlert+ChromeInstallerAdditions.h",
+    "NSAlert+ChromeInstallerAdditions.m",
+    "NSError+ChromeInstallerAdditions.h",
+    "NSError+ChromeInstallerAdditions.m",
+    "OmahaCommunication.h",
+    "OmahaCommunication.m",
+    "OmahaXMLParser.h",
+    "OmahaXMLParser.m",
+    "OmahaXMLRequest.h",
+    "OmahaXMLRequest.m",
+    "SystemInfo.h",
+    "SystemInfo.m",
+    "Unpacker.h",
+    "Unpacker.m",
+  ]
+  public_configs = [ "//build/config/compiler:enable_arc" ]
+}
+
+mac_app_bundle("mac_installer_app") {
+  output_name = "$chrome_product_installer_full_name"
+  info_plist = "Info.plist"
+  extra_substitutions = [
+    "PRODUCT_INSTALLER_FULLNAME=$chrome_product_installer_full_name",
+    "CHROMIUM_BUNDLE_ID=$chrome_mac_bundle_id",
+  ]
+  sources = [
+    "AppDelegate.h",
+    "AppDelegate.mm",
+    "AuthorizedInstall.h",
+    "AuthorizedInstall.m",
+    "InstallerWindowController.h",
+    "InstallerWindowController.m",
+    "main.m",
+  ]
+
+  deps = [
+    ":mac_installer_base",
+    ":mac_installer_resources",
+    ":mac_installer_xibs",
+    "//chrome/common:constants",
+  ]
+
+  libs = [
+    "Cocoa.framework",
+    "DiskArbitration.framework",
+    "Security.framework",
+  ]
+}
+
+mac_xib_bundle_data("mac_installer_xibs") {
+  sources = [
+    "MainMenu.xib",
+  ]
+}
+
+bundle_data("mac_installer_resources") {
+  sources = [
+    "copy_to_disk.sh",
+  ]
+  outputs = [
+    "{{bundle_resources_dir}}/copy_to_disk.sh",
+  ]
+}
+
+test("mac_installer_unittests") {
+  sources = [
+    "testing/OmahaXMLRequest_test.mm",
+    "testing/SystemInfo_test.mm",
+    "testing/Unpacker_test.mm",
+  ]
+  deps = [
+    ":mac_installer_base",
+    "//base:base",
+    "//base/test:run_all_unittests",
+    "//chrome/common:constants",
+    "//testing/gtest:gtest",
+  ]
+  libs = [
+    "Cocoa.framework",
+    "DiskArbitration.framework",
+    "Security.framework",
+  ]
+  data = [
+    "//chrome/test/data/mac_installer/requestCheck.dtd",
+    "//chrome/test/data/mac_installer/requestSample.xml",
+    "//chrome/test/data/mac_installer/responseExample.xml",
+    "//chrome/test/data/mac_installer/test-dmg.dmg",
+  ]
+}

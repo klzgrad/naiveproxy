@@ -1,0 +1,54 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module display.mojom;
+
+import "ui/display/mojo/display_constants.mojom";
+import "ui/display/mojo/display_mode.mojom";
+import "ui/display/mojo/display_snapshot.mojom";
+import "ui/display/mojo/gamma_ramp_rgb_entry.mojom";
+import "ui/gfx/geometry/mojo/geometry.mojom";
+
+// Corresponds to display::NativeDisplayObserver.
+interface NativeDisplayObserver {
+  OnConfigurationChanged();
+};
+
+// Corresponds to display::NativeDisplayDelegate. This only implements
+// functionality that is used by Ozone DRM.
+interface NativeDisplayDelegate {
+  // Initializes and registers the observer. This is synchronous so that ash
+  // initialization has an initial set of displays to use.
+  [Sync]
+  Initialize(NativeDisplayObserver observer) =>
+      (array<DisplaySnapshot> snapshots);
+
+  // Take control of the displays from any other controlling process.
+  TakeDisplayControl() => (bool result);
+
+  // Let others control the displays.
+  RelinquishDisplayControl() => (bool result);
+
+  // Queries for a list of fresh displays.
+  GetDisplays() => (array<DisplaySnapshot> snapshots);
+
+  // Configures the display represented by |display_id| to use |mode| and
+  // positions the display to |origin| in the framebuffer. |mode| can be null,
+  // which represents disabling the display.
+  Configure(int64 display_id,
+            DisplayMode? mode,
+            gfx.mojom.Point origin) => (bool status);
+
+  // Gets HDCP state of output.
+  GetHDCPState(int64 display_id) => (bool status, HDCPState state);
+
+  // Sets HDCP state of output.
+  SetHDCPState(int64 display_id, HDCPState state) => (bool status);
+
+  // Set the gamma tables and correction matrix for |display_id|.
+  SetColorCorrection(int64 display_id,
+                     array<GammaRampRGBEntry> degamma_lut,
+                     array<GammaRampRGBEntry> gamma_lut,
+                     array<float> correction_matrix);
+};

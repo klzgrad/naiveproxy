@@ -1,0 +1,94 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//third_party/fontconfig/fontconfig.gni")
+
+assert(is_linux)
+
+if (use_bundled_fontconfig) {
+  config("fontconfig_config") {
+    include_dirs = [ "src" ]
+  }
+
+  component("fontconfig") {
+    sources = [
+      "src/src/fcarch.h",
+      "src/src/fcatomic.c",
+      "src/src/fcblanks.c",
+      "src/src/fccache.c",
+      "src/src/fccfg.c",
+      "src/src/fccharset.c",
+      "src/src/fccompat.c",
+      "src/src/fcdbg.c",
+      "src/src/fcdefault.c",
+      "src/src/fcdir.c",
+      "src/src/fcformat.c",
+      "src/src/fcfreetype.c",
+      "src/src/fcfs.c",
+      "src/src/fcinit.c",
+      "src/src/fclang.c",
+      "src/src/fclist.c",
+      "src/src/fcmatch.c",
+      "src/src/fcmatrix.c",
+      "src/src/fcname.c",
+      "src/src/fcobjs.c",
+      "src/src/fcpat.c",
+      "src/src/fcrange.c",
+      "src/src/fcserialize.c",
+      "src/src/fcstat.c",
+      "src/src/fcstr.c",
+      "src/src/fcweight.c",
+      "src/src/fcxml.c",
+      "src/src/ftglue.c",
+      "src/src/ftglue.h",
+    ]
+
+    include_dirs = [
+      "include",
+      "include/src",
+    ]
+
+    defines = [
+      "HAVE_CONFIG_H",
+      "FC_CACHEDIR=\"/var/cache/fontconfig\"",
+      "FONTCONFIG_PATH=\"/etc/fonts\"",
+    ]
+
+    # This is a hack to remove visibility("default") annotations.  Fontconfig
+    # symbols should not be exported from chrome, nacl_helper, or anything
+    # else.
+    if (!is_component_build) {
+      defines += [ "visibility(x)=" ]
+    }
+
+    deps = [
+      "//build/config/freetype",
+      "//third_party/libxml",
+      "//third_party/zlib",
+    ]
+
+    configs -= [ "//build/config/compiler:chromium_code" ]
+    configs += [ "//build/config/compiler:no_chromium_code" ]
+
+    public_configs = [ ":fontconfig_config" ]
+
+    if (is_clang) {
+      cflags = [
+        # Work around a null-conversion warning. See crbug.com/358852.
+        "-Wno-non-literal-null-conversion",
+
+        # Work around a pointer-to-bool conversion.
+        "-Wno-pointer-bool-conversion",
+      ]
+    }
+  }
+} else {
+  config("fontconfig_config") {
+    libs = [ "fontconfig" ]
+  }
+
+  group("fontconfig") {
+    public_configs = [ ":fontconfig_config" ]
+  }
+}

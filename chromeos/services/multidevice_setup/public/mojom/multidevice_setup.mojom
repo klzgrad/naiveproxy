@@ -1,0 +1,51 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module chromeos.multidevice_setup.mojom;
+
+// Handles events dispatched by MultiDeviceSetup.
+interface MultiDeviceSetupObserver {
+  // Callback which indicates that one or more MultiDevice host phones are
+  // available for setup with the MultiDevice setup flow. This function is only
+  // called if the current user has not yet set up MultiDevice features.
+  OnPotentialHostExistsForNewUser();
+
+  // Callback which indicates that the currently-connected MultiDevice host has
+  // changed. This likely means that the user has changed MultiDevice settings
+  // on another device. This function is only called if the current user has
+  // already set up MultiDevice features.
+  OnConnectedHostSwitchedForExistingUser();
+
+  // Callback which indicates that a new Chromebook was added to the account of
+  // the current user. This function is only called if the current user has
+  // already set up MultiDevice features.
+  OnNewChromebookAddedForExistingUser();
+};
+
+// Enumeration of event types which can be dispatched. Only used for debugging
+// purposes.
+enum EventTypeForDebugging {
+  kNewUserPotentialHostExists,
+  kExistingUserConnectedHostSwitched,
+  kExistingUserNewChromebookAdded,
+};
+
+// Provides an API to the MultiDevice Setup flow. Designed to be exposed
+// primarily to the MultiDevice setup flow at chrome://multidevice-setup (normal
+// usage) as well as the ProximityAuth debug WebUI page at
+// chrome://proximity-auth (debugging only).
+// TODO(khorimoto): Finish fleshing out this interface.
+interface MultiDeviceSetup {
+  // Registers the observer to be used by the service. Once this function has
+  // been called, the service will begin monitoring changes to synced devices
+  // and will notify |observer| when appropriate. Only one observer can be
+  // active at a time; calling this function a second time will remove the
+  // first observer added.
+  SetObserver(MultiDeviceSetupObserver observer) => ();
+
+  // Triggers an event to be dispatched by the service. This API function is
+  // intended to be used only for debugging in the chrome://proximity-auth page.
+  // During normal usage, events are triggered internally within the service.
+  TriggerEventForDebugging(EventTypeForDebugging type) => (bool success);
+};

@@ -1,0 +1,114 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module blink.mojom;
+
+import "skia/public/interfaces/bitmap.mojom";
+import "third_party/blink/public/platform/modules/fetch/fetch_api_request.mojom";
+import "ui/gfx/geometry/mojo/geometry.mojom";
+
+enum BackgroundFetchError {
+  NONE,
+  DUPLICATED_DEVELOPER_ID,
+  INVALID_ARGUMENT,
+  INVALID_ID,
+  STORAGE_ERROR
+};
+
+// Represents the definition of an icon developers can optionally provide with a
+// Background Fetch fetch. Analogous to the following structure in the spec:
+// https://wicg.github.io/background-fetch/#background-fetch-manager
+struct IconDefinition {
+  string src;
+  string sizes;
+  string type;
+};
+
+// Represents the optional options a developer can provide when starting a new
+// Background Fetch fetch. Analogous to the following structure in the spec:
+// https://wicg.github.io/background-fetch/#background-fetch-manager
+struct BackgroundFetchOptions {
+  array<IconDefinition> icons;
+  uint64 download_total;
+  string title;
+};
+
+// Represents the information associated with a Background Fetch registration.
+// Analogous to the following structure in the spec:
+// https://wicg.github.io/background-fetch/#background-fetch-registration
+struct BackgroundFetchRegistration {
+  // Corresponds to IDL 'id' attribute. Not unique - an active registration can
+  // have the same |developer_id| as one or more inactive registrations.
+  string developer_id;
+  // Globally unique ID for the registration, generated in content/. Used to
+  // distinguish registrations in case a developer re-uses |developer_id|s. Not
+  // exposed to JavaScript.
+  string unique_id;
+
+  uint64 upload_total;
+  uint64 uploaded;
+  uint64 download_total;
+  uint64 downloaded;
+};
+
+interface BackgroundFetchRegistrationObserver {
+  // Notifies the BackgroundFetchRegistration about progress in the fetches that
+  // are part of it. The JavaScript `progress` event will be fired.
+  OnProgress(uint64 upload_total,
+             uint64 uploaded,
+             uint64 download_total,
+             uint64 downloaded);
+};
+
+// Interface for Background Fetch tasks. Lives in the browser process.
+// Implements Background Fetch over Mojo IPC RFC.
+interface BackgroundFetchService {
+  // Creates a new Background Fetch registration identified to the developer by
+  // |developer_id|, with the given |options| for the sequence of |requests|.
+  // Also passed along the |icon| to display.
+  Fetch(int64 service_worker_registration_id,
+        string developer_id,
+        array<FetchAPIRequest> requests,
+        BackgroundFetchOptions options,
+        skia.mojom.Bitmap? icon)
+      => (BackgroundFetchError error,
+          BackgroundFetchRegistration? registration);
+
+  // Updates the user interface for the Background Fetch registration identified
+  // by |service_worker_registration_id|, |developer_id|, and |unique_id|.
+  UpdateUI(int64 service_worker_registration_id,
+           string developer_id,
+           string unique_id,
+           string title)
+      => (BackgroundFetchError error);
+
+  // Aborts the Background Fetch registration identified by |unique_id| and
+  // the developer's |developer_id|. Fails if the registration had already
+  // completed/failed/aborted.
+  Abort(int64 service_worker_registration_id,
+        string developer_id,
+        string unique_id)
+      => (BackgroundFetchError error);
+
+  // Gets the active Background Fetch registration identified by |developer_id|.
+  GetRegistration(int64 service_worker_registration_id,
+                  string developer_id)
+      => (BackgroundFetchError error,
+          BackgroundFetchRegistration? registration);
+
+  // Gets the sequence of |developer_id|s for active Background Fetch
+  // registrations given the |service_worker_registration_id|.
+  GetDeveloperIds(int64 service_worker_registration_id)
+      => (BackgroundFetchError error,
+          array<string> developer_ids);
+
+  // Gets size of the icon to display with the Background Fetch UI.
+  GetIconDisplaySize()
+      => (gfx.mojom.Size icon_size_pixels);
+
+  // Registers the |observer| to receive events for the given registration
+  // that is identified by the |unique_id|.
+  AddRegistrationObserver(string unique_id,
+                          BackgroundFetchRegistrationObserver observer);
+};
