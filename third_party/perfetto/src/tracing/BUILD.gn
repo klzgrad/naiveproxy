@@ -1,0 +1,201 @@
+# Copyright (C) 2017 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../gn/perfetto.gni")
+import("//build_overrides/build.gni")
+
+# Core tracing library, platform independent, no transport layer.
+source_set("tracing") {
+  public_deps = [
+    "../../include/perfetto/tracing/core",
+    "../../protos/perfetto/common",
+    "../../protos/perfetto/trace:minimal_lite",
+    "../../protos/perfetto/trace:trusted_lite",
+    "../../protos/perfetto/trace:zero",
+  ]
+  deps = [
+    "../../gn:default_deps",
+    "../../gn:gtest_prod_config",
+    "../../protos/perfetto/config",
+    "../base",
+    "../protozero",
+  ]
+  sources = [
+    "core/chrome_config.cc",
+    "core/commit_data_request.cc",
+    "core/data_source_config.cc",
+    "core/data_source_descriptor.cc",
+    "core/ftrace_config.cc",
+    "core/id_allocator.cc",
+    "core/id_allocator.h",
+    "core/inode_file_config.cc",
+    "core/null_trace_writer.cc",
+    "core/null_trace_writer.h",
+    "core/packet_stream_validator.cc",
+    "core/packet_stream_validator.h",
+    "core/patch_list.h",
+    "core/process_stats_config.cc",
+    "core/shared_memory_abi.cc",
+    "core/shared_memory_arbiter_impl.cc",
+    "core/shared_memory_arbiter_impl.h",
+    "core/sliced_protobuf_input_stream.cc",
+    "core/sliced_protobuf_input_stream.h",
+    "core/test_config.cc",
+    "core/trace_buffer.cc",
+    "core/trace_buffer.h",
+    "core/trace_config.cc",
+    "core/trace_packet.cc",
+    "core/trace_writer_impl.cc",
+    "core/trace_writer_impl.h",
+    "core/tracing_service_impl.cc",
+    "core/tracing_service_impl.h",
+    "core/virtual_destructors.cc",
+  ]
+}
+
+source_set("unittests") {
+  testonly = true
+  deps = [
+    ":test_support",
+    ":tracing",
+    "../../gn:default_deps",
+    "../../gn:gtest_deps",
+    "../../protos/perfetto/config",
+    "../../protos/perfetto/trace:lite",
+    "../../protos/perfetto/trace:zero",
+    "../base",
+    "../base:test_support",
+  ]
+  sources = [
+    "core/id_allocator_unittest.cc",
+    "core/null_trace_writer_unittest.cc",
+    "core/packet_stream_validator_unittest.cc",
+    "core/patch_list_unittest.cc",
+    "core/shared_memory_abi_unittest.cc",
+    "core/sliced_protobuf_input_stream_unittest.cc",
+    "core/trace_buffer_unittest.cc",
+    "core/trace_packet_unittest.cc",
+    "test/aligned_buffer_test.cc",
+    "test/aligned_buffer_test.h",
+    "test/fake_packet.cc",
+    "test/fake_packet.h",
+    "test/test_shared_memory.cc",
+    "test/test_shared_memory.h",
+  ]
+
+  if (!build_with_chromium) {
+    deps += [ ":ipc" ]
+    sources += [
+      "ipc/posix_shared_memory_unittest.cc",
+      "test/tracing_integration_test.cc",
+    ]
+  }
+
+  # These tests rely on test_task_runner.h which
+  # has no Windows implementation.
+  if (!is_win) {
+    sources += [
+      "core/service_impl_unittest.cc",
+      "core/shared_memory_arbiter_impl_unittest.cc",
+      "core/trace_writer_impl_unittest.cc",
+      "test/mock_consumer.cc",
+      "test/mock_consumer.h",
+      "test/mock_producer.cc",
+      "test/mock_producer.h",
+    ]
+  }
+}
+
+source_set("test_support") {
+  testonly = true
+  public_deps = [
+    "../../include/perfetto/tracing/core",
+    "../../protos/perfetto/trace:lite",
+    "../../protos/perfetto/trace:zero",
+    "../protozero:test_support",
+  ]
+  sources = [
+    "core/trace_writer_for_testing.cc",
+    "core/trace_writer_for_testing.h",
+  ]
+}
+
+if (!build_with_chromium) {
+  # IPC transport: only consumer side
+  # TODO(fmayer): Remove duplication between this and ipc.
+  source_set("ipc_consumer") {
+    public_deps = [
+      "../../include/perfetto/tracing/core",
+      "../../include/perfetto/tracing/ipc",
+    ]
+    sources = [
+      "ipc/consumer/consumer_ipc_client_impl.cc",
+      "ipc/consumer/consumer_ipc_client_impl.h",
+      "ipc/default_socket.cc",
+      "ipc/default_socket.h",
+      "ipc/posix_shared_memory.cc",
+      "ipc/posix_shared_memory.h",
+    ]
+    deps = [
+      ":tracing",
+      "../../gn:default_deps",
+      "../../protos/perfetto/ipc",
+      "../base",
+      "../ipc",
+    ]
+  }
+
+  # Posix specialization of the tracing library for Linux/Android/Mac. Provides
+  # an IPC transport over a UNIX domain socket.
+  static_library("ipc") {
+    public_deps = [
+      "../../include/perfetto/tracing/core",
+      "../../include/perfetto/tracing/ipc",
+    ]
+    sources = [
+      "ipc/consumer/consumer_ipc_client_impl.cc",
+      "ipc/consumer/consumer_ipc_client_impl.h",
+      "ipc/default_socket.cc",
+      "ipc/default_socket.h",
+      "ipc/posix_shared_memory.cc",
+      "ipc/posix_shared_memory.h",
+      "ipc/producer/producer_ipc_client_impl.cc",
+      "ipc/producer/producer_ipc_client_impl.h",
+      "ipc/service/consumer_ipc_service.cc",
+      "ipc/service/consumer_ipc_service.h",
+      "ipc/service/producer_ipc_service.cc",
+      "ipc/service/producer_ipc_service.h",
+      "ipc/service/service_ipc_host_impl.cc",
+      "ipc/service/service_ipc_host_impl.h",
+    ]
+    deps = [
+      ":tracing",
+      "../../gn:default_deps",
+      "../../protos/perfetto/ipc",
+      "../base",
+      "../ipc",
+    ]
+  }
+
+  source_set("tracing_benchmarks") {
+    testonly = true
+    deps = [
+      "../../gn:default_deps",
+      "//buildtools:benchmark",
+    ]
+    sources = [
+      "test/hello_world_benchmark.cc",
+    ]
+  }
+}

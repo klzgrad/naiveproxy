@@ -1,0 +1,127 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module chromeos.multidevice_setup.mojom;
+
+import "chromeos/services/device_sync/public/mojom/device_sync.mojom";
+
+// Enumeration of event types which can be dispatched. Only used for debugging
+// purposes.
+enum EventTypeForDebugging {
+  kNewUserPotentialHostExists,
+  kExistingUserConnectedHostSwitched,
+  kExistingUserNewChromebookAdded,
+};
+
+enum HostStatus {
+  // The user's account has no devices which can serve as a host for
+  // multi-device features.
+  kNoEligibleHosts,
+
+  // The user's account has one or more devices which can be used as a host for
+  // multi-device features, but the user has not yet completed the setup flow
+  // for any one of these devices.
+  kEligibleHostExistsButNoHostSet,
+
+  // The user has completed the setup flow for multi-device features on this
+  // device, but there was an error contacting the back-end (e.g., the device
+  // was offline during the setup flow, or the back-end rejected the request for
+  // some reason). The local device will continue trying to contact the back-end
+  // to confirm that the host is set.
+  kHostSetLocallyButWaitingForBackendConfirmation,
+
+  // The host has been set (both locally and on the back-end), but verification
+  // has not yet completed. The local device will continue trying to establish
+  // a Bluetooth connection to the host until verification succeeds.
+  kHostSetButNotYetVerified,
+
+  // The host has been set (both locally and on the back-end), and the
+  // verification step over Bluetooth has completed. Features should be
+  // available for use.
+  kHostVerified
+};
+
+interface AccountStatusChangeDelegate {
+  // Callback which indicates that one or more MultiDevice host phones are
+  // available for setup with the MultiDevice setup flow. This function is only
+  // called if the current user has not yet set up MultiDevice features.
+  OnPotentialHostExistsForNewUser();
+
+  // Callback which indicates that the currently-connected MultiDevice host has
+  // changed. This likely means that the user has changed MultiDevice settings
+  // on another device. This function is only called if the current user has
+  // already set up MultiDevice features.
+  OnConnectedHostSwitchedForExistingUser();
+
+  // Callback which indicates that a new Chromebook was added to the account of
+  // the current user. This function is only called if the current user has
+  // already set up MultiDevice features.
+  OnNewChromebookAddedForExistingUser();
+};
+
+interface HostStatusObserver {
+  // Called whenever the host status changes. If the host status is
+  // HostStatus::kNoEligibleHosts or
+  // HostStatus::kEligibleHostExistsButNoHostSet, |host_device| is null.
+  OnHostStatusChanged(HostStatus host_status,
+                      chromeos.device_sync.mojom.RemoteDevice? host_device);
+};
+
+// Provides an API to the MultiDevice Setup flow. Designed to be exposed
+// primarily to the MultiDevice setup flow at chrome://multidevice-setup (normal
+// usage) as well as the ProximityAuth debug WebUI page at
+// chrome://proximity-auth (debugging only).
+interface MultiDeviceSetup {
+  // Registers the "account status change" delegate to be used by the service.
+  // Only one delegate can be set; this function should not be called more than
+  // once.
+  SetAccountStatusChangeDelegate(AccountStatusChangeDelegate delegate);
+
+  // Adds an observer of host status changes. To stop observing, disconnect the
+  // HostStatusObserverPtr passed here.
+  AddHostStatusObserver(HostStatusObserver observer);
+
+  // Provides a list of all eligible host devices (i.e., those which can be
+  // passed to SetHostDevice()).
+  GetEligibleHostDevices() =>
+      (array<chromeos.device_sync.mojom.RemoteDevice> eligible_host_devices);
+
+  // Sets the host associated with the provided public key as the host device
+  // for this account. When called when there is no current host or when the
+  // current host is a different device from the one passed, this function
+  // initiates a connection to the back-end and attempts to set the host. When
+  // called with the same device that is already the host, this function is a
+  // no-op. Returns a success boolean; the only way that this function can
+  // fail is if the provided public key does not correspond to an eligible host
+  // device on the account.
+  SetHostDevice(string public_key) => (bool success);
+
+  // Removes the currently-set host as the multi-device host for this account.
+  // If there was no host set to begin with, this function is a no-op.
+  RemoveHostDevice();
+
+  // Returns the host status and host device. If the host status is
+  // HostStatus::kNoEligibleHosts or
+  // HostStatus::kEligibleHostExistsButNoHostSet, |host_device| is null.
+  GetHostStatus() => (HostStatus host_status,
+                      chromeos.device_sync.mojom.RemoteDevice? host_device);
+
+  // Retries the most recent SetHostDevice() call.
+  //
+  // If the current status is
+  // HostStatus::kHostSetLocallyButWaitingForBackendConfirmation, this function
+  // retries the network attempt to set the device on the back-end. If the
+  // current status is HostStatus::kHostSetButNotYetVerified, this function
+  // retries the verification step. Both of these cases return true to the
+  // caller.
+  //
+  // If the current status is any other value, this function is not applicable,
+  // and false is returned to the caller.
+  RetrySetHostNow() => (bool success);
+
+  // Triggers an event to be dispatched by the service. This API function is
+  // intended to be used only for debugging in the chrome://proximity-auth page.
+  // During normal usage, events are triggered internally within the service.
+  TriggerEventForDebugging(EventTypeForDebugging type) => (bool success);
+};

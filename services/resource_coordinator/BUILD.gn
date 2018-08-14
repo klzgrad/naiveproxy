@@ -1,0 +1,147 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# There should be only one resource coordinator. It is currently
+# in the browser process. So, only //content/browser should link to this target.
+# Others modules should only need the public targets.
+import("//services/catalog/public/tools/catalog.gni")
+import("//services/service_manager/public/cpp/service.gni")
+import("//services/service_manager/public/service_manifest.gni")
+import("//services/service_manager/public/tools/test/service_test.gni")
+
+source_set("lib") {
+  sources = [
+    "coordination_unit/coordination_unit_base.cc",
+    "coordination_unit/coordination_unit_base.h",
+    "coordination_unit/coordination_unit_graph.cc",
+    "coordination_unit/coordination_unit_graph.h",
+    "coordination_unit/coordination_unit_introspector_impl.cc",
+    "coordination_unit/coordination_unit_introspector_impl.h",
+    "coordination_unit/coordination_unit_provider_impl.cc",
+    "coordination_unit/coordination_unit_provider_impl.h",
+    "coordination_unit/frame_coordination_unit_impl.cc",
+    "coordination_unit/frame_coordination_unit_impl.h",
+    "coordination_unit/page_coordination_unit_impl.cc",
+    "coordination_unit/page_coordination_unit_impl.h",
+    "coordination_unit/process_coordination_unit_impl.cc",
+    "coordination_unit/process_coordination_unit_impl.h",
+    "coordination_unit/system_coordination_unit_impl.cc",
+    "coordination_unit/system_coordination_unit_impl.h",
+    "memory_instrumentation/coordinator_impl.cc",
+    "memory_instrumentation/coordinator_impl.h",
+    "memory_instrumentation/graph.cc",
+    "memory_instrumentation/graph.h",
+    "memory_instrumentation/graph_processor.cc",
+    "memory_instrumentation/graph_processor.h",
+    "memory_instrumentation/process_map.cc",
+    "memory_instrumentation/process_map.h",
+    "memory_instrumentation/queued_request.cc",
+    "memory_instrumentation/queued_request.h",
+    "memory_instrumentation/queued_request_dispatcher.cc",
+    "memory_instrumentation/queued_request_dispatcher.h",
+    "memory_instrumentation/switches.cc",
+    "memory_instrumentation/switches.h",
+    "observers/background_metrics_reporter.h",
+    "observers/coordination_unit_graph_observer.cc",
+    "observers/coordination_unit_graph_observer.h",
+    "observers/ipc_volume_reporter.cc",
+    "observers/ipc_volume_reporter.h",
+    "observers/metrics_collector.cc",
+    "observers/metrics_collector.h",
+    "observers/page_signal_generator_impl.cc",
+    "observers/page_signal_generator_impl.h",
+    "resource_coordinator_clock.cc",
+    "resource_coordinator_clock.h",
+    "resource_coordinator_service.cc",
+    "resource_coordinator_service.h",
+  ]
+
+  public_deps = [
+    "//base",
+    "//mojo/public/cpp/bindings",
+    "//services/metrics/public/cpp:metrics_cpp",
+    "//services/metrics/public/cpp:ukm_builders",
+    "//services/metrics/public/mojom",
+    "//services/resource_coordinator/public/cpp:resource_coordinator_cpp",
+    "//services/service_manager/public/cpp/standalone_service:standalone_service",
+  ]
+}
+
+service_manifest("manifest") {
+  name = "resource_coordinator"
+  source = "manifest.json"
+}
+
+service("resource_coordinator") {
+  sources = [
+    "service_main.cc",
+  ]
+
+  deps = [
+    ":lib",
+    "//mojo/public/cpp/system",
+  ]
+}
+
+source_set("tests") {
+  testonly = true
+
+  sources = [
+    "coordination_unit/coordination_unit_base_unittest.cc",
+    "coordination_unit/coordination_unit_graph_unittest.cc",
+    "coordination_unit/coordination_unit_test_harness.cc",
+    "coordination_unit/coordination_unit_test_harness.h",
+    "coordination_unit/frame_coordination_unit_impl_unittest.cc",
+    "coordination_unit/mock_coordination_unit_graphs.cc",
+    "coordination_unit/mock_coordination_unit_graphs.h",
+    "coordination_unit/page_coordination_unit_impl_unittest.cc",
+    "coordination_unit/process_coordination_unit_impl_unittest.cc",
+    "coordination_unit/system_coordination_unit_impl_unittest.cc",
+    "memory_instrumentation/coordinator_impl_unittest.cc",
+    "memory_instrumentation/graph_processor_unittest.cc",
+    "memory_instrumentation/graph_unittest.cc",
+    "memory_instrumentation/process_map_unittest.cc",
+    "observers/coordination_unit_graph_observer_unittest.cc",
+    "observers/ipc_volume_reporter_unittest.cc",
+    "observers/metrics_collector_unittest.cc",
+    "observers/page_signal_generator_impl_unittest.cc",
+    "public/cpp/memory_instrumentation/memory_instrumentation_mojom_traits_unittest.cc",
+    "public/cpp/memory_instrumentation/os_metrics_unittest.cc",
+    "public/cpp/memory_instrumentation/tracing_integration_unittest.cc",
+  ]
+
+  if (!is_android) {
+    sources += [ "resource_coordinator_service_unittest.cc" ]
+  }
+
+  deps = [
+    ":lib",
+    "//base",
+    "//base/test:test_support",
+    "//components/ukm:test_support",
+    "//mojo/public/cpp/bindings",
+    "//services/resource_coordinator/public/cpp:resource_coordinator_cpp",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/cpp:service_test_support",
+    "//services/service_manager/public/mojom",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+
+  data_deps = [
+    ":resource_coordinator",
+    ":lib",
+  ]
+}
+
+service_manifest("unittest_manifest") {
+  name = "resource_coordinator_unittests"
+  source = "unittest_manifest.json"
+}
+
+catalog("tests_catalog") {
+  testonly = true
+  embedded_services = [ ":unittest_manifest" ]
+  standalone_services = [ ":manifest" ]
+}

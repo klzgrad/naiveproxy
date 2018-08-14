@@ -1,0 +1,283 @@
+# Copyright 2018 The ANGLE Project Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("../../gni/angle.gni")
+
+vulkan_gen_dir = "$target_gen_dir/angle/vulkan"
+raw_vulkan_gen_dir = rebase_path(vulkan_gen_dir, root_build_dir)
+
+# SPIRV-tools
+# -----------
+
+spirv_source_dir = "src/source"
+spirv_headers_dir = "../spirv-headers/src"
+spirv_include_dir = "$spirv_headers_dir/include/spirv"
+raw_spirv_source_dir = rebase_path(spirv_source_dir, root_build_dir)
+raw_spirv_headers_dir = rebase_path(spirv_headers_dir, root_build_dir)
+raw_spirv_include_dir = rebase_path(spirv_include_dir, root_build_dir)
+
+grammar_processing_script = "src/utils/generate_grammar_tables.py"
+
+spvtools_core_tables = [ "unified1" ]
+
+foreach(version, spvtools_core_tables) {
+  action("spirv_tools_gen_core_tables_" + version) {
+    script = grammar_processing_script
+    sources = [
+      "$spirv_include_dir/$version/spirv.core.grammar.json",
+    ]
+    outputs = [
+      "$vulkan_gen_dir/core.insts-$version.inc",
+      "$vulkan_gen_dir/operand.kinds-$version.inc",
+    ]
+    args = [
+      "--spirv-core-grammar=$raw_spirv_include_dir/$version/spirv.core.grammar.json",
+      "--extinst-debuginfo-grammar=$raw_spirv_source_dir/extinst.debuginfo.grammar.json",
+      "--core-insts-output=$raw_vulkan_gen_dir/core.insts-$version.inc",
+      "--operand-kinds-output=$raw_vulkan_gen_dir/operand.kinds-$version.inc",
+    ]
+  }
+}
+
+spvtools_enum_string_mapping = [ "unified1" ]
+
+foreach(version, spvtools_enum_string_mapping) {
+  action("spirv_tools_gen_enum_string_mapping_" + version) {
+    script = grammar_processing_script
+    sources = [
+      "$spirv_include_dir/$version/spirv.core.grammar.json",
+    ]
+    outputs = [
+      "$vulkan_gen_dir/extension_enum.inc",
+      "$vulkan_gen_dir/enum_string_mapping.inc",
+    ]
+    args = [
+      "--spirv-core-grammar=$raw_spirv_include_dir/$version/spirv.core.grammar.json",
+      "--extinst-debuginfo-grammar=$raw_spirv_source_dir/extinst.debuginfo.grammar.json",
+      "--extension-enum-output=$raw_vulkan_gen_dir/extension_enum.inc",
+      "--enum-string-mapping-output=$raw_vulkan_gen_dir/enum_string_mapping.inc",
+    ]
+  }
+}
+
+spvtools_opencl_tables = [ "unified1" ]
+
+foreach(version, spvtools_opencl_tables) {
+  action("spirv_tools_gen_opencl_tables_" + version) {
+    script = grammar_processing_script
+    sources = [
+      "$spirv_include_dir/$version/extinst.opencl.std.100.grammar.json",
+      "$spirv_include_dir/$version/spirv.core.grammar.json",
+    ]
+    outputs = [
+      "$vulkan_gen_dir/opencl.std.insts.inc",
+    ]
+    args = [
+      "--spirv-core-grammar=$raw_spirv_include_dir/$version/spirv.core.grammar.json",
+      "--extinst-debuginfo-grammar=$raw_spirv_source_dir/extinst.debuginfo.grammar.json",
+      "--extinst-opencl-grammar=$raw_spirv_include_dir/$version/extinst.opencl.std.100.grammar.json",
+      "--opencl-insts-output=$raw_vulkan_gen_dir/opencl.std.insts.inc",
+    ]
+  }
+}
+
+spvtools_glsl_tables = [ "unified1" ]
+
+foreach(version, spvtools_glsl_tables) {
+  action("spirv_tools_gen_glsl_tables_" + version) {
+    script = grammar_processing_script
+    sources = [
+      "$spirv_include_dir/$version/extinst.glsl.std.450.grammar.json",
+      "$spirv_include_dir/$version/spirv.core.grammar.json",
+    ]
+    outputs = [
+      "$vulkan_gen_dir/glsl.std.450.insts.inc",
+    ]
+    args = [
+      "--spirv-core-grammar=$raw_spirv_include_dir/$version/spirv.core.grammar.json",
+      "--extinst-debuginfo-grammar=$raw_spirv_source_dir/extinst.debuginfo.grammar.json",
+      "--extinst-glsl-grammar=$raw_spirv_include_dir/$version/extinst.glsl.std.450.grammar.json",
+      "--glsl-insts-output=$raw_vulkan_gen_dir/glsl.std.450.insts.inc",
+    ]
+  }
+}
+
+action("spirv_tools_gen_generators_inc") {
+  script = "src/utils/generate_registry_tables.py"
+  sources = [
+    "$spirv_headers_dir/include/spirv/spir-v.xml",
+  ]
+  outputs = [
+    "$vulkan_gen_dir/generators.inc",
+  ]
+  args = [
+    "--xml=$raw_spirv_headers_dir/include/spirv/spir-v.xml",
+    "--generator-output=$raw_vulkan_gen_dir/generators.inc",
+  ]
+}
+
+action("spirv_tools_gen_debuginfo_h") {
+  script = "src/utils/generate_language_headers.py"
+  sources = [
+    "$spirv_source_dir/extinst.debuginfo.grammar.json",
+  ]
+  outputs = [
+    "$vulkan_gen_dir/DebugInfo.h",
+  ]
+  args = [
+    "--extinst-name=DebugInfo",
+    "--extinst-grammar=$raw_spirv_source_dir/extinst.debuginfo.grammar.json",
+    "--extinst-output-base=$raw_vulkan_gen_dir/DebugInfo",
+  ]
+}
+
+spvtools_vendor_tables = [
+  "spv-amd-shader-explicit-vertex-parameter",
+  "spv-amd-shader-trinary-minmax",
+  "spv-amd-gcn-shader",
+  "spv-amd-shader-ballot",
+  "debuginfo",
+]
+
+foreach(target_name, spvtools_vendor_tables) {
+  insts_file = "$target_name.insts.inc"
+  grammar_file = "extinst.$target_name.grammar.json"
+
+  action(target_name) {
+    script = grammar_processing_script
+
+    sources = [
+      "$spirv_source_dir/$grammar_file",
+    ]
+
+    outputs = [
+      "$vulkan_gen_dir/$insts_file",
+    ]
+
+    args = [
+      "--extinst-vendor-grammar=$raw_spirv_source_dir/$grammar_file",
+      "--vendor-insts-output=$raw_vulkan_gen_dir/$insts_file",
+    ]
+  }
+}
+
+config("spirv_tools_config") {
+  include_dirs = [ "src/include" ]
+  if (is_win) {
+    cflags = [
+      "/wd4706",
+
+      # These are triggered in higher optimization levels. Disable for now until
+      # fixes are landed upstream. See https://crbug.com/677837.
+      "/wd4701",
+      "/wd4703",
+    ]
+  }
+}
+static_library("spirv_tools") {
+  deps = [
+    ":spirv_tools_gen_core_tables_unified1",
+    ":spirv_tools_gen_debuginfo_h",
+    ":spirv_tools_gen_enum_string_mapping_unified1",
+    ":spirv_tools_gen_generators_inc",
+    ":spirv_tools_gen_glsl_tables_unified1",
+    ":spirv_tools_gen_opencl_tables_unified1",
+  ]
+  include_dirs = [
+    vulkan_gen_dir,
+    "$spirv_headers_dir/include",
+    "src/source",
+  ]
+  sources = [
+    "src/source/assembly_grammar.cpp",
+    "src/source/assembly_grammar.h",
+    "src/source/binary.cpp",
+    "src/source/binary.h",
+    "src/source/diagnostic.cpp",
+    "src/source/diagnostic.h",
+    "src/source/disassemble.cpp",
+    "src/source/enum_set.h",
+    "src/source/ext_inst.cpp",
+    "src/source/ext_inst.h",
+    "src/source/instruction.h",
+    "src/source/libspirv.cpp",
+    "src/source/macro.h",
+    "src/source/message.cpp",
+    "src/source/name_mapper.cpp",
+    "src/source/name_mapper.h",
+    "src/source/opcode.cpp",
+    "src/source/opcode.h",
+    "src/source/operand.cpp",
+    "src/source/operand.h",
+    "src/source/parsed_operand.cpp",
+    "src/source/parsed_operand.h",
+    "src/source/print.cpp",
+    "src/source/print.h",
+
+    # TODO(jmadill): Determine if this is ever needed.
+    #"src/source/software_version.cpp",
+    "$vulkan_gen_dir/DebugInfo.h",
+    "src/source/enum_string_mapping.cpp",
+    "src/source/extensions.cpp",
+    "src/source/extensions.h",
+    "src/source/spirv_constant.h",
+    "src/source/spirv_definition.h",
+    "src/source/spirv_endian.cpp",
+    "src/source/spirv_endian.h",
+    "src/source/spirv_target_env.cpp",
+    "src/source/spirv_target_env.h",
+    "src/source/spirv_validator_options.cpp",
+    "src/source/spirv_validator_options.h",
+    "src/source/table.cpp",
+    "src/source/table.h",
+    "src/source/text.cpp",
+    "src/source/text.h",
+    "src/source/text_handler.cpp",
+    "src/source/text_handler.h",
+    "src/source/util/bitutils.h",
+    "src/source/util/hex_float.h",
+    "src/source/util/parse_number.cpp",
+    "src/source/util/parse_number.h",
+    "src/source/util/string_utils.cpp",
+    "src/source/util/string_utils.h",
+    "src/source/val/basic_block.cpp",
+    "src/source/val/construct.cpp",
+    "src/source/val/function.cpp",
+    "src/source/val/instruction.cpp",
+    "src/source/val/validation_state.cpp",
+    "src/source/validate.cpp",
+    "src/source/validate.h",
+    "src/source/validate_adjacency.cpp",
+    "src/source/validate_arithmetics.cpp",
+    "src/source/validate_atomics.cpp",
+    "src/source/validate_barriers.cpp",
+    "src/source/validate_bitwise.cpp",
+    "src/source/validate_builtins.cpp",
+    "src/source/validate_capability.cpp",
+    "src/source/validate_cfg.cpp",
+    "src/source/validate_composites.cpp",
+    "src/source/validate_conversion.cpp",
+    "src/source/validate_datarules.cpp",
+    "src/source/validate_decorations.cpp",
+    "src/source/validate_derivatives.cpp",
+    "src/source/validate_ext_inst.cpp",
+    "src/source/validate_id.cpp",
+    "src/source/validate_image.cpp",
+    "src/source/validate_instruction.cpp",
+    "src/source/validate_interfaces.cpp",
+    "src/source/validate_layout.cpp",
+    "src/source/validate_literals.cpp",
+    "src/source/validate_logicals.cpp",
+    "src/source/validate_non_uniform.cpp",
+    "src/source/validate_primitives.cpp",
+    "src/source/validate_type_unique.cpp",
+  ]
+  public_configs = [ ":spirv_tools_config" ]
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [ "//build/config/compiler:no_chromium_code" ]
+
+  foreach(target_name, spvtools_vendor_tables) {
+    deps += [ ":$target_name" ]
+  }
+}

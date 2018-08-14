@@ -1,0 +1,114 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module gfx.mojom;
+
+// gfx::BufferFormat
+enum BufferFormat {
+  ATC,
+  ATCIA,
+  DXT1,
+  DXT5,
+  ETC1,
+  R_8,
+  R_16,
+  RG_88,
+  BGR_565,
+  RGBA_4444,
+  RGBX_8888,
+  RGBA_8888,
+  BGRX_8888,
+  BGRX_1010102,
+  RGBX_1010102,
+  BGRA_8888,
+  RGBA_F16,
+  YVU_420,
+  YUV_420_BIPLANAR,
+  UYVY_422,
+
+  LAST = UYVY_422
+};
+
+// gfx::BufferUsage
+enum BufferUsage {
+  GPU_READ,
+  SCANOUT,
+  SCANOUT_CAMERA_READ_WRITE,
+  CAMERA_AND_CPU_READ_WRITE,
+  SCANOUT_CPU_READ_WRITE,
+  SCANOUT_VDA_WRITE,
+  GPU_READ_CPU_READ_WRITE,
+  GPU_READ_CPU_READ_WRITE_PERSISTENT,
+
+  LAST = GPU_READ_CPU_READ_WRITE_PERSISTENT
+};
+
+struct BufferUsageAndFormat {
+  BufferUsage usage;
+  BufferFormat format;
+};
+
+// gfx::GpuMemoryBufferType
+enum GpuMemoryBufferType {
+  EMPTY_BUFFER,
+  SHARED_MEMORY_BUFFER,
+  IO_SURFACE_BUFFER,
+  NATIVE_PIXMAP,
+  DXGI_SHARED_HANDLE,
+  ANDROID_HARDWARE_BUFFER,
+};
+
+// gfx::GpuMemoryBufferId
+struct GpuMemoryBufferId {
+  int32 id;
+};
+
+// gfx::NativePixmapPlane
+struct NativePixmapPlane {
+  uint32 stride;
+  int32 offset;
+  uint64 size;
+  uint64 modifier;
+};
+
+// gfx::NativePixmapHandle
+struct NativePixmapHandle {
+  // A file descriptor for the underlying memory object (usually dmabuf).
+  array<handle> fds;
+
+  array<NativePixmapPlane> planes;
+};
+
+[EnableIf=is_android]
+struct AHardwareBufferHandle {
+  // The actual file descriptor used to wrap the AHardwareBuffer object for
+  // serialization.
+  handle buffer_handle;
+
+  // A message pipe handle which tracks the lifetime of this
+  // AHardwareBufferHandle. The sender may use this to observe the lifetime
+  // remotely by watching the other end of this pipe. Useful for retaining a
+  // sender-side AHB ref until the receiver deserializes the AHB and acquires its
+  // own ref.
+  handle<message_pipe> tracking_pipe;
+};
+
+// gfx::GpuMemoryBufferHandle
+struct GpuMemoryBufferHandle {
+  // TODO(676224): Use preprocessor to restrict platform-specific members to
+  // desired platform.
+  GpuMemoryBufferType type;
+  GpuMemoryBufferId id;
+  handle<shared_buffer>? shared_memory_handle;
+  uint32 offset;
+  uint32 stride;
+  NativePixmapHandle? native_pixmap_handle;
+  handle? mach_port;
+
+  [EnableIf=is_win]
+  handle? dxgi_handle;
+
+  [EnableIf=is_android]
+  AHardwareBufferHandle? android_hardware_buffer_handle;
+};

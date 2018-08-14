@@ -1,0 +1,80 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build_overrides/build.gni")
+import("//build/config/ui.gni")  # import the use_x11 variable
+import("//build/config/sanitizers/sanitizers.gni")
+if (is_android) {
+  import("//build/config/android/config.gni")
+}
+
+if (build_with_chromium) {
+  angle_root = "//third_party/angle"
+
+  import("//ui/ozone/ozone.gni")
+} else {
+  angle_root = "//"
+
+  declare_args() {
+    ozone_platform_gbm = false
+  }
+}
+
+# Subdirectory to place data files (e.g. layer JSON files).
+data_dir = "angledata"
+
+declare_args() {
+  if (current_cpu == "arm64" || current_cpu == "x64" ||
+      current_cpu == "mips64el" || current_cpu == "s390x" ||
+      current_cpu == "ppc64") {
+    angle_64bit_current_cpu = true
+  } else if (current_cpu == "arm" || current_cpu == "x86" ||
+             current_cpu == "mipsel" || current_cpu == "s390" ||
+             current_cpu == "ppc") {
+    angle_64bit_current_cpu = false
+  } else {
+    assert(false, "Unknown current CPU: $current_cpu")
+  }
+}
+
+declare_args() {
+  if (!is_android) {
+    ndk_supports_vulkan = false
+    ndk_supports_nativewindow = false
+  } else {
+    ndk_supports_vulkan =
+        (!angle_64bit_current_cpu && android32_ndk_api_level >= 24) ||
+        (angle_64bit_current_cpu && android64_ndk_api_level >= 24)
+    ndk_supports_nativewindow =
+        (!angle_64bit_current_cpu && android32_ndk_api_level >= 26) ||
+        (angle_64bit_current_cpu && android64_ndk_api_level >= 26)
+  }
+  angle_shared_libvulkan = false
+  angle_libs_suffix = ""
+}
+
+declare_args() {
+  angle_enable_d3d9 = is_win
+  angle_enable_d3d11 = is_win
+  angle_enable_gl = ozone_platform_gbm || !is_linux || (use_x11 && !is_chromeos)
+
+  angle_enable_vulkan = is_win || (is_linux && use_x11 && !is_chromeos) ||
+                        (is_android && ndk_supports_vulkan)
+  angle_enable_null = true
+  angle_enable_essl = true
+  angle_enable_glsl = true
+}
+
+declare_args() {
+  angle_enable_gl_null = angle_enable_gl
+  angle_enable_hlsl = angle_enable_d3d9 || angle_enable_d3d11
+
+  # Disable the layers in ubsan builds because of really slow builds.
+  angle_enable_vulkan_validation_layers =
+      angle_enable_vulkan && !is_ubsan && !is_tsan && !is_asan
+}
+
+if (is_win) {
+  import("//build/config/win/visual_studio_version.gni")
+}

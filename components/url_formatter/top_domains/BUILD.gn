@@ -1,0 +1,71 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/compiled_action.gni")
+
+if (!is_ios && !is_android) {
+  executable("make_top_domain_skeletons") {
+    sources = [
+      "make_top_domain_skeletons.cc",
+    ]
+
+    deps = [
+      "//base",
+      "//base:i18n",
+      "//third_party/icu",
+    ]
+  }
+}
+
+executable("top_domain_generator") {
+  sources = [
+    "top_domain_generator.cc",
+    "top_domain_state_generator.cc",
+    "top_domain_state_generator.h",
+    "trie_entry.cc",
+    "trie_entry.h",
+  ]
+  deps = [
+    "//base",
+    "//net/tools/huffman_trie:huffman_trie_generator_sources",
+  ]
+  if (is_ios) {
+    libs = [ "UIKit.framework" ]
+  }
+}
+
+compiled_action("generate_top_domains_trie") {
+  tool = ":top_domain_generator"
+
+  # Inputs in order expected by the command line of the tool.
+  inputs = [
+    "//components/url_formatter/top_domains/alexa_domains.skeletons",
+    "//components/url_formatter/top_domains/top_domains_trie.template",
+  ]
+  outputs = [
+    "$target_gen_dir/alexa_domains-trie-inc.cc",
+  ]
+  args =
+      # Make sure the inputs are system-absolute, as base::File cannot open
+      # files with ".." components.
+      rebase_path(inputs, "", "/") + rebase_path(outputs, root_build_dir)
+}
+
+# TODO: Combine this and the previous one into a compiled_action_foreach target.
+compiled_action("generate_top_domains_test_trie") {
+  tool = ":top_domain_generator"
+
+  # Inputs in order expected by the command line of the tool.
+  inputs = [
+    "//components/url_formatter/top_domains/test_domains.skeletons",
+    "//components/url_formatter/top_domains/top_domains_trie.template",
+  ]
+  outputs = [
+    "$target_gen_dir/test_domains-trie-inc.cc",
+  ]
+  args =
+      # Make sure the inputs are system-absolute, as base::File cannot open
+      # files with ".." components.
+      rebase_path(inputs, "", "/") + rebase_path(outputs, root_build_dir)
+}

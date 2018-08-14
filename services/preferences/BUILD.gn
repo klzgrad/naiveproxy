@@ -1,0 +1,92 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//services/catalog/public/tools/catalog.gni")
+import("//services/service_manager/public/service_manifest.gni")
+import("//testing/test.gni")
+
+service_manifest("manifest") {
+  name = "preferences"
+  source = "manifest.json"
+}
+
+service_manifest("local_state_manifest") {
+  name = "local_state"
+  source = "local_state_manifest.json"
+}
+
+source_set("preferences") {
+  visibility = [
+    ":*",
+    "//services/preferences/public/cpp:service_main",
+  ]
+  deps = [
+    "//components/prefs",
+    "//services/preferences/public/cpp",
+    "//services/preferences/public/cpp/lib",
+    "//services/preferences/public/mojom",
+    "//services/preferences/tracked",
+    "//services/service_manager/public/cpp",
+  ]
+  sources = [
+    "persistent_pref_store_impl.cc",
+    "persistent_pref_store_impl.h",
+    "pref_store_impl.cc",
+    "pref_store_impl.h",
+    "pref_store_manager_impl.cc",
+    "pref_store_manager_impl.h",
+    "scoped_pref_connection_builder.cc",
+    "scoped_pref_connection_builder.h",
+    "shared_pref_registry.cc",
+    "shared_pref_registry.h",
+  ]
+}
+
+source_set("tests") {
+  testonly = true
+  deps = [
+    ":preferences",
+    "//base",
+    "//base/test:test_support",
+    "//components/prefs:test_support",
+    "//mojo/public/cpp/bindings:bindings",
+    "//services/preferences/public/cpp",
+    "//services/preferences/public/cpp:service_main",
+    "//services/preferences/public/cpp/tests",
+    "//services/preferences/public/mojom",
+    "//services/preferences/tracked:unit_tests",
+    "//services/service_manager/public/cpp",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+  sources = [
+    "persistent_pref_store_impl_unittest.cc",
+    "pref_store_consistency_unittest.cc",
+    "pref_store_impl_unittest.cc",
+    "unittest_common.cc",
+  ]
+  if (!is_ios) {
+    sources += [ "pref_service_factory_unittest.cc" ]
+    deps += [ "//services/service_manager/public/cpp:service_test_support" ]
+  }
+}
+
+service_manifest("unittest_manifest") {
+  name = "prefs_unittests"
+  source = "unittest_manifest.json"
+  packaged_services = [
+    ":manifest",
+    ":unittest_helper_manifest",
+  ]
+}
+
+service_manifest("unittest_helper_manifest") {
+  name = "prefs_unittest_helper"
+  source = "unittest_helper_manifest.json"
+}
+
+catalog("tests_catalog") {
+  testonly = true
+  embedded_services = [ ":unittest_manifest" ]
+}

@@ -1,0 +1,235 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/android/rules.gni")
+import("manifest_processor.gni")
+import("shell_apk_version.gni")
+
+shell_apk_manifest = "$target_gen_dir/shell_apk_manifest/AndroidManifest.xml"
+unbound_shell_apk_manifest =
+    "$target_gen_dir/unbound_shell_apk_manifest/AndroidManifest.xml"
+maps_go_apk_manifest =
+    "$target_gen_dir/maps_go_apk_manifest/AndroidManifest.xml"
+shell_apk_http_manifest =
+    "$target_gen_dir/shell_apk_http_manifest/AndroidManifest.xml"
+
+manifest_processor_template("shell_apk_manifest") {
+  input = "AndroidManifest.xml"
+  config_file = "bound_manifest_config.json"
+  output = shell_apk_manifest
+
+  extra_variables = [ "shell_apk_version=$template_shell_apk_version" ]
+}
+
+manifest_processor_template("unbound_shell_apk_manifest") {
+  input = "AndroidManifest.xml"
+  config_file = "unbound_manifest_config.json"
+  output = unbound_shell_apk_manifest
+
+  extra_variables = [ "shell_apk_version=$template_shell_apk_version" ]
+}
+
+manifest_processor_template("maps_go_apk_manifest") {
+  input = "AndroidManifest.xml"
+  config_file = "maps_go_manifest_config.json"
+  output = maps_go_apk_manifest
+
+  extra_variables = [ "shell_apk_version=$template_shell_apk_version" ]
+}
+
+manifest_processor_template("shell_apk_http_manifest") {
+  input = "AndroidManifest.xml"
+  config_file = "http_manifest_config.json"
+  output = shell_apk_http_manifest
+
+  extra_variables = [ "shell_apk_version=$template_shell_apk_version" ]
+}
+
+android_resources("shell_apk_resources") {
+  resource_dirs = [ "res" ]
+  custom_package = "org.chromium.webapk.shell_apk"
+  deps = [
+    ":webapk_strings_grd",
+  ]
+}
+
+# Stamped out copy of the runtime-library, used for fail-safe code in when using an
+# old copy of the runtime library.
+android_library("compiled_in_runtime_library_java") {
+  chromium_code = false
+  java_files = [ "src/org/chromium/webapk/lib/runtime_library/IWebApkApi.java" ]
+}
+
+# Split out as a separate target so that it can be tested from chrome_public_test_apk
+android_library("dex_loader_java") {
+  java_files = [ "src/org/chromium/webapk/shell_apk/DexLoader.java" ]
+}
+
+android_library("webapk_java") {
+  java_files = [
+    "src/org/chromium/webapk/shell_apk/HostBrowserClassLoader.java",
+    "src/org/chromium/webapk/shell_apk/HostBrowserLauncher.java",
+    "src/org/chromium/webapk/shell_apk/ChooseHostBrowserDialog.java",
+    "src/org/chromium/webapk/shell_apk/MainActivity.java",
+    "src/org/chromium/webapk/shell_apk/IdentityService.java",
+    "src/org/chromium/webapk/shell_apk/InstallHostBrowserDialog.java",
+    "src/org/chromium/webapk/shell_apk/ShareActivity.java",
+    "src/org/chromium/webapk/shell_apk/ShareActivity0.java",
+    "src/org/chromium/webapk/shell_apk/ShareActivity1.java",
+    "src/org/chromium/webapk/shell_apk/ShareActivity2.java",
+    "src/org/chromium/webapk/shell_apk/ShareActivity3.java",
+    "src/org/chromium/webapk/shell_apk/ShareActivity4.java",
+    "src/org/chromium/webapk/shell_apk/WebApkServiceFactory.java",
+    "src/org/chromium/webapk/shell_apk/WebApkServiceImplWrapper.java",
+    "src/org/chromium/webapk/shell_apk/WebApkUtils.java",
+  ]
+  deps = [
+    ":compiled_in_runtime_library_java",
+    ":dex_loader_java",
+    ":shell_apk_manifest",
+    ":shell_apk_resources",
+    "//chrome/android/webapk/libs/common:common_java",
+  ]
+
+  android_manifest_for_lint = shell_apk_manifest
+}
+
+template("webapk_tmpl") {
+  android_apk(target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "android_manifest",
+                             "android_manifest_dep",
+                             "apk_name",
+                           ])
+    deps = [
+      ":webapk_java",
+    ]
+    never_incremental = true
+
+    # Force 32 bit mode on 64 bit devices.
+    native_lib_placeholders = [ "libfoo.so" ]
+
+    if (!is_java_debug) {
+      proguard_enabled = true
+      proguard_configs = [
+        "//chrome/android/webapk/shell_apk/proguard.flags",
+        "//chrome/android/java/proguard.flags",
+        "//base/android/proguard/chromium_apk.flags",
+        "//base/android/proguard/chromium_code.flags",
+      ]
+    }
+  }
+}
+
+java_strings_grd("webapk_strings_grd") {
+  grd_file = "//chrome/android/webapk/strings/android_webapk_strings.grd"
+
+  outputs = [
+    "values-am/android_webapk_strings.xml",
+    "values-ar/android_webapk_strings.xml",
+    "values-bg/android_webapk_strings.xml",
+    "values-ca/android_webapk_strings.xml",
+    "values-cs/android_webapk_strings.xml",
+    "values-da/android_webapk_strings.xml",
+    "values-de/android_webapk_strings.xml",
+    "values-el/android_webapk_strings.xml",
+    "values/android_webapk_strings.xml",
+    "values-en-rGB/android_webapk_strings.xml",
+    "values-es/android_webapk_strings.xml",
+    "values-es-rUS/android_webapk_strings.xml",
+    "values-fa/android_webapk_strings.xml",
+    "values-fi/android_webapk_strings.xml",
+    "values-tl/android_webapk_strings.xml",
+    "values-fr/android_webapk_strings.xml",
+    "values-hi/android_webapk_strings.xml",
+    "values-hr/android_webapk_strings.xml",
+    "values-hu/android_webapk_strings.xml",
+    "values-in/android_webapk_strings.xml",
+    "values-it/android_webapk_strings.xml",
+    "values-iw/android_webapk_strings.xml",
+    "values-ja/android_webapk_strings.xml",
+    "values-ko/android_webapk_strings.xml",
+    "values-lt/android_webapk_strings.xml",
+    "values-lv/android_webapk_strings.xml",
+    "values-nl/android_webapk_strings.xml",
+    "values-nb/android_webapk_strings.xml",
+    "values-pl/android_webapk_strings.xml",
+    "values-pt-rBR/android_webapk_strings.xml",
+    "values-pt-rPT/android_webapk_strings.xml",
+    "values-ro/android_webapk_strings.xml",
+    "values-ru/android_webapk_strings.xml",
+    "values-sk/android_webapk_strings.xml",
+    "values-sl/android_webapk_strings.xml",
+    "values-sr/android_webapk_strings.xml",
+    "values-sv/android_webapk_strings.xml",
+    "values-sw/android_webapk_strings.xml",
+    "values-th/android_webapk_strings.xml",
+    "values-tr/android_webapk_strings.xml",
+    "values-uk/android_webapk_strings.xml",
+    "values-vi/android_webapk_strings.xml",
+    "values-zh-rCN/android_webapk_strings.xml",
+    "values-zh-rTW/android_webapk_strings.xml",
+  ]
+}
+
+# Template for WebAPK. When a WebAPK is generated:
+# - Android manifest is customized to the website.
+# - App icon is extracted from the website and added to the APK's resources.
+webapk_tmpl("webapk") {
+  android_manifest = shell_apk_manifest
+  android_manifest_dep = ":shell_apk_manifest"
+  apk_name = "WebApk"
+}
+
+webapk_tmpl("maps_go_webapk") {
+  android_manifest = maps_go_apk_manifest
+  android_manifest_dep = ":maps_go_apk_manifest"
+  apk_name = "MapsWebApk"
+}
+
+webapk_tmpl("unbound_webapk") {
+  android_manifest = unbound_shell_apk_manifest
+  android_manifest_dep = ":unbound_shell_apk_manifest"
+  apk_name = "UnboundWebApk"
+}
+
+webapk_tmpl("http_webapk") {
+  android_manifest = shell_apk_http_manifest
+  android_manifest_dep = ":shell_apk_http_manifest"
+  apk_name = "HttpWebApk"
+}
+
+android_library("shell_apk_javatests") {
+  testonly = true
+  java_files =
+      [ "javatests/src/org/chromium/webapk/shell_apk/DexLoaderTest.java" ]
+  deps = [
+    ":dex_loader_java",
+    "//base:base_java",
+    "//base:base_java_test_support",
+    "//chrome/android/webapk/libs/common:common_java",
+    "//content/public/test/android:content_java_test_support",
+    "//third_party/android_support_test_runner:runner_java",
+    "//third_party/junit",
+  ]
+  srcjar_deps = [ "javatests/dex_optimizer:dex_optimizer_service_aidl" ]
+}
+
+junit_binary("webapk_shell_apk_junit_tests") {
+  java_files = [
+    "junit/src/org/chromium/webapk/shell_apk/HostBrowserClassLoaderTest.java",
+    "junit/src/org/chromium/webapk/shell_apk/MainActivityTest.java",
+    "junit/src/org/chromium/webapk/shell_apk/WebApkServiceImplWrapperTest.java",
+    "junit/src/org/chromium/webapk/shell_apk/WebApkUtilsTest.java",
+  ]
+  deps = [
+    ":compiled_in_runtime_library_java",
+    ":dex_loader_java",
+    ":webapk_java",
+    "//chrome/android/webapk/libs/common:common_java",
+    "//chrome/android/webapk/libs/runtime_library:runtime_library_for_tests_java",
+    "//chrome/android/webapk/test:junit_test_support",
+  ]
+}

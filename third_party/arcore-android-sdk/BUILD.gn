@@ -1,0 +1,39 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/android/rules.gni")
+
+java_prebuilt("libdynamite_client_java") {
+  supports_android = true
+  proguard_configs = [ "proguard-arcore.txt" ]
+  jar_path = "libarcore_client_c.jar"
+}
+
+if (!android_64bit_target_cpu || !build_apk_secondary_abi ||
+    current_toolchain == android_secondary_abi_toolchain) {
+  copy("libarcore_library") {
+    if (current_cpu == "arm") {
+      sources = [
+        "libraries/android_arm/libarcore_sdk_c_minimal.so",
+      ]
+    } else if (current_cpu == "arm64") {
+      sources = [
+        "libraries/android_arm64/libarcore_sdk_c_minimal.so",
+      ]
+    }
+    outputs = [
+      "${root_out_dir}/libarcore_sdk_c_minimal.so",
+    ]
+  }
+} else {
+  group("libarcore_library_secondary_abi") {
+    public_deps = [
+      ":libarcore_library($android_secondary_abi_toolchain)",
+    ]
+  }
+}
+
+config("libarcore_config") {
+  include_dirs = [ "src/libraries/include/" ]
+}

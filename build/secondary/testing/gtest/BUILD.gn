@@ -1,0 +1,150 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# Chromium's GN configuration for gtest now lives at testing/gtest/BUILD.gn.
+#
+# This configuration is left in the tree because it is pulled by V8 and PDFium,
+# and will be removed as soon as the projects switch off of it.
+#
+# Details at http://crbug.com/630705 and http://crrev.com/2779193002
+
+import("//build_overrides/gtest.gni")
+if (is_ios) {
+  import("//build/config/ios/ios_sdk.gni")
+  import("//build/buildflag_header.gni")
+}
+
+config("gtest_config") {
+  visibility = [
+    ":*",
+    "//testing/gmock:*",  # gmock also shares this config.
+  ]
+
+  defines = [
+    # In order to allow regex matches in gtest to be shared between Windows
+    # and other systems, we tell gtest to always use it's internal engine.
+    "GTEST_HAS_POSIX_RE=0",
+    "GTEST_LANG_CXX11=1",
+  ]
+
+  # Gtest headers need to be able to find themselves.
+  include_dirs = [ "include" ]
+
+  if (is_win) {
+    cflags = [ "/wd4800" ]  # Unused variable warning.
+  }
+}
+
+config("gtest_direct_config") {
+  visibility = [ ":*" ]
+  defines = [ "UNIT_TEST" ]
+}
+
+config("gtest_warnings") {
+  if (is_win && is_clang) {
+    # The Mutex constructor initializer list in gtest-port.cc is incorrectly
+    # ordered. See
+    # https://groups.google.com/d/msg/googletestframework/S5uSV8L2TX8/U1FaTDa6J6sJ.
+    cflags = [ "-Wno-reorder" ]
+  }
+}
+
+static_library("gtest") {
+  testonly = true
+  sources = [
+    "include/gtest/gtest-death-test.h",
+    "include/gtest/gtest-message.h",
+    "include/gtest/gtest-param-test.h",
+    "include/gtest/gtest-printers.h",
+    "include/gtest/gtest-spi.h",
+    "include/gtest/gtest-test-part.h",
+    "include/gtest/gtest-typed-test.h",
+    "include/gtest/gtest.h",
+    "include/gtest/gtest_pred_impl.h",
+    "include/gtest/internal/gtest-death-test-internal.h",
+    "include/gtest/internal/gtest-filepath.h",
+    "include/gtest/internal/gtest-internal.h",
+    "include/gtest/internal/gtest-linked_ptr.h",
+    "include/gtest/internal/gtest-param-util-generated.h",
+    "include/gtest/internal/gtest-param-util.h",
+    "include/gtest/internal/gtest-port.h",
+    "include/gtest/internal/gtest-string.h",
+    "include/gtest/internal/gtest-tuple.h",
+    "include/gtest/internal/gtest-type-util.h",
+
+    #"gtest/src/gtest-all.cc",  # Not needed by our build.
+    "src/gtest-death-test.cc",
+    "src/gtest-filepath.cc",
+    "src/gtest-internal-inl.h",
+    "src/gtest-port.cc",
+    "src/gtest-printers.cc",
+    "src/gtest-test-part.cc",
+    "src/gtest-typed-test.cc",
+    "src/gtest.cc",
+  ]
+  deps = []
+
+  if (gtest_include_multiprocess) {
+    sources += [
+      "../multiprocess_func_list.cc",
+      "../multiprocess_func_list.h",
+    ]
+  }
+
+  if (gtest_include_platform_test) {
+    sources += [ "../platform_test.h" ]
+  }
+
+  if ((is_mac || is_ios) && gtest_include_objc_support) {
+    if (is_ios) {
+      set_sources_assignment_filter([])
+    }
+    sources += [
+      "../gtest_mac.h",
+      "../gtest_mac.mm",
+    ]
+    if (gtest_include_platform_test) {
+      sources += [ "../platform_test_mac.mm" ]
+    }
+    set_sources_assignment_filter(sources_assignment_filter)
+  }
+
+  if (is_ios && gtest_include_ios_coverage) {
+    sources += [
+      "../coverage_util_ios.h",
+      "../coverage_util_ios.mm",
+    ]
+    deps += [ ":ios_enable_coverage" ]
+  }
+
+  include_dirs = [ "." ]
+
+  all_dependent_configs = [ ":gtest_config" ]
+  public_configs = [ ":gtest_direct_config" ]
+
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [
+    "//build/config/compiler:no_chromium_code",
+
+    # Must be after no_chromium_code for warning flags to be ordered correctly.
+    ":gtest_warnings",
+  ]
+}
+
+source_set("gtest_main") {
+  testonly = true
+  sources = [
+    "src/gtest_main.cc",
+  ]
+  deps = [
+    ":gtest",
+  ]
+}
+
+if (is_ios) {
+  buildflag_header("ios_enable_coverage") {
+    header = "ios_enable_coverage.h"
+    flags = [ "IOS_ENABLE_COVERAGE=$ios_enable_coverage" ]
+  }
+}

@@ -1,0 +1,75 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//printing/buildflags/buildflags.gni")
+import("//services/service_manager/public/cpp/service.gni")
+import("//services/service_manager/public/service_manifest.gni")
+import("//services/service_manager/public/tools/test/service_test.gni")
+
+static_library("pdf_compositor") {
+  sources = [
+    "pdf_compositor_impl.cc",
+    "pdf_compositor_impl.h",
+    "pdf_compositor_service.cc",
+    "pdf_compositor_service.h",
+  ]
+
+  deps = [
+    "//base",
+    "//components/crash/core/common:crash_key",
+    "//components/discardable_memory/client",
+    "//components/discardable_memory/public/interfaces",
+    "//content/public/child",
+    "//content/public/common:service_names",
+    "//content/public/utility",
+    "//printing/common",
+    "//services/ui/public/interfaces",
+    "//skia",
+    "//third_party/blink/public:blink_headers",
+  ]
+
+  public_deps = [
+    "//components/services/pdf_compositor/public/cpp:utils",
+    "//components/services/pdf_compositor/public/interfaces",
+    "//services/service_manager/public/cpp",
+  ]
+}
+
+service_manifest("pdf_compositor_manifest") {
+  name = "pdf_compositor"
+  source = "pdf_compositor_manifest.json"
+}
+
+if (enable_basic_printing) {
+  source_set("unit_tests") {
+    testonly = true
+    sources = [
+      "pdf_compositor_impl_unittest.cc",
+      "pdf_compositor_service_unittest.cc",
+    ]
+
+    include_dirs = [
+      "//skia/config",
+      "//testing/gmock/include",
+      "//third_party/skia/include/core",
+    ]
+    deps = [
+      ":pdf_compositor",
+      "//base/test:test_support",
+      "//cc/paint:paint",
+      "//components/crash/core/common:crash_key",
+      "//components/services/pdf_compositor/public/interfaces",
+      "//services/service_manager/public/cpp:service_test_support",
+      "//skia",
+      "//testing/gmock",
+      "//testing/gtest",
+    ]
+  }
+
+  service_manifest("pdf_compositor_service_unittest_manifest") {
+    name = "pdf_compositor_service_unittest"
+    source = "pdf_compositor_service_unittest_manifest.json"
+    packaged_services = [ ":pdf_compositor_manifest" ]
+  }
+}

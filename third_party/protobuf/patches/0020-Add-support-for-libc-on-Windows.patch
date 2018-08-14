@@ -1,0 +1,42 @@
+From 3ba21cd5f724528ab8792c05bda6e06ceb557bff Mon Sep 17 00:00:00 2001
+From: Peter Collingbourne <pcc@google.com>
+Date: Wed, 17 Jan 2018 16:05:47 -0800
+Subject: [PATCH] Add support for libc++ on Windows.
+
+This disables a couple of workarounds which are only necessary with
+MSVC's standard library and cause problems with libc++.
+---
+ src/google/protobuf/arena.h      | 2 +-
+ src/google/protobuf/stubs/hash.h | 3 ++-
+ 2 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/src/google/protobuf/arena.h b/src/google/protobuf/arena.h
+index f3cdedac..b500b3be 100644
+--- a/src/google/protobuf/arena.h
++++ b/src/google/protobuf/arena.h
+@@ -40,7 +40,7 @@
+ #if LANG_CXX11
+ #include <google/protobuf/stubs/type_traits.h>
+ #endif
+-#if defined(_MSC_VER) && !_HAS_EXCEPTIONS
++#if defined(_MSC_VER) && !defined(_LIBCPP_STD_VER) && !_HAS_EXCEPTIONS
+ // Work around bugs in MSVC <typeinfo> header when _HAS_EXCEPTIONS=0.
+ #include <exception>
+ #include <typeinfo>
+diff --git a/src/google/protobuf/stubs/hash.h b/src/google/protobuf/stubs/hash.h
+index 218cd948..ec1f9810 100644
+--- a/src/google/protobuf/stubs/hash.h
++++ b/src/google/protobuf/stubs/hash.h
+@@ -235,7 +235,8 @@ class hash_set : public std::set<Key, HashFcn> {
+   HashFcn hash_function() const { return HashFcn(); }
+ };
+ 
+-#elif defined(_MSC_VER) && !defined(_STLPORT_VERSION)
++#elif defined(_MSC_VER) && !defined(_STLPORT_VERSION) && \
++    !(defined(_LIBCPP_STD_VER) && _LIBCPP_STD_VER >= 11)
+ 
+ template <typename Key>
+ struct hash : public GOOGLE_PROTOBUF_HASH_COMPARE<Key> {
+-- 
+2.16.2.395.g2e18187dfd-goog
+

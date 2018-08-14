@@ -1,0 +1,137 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/util/process_version.gni")
+import("//build/util/version.gni")
+import("//testing/test.gni")
+
+process_version("cronet_version_header") {
+  template_file = "//components/cronet/version.h.in"
+  sources = [
+    "//chrome/VERSION",
+  ]
+  output = "$target_gen_dir/version.h"
+  extra_args = [
+    "-e",
+    "VERSION_FULL=\"%s.%s.%s.%s\" % (MAJOR,MINOR,BUILD,PATCH)",
+  ]
+}
+
+# Cronet common implementation.
+source_set("cronet_common") {
+  sources = [
+    "cronet_global_state.h",
+    "cronet_prefs_manager.cc",
+    "cronet_prefs_manager.h",
+    "cronet_upload_data_stream.cc",
+    "cronet_upload_data_stream.h",
+    "cronet_url_request.cc",
+    "cronet_url_request.h",
+    "cronet_url_request_context.cc",
+    "cronet_url_request_context.h",
+    "histogram_manager.cc",
+    "histogram_manager.h",
+    "host_cache_persistence_manager.cc",
+    "host_cache_persistence_manager.h",
+    "stale_host_resolver.cc",
+    "stale_host_resolver.h",
+    "url_request_context_config.cc",
+    "url_request_context_config.h",
+  ]
+  deps = [
+    ":cronet_version_header",
+    "//base",
+    "//components/metrics:metrics",
+    "//components/prefs:prefs",
+    "//net",
+    "//third_party/metrics_proto",
+  ]
+}
+
+# Unit tests for Cronet common implementation.
+source_set("cronet_common_unittests") {
+  testonly = true
+
+  deps = [
+    ":cronet_common",
+    "//components/prefs:test_support",
+    "//net:test_support",
+  ]
+
+  sources = [
+    "histogram_manager_unittest.cc",
+    "host_cache_persistence_manager_unittest.cc",
+    "run_all_unittests.cc",
+    "stale_host_resolver_unittest.cc",
+    "url_request_context_config_unittest.cc",
+  ]
+}
+
+# For platforms on which the native Cronet library is used, build the library,
+# a cronet_tests binary that exercises it, and a unit-tests binary.
+# Android and iOS have their own platform-specific rules to build Cronet.
+if (!is_ios && !is_android) {
+  config("shared_library_public_config") {
+    if (is_mac && !is_component_build) {
+      # Executable targets that depend on the shared libraries below need to have
+      # the rpath setup in non-component build configurations.
+      ldflags = [
+        "-rpath",
+        "@executable_path/",
+      ]
+    }
+  }
+
+  shared_library("cronet") {
+    deps = [
+      "//base",
+      "//components/cronet:cronet_common",
+      "//components/cronet/native:cronet_native_impl",
+      "//net",
+    ]
+
+    sources = [
+      "cronet_global_state_stubs.cc",
+    ]
+
+    if (is_mac && !is_component_build) {
+      ldflags = [
+        "-install_name",
+        "@rpath/lib${target_name}.dylib",
+      ]
+      public_configs = [ ":shared_library_public_config" ]
+    }
+  }
+
+  test("cronet_tests") {
+    deps = [
+      ":cronet",
+      "//base",
+      "//base/test:test_support",
+      "//components/cronet/native/test:cronet_native_tests",
+    ]
+
+    sources = [
+      "run_all_unittests.cc",
+    ]
+
+    if (is_linux && !is_component_build) {
+      public_configs = [ "//build/config/gcc:rpath_for_built_shared_libraries" ]
+    }
+  }
+
+  test("cronet_unittests") {
+    deps = [
+      ":cronet_common",
+      ":cronet_common_unittests",
+      "//base",
+      "//components/cronet/native:cronet_native_unittests",
+      "//net",
+    ]
+
+    sources = [
+      "cronet_global_state_stubs.cc",
+    ]
+  }
+}

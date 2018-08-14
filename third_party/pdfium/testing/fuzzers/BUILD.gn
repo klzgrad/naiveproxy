@@ -1,0 +1,253 @@
+# Copyright 2016 The PDFium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("../../pdfium.gni")
+
+config("fuzzer_config") {
+  configs = [ "../..:pdfium_core_config" ]
+
+  defines = [
+    "PNG_PREFIX",
+    "PNG_USE_READ_MACROS",
+  ]
+  include_dirs = [ "../.." ]
+  if (pdf_enable_v8) {
+    defines += [ "PDF_ENABLE_V8" ]
+  }
+  if (pdf_enable_xfa) {
+    defines += [ "PDF_ENABLE_XFA" ]
+  }
+}
+
+group("fuzzers") {
+  testonly = true
+  deps = [
+    ":pdf_cmap_fuzzer_src",
+    ":pdf_codec_a85_fuzzer_src",
+    ":pdf_codec_fax_fuzzer_src",
+    ":pdf_codec_icc_fuzzer_src",
+    ":pdf_codec_jbig2_fuzzer_src",
+    ":pdf_codec_rle_fuzzer_src",
+    ":pdf_font_fuzzer_src",
+    ":pdf_hint_table_fuzzer_src",
+    ":pdf_jpx_fuzzer_src",
+    ":pdf_psengine_fuzzer_src",
+    ":pdf_streamparser_fuzzer_src",
+    ":pdf_xml_fuzzer_src",
+  ]
+  if (pdf_enable_xfa) {
+    deps += [
+      ":pdf_bidi_fuzzer_src",
+      ":pdf_cfx_barcode_fuzzer_src",
+      ":pdf_codec_jpeg_fuzzer_src",
+      ":pdf_css_fuzzer_src",
+      ":pdf_fm2js_fuzzer_src",
+      ":pdf_formcalc_fuzzer_src",
+    ]
+    if (pdf_enable_xfa_bmp) {
+      deps += [ ":pdf_codec_bmp_fuzzer_src" ]
+    }
+    if (pdf_enable_xfa_gif) {
+      deps += [
+        ":pdf_codec_gif_fuzzer_src",
+        ":pdf_lzw_fuzzer_src",
+      ]
+    }
+    if (pdf_enable_xfa_png) {
+      deps += [ ":pdf_codec_png_fuzzer_src" ]
+    }
+    if (pdf_enable_xfa_tiff) {
+      deps += [ ":pdf_codec_tiff_fuzzer_src" ]
+    }
+  }
+}
+
+template("pdfium_fuzzer") {
+  source_set(target_name) {
+    sources = invoker.sources + [ "pdf_fuzzer_init.cc" ]
+    deps = [
+      "../..:pdfium",
+    ]
+    if (defined(invoker.deps)) {
+      deps += invoker.deps
+    }
+    testonly = true
+    configs -= [ "//build/config/compiler:chromium_code" ]
+    configs += [
+      "//build/config/compiler:no_chromium_code",
+      ":fuzzer_config",
+    ]
+  }
+}
+
+if (pdf_enable_xfa) {
+  pdfium_fuzzer("pdf_bidi_fuzzer_src") {
+    sources = [
+      "pdf_bidi_fuzzer.cc",
+    ]
+  }
+
+  pdfium_fuzzer("pdf_cfx_barcode_fuzzer_src") {
+    sources = [
+      "pdf_cfx_barcode_fuzzer.cc",
+    ]
+  }
+
+  if (pdf_enable_xfa_bmp) {
+    pdfium_fuzzer("pdf_codec_bmp_fuzzer_src") {
+      sources = [
+        "pdf_codec_bmp_fuzzer.cc",
+        "xfa_codec_fuzzer.h",
+      ]
+      deps = [
+        "../../:test_support",
+      ]
+    }
+  }
+
+  if (pdf_enable_xfa_gif) {
+    pdfium_fuzzer("pdf_codec_gif_fuzzer_src") {
+      sources = [
+        "pdf_codec_gif_fuzzer.cc",
+        "xfa_codec_fuzzer.h",
+      ]
+      deps = [
+        "../../:test_support",
+      ]
+    }
+
+    pdfium_fuzzer("pdf_lzw_fuzzer_src") {
+      sources = [
+        "pdf_lzw_fuzzer.cc",
+      ]
+    }
+  }
+
+  pdfium_fuzzer("pdf_codec_jpeg_fuzzer_src") {
+    sources = [
+      "pdf_codec_jpeg_fuzzer.cc",
+      "xfa_codec_fuzzer.h",
+    ]
+    deps = [
+      "../../:test_support",
+    ]
+  }
+
+  if (pdf_enable_xfa_png) {
+    pdfium_fuzzer("pdf_codec_png_fuzzer_src") {
+      sources = [
+        "pdf_codec_png_fuzzer.cc",
+        "xfa_codec_fuzzer.h",
+      ]
+      deps = [
+        "../../:test_support",
+      ]
+    }
+  }
+
+  if (pdf_enable_xfa_tiff) {
+    pdfium_fuzzer("pdf_codec_tiff_fuzzer_src") {
+      sources = [
+        "pdf_codec_tiff_fuzzer.cc",
+        "xfa_codec_fuzzer.h",
+      ]
+      deps = [
+        "../../:test_support",
+      ]
+    }
+  }
+
+  pdfium_fuzzer("pdf_css_fuzzer_src") {
+    sources = [
+      "pdf_css_fuzzer.cc",
+    ]
+  }
+
+  pdfium_fuzzer("pdf_fm2js_fuzzer_src") {
+    sources = [
+      "pdf_fm2js_fuzzer.cc",
+    ]
+  }
+
+  pdfium_fuzzer("pdf_formcalc_fuzzer_src") {
+    sources = [
+      "pdf_formcalc_fuzzer.cc",
+    ]
+  }
+}
+
+pdfium_fuzzer("pdf_cmap_fuzzer_src") {
+  sources = [
+    "pdf_cmap_fuzzer.cc",
+  ]
+}
+
+pdfium_fuzzer("pdf_codec_a85_fuzzer_src") {
+  sources = [
+    "pdf_codec_a85_fuzzer.cc",
+  ]
+}
+
+pdfium_fuzzer("pdf_codec_fax_fuzzer_src") {
+  sources = [
+    "pdf_codec_fax_fuzzer.cc",
+  ]
+}
+
+pdfium_fuzzer("pdf_codec_icc_fuzzer_src") {
+  deps = [
+    "../../third_party/:lcms2",
+  ]
+  sources = [
+    "pdf_codec_icc_fuzzer.cc",
+  ]
+}
+
+pdfium_fuzzer("pdf_codec_jbig2_fuzzer_src") {
+  sources = [
+    "pdf_codec_jbig2_fuzzer.cc",
+  ]
+}
+
+pdfium_fuzzer("pdf_codec_rle_fuzzer_src") {
+  sources = [
+    "pdf_codec_rle_fuzzer.cc",
+  ]
+}
+
+pdfium_fuzzer("pdf_font_fuzzer_src") {
+  sources = [
+    "pdf_font_fuzzer.cc",
+  ]
+}
+
+pdfium_fuzzer("pdf_hint_table_fuzzer_src") {
+  sources = [
+    "pdf_hint_table_fuzzer.cc",
+  ]
+}
+
+pdfium_fuzzer("pdf_jpx_fuzzer_src") {
+  sources = [
+    "pdf_jpx_fuzzer.cc",
+  ]
+}
+
+pdfium_fuzzer("pdf_psengine_fuzzer_src") {
+  sources = [
+    "pdf_psengine_fuzzer.cc",
+  ]
+}
+
+pdfium_fuzzer("pdf_streamparser_fuzzer_src") {
+  sources = [
+    "pdf_streamparser_fuzzer.cc",
+  ]
+}
+
+pdfium_fuzzer("pdf_xml_fuzzer_src") {
+  sources = [
+    "pdf_xml_fuzzer.cc",
+  ]
+}

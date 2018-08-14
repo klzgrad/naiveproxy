@@ -1,0 +1,113 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module blink.mojom;
+
+import "third_party/blink/public/mojom/service_worker/navigation_preload_state.mojom";
+import "third_party/blink/public/mojom/service_worker/service_worker_error_type.mojom";
+import "third_party/blink/public/mojom/service_worker/service_worker_object.mojom";
+import "url/mojom/url.mojom";
+
+const int64 kInvalidServiceWorkerRegistrationId = -1;
+
+// Represents ServiceWorkerUpdateViaCache enum for ServiceWorkerRegistrationOptions:
+// https://w3c.github.io/ServiceWorker/#enumdef-serviceworkerupdateviacache
+enum ServiceWorkerUpdateViaCache {
+  kImports,
+  kAll,
+  kNone,
+};
+
+// Represents options for register():
+// https://w3c.github.io/ServiceWorker/#dictdef-registrationoptions
+struct ServiceWorkerRegistrationOptions {
+  url.mojom.Url scope;
+  ServiceWorkerUpdateViaCache update_via_cache = kImports;
+};
+
+// Describes a ServiceWorkerRegistration:
+// https://w3c.github.io/ServiceWorker/#serviceworkerregistration-interface
+struct ServiceWorkerRegistrationObjectInfo {
+  // The globally unique identifier of a service worker registration entity.
+  int64 registration_id = kInvalidServiceWorkerRegistrationId;
+
+  // The registration options attached with this registration object, including
+  // some information such as scope of this registration.
+  ServiceWorkerRegistrationOptions options;
+
+  // Holds one mojo connection to browser process, acts as a reference count to
+  // control lifetime of ServiceWorkerRegistration in the browser process.
+  associated ServiceWorkerRegistrationObjectHost host_ptr_info;
+
+  // |request| is expected to be bound on the implementation of interface
+  // ServiceWorkerRegistrationObject in the renderer process. The other end
+  // point of this Mojo connection is held by the browser process.
+  associated ServiceWorkerRegistrationObject& request;
+
+  // Corresponds to ServiceWorkerRegistration#{installing,waiting,active}.
+  // Null value means the corresponding object does not exist.
+  ServiceWorkerObjectInfo? installing;
+  ServiceWorkerObjectInfo? waiting;
+  ServiceWorkerObjectInfo? active;
+};
+
+// This interface lives in the browser process, it corresponds to one
+// ServiceWorkerRegistration JavaScript object. The renderer uses it to ask the
+// browser to do operations needed to implement ServiceWorkerRegistration
+// methods.
+interface ServiceWorkerRegistrationObjectHost {
+  // Corresponds to ServiceWorkerRegistration#update().
+  // On success, |error| is kNone without |error_msg| set.
+  // Otherwise, |error| and |error_msg| describe the failure.
+  Update() => (ServiceWorkerErrorType error, string? error_msg);
+
+  // Corresponds to ServiceWorkerRegistration#unregister().
+  // On success, |error| is kNone without |error_msg| set.
+  // Otherwise, |error| and |error_msg| describe the failure.
+  Unregister() => (ServiceWorkerErrorType error, string? error_msg);
+
+  // Corresponds to NavigationPreloadManager#enable()/disable().
+  // On success, |error| is kNone without |error_msg| set.
+  // Otherwise, |error| and |error_msg| describe the failure.
+  EnableNavigationPreload(bool enable)
+    => (ServiceWorkerErrorType error, string? error_msg);
+
+  // Corresponds to NavigationPreloadManager#getState().
+  // On success, |error| is kNone with |state| set.
+  // Otherwise, |error| and |error_msg| describe the failure.
+  GetNavigationPreloadState()
+    => (ServiceWorkerErrorType error,
+        string? error_msg,
+        blink.mojom.NavigationPreloadState? state);
+
+  // Corresponds to NavigationPreloadManager#setHeaderValue().
+  // On success, |error| is kNone without |error_msg| set.
+  // Otherwise, |error| and |error_msg| describe the failure.
+  SetNavigationPreloadHeader(string value)
+    => (ServiceWorkerErrorType error, string? error_msg);
+};
+
+// This interface lives in the renderer process, it corresponds to one
+// ServiceWorkerRegistration JavaScript object. The browser uses it to talk with
+// the corresponding impl of ServiceWorkerRegistration in the renderer.
+interface ServiceWorkerRegistrationObject {
+  // Sets changed service worker objects for this registration object.
+  // |changed_mask| indicates which objects of {|installing|,|waiting|,|active|}
+  // have changed. See ChangedVersionAttributesMask in service_worker_types.h
+  // for details.
+  // Changed objects may be null to indicate that the object does not exist
+  // anymore. Unchanged ones are always null.
+  // TODO(leonhsl): Use mojofied ChangedVersionAttributesMask directly instead
+  // of an int32 for |changed_mask|.
+  SetVersionAttributes(int32 changed_mask,
+                       ServiceWorkerObjectInfo? installing,
+                       ServiceWorkerObjectInfo? waiting,
+                       ServiceWorkerObjectInfo? active);
+
+  // Sets ServiceWorkerRegistration#updateViaCache.
+  SetUpdateViaCache(ServiceWorkerUpdateViaCache update_via_cache);
+
+  // Corresponds to ServiceWorkerRegistration#onupdatefound.
+  UpdateFound();
+};

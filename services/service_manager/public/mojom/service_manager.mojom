@@ -1,0 +1,48 @@
+// Copyright 2015 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module service_manager.mojom;
+
+import "services/service_manager/public/mojom/connector.mojom";
+
+struct RunningServiceInfo {
+  uint32 id;
+  Identity identity;
+  uint32 pid;
+};
+
+// Implemented by a client that wishes to be informed when the list of running
+// services changes.
+interface ServiceManagerListener {
+  // Called once when the listener is added via
+  // ServiceManager::AddInstanceListener() to provide the initial list of
+  // services that the listener observes changes against.
+  OnInit(array<RunningServiceInfo> running_services);
+
+  // Called when the Service Manager has started tracking a Service. This
+  // happens when the Service Manager first handles a request to launch the
+  // Service, before a process is created for it.
+  OnServiceCreated(RunningServiceInfo service);
+
+  // Called when a pid is available for the service. This could be because the
+  // Service Manager created a process for it, or because an existing one was
+  // assigned to it.
+  OnServiceStarted(Identity identity, uint32 pid);
+
+  // Called when a pid is available for the service.
+  OnServicePIDReceived(Identity identity, uint32 pid);
+
+  // Called when a service failed to start. (typically because it was shutdown
+  // before the manager heard back from the service).
+  OnServiceFailedToStart(Identity identity);
+
+  // Called when the Service Manager has stopped tracking a service. (i.e. when
+  // it has ended/quit).
+  OnServiceStopped(Identity identity);
+};
+
+interface ServiceManager {
+  // The listener is removed when the |listener| pipe is closed.
+  AddListener(ServiceManagerListener listener);
+};

@@ -1,0 +1,65 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module viz.mojom;
+
+import "mojo/public/mojom/base/time.mojom";
+import "ui/gfx/mojo/ca_layer_params.mojom";
+import "ui/gfx/mojo/color_space.mojom";
+import "ui/gfx/mojo/transform.mojom";
+import "ui/gfx/geometry/mojo/geometry.mojom";
+import "ui/latency/mojo/latency_info.mojom";
+import "services/viz/privileged/interfaces/compositing/layered_window_updater.mojom";
+
+// See ui/compositor/compositor.h: ContextFactoryPrivate.
+// The DisplayPrivate is used by privileged clients to talk to Display.
+// DisplayPrivate would eventually replace or be used by ContextFactoryPrivate.
+interface DisplayPrivate {
+  SetDisplayVisible(bool visible);
+
+  // Attempts to immediately swap a frame with the current size if possible,
+  // then will no longer swap until Resize() is called with a non-empty size.
+  [Sync] DisableSwapUntilResize() => ();
+
+  // Resizes the display.
+  Resize(gfx.mojom.Size size);
+
+  // Sets the matrix that will be used to transform the output color of the
+  // display. This only works in GPU compositing.
+  SetDisplayColorMatrix(gfx.mojom.Transform color_matrix);
+
+  SetDisplayColorSpace(gfx.mojom.ColorSpace blending_color_space,
+                       gfx.mojom.ColorSpace device_color_space);
+  SetOutputIsSecure(bool secure);
+
+  // Locks the vsync interval used to generate BeginFrames for this display to
+  // |interval|. Changes to vsync interval from other sources will be ignored.
+  // This will do nothing if the display is using an external BeginFrame source.
+  SetAuthoritativeVSyncInterval(mojo_base.mojom.TimeDelta interval);
+
+  // Updates vsync parameters used to generate BeginFrames for this display.
+  // This will do nothing if the display is using an external BeginFrame source.
+  SetDisplayVSyncParameters(
+    mojo_base.mojom.TimeTicks timebase,
+    mojo_base.mojom.TimeDelta interval);
+};
+
+interface DisplayClient {
+  // Notifies that a swap has occured after some latency info with snapshot
+  // component reached the display.
+  DidSwapAfterSnapshotRequestReceived(array<ui.mojom.LatencyInfo> latency_info);
+
+  [EnableIf=is_mac]
+  OnDisplayReceivedCALayerParams(gfx.mojom.CALayerParams ca_layer_params);
+
+  // Creates a LayeredWindowUpdater implementation to draw into a layered
+  // window.
+  [EnableIf=is_win]
+  CreateLayeredWindowUpdater(LayeredWindowUpdater& layered_window_updater);
+
+  // Notifies that a swap has occurred and provides information about the pixel
+  // size of the swapped frame.
+  [EnableIf=is_android]
+  DidCompleteSwapWithSize(gfx.mojom.Size size);
+};

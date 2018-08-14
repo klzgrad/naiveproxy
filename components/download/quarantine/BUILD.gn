@@ -1,0 +1,59 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/chromecast_build.gni")
+
+if (is_android) {
+  import("//build/config/android/rules.gni")
+}
+
+static_library("quarantine") {
+  sources = [
+    "quarantine.cc",
+    "quarantine.h",
+    "quarantine_constants_linux.h",
+    "quarantine_linux.cc",
+    "quarantine_mac.mm",
+    "quarantine_win.cc",
+  ]
+
+  deps = [
+    "//base",
+    "//net",
+    "//url",
+  ]
+
+  if (is_mac) {
+    libs = [
+      "Carbon.framework",
+      "Foundation.framework",
+    ]
+  }
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "quarantine_linux_unittest.cc",
+    "quarantine_mac_unittest.mm",
+    "quarantine_win_unittest.cc",
+  ]
+
+  # Chromecasts do not have extended attributes enabled; even if it were
+  # enabled, the devices use tmpfs which restricts the extended attributes that
+  # can be set such that quarantining still would not work. (The platform
+  # specific tests include a runtime guard to skip tests that need xattr.)
+  if (!is_chromecast) {
+    sources += [ "quarantine_unittest.cc" ]
+  }
+
+  deps = [
+    ":quarantine",
+    "//base",
+    "//base/test:test_support",
+    "//net",
+    "//testing/gtest",
+    "//url",
+  ]
+}

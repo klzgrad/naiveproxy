@@ -1,0 +1,105 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+source_set("gpu_host") {
+  sources = [
+    "gpu_client.cc",
+    "gpu_client.h",
+    "gpu_host.cc",
+    "gpu_host.h",
+    "gpu_host_delegate.h",
+  ]
+
+  deps = [
+    "//base",
+    "//components/discardable_memory/service",
+    "//components/viz/host",
+    "//components/viz/service/main",  # TODO(sad): Temporary until GPU process split.
+    "//gpu/command_buffer/client",
+    "//gpu/command_buffer/client:gles2_interface",
+    "//gpu/ipc/client",
+    "//gpu/ipc/common",
+    "//mojo/public/cpp/bindings",
+    "//mojo/public/cpp/system",
+    "//services/service_manager/public/cpp",
+    "//ui/gfx",
+    "//ui/gl",
+  ]
+
+  public_deps = [
+    "//services/ui/public/interfaces",
+    "//services/viz/privileged/interfaces",
+    "//services/viz/public/interfaces",
+  ]
+
+  if (is_chromeos) {
+    sources += [
+      "arc_client.cc",
+      "arc_client.h",
+    ]
+  }
+
+  # ui service should not depend on below components.
+  assert_no_deps = [
+    "//ash",
+    "//content/public/browser",
+    "//content/public/common",
+    "//ui/aura",
+    "//ui/views",
+  ]
+}
+
+static_library("test_support") {
+  testonly = true
+
+  sources = [
+    "test_gpu_host.cc",
+    "test_gpu_host.h",
+  ]
+
+  deps = [
+    ":gpu_host",
+    "//base",
+    "//components/viz/test:test_support",
+  ]
+}
+
+source_set("tests") {
+  testonly = true
+
+  sources = [
+    "gpu_host_unittest.cc",
+  ]
+
+  deps = [
+    ":gpu_host",
+    "//base",
+    "//base/test:test_config",
+    "//base/test:test_support",
+    "//components/discardable_memory/service",
+    "//components/viz/service",
+    "//components/viz/service/main",
+    "//components/viz/test:test_support",
+    "//gpu/ipc/client",
+    "//mojo/public/cpp/bindings:bindings",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/cpp:service_test_support",
+    "//services/service_manager/public/mojom",
+    "//services/ui/common:mus_common",
+    "//services/ui/common:task_runner_test_base",
+    "//services/ui/public/cpp",
+    "//services/ui/public/interfaces",
+    "//testing/gtest",
+    "//third_party/mesa:osmesa",
+    "//ui/aura",
+    "//ui/aura:test_support",
+    "//ui/events",
+    "//ui/gfx",
+    "//ui/gfx:test_support",
+    "//ui/gfx/geometry",
+    "//ui/gfx/geometry/mojo",
+    "//ui/gl",
+    "//ui/gl/init",
+  ]
+}

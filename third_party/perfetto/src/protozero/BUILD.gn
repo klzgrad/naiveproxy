@@ -1,0 +1,98 @@
+# Copyright (C) 2017 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../gn/perfetto.gni")
+import("../../gn/proto_library.gni")
+import("protozero_library.gni")
+
+source_set("protozero") {
+  public_configs = [ "../../gn:default_config" ]
+  public_deps = [
+    "../../include/perfetto/protozero",
+  ]
+  deps = [
+    "../../gn:default_deps",
+    "../../gn:gtest_prod_config",
+    "../base",
+  ]
+  sources = [
+    "message.cc",
+    "message_handle.cc",
+    "proto_decoder.cc",
+    "proto_field_descriptor.cc",
+    "proto_utils.cc",
+    "scattered_stream_null_delegate.cc",
+    "scattered_stream_writer.cc",
+  ]
+}
+
+source_set("test_support") {
+  testonly = true
+  deps = [
+    "../../gn:default_deps",
+  ]
+  public_deps = [
+    ":protozero",
+  ]
+  sources = [
+    "scattered_stream_delegate_for_testing.cc",
+    "scattered_stream_delegate_for_testing.h",
+  ]
+}
+
+source_set("unittests") {
+  testonly = true
+  deps = [
+    ":protozero",
+    ":test_support",
+    ":testing_messages_lite",
+    ":testing_messages_zero",
+    "../../gn:default_deps",
+    "../../gn:gtest_deps",
+    "../base",
+  ]
+  sources = [
+    "message_handle_unittest.cc",
+    "message_unittest.cc",
+    "proto_decoder_unittest.cc",
+    "proto_utils_unittest.cc",
+    "scattered_stream_writer_unittest.cc",
+    "test/fake_scattered_buffer.cc",
+    "test/fake_scattered_buffer.h",
+    "test/protozero_conformance_unittest.cc",
+  ]
+}
+
+# Generates both xxx.pbzero.h and xxx.pb.h (official proto).
+
+testing_proto_sources = [
+  "test/example_proto/library.proto",
+  "test/example_proto/library_internals/galaxies.proto",
+  "test/example_proto/test_messages.proto",
+  "test/example_proto/upper_import.proto",
+]
+
+protozero_library("testing_messages_zero") {
+  sources = testing_proto_sources
+  proto_in_dir = perfetto_root_path
+  proto_out_dir = perfetto_root_path
+  generator_plugin_options = "wrapper_namespace=pbzero"
+}
+
+proto_library("testing_messages_lite") {
+  generate_python = false
+  sources = testing_proto_sources
+  proto_in_dir = perfetto_root_path
+  proto_out_dir = perfetto_root_path
+}

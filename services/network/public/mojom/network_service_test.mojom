@@ -1,0 +1,58 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module network.mojom;
+
+import "services/network/public/mojom/network_change_manager.mojom";
+import "services/network/public/mojom/network_param.mojom";
+import "services/network/public/mojom/network_types.mojom";
+
+struct Rule {
+  string host_pattern;
+  string replacement;
+};
+
+// Testing interface to the network service.
+// Methods are sometimes synchronous to avoid race conditions since this test
+// interface is on a different pipe than interfaces which are impacted.
+interface NetworkServiceTest {
+  // Adds the given host resolver rules in the process where the network service
+  // is running.
+  [Sync]
+  AddRules(array<Rule> rules) => ();
+
+  // Simulates a network connection type change. The new connection type will be
+  // updated to |type| and broadcasts will be sent to
+  // NetworkConnectionManagerClient implementations.
+  SimulateNetworkChange(ConnectionType type) => ();
+
+  // Simulates a network quality change. The new effective connection type will
+  // be updated to |type| and broadcasts will be sent to
+  // NetworkQualityEstimatorManagerClient implementations.
+  SimulateNetworkQualityChange(EffectiveConnectionType type) => ();
+
+  // Crash the process where network service is running.
+  SimulateCrash();
+
+  // These methods mirror the net::MockCertVerifier interface.
+  [Sync]
+  MockCertVerifierSetDefaultResult(int32 default_result) => ();
+
+  [Sync]
+  MockCertVerifierAddResultForCertAndHost(
+      X509Certificate cert,
+      string host_pattern,
+      CertVerifyResult verify_result,
+      int32 rv) => ();
+
+  // Toggles requiring CT for testing
+  enum ShouldRequireCT {
+    RESET = 0,
+    REQUIRE = 1,
+    DONT_REQUIRE = 2,
+  };
+
+  [Sync]
+  SetShouldRequireCT(ShouldRequireCT required) => ();
+};

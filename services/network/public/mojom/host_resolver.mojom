@@ -1,0 +1,34 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module network.mojom;
+
+import "net/interfaces/address_list.mojom";
+
+// Control handle used to control outstanding NetworkContext::ResolveHost
+// requests. Handle is optional for all requests, and may be closed at any time
+// without affecting the request.
+//
+// TODO(crbug.com/821021): Add support to change priority.
+interface ResolveHostHandle {
+  // Requests cancellation of the resolution request. Doing so may have no
+  // effect if a result was already sent. If successful, cancellation results in
+  // ResolveHostClient::OnComplete being invoked with |result|, which should be
+  // a non-OK network error code.
+  Cancel(int32 result);
+};
+
+// Response interface used to receive results of NetworkContext::ResolveHost
+// requests.
+//
+// TODO(crbug.com/821021): Add additional methods to receive non-address
+// results (eg TXT DNS responses).
+interface ResolveHostClient {
+  // Called on completion of a resolve host request. Results are a network error
+  // code, and on success (network error code OK), an AddressList.
+  OnComplete(int32 result, net.interfaces.AddressList? resolved_addresses);
+};
+
+// TODO(crbug.com/821021): Create a separate HostResolver interface, so host
+// resolution can be done without direct access to NetworkContext.

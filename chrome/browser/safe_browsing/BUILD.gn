@@ -1,0 +1,261 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//extensions/buildflags/buildflags.gni")
+import("//third_party/protobuf/proto_library.gni")
+
+proto_library("chunk_proto") {
+  sources = [
+    "chunk.proto",
+  ]
+}
+
+static_library("safe_browsing") {
+  sources = [
+    "chrome_cleaner/chrome_cleaner_controller_impl_win.cc",
+    "chrome_cleaner/chrome_cleaner_controller_impl_win.h",
+    "chrome_cleaner/chrome_cleaner_controller_win.h",
+    "chrome_cleaner/chrome_cleaner_extensions_util_win.h",
+    "chrome_cleaner/chrome_cleaner_fetcher_win.cc",
+    "chrome_cleaner/chrome_cleaner_fetcher_win.h",
+    "chrome_cleaner/chrome_cleaner_navigation_util_win.cc",
+    "chrome_cleaner/chrome_cleaner_navigation_util_win.h",
+    "chrome_cleaner/chrome_cleaner_reboot_dialog_controller_impl_win.cc",
+    "chrome_cleaner/chrome_cleaner_reboot_dialog_controller_impl_win.h",
+    "chrome_cleaner/chrome_cleaner_reboot_dialog_controller_win.h",
+    "chrome_cleaner/chrome_cleaner_runner_win.cc",
+    "chrome_cleaner/chrome_cleaner_runner_win.h",
+    "chrome_cleaner/chrome_cleaner_scanner_results.cc",
+    "chrome_cleaner/chrome_cleaner_scanner_results.h",
+    "chrome_cleaner/reporter_runner_win.cc",
+    "chrome_cleaner/reporter_runner_win.h",
+    "chrome_cleaner/settings_resetter_win.cc",
+    "chrome_cleaner/settings_resetter_win.h",
+    "chrome_cleaner/srt_chrome_prompt_impl.cc",
+    "chrome_cleaner/srt_chrome_prompt_impl.h",
+    "chrome_cleaner/srt_client_info_win.cc",
+    "chrome_cleaner/srt_client_info_win.h",
+    "chrome_cleaner/srt_field_trial_win.cc",
+    "chrome_cleaner/srt_field_trial_win.h",
+    "safe_browsing_controller_client.cc",
+    "safe_browsing_controller_client.h",
+    "safe_browsing_tab_observer.cc",
+    "safe_browsing_tab_observer.h",
+    "url_checker_delegate_impl.cc",
+    "url_checker_delegate_impl.h",
+  ]
+
+  deps = [
+    "//chrome/app:generated_resources",
+    "//components/chrome_cleaner/public/interfaces",
+    "//components/safe_browsing/common:interfaces",
+    "//mojo/public/cpp/platform",
+    "//mojo/public/cpp/system",
+  ]
+
+  if (enable_extensions) {
+    sources += [
+      "chrome_cleaner/chrome_cleaner_dialog_controller_impl_win.cc",
+      "chrome_cleaner/chrome_cleaner_dialog_controller_impl_win.h",
+      "chrome_cleaner/chrome_cleaner_dialog_controller_win.h",
+      "settings_reset_prompt/default_settings_fetcher.cc",
+      "settings_reset_prompt/default_settings_fetcher.h",
+      "settings_reset_prompt/settings_reset_prompt_config.cc",
+      "settings_reset_prompt/settings_reset_prompt_config.h",
+      "settings_reset_prompt/settings_reset_prompt_controller.cc",
+      "settings_reset_prompt/settings_reset_prompt_controller.h",
+      "settings_reset_prompt/settings_reset_prompt_model.cc",
+      "settings_reset_prompt/settings_reset_prompt_model.h",
+      "settings_reset_prompt/settings_reset_prompt_prefs_manager.cc",
+      "settings_reset_prompt/settings_reset_prompt_prefs_manager.h",
+      "settings_reset_prompt/settings_reset_prompt_util_win.cc",
+      "settings_reset_prompt/settings_reset_prompt_util_win.h",
+    ]
+    deps += [ "//components/keep_alive_registry" ]
+  }
+
+  if (is_chrome_branded && is_win) {
+    sources += [ "chrome_cleaner/chrome_cleaner_extension_util_win.cc" ]
+  } else {
+    sources += [ "chrome_cleaner/chrome_cleaner_extension_util_win_noop.cc" ]
+  }
+
+  if (safe_browsing_mode != 0) {
+    # "Safe Browsing Basic" files used for safe browsing in full mode
+    # (safe_browsing=1) and mobile (=2)
+    sources += [
+      "../loader/data_reduction_proxy_resource_throttle_android.cc",
+      "../loader/data_reduction_proxy_resource_throttle_android.h",
+      "certificate_reporting_metrics_provider.cc",
+      "certificate_reporting_metrics_provider.h",
+      "certificate_reporting_service.cc",
+      "certificate_reporting_service.h",
+      "certificate_reporting_service_factory.cc",
+      "certificate_reporting_service_factory.h",
+      "safe_browsing_blocking_page.cc",
+      "safe_browsing_blocking_page.h",
+      "safe_browsing_navigation_observer.cc",
+      "safe_browsing_navigation_observer.h",
+      "safe_browsing_navigation_observer_manager.cc",
+      "safe_browsing_navigation_observer_manager.h",
+      "safe_browsing_service.cc",
+      "safe_browsing_service.h",
+      "services_delegate.h",
+      "test_safe_browsing_blocking_page_quiet.cc",
+      "test_safe_browsing_blocking_page_quiet.h",
+      "test_safe_browsing_service.cc",
+      "test_safe_browsing_service.h",
+      "trigger_creator.cc",
+      "trigger_creator.h",
+      "ui_manager.cc",
+      "ui_manager.h",
+    ]
+    deps += [
+      "//chrome/browser/safe_browsing:chunk_proto",
+      "//chrome/common/safe_browsing:proto",
+      "//components/safe_browsing:csd_proto",
+      "//components/safe_browsing:safe_browsing",
+      "//components/safe_browsing/browser:browser",
+      "//components/safe_browsing/common:common",
+      "//components/safe_browsing/common:safe_browsing_prefs",
+      "//components/safe_browsing/db:metadata_proto",
+      "//components/safe_browsing/db:whitelist_checker_client",
+      "//components/safe_browsing/password_protection",
+      "//components/safe_browsing/triggers:ad_sampler_trigger",
+      "//components/safe_browsing/triggers:suspicious_site_trigger",
+      "//components/safe_browsing/triggers:trigger_throttler",
+      "//components/safe_browsing/triggers:triggers",
+    ]
+    if (safe_browsing_mode == 1) {
+      # "Safe Browsing Full" files in addition to the "basic" ones to use for
+      # full safe browsing. This has some in common with "mobile."
+      sources += [
+        "../download/download_completion_blocker.cc",
+        "../download/download_completion_blocker.h",
+        "../loader/safe_browsing_resource_throttle.cc",
+        "../loader/safe_browsing_resource_throttle.h",
+        "browser_feature_extractor.cc",
+        "browser_feature_extractor.h",
+        "browser_features.cc",
+        "browser_features.h",
+        "chrome_password_protection_service.cc",
+        "chrome_password_protection_service.h",
+        "chunk_range.cc",
+        "chunk_range.h",
+        "client_side_detection_host.cc",
+        "client_side_detection_host.h",
+        "client_side_detection_service.cc",
+        "client_side_detection_service.h",
+        "client_side_model_loader.cc",
+        "client_side_model_loader.h",
+        "download_protection/check_client_download_request.cc",
+        "download_protection/check_client_download_request.h",
+        "download_protection/disk_image_type_sniffer_mac.cc",
+        "download_protection/disk_image_type_sniffer_mac.h",
+        "download_protection/download_feedback.cc",
+        "download_protection/download_feedback.h",
+        "download_protection/download_feedback_service.cc",
+        "download_protection/download_feedback_service.h",
+        "download_protection/download_protection_service.cc",
+        "download_protection/download_protection_service.h",
+        "download_protection/download_protection_util.cc",
+        "download_protection/download_protection_util.h",
+        "download_protection/download_url_sb_client.cc",
+        "download_protection/download_url_sb_client.h",
+        "download_protection/path_sanitizer.cc",
+        "download_protection/path_sanitizer.h",
+        "download_protection/ppapi_download_request.cc",
+        "download_protection/ppapi_download_request.h",
+        "download_protection/two_phase_uploader.cc",
+        "download_protection/two_phase_uploader.h",
+        "incident_reporting/binary_integrity_analyzer.cc",
+        "incident_reporting/binary_integrity_analyzer.h",
+        "incident_reporting/binary_integrity_analyzer_mac.cc",
+        "incident_reporting/binary_integrity_analyzer_mac.h",
+        "incident_reporting/binary_integrity_analyzer_win.cc",
+        "incident_reporting/binary_integrity_analyzer_win.h",
+        "incident_reporting/binary_integrity_incident.cc",
+        "incident_reporting/binary_integrity_incident.h",
+        "incident_reporting/delayed_analysis_callback.h",
+        "incident_reporting/delayed_callback_runner.cc",
+        "incident_reporting/delayed_callback_runner.h",
+        "incident_reporting/download_metadata_manager.cc",
+        "incident_reporting/download_metadata_manager.h",
+        "incident_reporting/environment_data_collection.cc",
+        "incident_reporting/environment_data_collection.h",
+        "incident_reporting/environment_data_collection_win.cc",
+        "incident_reporting/environment_data_collection_win.h",
+        "incident_reporting/extension_data_collection.cc",
+        "incident_reporting/extension_data_collection.h",
+        "incident_reporting/incident.cc",
+        "incident_reporting/incident.h",
+        "incident_reporting/incident_handler_util.cc",
+        "incident_reporting/incident_handler_util.h",
+        "incident_reporting/incident_receiver.h",
+        "incident_reporting/incident_report_uploader.cc",
+        "incident_reporting/incident_report_uploader.h",
+        "incident_reporting/incident_report_uploader_impl.cc",
+        "incident_reporting/incident_report_uploader_impl.h",
+        "incident_reporting/incident_reporting_service.cc",
+        "incident_reporting/incident_reporting_service.h",
+        "incident_reporting/last_download_finder.cc",
+        "incident_reporting/last_download_finder.h",
+        "incident_reporting/module_integrity_verifier_win.cc",
+        "incident_reporting/module_integrity_verifier_win.h",
+        "incident_reporting/platform_state_store.cc",
+        "incident_reporting/platform_state_store.h",
+        "incident_reporting/platform_state_store_win.cc",
+        "incident_reporting/preference_validation_delegate.cc",
+        "incident_reporting/preference_validation_delegate.h",
+        "incident_reporting/resource_request_detector.cc",
+        "incident_reporting/resource_request_detector.h",
+        "incident_reporting/resource_request_incident.cc",
+        "incident_reporting/resource_request_incident.h",
+        "incident_reporting/state_store.cc",
+        "incident_reporting/state_store.h",
+        "incident_reporting/tracked_preference_incident.cc",
+        "incident_reporting/tracked_preference_incident.h",
+        "local_database_manager.cc",
+        "local_database_manager.h",
+        "protocol_manager.cc",
+        "protocol_manager.h",
+        "protocol_parser.cc",
+        "protocol_parser.h",
+        "safe_browsing_database.cc",
+        "safe_browsing_database.h",
+        "safe_browsing_store.cc",
+        "safe_browsing_store.h",
+        "safe_browsing_store_file.cc",
+        "safe_browsing_store_file.h",
+        "safe_browsing_util.cc",
+        "safe_browsing_util.h",
+        "services_delegate_impl.cc",
+        "services_delegate_impl.h",
+        "signature_evaluator_mac.h",
+        "signature_evaluator_mac.mm",
+      ]
+      deps += [
+        "//chrome/services/file_util/public/cpp",
+        "//components/content_settings/core/browser:browser",
+        "//components/language/core/common:common",
+        "//components/prefs:prefs",
+        "//components/safe_browsing/db:db",
+        "//components/security_interstitials/content:security_interstitial_page",
+        "//content/public/browser:browser",
+        "//net:net",
+      ]
+      if (is_win) {
+        deps += [ "//chrome/browser/safe_browsing/incident_reporting:state_store_data_proto" ]
+      }
+    } else if (safe_browsing_mode == 2) {
+      sources += [
+        "../loader/safe_browsing_resource_throttle.cc",
+        "../loader/safe_browsing_resource_throttle.h",
+        "services_delegate_stub.cc",
+        "services_delegate_stub.h",
+      ]
+      deps += [ "//components/safe_browsing/android:safe_browsing_mobile" ]
+    }
+  }
+}

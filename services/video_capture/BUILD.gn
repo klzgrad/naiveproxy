@@ -1,0 +1,124 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//services/service_manager/public/cpp/service.gni")
+import("//services/service_manager/public/service_manifest.gni")
+import("//services/service_manager/public/tools/test/service_test.gni")
+import("//testing/test.gni")
+
+service("video_capture") {
+  sources = [
+    "service_main.cc",
+  ]
+
+  deps = [
+    ":lib",
+    "//mojo/public/cpp/system",
+    "//services/video_capture/public/cpp",
+    "//services/video_capture/public/mojom",
+  ]
+}
+
+service_manifest("manifest") {
+  name = "video_capture"
+  source = "service_manifest.json"
+}
+
+source_set("lib") {
+  sources = [
+    "device_factory_media_to_mojo_adapter.cc",
+    "device_factory_media_to_mojo_adapter.h",
+    "device_factory_provider_impl.cc",
+    "device_factory_provider_impl.h",
+    "device_media_to_mojo_adapter.cc",
+    "device_media_to_mojo_adapter.h",
+    "receiver_mojo_to_media_adapter.cc",
+    "receiver_mojo_to_media_adapter.h",
+    "scoped_access_permission_media_to_mojo_adapter.cc",
+    "scoped_access_permission_media_to_mojo_adapter.h",
+    "service_impl.cc",
+    "service_impl.h",
+    "shared_memory_virtual_device_mojo_adapter.cc",
+    "shared_memory_virtual_device_mojo_adapter.h",
+    "testing_controls_impl.cc",
+    "testing_controls_impl.h",
+    "texture_virtual_device_mojo_adapter.cc",
+    "texture_virtual_device_mojo_adapter.h",
+    "virtual_device_enabled_device_factory.cc",
+    "virtual_device_enabled_device_factory.h",
+  ]
+
+  public_deps = [
+    "//base",
+    "//media",
+    "//media/capture:capture",
+    "//media/capture/mojom:image_capture",
+    "//media/mojo/common:common",
+    "//mojo/public/cpp/system",
+    "//services/service_manager/public/cpp",
+    "//services/ui/public/cpp/gpu:gpu",
+    "//services/video_capture/public/cpp",
+    "//services/video_capture/public/mojom",
+    "//services/video_capture/public/mojom:constants",
+    "//services/video_capture/public/uma",
+  ]
+}
+
+source_set("tests") {
+  testonly = true
+
+  sources = [
+    "device_media_to_mojo_adapter_unittest.cc",
+    "test/device_factory_provider_connectortest.cc",
+    "test/device_factory_provider_test.cc",
+    "test/device_factory_provider_test.h",
+    "test/device_factory_provider_unittest.cc",
+    "test/fake_device_descriptor_test.cc",
+    "test/fake_device_descriptor_test.h",
+    "test/fake_device_descriptor_unittest.cc",
+    "test/fake_device_test.cc",
+    "test/fake_device_test.h",
+    "test/fake_device_unittest.cc",
+    "test/mock_device.cc",
+    "test/mock_device.h",
+    "test/mock_device_factory.cc",
+    "test/mock_device_factory.h",
+    "test/mock_device_test.cc",
+    "test/mock_device_test.h",
+    "test/mock_device_unittest.cc",
+    "test/mock_producer.cc",
+    "test/mock_producer.h",
+    "test/mock_receiver.cc",
+    "test/mock_receiver.h",
+    "test/virtual_device_unittest.cc",
+    "texture_virtual_device_mojo_adapter_unittest.cc",
+  ]
+
+  deps = [
+    ":lib",
+    ":video_capture",
+    "//base/test:test_support",
+    "//media/capture/mojom:video_capture",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/cpp:service_test_support",
+    "//services/service_manager/public/cpp/test:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//ui/gfx:test_support",
+  ]
+
+  data_deps = [
+    ":video_capture",
+  ]
+}
+
+service_manifest("unittest_manifest") {
+  name = "video_capture_unittests"
+  source = "test/service_unittest_manifest.json"
+}
+
+catalog("tests_catalog") {
+  embedded_services = [ ":unittest_manifest" ]
+  standalone_services = [ ":manifest" ]
+}

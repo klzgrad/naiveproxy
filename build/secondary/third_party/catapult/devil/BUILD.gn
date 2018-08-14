@@ -1,0 +1,50 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/symlink.gni")
+import("//build/secondary/third_party/catapult/devil/devil_arm.gni")
+import("//testing/android/empty_apk/empty_apk.gni")
+
+empty_apk("empty_system_webview_apk") {
+  package_name = "com.android.webview"
+  apk_name = "EmptySystemWebView"
+}
+
+group("devil") {
+  testonly = true
+  deps = [
+    ":empty_system_webview_apk",
+    "//buildtools/third_party/libc++($host_toolchain)",
+    "//tools/android/forwarder2",
+    "//tools/android/md5sum",
+  ]
+
+  if (build_devil_arm_deps) {
+    deps += [
+      ":host_forwarder_arm",
+      ":libcxx_arm",
+      ":md5sum_bin_host_arm",
+    ]
+  }
+}
+
+if (build_devil_arm_deps) {
+  binary_symlink("host_forwarder_arm") {
+    binary_label = "//tools/android/forwarder2:host_forwarder(//build/toolchain/linux:clang_arm)"
+    output_name = "host_forwarder_arm"
+  }
+
+  binary_symlink("md5sum_bin_host_arm") {
+    binary_label =
+        "//tools/android/md5sum:md5sum_bin(//build/toolchain/linux:clang_arm)"
+    output_name = "md5sum_bin_host_arm"
+  }
+
+  binary_symlink("libcxx_arm") {
+    binary_label =
+        "//buildtools/third_party/libc++(//build/toolchain/linux:clang_arm)"
+    binary_output_name = "libc++.so"
+    output_name = "libc++_arm"
+  }
+}

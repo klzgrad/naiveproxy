@@ -1,0 +1,172 @@
+// Copyright (c) 2012 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "net/spdy/spdy_http_utils.h"
+
+#include <string>
+#include <vector>
+
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/string_piece.h"
+#include "base/strings/string_split.h"
+#include "base/strings/string_util.h"
+#include "base/time/time.h"
+#include "net/base/escape.h"
+#include "net/base/load_flags.h"
+#include "net/base/url_util.h"
+#include "net/http/http_request_headers.h"
+#include "net/http/http_request_info.h"
+#include "net/http/http_response_headers.h"
+#include "net/http/http_response_info.h"
+#include "net/http/http_util.h"
+
+namespace net {
+
+namespace {
+
+void AddSpdyHeader(const std::string& name,
+                   const std::string& value,
+                   spdy::SpdyHeaderBlock* headers) {
+  if (headers->find(name) == headers->end()) {
+    (*headers)[name] = value;
+  } else {
+    std::string joint_value = (*headers)[name].as_string();
+    joint_value.append(1, '\0');
+    joint_value.append(value);
+    (*headers)[name] = joint_value;
+  }
+}
+
+}  // namespace
+
+bool SpdyHeadersToHttpResponse(const spdy::SpdyHeaderBlock& headers,
+                               HttpResponseInfo* response) {
+  // The ":status" header is required.
+  spdy::SpdyHeaderBlock::const_iterator it =
+      headers.find(spdy::kHttp2StatusHeader);
+  if (it == headers.end())
+    return false;
+  std::string status = it->second.as_string();
+  std::string raw_headers("HTTP/1.1 ");
+  raw_headers.append(status);
+  raw_headers.push_back('\0');
+  for (it = headers.begin(); it != headers.end(); ++it) {
+    // For each value, if the server sends a NUL-separated
+    // list of values, we separate that back out into
+    // individual headers for each value in the list.
+    // e.g.
+    //    Set-Cookie "foo\0bar"
+    // becomes
+    //    Set-Cookie: foo\0
+    //    Set-Cookie: bar\0
+    std::string value = it->second.as_string();
+    size_t start = 0;
+    size_t end = 0;
+    do {
+      end = value.find('\0', start);
+      std::string tval;
+      if (end != value.npos)
+        tval = value.substr(start, (end - start));
+      else
+        tval = value.substr(start);
+      if (it->first[0] == ':')
+        raw_headers.append(it->first.as_string().substr(1));
+      else
+        raw_headers.append(it->first.as_string());
+      raw_headers.push_back(':');
+      raw_headers.append(tval);
+      raw_headers.push_back('\0');
+      start = end + 1;
+    } while (end != value.npos);
+  }
+
+  response->headers = new HttpResponseHeaders(raw_headers);
+  response->was_fetched_via_spdy = true;
+  return true;
+}
+
+void CreateSpdyHeadersFromHttpRequest(const HttpRequestInfo& info,
+                                      const HttpRequestHeaders& request_headers,
+                                      spdy::SpdyHeaderBlock* headers) {
+  (*headers)[spdy::kHttp2MethodHeader] = info.method;
+  if (info.method == "CONNECT") {
+    (*headers)[spdy::kHttp2AuthorityHeader] = GetHostAndPort(info.url);
+  } else {
+    (*headers)[spdy::kHttp2AuthorityHeader] = GetHostAndOptionalPort(info.url);
+    (*headers)[spdy::kHttp2SchemeHeader] = info.url.scheme();
+    (*headers)[spdy::kHttp2PathHeader] = info.url.PathForRequest();
+  }
+
+  HttpRequestHeaders::Iterator it(request_headers);
+  while (it.GetNext()) {
+    std::string name = base::ToLowerASCII(it.name());
+    if (name.empty() || name[0] == ':' || name == "connection" ||
+        name == "proxy-connection" || name == "transfer-encoding" ||
+        name == "host") {
+      continue;
+    }
+    AddSpdyHeader(name, it.value(), headers);
+  }
+}
+
+void CreateSpdyHeadersFromHttpRequestForWebSocket(
+    const GURL& url,
+    const HttpRequestHeaders& request_headers,
+    spdy::SpdyHeaderBlock* headers) {
+  (*headers)[spdy::kHttp2MethodHeader] = "CONNECT";
+  (*headers)[spdy::kHttp2AuthorityHeader] = GetHostAndOptionalPort(url);
+  (*headers)[spdy::kHttp2SchemeHeader] = "https";
+  (*headers)[spdy::kHttp2PathHeader] = url.PathForRequest();
+  (*headers)[spdy::kHttp2ProtocolHeader] = "websocket";
+
+  HttpRequestHeaders::Iterator it(request_headers);
+  while (it.GetNext()) {
+    std::string name = base::ToLowerASCII(it.name());
+    if (name.empty() || name[0] == ':' || name == "upgrade" ||
+        name == "connection" || name == "proxy-connection" ||
+        name == "transfer-encoding" || name == "host") {
+      continue;
+    }
+    AddSpdyHeader(name, it.value(), headers);
+  }
+}
+
+static_assert(HIGHEST - LOWEST < 4 && HIGHEST - MINIMUM_PRIORITY < 6,
+              "request priority incompatible with spdy");
+
+spdy::SpdyPriority ConvertRequestPriorityToSpdyPriority(
+    const RequestPriority priority) {
+  DCHECK_GE(priority, MINIMUM_PRIORITY);
+  DCHECK_LE(priority, MAXIMUM_PRIORITY);
+  return static_cast<spdy::SpdyPriority>(MAXIMUM_PRIORITY - priority +
+                                         spdy::kV3HighestPriority);
+}
+
+NET_EXPORT_PRIVATE RequestPriority
+ConvertSpdyPriorityToRequestPriority(spdy::SpdyPriority priority) {
+  // Handle invalid values gracefully.
+  return ((priority - spdy::kV3HighestPriority) >
+          (MAXIMUM_PRIORITY - MINIMUM_PRIORITY))
+             ? IDLE
+             : static_cast<RequestPriority>(
+                   MAXIMUM_PRIORITY - (priority - spdy::kV3HighestPriority));
+}
+
+NET_EXPORT_PRIVATE void ConvertHeaderBlockToHttpRequestHeaders(
+    const spdy::SpdyHeaderBlock& spdy_headers,
+    HttpRequestHeaders* http_headers) {
+  for (const auto& it : spdy_headers) {
+    base::StringPiece key = it.first;
+    if (key[0] == ':') {
+      key.remove_prefix(1);
+    }
+    std::vector<base::StringPiece> values = base::SplitStringPiece(
+        it.second, "\0", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+    for (const auto& value : values) {
+      http_headers->SetHeader(key, value);
+    }
+  }
+}
+
+}  // namespace net

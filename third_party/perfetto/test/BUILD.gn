@@ -1,0 +1,160 @@
+# Copyright (C) 2018 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../gn/perfetto.gni")
+import("//build_overrides/build.gni")
+
+# For use_libfuzzer.
+if (!build_with_chromium) {
+  import("//gn/standalone/sanitizers/vars.gni")
+} else {
+  import("//build/config/sanitizers/sanitizers.gni")
+}
+
+source_set("end_to_end_integrationtests") {
+  testonly = true
+  deps = [
+    ":task_runner_thread",
+    ":task_runner_thread_delegates",
+    ":test_helper",
+    "../gn:default_deps",
+    "../gn:gtest_deps",
+    "../include/perfetto/traced",
+    "../protos/perfetto/trace:lite",
+    "../protos/perfetto/trace:zero",
+    "../src/base:base",
+    "../src/base:test_support",
+  ]
+  sources = [
+    "end_to_end_integrationtest.cc",
+  ]
+  if (is_android && !build_with_chromium) {
+    deps += [ "../src/base:android_task_runner" ]
+  }
+  if (start_daemons_for_testing) {
+    cflags = [ "-DPERFETTO_START_DAEMONS_FOR_TESTING" ]
+  }
+}
+
+if (use_libfuzzer && !build_with_chromium) {
+  executable("end_to_end_shared_memory_fuzzer") {
+    sources = [
+      "end_to_end_shared_memory_fuzzer.cc",
+    ]
+    testonly = true
+    deps = [
+      ":task_runner_thread",
+      ":task_runner_thread_delegates",
+      ":test_helper",
+      "../gn:default_deps",
+      "../protos/perfetto/trace:lite",
+      "../src/base:test_support",
+      "../src/protozero",
+      "../src/tracing",
+      "../src/tracing:ipc",
+    ]
+    configs += [ "../gn:fuzzer_config" ]
+  }
+}
+
+source_set("task_runner_thread") {
+  testonly = true
+  deps = [
+    "../gn:default_deps",
+    "../src/base",
+    "../src/base:test_support",
+  ]
+  sources = [
+    "task_runner_thread.cc",
+    "task_runner_thread.h",
+  ]
+}
+
+source_set("task_runner_thread_delegates") {
+  testonly = true
+  deps = [
+    ":task_runner_thread",
+    "../gn:default_deps",
+    "../include/perfetto/traced",
+    "../src/base:test_support",
+    "../src/traced/probes:probes_src",
+    "../src/tracing:ipc",
+  ]
+  sources = [
+    "fake_producer.cc",
+    "fake_producer.h",
+    "task_runner_thread_delegates.h",
+  ]
+}
+
+source_set("test_helper") {
+  testonly = true
+  public_deps = [
+    "../src/tracing:ipc",
+  ]
+  deps = [
+    ":task_runner_thread",
+    ":task_runner_thread_delegates",
+    "../gn:default_deps",
+    "../include/perfetto/traced",
+    "../protos/perfetto/trace:lite",
+    "../protos/perfetto/trace:zero",
+    "../src/base:test_support",
+  ]
+  sources = [
+    "test_helper.cc",
+    "test_helper.h",
+  ]
+  if (start_daemons_for_testing) {
+    cflags = [ "-DPERFETTO_START_DAEMONS_FOR_TESTING" ]
+  }
+}
+
+if (!build_with_chromium) {
+  source_set("end_to_end_benchmarks") {
+    testonly = true
+    deps = [
+      ":task_runner_thread",
+      ":task_runner_thread_delegates",
+      ":test_helper",
+      "../../gn:default_deps",
+      "../buildtools:benchmark",
+      "../gn:gtest_deps",
+      "../include/perfetto/traced",
+      "../protos/perfetto/trace:lite",
+      "../protos/perfetto/trace:zero",
+      "../src/base:test_support",
+    ]
+    sources = [
+      "end_to_end_benchmark.cc",
+    ]
+    if (is_android && !build_with_chromium) {
+      deps += [ "../src/base:android_task_runner" ]
+    }
+    if (start_daemons_for_testing) {
+      cflags = [ "-DPERFETTO_START_DAEMONS_FOR_TESTING" ]
+    }
+  }
+
+  source_set("benchmark_main") {
+    testonly = true
+    deps = [
+      "../../gn:default_deps",
+      "../buildtools:benchmark",
+    ]
+    sources = [
+      "benchmark_main.cc",
+    ]
+  }
+}

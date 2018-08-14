@@ -1,0 +1,172 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module page_load_metrics.mojom;
+
+import "mojo/public/mojom/base/time.mojom";
+import "third_party/blink/public/platform/web_feature.mojom";
+
+// TimeDeltas below relative to navigation start.
+struct DocumentTiming {
+  // Time immediately before the DOMContentLoaded event is fired.
+  mojo_base.mojom.TimeDelta? dom_content_loaded_event_start;
+
+  // Time immediately before the load event is fired.
+  mojo_base.mojom.TimeDelta? load_event_start;
+
+  // Time when the first layout is completed.
+  mojo_base.mojom.TimeDelta? first_layout;
+};
+
+// TimeDeltas below relative to navigation start.
+struct PaintTiming {
+  // Time when the first paint is performed.
+  mojo_base.mojom.TimeDelta? first_paint;
+
+  // Time when the first non-blank text is painted.
+  mojo_base.mojom.TimeDelta? first_text_paint;
+
+  // Time when the first image is painted.
+  mojo_base.mojom.TimeDelta? first_image_paint;
+
+  // Time when the first contentful thing (image, text, etc.) is painted.
+  mojo_base.mojom.TimeDelta? first_contentful_paint;
+
+  // (Experimental) Time when the page's primary content is painted.
+  mojo_base.mojom.TimeDelta? first_meaningful_paint;
+};
+
+// TimeDeltas below represent durations of time during the page load.
+struct ParseTiming {
+  // Time that the document's parser started and stopped parsing main resource
+  // content.
+  mojo_base.mojom.TimeDelta? parse_start;
+  mojo_base.mojom.TimeDelta? parse_stop;
+
+  // Sum of times when the parser is blocked waiting on the load of a script.
+  // This duration takes place between parser_start and parser_stop, and thus
+  // must be less than or equal to parser_stop - parser_start. Note that this
+  // value may be updated multiple times during the period between parse_start
+  // and parse_stop.
+  mojo_base.mojom.TimeDelta? parse_blocked_on_script_load_duration;
+
+  // Sum of times when the parser is blocked waiting on the load of a script
+  // that was inserted from document.write. This duration must be less than or
+  // equal to parse_blocked_on_script_load_duration. Note that this value may be
+  // updated multiple times during the period between parse_start and
+  // parse_stop. Note that some uncommon cases where scripts are loaded via
+  // document.write are not currently covered by this field. See crbug/600711
+  // for details.
+  mojo_base.mojom.TimeDelta? parse_blocked_on_script_load_from_document_write_duration;
+
+  // Sum of times when the parser is executing a script.  This duration takes
+  // place between parser_start and parser_stop, and thus must be less than or
+  // equal to parser_stop - parser_start. Note that this value may be updated
+  // multiple times during the period between parse_start and parse_stop.
+  mojo_base.mojom.TimeDelta? parse_blocked_on_script_execution_duration;
+
+  // Sum of times when the parser is executing a script that was inserted from
+  // document.write. This duration must be less than or equal to
+  // parse_blocked_on_script_load_duration. Note that this value may be updated
+  // multiple times during the period between parse_start and parse_stop. Note
+  // that some uncommon cases where scripts are loaded via document.write are
+  // not currently covered by this field. See crbug/600711 for details.
+  mojo_base.mojom.TimeDelta? parse_blocked_on_script_execution_from_document_write_duration;
+};
+
+struct InteractiveTiming {
+  // The first time the page is considered 'interactive'. This is determined
+  // using heuristics based on main thread and network activity. Time delta is
+  // relative to navigation_start.
+  mojo_base.mojom.TimeDelta? interactive;
+
+  // The time of when we detect the page is interactive. There is a delay
+  // between when the page was interactive and when we were able to detect it.
+  // Time delta is relative to navigation_start.
+  // This is a page load metrics internal value and not generally intended for
+  // consumption by observers.
+  mojo_base.mojom.TimeDelta? interactive_detection;
+
+
+  // The time of when a significant input event happened that may cause
+  // observers to discard the value of Time to Interactive. Time delta is
+  // relative to navigation start.
+  // This is a page load metrics internal value and not generally intended for
+  // consumption by observers.
+  mojo_base.mojom.TimeDelta? first_invalidating_input;
+
+  // Queueing Time of the first click, tap, key press, cancellable touchstart,
+  // or pointer down followed by a pointer up.
+  mojo_base.mojom.TimeDelta? first_input_delay;
+
+  // The timestamp of the event whose delay is reported by GetFirstInputDelay().
+  mojo_base.mojom.TimeDelta? first_input_timestamp;
+
+  // Queueing Time of the meaningful input event with longest delay. Meaningful
+  // input events are click, tap, key press, cancellable touchstart, or pointer
+  // down followed by a pointer up.
+  mojo_base.mojom.TimeDelta? longest_input_delay;
+
+  // The timestamp of the event whose delay is reported as longest_input_delay.
+  mojo_base.mojom.TimeDelta? longest_input_timestamp;
+};
+
+
+// PageLoadTiming contains timing metrics associated with a page load. Many of
+// the metrics here are based on the Navigation Timing spec:
+// http://www.w3.org/TR/navigation-timing/.
+struct PageLoadTiming {
+  // Time that the navigation for the associated page was initiated. Note that
+  // this field is only used for internal tracking purposes and should not be
+  // used by PageLoadMetricsObservers. This field will likely be removed in the
+  // future.
+  mojo_base.mojom.Time navigation_start;
+
+  // Time relative to navigation_start that the first byte of the response is
+  // received.
+  mojo_base.mojom.TimeDelta? response_start;
+  DocumentTiming document_timing;
+  InteractiveTiming interactive_timing;
+  PaintTiming paint_timing;
+  ParseTiming parse_timing;
+
+  // If you add additional members, also be sure to update page_load_timing.h.
+};
+
+struct PageLoadMetadata {
+  // These are packed blink::WebLoadingBehaviorFlag enums.
+  int32 behavior_flags = 0;
+};
+
+// PageLoadFeatures contains a list of features newly observed by use counter.
+// In a given page load, no PageLoadFeatures sent will contain previously seen
+// values.
+struct PageLoadFeatures {
+  // These features are defined as blink::mojom::WebFeature enums.
+  array<blink.mojom.WebFeature> features;
+  // These ints represent CSSSampleID for histogram converted from CSSPropertyId
+  // by blink::UseCounter::MapCSSPropertyIdToCSSSampleIdForHistogram.
+  array<int32> css_properties;
+  array<int32> animated_css_properties;
+};
+
+// Data used for the page load.
+struct PageLoadDataUse {
+  // Network bytes received for the page load.
+  int64 received_data_length = 0;
+
+  // The number of bytes saved by the data reduction proxy. Will be zero when
+  // data reduction proxy is not used. Can be negative if the proxy inflated the
+  // resource.
+  int64 data_reduction_proxy_bytes_saved = 0;
+};
+
+// Sent from renderer to browser process when the PageLoadTiming for the
+// associated frame changed.
+interface PageLoadMetrics {
+  UpdateTiming(PageLoadTiming page_load_timing,
+               PageLoadMetadata page_load_metadata,
+               PageLoadFeatures new_features,
+               PageLoadDataUse data_use);
+};

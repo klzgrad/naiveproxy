@@ -1,0 +1,137 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module content.mojom;
+
+import "content/common/service_worker/service_worker_container.mojom";
+import "services/network/public/mojom/url_loader_factory.mojom";
+import "services/service_manager/public/mojom/interface_provider.mojom";
+import "third_party/blink/public/mojom/service_worker/service_worker_object.mojom";
+import "third_party/blink/public/mojom/service_worker/service_worker_provider_type.mojom";
+import "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom";
+import "third_party/blink/public/platform/modules/cache_storage/cache_storage.mojom";
+
+// The name of the InterfaceProviderSpec in service manifests used by the
+// frame tree to expose service-worker-specific interfaces between renderer
+// and browser.
+const string kNavigation_ServiceWorkerSpec = "navigation:service_worker";
+
+// S13nServiceWorker:
+// Sent from the browser process to the renderer. Contains parameteres for the
+// constructor of ServiceWorkerNetworkProvider used for starting a shared
+// worker.
+struct ServiceWorkerProviderInfoForSharedWorker {
+  int32 provider_id;
+  associated ServiceWorkerContainerHost host_ptr_info;
+  associated ServiceWorkerContainer& client_request;
+};
+
+// Sent from the browser process to the renderer. Contains parameters for the
+// constructor of ServiceWorkerNetworkProvider used for starting a service
+// worker.
+struct ServiceWorkerProviderInfoForStartWorker {
+  int32 provider_id;
+
+  associated ServiceWorkerContainerHost host_ptr_info;
+  associated ServiceWorkerContainer& client_request;
+
+  // S13nServiceWorker:
+  // The loader to use for loading the worker's main script and
+  // importScripts().
+  associated network.mojom.URLLoaderFactory? script_loader_factory_ptr_info;
+
+  // |cache_storage| is an optional optimization so the service worker can use
+  // the Cache Storage API immediately without using InterfaceProvider. May be
+  // null for service workers created for update checks, as the optimization
+  // would be wasteful because these workers usually are aborted after the
+  // byte-to-byte update check before running.
+  blink.mojom.CacheStorage? cache_storage;
+
+  service_manager.mojom.InterfaceProvider interface_provider;
+};
+
+// Describes a browser-side provider host. See
+// content::ServiceWorkerProviderHost.
+struct ServiceWorkerProviderHostInfo {
+  // |provider_id| may be browser-assigned or renderer-assigned.
+  // Browser-assigned ids are unique among all providers. Renderer-assigned ids
+  // are unique among providers in a given renderer process. Most providers have
+  // browser-assigned ids. The exceptions are about:blank iframes, and shared
+  // workers (in the non-S13nServiceWorker case).
+  int32 provider_id;
+
+  // When this provider is created for a document, |route_id| is the frame ID of
+  // it. Otherwise |route_id| is MSG_ROUTING_NONE.
+  int32 route_id;
+
+  // This identifies whether this provider is for a service worker or for a
+  // service worker client (Documents and Shared Workers).
+  blink.mojom.ServiceWorkerProviderType type;
+
+  // |is_parent_frame_secure| is false if the provider is created for a document
+  // whose parent frame is not secure from the point of view of the document;
+  // that is, blink::WebFrame::canHaveSecureChild() returns false. This doesn't
+  // mean the document is necessarily an insecure context, because the document
+  // may have a URL whose scheme is granted an exception that allows bypassing
+  // the ancestor secure context check. See the comment in
+  // blink::Document::isSecureContextImpl for more details. If the provider is
+  // not created for a document, or the document does not have a parent frame,
+  // is_parent_frame_secure| is true.
+  bool is_parent_frame_secure;
+
+  // Mojo endpoint to send a message from the renderer to the browser. This
+  // will be associated with ServiceWorkerDisptacherHost. |host_request| should
+  // be valid when ServiceWorkerProviderHostInfo is passed to any Mojo method.
+  // After used to create the ServiceWorkerProviderHost, this will be invalid.
+  associated ServiceWorkerContainerHost& host_request;
+
+  // Mojo endpoint to send a message from the browser to the renderer. This
+  // will be associated with ServiceWorkerDispatcherHost. |client_ptr_info|
+  // should be valid when ServiceWorkerProviderHostInfo is passed to any Mojo
+  // method.
+  // After used to create the ServiceWorkerProviderHost, this will be invalid.
+  associated ServiceWorkerContainer client_ptr_info;
+};
+
+// ServiceWorkerWorkerClient represents a service worker client that is a worker
+// (i.e., a shared worker or dedicated worker). We use this interface to let the
+// WebWorkerFetchContextImpl in the worker thread know about the change of
+// controlling service worker by calling OnControllerChanged() from the
+// ServiceWorkerProviderContext in the main thread of the renderer process.
+//
+// TODO(horo): We should implement ServiceWorkerProvider in the worker thread
+// instead of using this interface to support WorkerNavigator.serviceWorker.
+interface ServiceWorkerWorkerClient {
+  // Called when the worker is controlled by a new service worker. This is only
+  // used to let the worker know that we now have a service worker (while there
+  // may or may not have been one previously), but not the other way around.
+  OnControllerChanged(blink.mojom.ControllerServiceWorkerMode mode);
+};
+
+// ServiceWorkerWorkerClientRegistry is a mojo interface for hosting and
+// registering ServiceWorkerWorkerClients. An instance of this interface is
+// implemented by ServiceWorkerProviderContext and lives in the same renderer
+// process as the worker clients.
+// This interface is useful when one needs to register a new worker client
+// for an existing ServiceWorkerProviderContext on non-main thread, i.e. for
+// nested workers.
+interface ServiceWorkerWorkerClientRegistry {
+  // Adds a new ServiceWorkerWorkerClient.
+  RegisterWorkerClient(ServiceWorkerWorkerClient client);
+
+  // Clones this host.
+  CloneWorkerClientRegistry(ServiceWorkerWorkerClientRegistry& host);
+};
+
+// Per-process browser-side interface.
+// The renderer uses this interface to tell the browser when potential service
+// worker clients are created and when service workers are starting up.
+interface ServiceWorkerDispatcherHost {
+  // Creates a content::ServiceWorkerProviderHost on the browser
+  // process. |provider_info| has Mojo endpoints to connect the container host
+  // and the container on the renderer together. The lifetime of
+  // ServiceWorkerProviderHost will be tied to the
+  // mojom::ServiceWorkerContainerHost interface.
+  OnProviderCreated(ServiceWorkerProviderHostInfo provider_info);
+};

@@ -1,0 +1,57 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module ash.mojom;
+
+import "components/account_id/interfaces/account_id.mojom";
+import "mojo/public/mojom/base/unguessable_token.mojom";
+import "ui/gfx/geometry/mojo/geometry.mojom";
+import "url/mojom/url.mojom";
+
+// Interface for a class which is responsible for managing a WebContents in
+// chrome/browser and owning associated resources until they are explicity
+// released using the provided APIs.
+interface WebContentsManager {
+  // Creates and manages WebContents as defined by the specified |params|. Any
+  // call to ManageWebContents should be paired with a corresponding call to
+  // ReleaseWebContents when the resources are no longer needed. To this end,
+  // the caller must supply an identifier by which to uniquely identify
+  // WebContents resources. When the rendered content is ready for embedding,
+  // the supplied callback will be run providing an unguessable |embed_token|.
+  // In the event of failure, the callback will still be run but no
+  // |embed_token| will be provided.
+  ManageWebContents(mojo_base.mojom.UnguessableToken id_token,
+    ManagedWebContentsParams params)
+      => (mojo_base.mojom.UnguessableToken? embed_token);
+
+  // Releases any resources associated with the WebContents uniquely identified
+  // by |id_token|.
+  ReleaseWebContents(mojo_base.mojom.UnguessableToken id_token);
+
+  // Releases any resources associated with any WebContents uniquely identified
+  // by one of the specified |id_tokens|.
+  ReleaseAllWebContents(array<mojo_base.mojom.UnguessableToken> id_tokens);
+};
+
+// Defines parameters for a managed WebContents.
+struct ManagedWebContentsParams {
+  // The account identifier for the profile.
+  signin.mojom.AccountId account_id;
+  // The initial URL.
+  url.mojom.Url url;
+  // The minimum desired size. Omitting defaults to (1, 1).
+  gfx.mojom.Size? min_size_dip;
+  // The maximum desired size. Omitting defaults to (INT_MAX, INT_MAX).
+  gfx.mojom.Size? max_size_dip;
+  // An optional delegate to handle top level browser requests. If omitted, top
+  // level browser requests will be handled according to default behavior.
+  ManagedWebContentsOpenUrlDelegate? open_url_delegate_ptr_info;
+};
+
+// Interface for a delegate to handle top level browser requests for a
+// managed WebContents.
+interface ManagedWebContentsOpenUrlDelegate {
+  // Invoked on a top level browser request to navigate to |url|.
+  OnOpenUrlFromTab(url.mojom.Url url);
+};

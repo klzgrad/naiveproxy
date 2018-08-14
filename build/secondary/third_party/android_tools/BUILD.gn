@@ -1,0 +1,183 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/android/rules.gni")
+
+config("cpu_features_include") {
+  include_dirs = [ "$android_ndk_root/sources/android/cpufeatures" ]
+}
+
+config("cpu_features_warnings") {
+  if (is_clang) {
+    # cpu-features.c has few unused functions on x86 b/26403333
+    cflags = [ "-Wno-unused-function" ]
+  }
+}
+
+source_set("cpu_features") {
+  sources = [
+    "$android_ndk_root/sources/android/cpufeatures/cpu-features.c",
+  ]
+  public_configs = [ ":cpu_features_include" ]
+
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [
+    "//build/config/compiler:no_chromium_code",
+
+    # Must be after no_chromium_code for warning flags to be ordered correctly.
+    ":cpu_features_warnings",
+  ]
+}
+
+if (enable_java_templates) {
+  android_system_java_prebuilt("android_sdk_java") {
+    jar_path = android_sdk_jar
+  }
+
+  # The android test libraries below are part of the main SDK jar
+  # and are linked by default on O and below. Starting in P, they
+  # exist in their own libraries that are present on device and are
+  # available to be linked against but aren't linked by default.
+  android_system_java_prebuilt("android_test_base_java") {
+    jar_path = "${android_sdk}/optional/android.test.base.jar"
+  }
+  android_system_java_prebuilt("android_test_mock_java") {
+    jar_path = "${android_sdk}/optional/android.test.mock.jar"
+  }
+  android_system_java_prebuilt("android_test_runner_java") {
+    jar_path = "${android_sdk}/optional/android.test.runner.jar"
+  }
+
+  template("support_lib_alias") {
+    java_group(target_name) {
+      forward_variables_from(invoker, [ "testonly" ])
+      deps = [
+        "$android_support_library_package:$target_name",
+      ]
+    }
+  }
+  support_lib_alias("android_support_chromium_java") {
+    testonly = true
+  }
+  support_lib_alias("android_gcm_java") {
+  }
+  support_lib_alias("emma_device_java") {
+  }
+
+  template("android_deps_alias") {
+    java_group(target_name) {
+      deps = [
+        "//third_party/android_deps:${invoker.android_deps_target_name}",
+      ]
+    }
+  }
+  android_deps_alias("android_arch_lifecycle_common_java") {
+    android_deps_target_name = "android_arch_lifecycle_common_java"
+  }
+  android_deps_alias("android_arch_lifecycle_runtime_java") {
+    android_deps_target_name = "android_arch_lifecycle_runtime_java"
+  }
+  android_deps_alias("android_support_multidex_java") {
+    android_deps_target_name = "com_android_support_multidex_java"
+  }
+  android_deps_alias("android_support_annotations_java") {
+    android_deps_target_name = "com_android_support_support_annotations_java"
+  }
+  android_deps_alias("android_support_cardview_java") {
+    android_deps_target_name = "com_android_support_cardview_v7_java"
+  }
+  android_deps_alias("android_support_compat_java") {
+    android_deps_target_name = "com_android_support_support_compat_java"
+  }
+  android_deps_alias("android_support_core_ui_java") {
+    android_deps_target_name = "com_android_support_support_core_ui_java"
+  }
+  android_deps_alias("android_support_core_utils_java") {
+    android_deps_target_name = "com_android_support_support_core_utils_java"
+  }
+  android_deps_alias("android_support_design_java") {
+    android_deps_target_name = "com_android_support_design_java"
+  }
+  android_deps_alias("android_support_v4_java") {
+    android_deps_target_name = "android_support_v4_java"
+  }
+  android_deps_alias("android_support_v7_appcompat_java") {
+    android_deps_target_name = "android_support_v7_appcompat_java"
+  }
+  android_deps_alias("android_support_v7_gridlayout_java") {
+    android_deps_target_name = "com_android_support_gridlayout_v7_java"
+  }
+  android_deps_alias("android_support_v7_mediarouter_java") {
+    android_deps_target_name = "com_android_support_mediarouter_v7_java"
+  }
+  android_deps_alias("android_support_v7_recyclerview_java") {
+    android_deps_target_name = "com_android_support_recyclerview_v7_java"
+  }
+  android_deps_alias("android_support_v13_java") {
+    android_deps_target_name = "com_android_support_support_v13_java"
+  }
+  android_deps_alias("google_play_services_basement_java") {
+    android_deps_target_name =
+        "com_google_android_gms_play_services_basement_java"
+  }
+  android_deps_alias("google_play_services_tasks_java") {
+    android_deps_target_name = "com_google_android_gms_play_services_tasks_java"
+  }
+  android_deps_alias("google_play_services_base_java") {
+    android_deps_target_name = "com_google_android_gms_play_services_base_java"
+  }
+  android_deps_alias("google_play_services_auth_base_java") {
+    android_deps_target_name =
+        "com_google_android_gms_play_services_auth_base_java"
+  }
+  android_deps_alias("google_play_services_auth_api_phone_java") {
+    android_deps_target_name =
+        "com_google_android_gms_play_services_auth_api_phone_java"
+  }
+  android_deps_alias("google_play_services_auth_java") {
+    android_deps_target_name = "com_google_android_gms_play_services_auth_java"
+  }
+  android_deps_alias("google_play_services_cast_java") {
+    android_deps_target_name = "com_google_android_gms_play_services_cast_java"
+  }
+  android_deps_alias("google_play_services_cast_framework_java") {
+    android_deps_target_name =
+        "com_google_android_gms_play_services_cast_framework_java"
+  }
+  android_deps_alias("google_play_services_iid_java") {
+    android_deps_target_name = "com_google_android_gms_play_services_iid_java"
+  }
+  android_deps_alias("google_play_services_instantapps_java") {
+    android_deps_target_name =
+        "com_google_android_gms_play_services_instantapps_java"
+  }
+  android_deps_alias("google_play_services_gcm_java") {
+    android_deps_target_name = "com_google_android_gms_play_services_gcm_java"
+  }
+  android_deps_alias("google_play_services_location_java") {
+    android_deps_target_name =
+        "com_google_android_gms_play_services_location_java"
+  }
+  android_deps_alias("google_play_services_vision_java") {
+    android_deps_target_name =
+        "com_google_android_gms_play_services_vision_java"
+  }
+  android_deps_alias("google_play_services_vision_common_java") {
+    android_deps_target_name =
+        "com_google_android_gms_play_services_vision_common_java"
+  }
+  android_deps_alias("google_play_services_fido_java") {
+    android_deps_target_name = "com_google_android_gms_play_services_fido_java"
+  }
+
+  # The current version of //third_party/byte_buddy relies on an older
+  # version of dx.
+  java_prebuilt("dx_25_0_2_java") {
+    supports_android = true
+    requires_android = true
+    no_build_hooks = true
+    testonly = true
+    jar_path = "//third_party/android_tools/sdk/build-tools/25.0.2/lib/dx.jar"
+  }
+}

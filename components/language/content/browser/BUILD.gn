@@ -1,0 +1,75 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/compiler/compiler.gni")
+
+action("make_s2_language_locator") {
+  script = "convert_s2_cell.py"
+  sources = [
+    "adminregionsdata.csv",
+  ]
+  inputs = [
+    "template/language_code_locator_helper.h.tmpl",
+  ]
+  outputs = [
+    "$target_gen_dir/language_code_locator_helper.h",
+  ]
+
+  args = [
+    "-o=" + rebase_path(outputs[0], root_build_dir),
+    "-t=" + rebase_path(inputs[0], root_build_dir),
+    "-i=" + rebase_path(sources[0], root_build_dir),
+  ]
+}
+
+source_set("language_code_locator") {
+  sources = [
+              "language_code_locator.h",
+              "language_code_locator.cc",
+            ] + get_target_outputs(":make_s2_language_locator")
+  deps = [
+    ":make_s2_language_locator",
+    "//base",
+    "//third_party/s2cellid",
+  ]
+}
+
+static_library("browser") {
+  sources = [
+    "geo_language_model.cc",
+    "geo_language_model.h",
+    "geo_language_provider.cc",
+    "geo_language_provider.h",
+  ]
+
+  deps = [
+    ":language_code_locator",
+    "//base",
+    "//components/language/core/browser:browser",
+    "//net",
+    "//services/device/public/mojom",
+    "//services/service_manager/public/cpp",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "geo_language_model_unittest.cc",
+    "geo_language_provider_unittest.cc",
+    "language_code_locator_unittest.cc",
+    "test_utils.cc",
+    "test_utils.h",
+  ]
+  deps = [
+    ":browser",
+    ":language_code_locator",
+    "//base",
+    "//base/test:test_support",
+    "//services/device/public/mojom",
+    "//services/service_manager/public/cpp",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+}

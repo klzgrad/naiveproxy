@@ -1,0 +1,50 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module arc.mojom;
+
+// Represents the information of an Android IME.
+struct ImeInfo {
+  // The unique ID for the Android IME. Corresponds to InputMethodInfo.getId().
+  string ime_id;
+  // The user-displayed label for the IME. Corresponds to
+  // InputMethodInfo.loadLabel().
+  string display_name;
+  // Whether the IME is enabled or not. It's equivalent to whether the IME is
+  // in ENABLED_INPUT_METHODS settings.
+  bool enabled;
+  // intent: URL to open the settings activity of the IME.
+  string settings_url;
+};
+
+// This interface is called by container when Android's InputMethodManager state
+// is changed.
+// In Android container, ArcInputMethodService IME is pre-installed to bridge
+// Chrome OS's IME to Android apps. The bridge is defined in ime.mojom.
+//
+// Next method ID: 2
+interface InputMethodManagerHost {
+  // Notifies Chrome that active IME in Android is changed.
+  OnActiveImeChanged@0(string ime_id);
+
+  // Notifies Chrome of information of installed IMEs in Android.
+  // The passed list doesn't contain information of our bridge IME,
+  // ArcInputMethodService.
+  OnImeInfoChanged@1(array<ImeInfo> ime_infos);
+};
+
+// This interface provides methods to control Android's InputMethodManager.
+//
+// Next method ID: 3
+interface InputMethodManagerInstance {
+  // Establishes full-duplex communication with the host.
+  Init@0(InputMethodManagerHost host_ptr) => ();
+
+  // Enables/Disables an IME in Android. Calling this method will add/remove
+  // the specified IME to/from ENABLED_INPUT_METHODS settings.
+  EnableIme@1(string ime_id, bool enable) => (bool success);
+
+  // Switches active IME in Android.
+  SwitchImeTo@2(string ime_id) => (bool success);
+};

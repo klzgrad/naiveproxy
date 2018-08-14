@@ -1,0 +1,108 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/features.gni")
+import("//build/config/ui.gni")
+
+if (is_android) {
+  import("//build/config/android/rules.gni")
+}
+
+source_set("power_save_blocker") {
+  visibility = [
+    # //remoting runs in a separate process which is outside of the context of
+    # the ServiceManager-based world. Instead of embedding a Service Manager
+    # environment and Device Service in it, we allow the power save blocker to
+    # be visible to //remoting and directly used. See crbug.com/689423
+    "//remoting/host:*",
+    "//remoting/host/win:*",
+    "//services/device/wake_lock:*",
+  ]
+
+  sources = [
+    "power_save_blocker.h",
+    "power_save_blocker_android.cc",
+    "power_save_blocker_chromeos.cc",
+    "power_save_blocker_mac.cc",
+    "power_save_blocker_ozone.cc",
+    "power_save_blocker_win.cc",
+    "power_save_blocker_x11.cc",
+  ]
+
+  public_deps = [
+    "//services/device/public/mojom",
+  ]
+
+  deps = [
+    "//base",
+  ]
+
+  if (use_dbus) {
+    deps += [ "//dbus" ]
+  }
+
+  if (use_x11) {
+    configs += [ "//build/config/linux:x11" ]
+    if (!is_chromeos) {
+      configs += [ "//build/config/linux:xscrnsaver" ]
+    }
+    deps += [
+      "//ui/gfx",
+      "//ui/gfx/x",
+    ]
+  }
+
+  # Dealing with power_save_blocker_{x11,ozone}.cc is a little complicated
+  # given the interaction between os_chromeos and the feature flags for X11 and
+  # ozone, so do it all in one spot.
+  if (is_chromeos || !use_ozone) {
+    sources -= [ "power_save_blocker_ozone.cc" ]
+  }
+  if (is_chromeos || !use_x11 || !use_dbus) {
+    sources -= [ "power_save_blocker_x11.cc" ]
+  }
+
+  if (is_android) {
+    deps += [ ":jni_headers" ]
+    public_deps += [ "//ui/android" ]
+  }
+
+  if (is_chromeos) {
+    deps += [
+      "//chromeos",
+      "//chromeos:power_manager_proto",
+    ]
+  }
+
+  if (is_mac) {
+    libs = [
+      "CoreFoundation.framework",
+      "IOKit.framework",
+    ]
+  }
+}
+
+if (is_android) {
+  java_sources_needing_jni = [ "android/java/src/org/chromium/device/power_save_blocker/PowerSaveBlocker.java" ]
+
+  generate_jni("jni_headers") {
+    visibility = [ ":power_save_blocker" ]
+    sources = java_sources_needing_jni
+    jni_package = "device"
+  }
+
+  android_library("java") {
+    # Conceptually, this should be visible only to //services/device:java.
+    # However, various generated targets also need to see this target as a
+    # result of //services/device:java depending on it.
+    visibility = [
+      "//services:*",
+      "//services/device:*",
+    ]
+    java_files = java_sources_needing_jni
+    deps = [
+      "//base:base_java",
+    ]
+  }
+}

@@ -1,0 +1,82 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+config("minizip_compiler_flags") {
+  if (is_clang) {
+    cflags = [ "-Wno-unused-function" ]
+
+    if (!is_nacl && (target_cpu == "x86" || target_cpu == "x64")) {
+      cflags += [
+        "-maes",
+        "-msse3",
+        "-msse4.1",
+      ]
+    }
+  }
+}
+
+config("minizip_include_dirs") {
+  include_dirs = [ "//third_party/zlib" ]
+}
+
+static_library("minizip") {
+  sources = [
+    "src/aes/aes.h",
+    "src/aes/aes_ni.c",
+    "src/aes/aes_ni.h",
+    "src/aes/aes_via_ace.h",
+    "src/aes/aescrypt.c",
+    "src/aes/aeskey.c",
+    "src/aes/aesopt.h",
+    "src/aes/aestab.c",
+    "src/aes/aestab.h",
+    "src/aes/brg_endian.h",
+    "src/aes/brg_types.h",
+    "src/aes/fileenc.c",
+    "src/aes/fileenc.h",
+    "src/aes/hmac.c",
+    "src/aes/hmac.h",
+    "src/aes/prng.c",
+    "src/aes/prng.h",
+    "src/aes/pwd2key.c",
+    "src/aes/pwd2key.h",
+    "src/aes/sha1.c",
+    "src/aes/sha1.h",
+    "src/crypt.c",
+    "src/crypt.h",
+    "src/ioapi.c",
+    "src/ioapi.h",
+    "src/ioapi_buf.c",
+    "src/ioapi_buf.h",
+    "src/ioapi_mem.c",
+    "src/ioapi_mem.h",
+    "src/unzip.c",
+    "src/unzip.h",
+    "src/zip.c",
+    "src/zip.h",
+  ]
+
+  defines = [
+    "HAVE_AES",
+    "NOCRYPT",
+  ]
+
+  if (is_nacl) {
+    defines += [ "USE_FILE32API" ]
+  }
+
+  configs += [ ":minizip_compiler_flags" ]
+
+  public_configs = [ ":minizip_include_dirs" ]
+
+  deps = [
+    "//third_party/zlib:zlib",
+  ]
+
+  visibility = [
+    # NOTE: Modifying visibility list requires approval from security team.
+    "//testing/libfuzzer/fuzzers:*",
+    "//chrome/browser/resources/chromeos/zip_archiver/cpp:zip_archiver_pnacl",
+  ]
+}

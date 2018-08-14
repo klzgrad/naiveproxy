@@ -1,0 +1,322 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/features.gni")
+import("//build/config/jumbo.gni")
+import("//build/config/ui.gni")
+import("//services/catalog/public/tools/catalog.gni")
+import("//services/service_manager/public/cpp/service.gni")
+import("//services/service_manager/public/service_manifest.gni")
+import("//testing/test.gni")
+import("//tools/grit/repack.gni")
+
+jumbo_component("mus") {
+  output_name = "ui_views_mus_lib"
+
+  sources = [
+    "aura_init.cc",
+    "aura_init.h",
+    "ax_remote_host.cc",
+    "ax_remote_host.h",
+    "ax_tree_source_mus.cc",
+    "ax_tree_source_mus.h",
+    "desktop_window_tree_host_mus.cc",
+    "desktop_window_tree_host_mus.h",
+    "mus_client.cc",
+    "mus_client.h",
+    "mus_client_observer.h",
+    "mus_export.h",
+    "mus_property_mirror.h",
+    "mus_views_delegate.cc",
+    "mus_views_delegate.h",
+    "pointer_watcher_event_router.cc",
+    "pointer_watcher_event_router.h",
+    "screen_mus.cc",
+    "screen_mus.h",
+    "screen_mus_delegate.h",
+    "window_manager_constants_converters.cc",
+    "window_manager_constants_converters.h",
+    "window_manager_frame_values.cc",
+    "window_manager_frame_values.h",
+  ]
+
+  defines = [ "VIEWS_MUS_IMPLEMENTATION" ]
+
+  public_deps = [
+    ":resources",
+    "//services/ui/public/cpp",
+    "//ui/aura",
+  ]
+  deps = [
+    "//base",
+    "//base:i18n",
+    "//base/third_party/dynamic_annotations",
+    "//cc",
+    "//mojo/public/cpp/bindings",
+    "//net",
+    "//services/catalog/public/cpp",
+    "//services/catalog/public/mojom:constants",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/mojom",
+    "//services/ui/public/cpp",
+    "//services/ui/public/cpp/input_devices",
+    "//services/ui/public/interfaces",
+    "//skia",
+    "//third_party/icu",
+    "//ui/accessibility",
+    "//ui/accessibility/mojom",
+    "//ui/aura",
+    "//ui/base/mojo:lib",
+    "//ui/compositor",
+    "//ui/display",
+    "//ui/events",
+    "//ui/events:events_base",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+    "//ui/gfx/geometry/mojo",
+    "//ui/gl",
+    "//ui/native_theme",
+    "//ui/platform_window",
+    "//ui/platform_window/mojo",
+    "//ui/platform_window/mojo:interfaces",
+    "//ui/platform_window/stub",
+    "//ui/views",
+    "//ui/wm",
+    "//ui/wm/public",
+  ]
+}
+
+repack("resources") {
+  sources = [
+    "$root_gen_dir/ui/resources/ui_resources_100_percent.pak",
+    "$root_gen_dir/ui/strings/app_locale_settings_en-US.pak",
+    "$root_gen_dir/ui/strings/ui_strings_en-US.pak",
+    "$root_gen_dir/ui/views/resources/views_resources_100_percent.pak",
+  ]
+  output = "$root_out_dir/views_mus_resources.pak"
+  deps = [
+    "//ui/resources",
+    "//ui/strings",
+    "//ui/views/resources",
+  ]
+}
+
+group("for_mojo_application") {
+  public_deps = [
+    ":mus",
+  ]
+}
+
+jumbo_static_library("test_support") {
+  testonly = true
+
+  sources = [
+    "../test/native_widget_factory_aura_mus.cc",
+    "mus_client_test_api.h",
+    "views_mus_test_suite.cc",
+    "views_mus_test_suite.h",
+  ]
+
+  deps = [
+    ":mus",
+    "//base",
+    "//base/test:test_support",
+    "//mojo/core/embedder",
+    "//services/catalog:lib",
+    "//services/service_manager/background:lib",
+    "//services/service_manager/public/cpp",
+    "//services/ui/common:mus_common",
+    "//testing/gtest",
+    "//ui/aura",
+    "//ui/aura:test_support",
+    "//ui/compositor:test_support",
+    "//ui/gl:test_support",
+    "//ui/resources",
+    "//ui/resources:ui_test_pak",
+    "//ui/views",
+    "//ui/views:test_support_internal",
+  ]
+
+  if (use_ozone) {
+    deps += [ "//ui/ozone" ]
+  }
+
+  data_deps = [
+    ":views_mus_tests_catalog",
+    "//services/ui/ime/test_ime_driver",
+    "//ui/resources:ui_test_pak_data",
+  ]
+}
+
+test("views_mus_unittests") {
+  testonly = true
+
+  sources = [
+    "ax_remote_host_unittest.cc",
+    "ax_tree_source_mus_unittest.cc",
+    "desktop_window_tree_host_mus_unittest.cc",
+    "pointer_watcher_event_router_unittest.cc",
+    "run_all_unittests_mus.cc",
+    "screen_mus_unittest.cc",
+  ]
+
+  configs += [ "//build/config:precompiled_headers" ]
+
+  deps = [
+    ":mus",
+    ":test_support",
+    "//base",
+    "//base:i18n",
+    "//base/test:test_support",
+    "//cc",
+    "//net",
+    "//services/ui/public/interfaces",
+    "//skia",
+    "//testing/gtest",
+    "//third_party/icu",
+    "//ui/accessibility",
+    "//ui/accessibility/mojom",
+    "//ui/aura",
+    "//ui/aura:test_support",
+    "//ui/base",
+    "//ui/base:test_support",
+    "//ui/base/ime",
+    "//ui/compositor:test_support",
+    "//ui/events:dom_keycode_converter",
+    "//ui/events:events_base",
+    "//ui/events:test_support",
+    "//ui/events/platform",
+    "//ui/gfx:test_support",
+    "//ui/gfx/geometry",
+    "//ui/native_theme",
+    "//ui/strings",
+    "//ui/touch_selection",
+    "//ui/views",
+    "//ui/views:test_support_internal",
+    "//ui/views:views_unittests_sources",
+    "//ui/views/mus/remote_view:tests",
+    "//ui/wm",
+    "//url",
+  ]
+
+  data_deps = [
+    ":views_mus_tests_catalog_copy",
+    "//services/ui/ime/test_ime_driver",
+    "//services/ui/test_ws",
+  ]
+
+  if (is_win) {
+    deps += [
+      "//build/win:default_exe_manifest",
+      "//third_party/iaccessible2",
+      "//third_party/wtl",
+    ]
+    libs = [
+      "imm32.lib",
+      "oleacc.lib",
+      "comctl32.lib",
+    ]
+  }
+
+  if (use_x11) {
+    configs += [
+      "//build/config/linux:x11",
+      "//build/config/linux:xext",
+    ]
+    deps += [
+      "//ui/events/devices",
+      "//ui/events/platform/x11",
+      "//ui/gfx/x",
+    ]
+  }
+}
+
+# Tests that must run sequentially because they access system-wide features
+# like capture.
+test("views_mus_interactive_ui_tests") {
+  testonly = true
+
+  sources = [
+    "../widget/widget_interactive_uitest.cc",
+    "clipboard_unittest.cc",
+    "drag_interactive_uitest.cc",
+    "interactive_ui_tests_mus.cc",
+  ]
+
+  deps = [
+    ":mus",
+    ":test_support",
+    "//base",
+    "//mojo/core/embedder",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//ui/aura",
+    "//ui/aura:test_support",
+    "//ui/base",
+    "//ui/base:test_support",
+    "//ui/base/ime",
+    "//ui/base/mojo:lib",
+    "//ui/events:events_base",
+    "//ui/events:test_support",
+    "//ui/gl:test_support",
+    "//ui/touch_selection",
+    "//ui/views",
+    "//ui/views:test_support_internal",
+    "//ui/wm",
+    "//ui/wm/public",
+  ]
+
+  data_deps = [
+    ":views_mus_tests_catalog_copy",
+    "//services/ui/test_ws",
+  ]
+
+  if (is_win) {
+    deps += [
+      "//build/win:default_exe_manifest",
+      "//third_party/iaccessible2",
+      "//third_party/wtl",
+    ]
+    libs = [
+      "imm32.lib",
+      "oleacc.lib",
+      "comctl32.lib",
+    ]
+  }
+}
+
+service_manifest("unittests_manifest") {
+  name = "views_mus_unittests"
+  source = "unittests_manifest.json"
+}
+
+service_manifest("interactive_ui_tests_manifest") {
+  name = "views_mus_interactive_ui_tests"
+  source = "interactive_ui_tests_manifest.json"
+}
+
+catalog("views_mus_tests_catalog") {
+  testonly = true
+
+  embedded_services = [
+    ":unittests_manifest",
+    ":interactive_ui_tests_manifest",
+  ]
+
+  standalone_services = [
+    "//services/ui/test_ws:manifest",
+    "//services/ui/ime/test_ime_driver:manifest",
+  ]
+}
+
+copy("views_mus_tests_catalog_copy") {
+  testonly = true
+  sources = get_target_outputs(":views_mus_tests_catalog")
+  outputs = [
+    "${root_out_dir}/views_mus_tests_catalog.json",
+  ]
+  deps = [
+    ":views_mus_tests_catalog",
+  ]
+}

@@ -1,0 +1,71 @@
+# Copyright 2014 PDFium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/sanitizers/sanitizers.gni")
+import("../pdfium.gni")
+
+group("samples") {
+  testonly = true
+  deps = [
+    ":pdfium_test",
+  ]
+}
+
+config("pdfium_samples_config") {
+  cflags = []
+  ldflags = []
+  defines = [
+    "PNG_PREFIX",
+    "PNG_USE_READ_MACROS",
+  ]
+  include_dirs = [ ".." ]
+  if (pdf_enable_v8) {
+    defines += [ "PDF_ENABLE_V8" ]
+  }
+  if (pdf_enable_xfa) {
+    defines += [ "PDF_ENABLE_XFA" ]
+  }
+  if (pdf_use_skia) {
+    defines += [ "PDF_ENABLE_SKIA" ]
+  }
+  if (is_asan) {
+    defines += [ "PDF_ENABLE_ASAN" ]
+  }
+
+  if (enable_callgrind) {
+    defines += [ "ENABLE_CALLGRIND" ]
+  }
+}
+
+executable("pdfium_test") {
+  testonly = true
+  sources = [
+    "pdfium_test.cc",
+    "pdfium_test_dump_helper.cc",
+    "pdfium_test_dump_helper.h",
+    "pdfium_test_event_helper.cc",
+    "pdfium_test_event_helper.h",
+    "pdfium_test_write_helper.cc",
+    "pdfium_test_write_helper.h",
+  ]
+  deps = [
+    "../:image_diff",
+    "../:pdfium",
+    "../:test_support",
+    "//build/win:default_exe_manifest",
+  ]
+  configs += [ ":pdfium_samples_config" ]
+
+  if (pdf_enable_v8) {
+    deps += [ "//v8:v8_libplatform" ]
+    include_dirs = [
+      "//v8",
+      "//v8/include",
+    ]
+    configs += [ "//v8:external_startup_data" ]
+  }
+  if (pdf_use_skia || pdf_use_skia_paths) {
+    deps += [ "//skia" ]
+  }
+}

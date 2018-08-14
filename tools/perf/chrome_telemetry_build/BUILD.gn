@@ -1,0 +1,233 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/compiler/compiler.gni")
+if (is_android) {
+  import("//build/config/android/config.gni")  # For public_android_sdk
+}
+if (is_chromeos) {
+  import("//build/config/chromeos/rules.gni")
+}
+
+group("telemetry_chrome_test") {
+  testonly = true
+
+  data_deps = [
+    ":telemetry_chrome_test_without_chrome",
+  ]
+  data = []
+
+  if (is_android) {
+    data_deps += [ "//chrome/android:chrome_public_apk" ]
+
+    if (public_android_sdk) {
+      data_deps += [
+        "//android_webview:system_webview_apk",
+        "//android_webview/tools/system_webview_shell:system_webview_shell_apk",
+        "//chrome/android:monochrome_public_apk",
+      ]
+    }
+  } else {
+    data_deps += [ "//chrome" ]
+  }
+
+  if (is_win) {
+    data_deps += [ "//chrome:reorder_imports" ]
+  }
+
+  if (is_linux) {
+    data_deps += [ "//third_party/breakpad:dump_syms($host_toolchain)" ]
+  }
+
+  if (is_mac) {
+    data_deps += [
+      "//chrome:chrome_framework",
+      "//chrome:chrome_helper_app",
+      "//third_party/breakpad:dump_syms",
+      "//third_party/crashpad/crashpad/tools:crashpad_database_util",
+    ]
+  }
+
+  if (is_chromeos && cros_board != "") {
+    data_deps += [
+      "//chromeos:cros_chrome_deploy",
+      "//chromeos:cros_vm_launcher",
+    ]
+  }
+
+  if (is_win && (symbol_level == 1 || symbol_level == 2)) {
+    data_deps += [
+      "//build/win:copy_cdb_to_output",
+      "//third_party/crashpad/crashpad/tools:crashpad_database_util",
+    ]
+
+    # TODO(GYP): These should be provided automatically through data_deps.
+    data += [ "$root_out_dir/chrome.exe.pdb" ]
+    if (is_component_build) {
+      data += [
+        "$root_out_dir/base.dll.pdb",
+        "$root_out_dir/blink_platform.dll.pdb",
+        "$root_out_dir/content.dll.pdb",
+      ]
+    } else {
+      data += [ "$root_out_dir/chrome_child.dll.pdb" ]
+    }
+  }
+}
+
+group("telemetry_chrome_test_without_chrome") {
+  testonly = true
+
+  if (!is_android) {
+    data_deps = [
+      "//third_party/catapult/telemetry:bitmaptools",
+    ]
+  }
+
+  data = [
+    "//tools/perf/core/",  # chrome_telemetry_build/ depends on core/
+    "//tools/perf/chrome_telemetry_build/",
+    "//components/crash/content/tools/generate_breakpad_symbols.py",
+  ]
+
+  data += [
+    "//third_party/catapult/common/",
+    "//third_party/catapult/dependency_manager/",
+    "//third_party/catapult/devil/",
+    "//third_party/catapult/systrace/",
+    "//third_party/catapult/trace_processor/",
+    "//third_party/catapult/web_page_replay_go/",
+  ]
+
+  # //third_party/catapult/tracing/ stuff
+  # mostly excluding test_data/
+  data += [
+    "//third_party/catapult/tracing/bin/",
+    "//third_party/catapult/tracing/third_party/",
+    "//third_party/catapult/tracing/tracing/",
+    "//third_party/catapult/tracing/tracing_build/",
+    "//third_party/catapult/tracing/tracing_project.py",
+  ]
+
+  # //third_party/catapult/third_party/ stuff
+  # excluding google-endpoints/, Paste/, polymer2/
+  data += [
+    "//third_party/catapult/third_party/beautifulsoup4/",
+    "//third_party/catapult/third_party/chai/",
+    "//third_party/catapult/third_party/cloudstorage/",
+    "//third_party/catapult/third_party/coverage/",
+    "//third_party/catapult/third_party/d3/",
+    "//third_party/catapult/third_party/flot/",
+    "//third_party/catapult/third_party/graphy/",
+    "//third_party/catapult/third_party/gsutil/",
+    "//third_party/catapult/third_party/html5lib-python/",
+    "//third_party/catapult/third_party/httplib2/",
+    "//third_party/catapult/third_party/idb/",
+    "//third_party/catapult/third_party/jquery/",
+    "//third_party/catapult/third_party/mapreduce/",
+    "//third_party/catapult/third_party/mocha/",
+    "//third_party/catapult/third_party/mock/",
+    "//third_party/catapult/third_party/mox3/",
+    "//third_party/catapult/third_party/oauth2client/",
+    "//third_party/catapult/third_party/pipeline/",
+    "//third_party/catapult/third_party/polymer/",
+    "//third_party/catapult/third_party/pyfakefs/",
+    "//third_party/catapult/third_party/pyserial/",
+    "//third_party/catapult/third_party/python_gflags/",
+    "//third_party/catapult/third_party/redux/",
+    "//third_party/catapult/third_party/six/",
+    "//third_party/catapult/third_party/snap-it/",
+    "//third_party/catapult/third_party/typ/",
+    "//third_party/catapult/third_party/uritemplate/",
+    "//third_party/catapult/third_party/webapp2/",
+    "//third_party/catapult/third_party/WebOb/",
+    "//third_party/catapult/third_party/webtest/",
+    "//third_party/catapult/third_party/zipfile/",
+  ]
+
+  # //third_party/catapult/third_party/vinn/ stuff
+  # making third_part/v8/ binary data platform specific
+  data += [
+    "//third_party/catapult/third_party/vinn/bin/",
+    "//third_party/catapult/third_party/vinn/third_party/parse5/",
+    "//third_party/catapult/third_party/vinn/vinn/",
+  ]
+  if (is_win) {
+    data += [ "//third_party/catapult/third_party/vinn/third_party/v8/win/" ]
+  } else if (is_mac) {
+    data += [ "//third_party/catapult/third_party/vinn/third_party/v8/mac/" ]
+  } else if (is_linux) {
+    data += [
+      "//third_party/catapult/third_party/vinn/third_party/v8/linux/x86_64/",
+    ]
+    if (is_chromeos) {
+      data += [
+        "//third_party/catapult/third_party/vinn/third_party/v8/linux/arm/",
+        "//third_party/catapult/third_party/vinn/third_party/v8/linux/mips/",
+        "//third_party/catapult/third_party/vinn/third_party/v8/linux/mips64/",
+      ]
+    }
+  } else if (is_android) {
+    # android-marshmallow-arm64-rel needs this for telemetry_perf_unittests
+    # this is because the host is linux x64
+    data += [
+      "//third_party/catapult/third_party/vinn/third_party/v8/linux/x86_64/",
+    ]
+  }
+
+  # //third_party/catapult/telemetry/ stuff
+  # excluding telemetry/internal/actions/bin/
+  data += [
+    "//third_party/catapult/telemetry/bin/",
+    "//third_party/catapult/telemetry/build/",
+    "//third_party/catapult/telemetry/examples/",
+    "//third_party/catapult/telemetry/third_party/",
+    "//third_party/catapult/telemetry/cloud_storage",
+    "//third_party/catapult/telemetry/json_format",
+    "//third_party/catapult/telemetry/validate_binary_dependencies",
+  ]
+  data += [
+    "//third_party/catapult/telemetry/telemetry/android/",
+    "//third_party/catapult/telemetry/telemetry/core/",
+    "//third_party/catapult/telemetry/telemetry/page/",
+    "//third_party/catapult/telemetry/telemetry/story/",
+    "//third_party/catapult/telemetry/telemetry/testing/",
+    "//third_party/catapult/telemetry/telemetry/timeline/",
+    "//third_party/catapult/telemetry/telemetry/util/",
+    "//third_party/catapult/telemetry/telemetry/value/",
+    "//third_party/catapult/telemetry/telemetry/web_perf/",
+    "//third_party/catapult/telemetry/telemetry/wpr/",
+    "//third_party/catapult/telemetry/telemetry/__init__.py",
+    "//third_party/catapult/telemetry/telemetry/benchmark.py",
+    "//third_party/catapult/telemetry/telemetry/benchmark_run_unittest.py",
+    "//third_party/catapult/telemetry/telemetry/benchmark_runner.py",
+    "//third_party/catapult/telemetry/telemetry/benchmark_runner_unittest.py",
+    "//third_party/catapult/telemetry/telemetry/benchmark_unittest.py",
+    "//third_party/catapult/telemetry/telemetry/decorators.py",
+    "//third_party/catapult/telemetry/telemetry/decorators_unittest.py",
+    "//third_party/catapult/telemetry/telemetry/project_config.py",
+    "//third_party/catapult/telemetry/telemetry/record_wpr.py",
+    "//third_party/catapult/telemetry/telemetry/record_wpr_unittest.py",
+    "//third_party/catapult/telemetry/telemetry/telemetry_unittest_deps.json",
+  ]
+  data += [
+    "//third_party/catapult/telemetry/telemetry/internal/actions/",
+    "//third_party/catapult/telemetry/telemetry/internal/app/",
+    "//third_party/catapult/telemetry/telemetry/internal/backends/",
+    "//third_party/catapult/telemetry/telemetry/internal/browser/",
+    "//third_party/catapult/telemetry/telemetry/internal/browser_profiles/",
+    "//third_party/catapult/telemetry/telemetry/internal/forwarders/",
+    "//third_party/catapult/telemetry/telemetry/internal/image_processing/",
+    "//third_party/catapult/telemetry/telemetry/internal/platform/",
+    "//third_party/catapult/telemetry/telemetry/internal/results/",
+    "//third_party/catapult/telemetry/telemetry/internal/testing/",
+    "//third_party/catapult/telemetry/telemetry/internal/util/",
+    "//third_party/catapult/telemetry/telemetry/internal/__init__.py",
+    "//third_party/catapult/telemetry/telemetry/internal/binary_dependencies.json",
+    "//third_party/catapult/telemetry/telemetry/internal/snap_page_util.py",
+    "//third_party/catapult/telemetry/telemetry/internal/snap_page_util_unittest.py",
+    "//third_party/catapult/telemetry/telemetry/internal/story_runner.py",
+    "//third_party/catapult/telemetry/telemetry/internal/story_runner_unittest.py",
+  ]
+}

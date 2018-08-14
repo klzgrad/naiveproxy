@@ -1,0 +1,24 @@
+# 80 ---------------------------------------------------------------------------
+# Because there is a difference in precedence level between || and &&
+#   a || b || c && d
+# is equivalent to
+#   a || b || (c && d)
+# Because parens are not stored in the parse tree, the formatter recreates the
+# minimally required set to maintain meaning. However, this particular case can
+# be confusing for human readers, so we special case these ones and add
+# strictly-unnecessary parens.
+
+supports_android = is_apk || is_android_resources ||
+                   (is_java_library && defined(invoker.supports_android) &&
+                    invoker.supports_android)
+
+enable_one_click_signin = is_win || is_mac || (is_linux && !is_chromeos)
+enable_one_click_signin = (is_linux && !is_chromeos) || is_win || is_mac
+
+x = c || (a && b)
+x = (a && b) || c
+x = (a && b) || c
+
+x = c && (a || b)
+x = (a || b) && c
+x = a || (b && c)
