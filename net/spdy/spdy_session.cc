@@ -939,7 +939,8 @@ void SpdySession::InitializeWithSocket(
 
   connection_ = std::move(connection);
 
-  session_send_window_size_ = kDefaultInitialWindowSize;
+  session_send_window_size_ =
+    std::numeric_limits<int32_t>::max() - kDefaultInitialWindowSize;
   session_recv_window_size_ = kDefaultInitialWindowSize;
 
   spdy::SettingsMap::const_iterator it =
