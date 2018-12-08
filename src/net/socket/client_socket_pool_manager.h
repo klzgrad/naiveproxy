@@ -167,6 +167,21 @@ NET_EXPORT int InitSocketHandleForRawConnect(
     CompletionOnceCallback callback,
     const ClientSocketPool::ProxyAuthCallback& proxy_auth_callback);
 
+NET_EXPORT int InitSocketHandleForRawConnect2(
+    const HostPortPair& host_port_pair,
+    HttpNetworkSession* session,
+    int request_load_flags,
+    RequestPriority request_priority,
+    const ProxyInfo& proxy_info,
+    quic::QuicTransportVersion quic_version,
+    const SSLConfig& ssl_config_for_origin,
+    const SSLConfig& ssl_config_for_proxy,
+    PrivacyMode privacy_mode,
+    const NetLogWithSource& net_log,
+    ClientSocketHandle* socket_handle,
+    CompletionOnceCallback callback,
+    const ClientSocketPool::ProxyAuthCallback& proxy_auth_callback);
+
 // Deprecated: Please do not use this outside of //net and //services/network.
 // A helper method that uses the passed in proxy information to initialize a
 // ClientSocketHandle with the relevant socket pool. Use this method for
