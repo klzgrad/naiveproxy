@@ -31,8 +31,8 @@ namespace {
 
 // Limit of sockets of each socket pool.
 int g_max_sockets_per_pool[] = {
-  256,  // NORMAL_SOCKET_POOL
-  256   // WEBSOCKET_SOCKET_POOL
+    256,  // NORMAL_SOCKET_POOL
+    256   // WEBSOCKET_SOCKET_POOL
 };
 
 static_assert(std::size(g_max_sockets_per_pool) ==
@@ -60,8 +60,8 @@ static_assert(std::size(g_max_sockets_per_group) ==
 // http and SOCKS proxies.  See http://crbug.com/12066 and
 // http://crbug.com/44501 for details about proxy server connection limits.
 int g_max_sockets_per_proxy_server[] = {
-  kDefaultMaxSocketsPerProxyServer,  // NORMAL_SOCKET_POOL
-  kDefaultMaxSocketsPerProxyServer   // WEBSOCKET_SOCKET_POOL
+    kDefaultMaxSocketsPerProxyServer,  // NORMAL_SOCKET_POOL
+    kDefaultMaxSocketsPerProxyServer   // WEBSOCKET_SOCKET_POOL
 };
 
 static_assert(std::size(g_max_sockets_per_proxy_server) ==
@@ -277,6 +277,30 @@ int InitSocketHandleForWebSocketRequest(
       SocketTag(), net_log, 0, socket_handle,
       HttpNetworkSession::WEBSOCKET_SOCKET_POOL, std::move(callback),
       proxy_auth_callback);
+}
+
+int InitSocketHandleForRawConnect2(
+    url::SchemeHostPort endpoint,
+    int request_load_flags,
+    RequestPriority request_priority,
+    HttpNetworkSession* session,
+    const ProxyInfo& proxy_info,
+    const SSLConfig& ssl_config_for_origin,
+    const SSLConfig& ssl_config_for_proxy,
+    PrivacyMode privacy_mode,
+    NetworkAnonymizationKey network_anonymization_key,
+    const NetLogWithSource& net_log,
+    ClientSocketHandle* socket_handle,
+    CompletionOnceCallback callback) {
+  DCHECK(socket_handle);
+  return InitSocketPoolHelper(
+      std::move(endpoint), request_load_flags, request_priority, session,
+      proxy_info, ssl_config_for_origin, ssl_config_for_proxy,
+      /*is_for_websockets=*/true, privacy_mode,
+      std::move(network_anonymization_key), SecureDnsPolicy::kDisable,
+      SocketTag(), net_log, 0, socket_handle,
+      HttpNetworkSession::NORMAL_SOCKET_POOL, std::move(callback),
+      ClientSocketPool::ProxyAuthCallback());
 }
 
 int PreconnectSocketsForHttpRequest(
