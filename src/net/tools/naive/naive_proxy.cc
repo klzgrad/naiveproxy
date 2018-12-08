@@ -20,6 +20,8 @@
 #include "net/socket/client_socket_pool_manager.h"
 #include "net/socket/server_socket.h"
 #include "net/socket/stream_socket.h"
+#include "net/third_party/quic/core/quic_versions.h"
+#include "net/tools/naive/http_proxy_socket.h"
 #include "net/tools/naive/socks5_server_socket.h"
 
 namespace net {
@@ -76,13 +78,20 @@ void NaiveProxy::HandleAcceptResult(int result) {
 
 void NaiveProxy::DoConnect() {
   std::unique_ptr<StreamSocket> socket;
+  NaiveConnection::Direction pad_direction;
   if (protocol_ == kSocks5) {
-    socket = std::make_unique<Socks5ServerSocket>(std::move(accepted_socket_));
+    socket = std::make_unique<Socks5ServerSocket>(std::move(accepted_socket_),
+                                                  traffic_annotation_);
+    pad_direction = NaiveConnection::kClient;
+  } else if (protocol_ == kHttp) {
+    socket = std::make_unique<HttpProxySocket>(std::move(accepted_socket_),
+                                               traffic_annotation_);
+    pad_direction = NaiveConnection::kServer;
   } else {
     return;
   }
   auto connection_ptr = std::make_unique<NaiveConnection>(
-      ++last_id_, std::move(socket), this, traffic_annotation_);
+      ++last_id_, pad_direction, std::move(socket), this, traffic_annotation_);
   auto* connection = connection_ptr.get();
   connection_by_id_[connection->id()] = std::move(connection_ptr);
   int result = connection->Connect(
@@ -119,25 +128,32 @@ int NaiveProxy::OnConnectServer(unsigned int connection_id,
     HttpRequestInfo req_info;
     session_->GetSSLConfig(req_info, &server_ssl_config, &proxy_ssl_config);
     proxy_ssl_config.disable_cert_verification_network_fetches = true;
+  } else {
+    proxy_info.UseDirect();
   }
 
   HostPortPair request_endpoint;
   if (protocol_ == kSocks5) {
     const auto* socket = static_cast<const Socks5ServerSocket*>(client_socket);
     request_endpoint = socket->request_endpoint();
+  } else if (protocol_ == kHttp) {
+    const auto* socket = static_cast<const HttpProxySocket*>(client_socket);
+    request_endpoint = socket->request_endpoint();
   }
-  if (request_endpoint.port() == 0) {
-    LOG(ERROR) << "Connection " << connection_id << " has invalid upstream";
+  if (request_endpoint.IsEmpty()) {
+    LOG(ERROR) << "Connection " << connection_id << " to invalid origin";
     return ERR_ADDRESS_INVALID;
   }
 
   LOG(INFO) << "Connection " << connection_id << " to "
             << request_endpoint.ToString();
 
-  return InitSocketHandleForRawConnect(
+  auto quic_version = quic::QUIC_VERSION_UNSUPPORTED;
+
+  return InitSocketHandleForRawConnect2(
       request_endpoint, session_, request_load_flags, request_priority,
-      proxy_info, server_ssl_config, proxy_ssl_config, PRIVACY_MODE_DISABLED,
-      net_log_, server_socket, callback);
+      proxy_info, quic_version, server_ssl_config, proxy_ssl_config,
+      PRIVACY_MODE_DISABLED, net_log_, server_socket, callback);
 }
 
 void NaiveProxy::OnConnectComplete(int connection_id, int result) {
