@@ -3,8 +3,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef NET_TOOLS_NAIVE_SOCKS5_SERVER_SOCKET_H_
-#define NET_TOOLS_NAIVE_SOCKS5_SERVER_SOCKET_H_
+#ifndef NET_TOOLS_NAIVE_HTTP_PROXY_SOCKET_H_
+#define NET_TOOLS_NAIVE_HTTP_PROXY_SOCKET_H_
 
 #include <cstddef>
 #include <cstdint>
@@ -27,21 +27,19 @@
 
 namespace net {
 
-// This StreamSocket is used to setup a SOCKSv5 handshake with a socks client.
-// Currently no SOCKSv5 authentication is supported.
-class Socks5ServerSocket : public StreamSocket {
+// This StreamSocket is used to setup a HTTP CONNECT tunnel.
+class HttpProxySocket : public StreamSocket {
  public:
-  Socks5ServerSocket(std::unique_ptr<StreamSocket> transport_socket,
-                     const NetworkTrafficAnnotationTag& traffic_annotation);
+  HttpProxySocket(std::unique_ptr<StreamSocket> transport_socket,
+                  const NetworkTrafficAnnotationTag& traffic_annotation);
 
   // On destruction Disconnect() is called.
-  ~Socks5ServerSocket() override;
+  ~HttpProxySocket() override;
 
   const HostPortPair& request_endpoint() const;
 
   // StreamSocket implementation.
 
-  // Does the SOCKS handshake and completes the protocol.
   int Connect(CompletionOnceCallback callback) override;
   void Disconnect() override;
   bool IsConnected() const override;
@@ -74,52 +72,22 @@ class Socks5ServerSocket : public StreamSocket {
 
  private:
   enum State {
-    STATE_GREET_READ,
-    STATE_GREET_READ_COMPLETE,
-    STATE_GREET_WRITE,
-    STATE_GREET_WRITE_COMPLETE,
-    STATE_HANDSHAKE_WRITE,
-    STATE_HANDSHAKE_WRITE_COMPLETE,
-    STATE_HANDSHAKE_READ,
-    STATE_HANDSHAKE_READ_COMPLETE,
+    STATE_HEADER_READ,
+    STATE_HEADER_READ_COMPLETE,
+    STATE_HEADER_WRITE,
+    STATE_HEADER_WRITE_COMPLETE,
     STATE_NONE,
   };
-
-  // Addressing type that can be specified in requests or responses.
-  enum SocksEndPointAddressType {
-    kEndPointDomain = 0x03,
-    kEndPointResolvedIPv4 = 0x01,
-    kEndPointResolvedIPv6 = 0x04,
-  };
-
-  enum SocksCommandType {
-    kCommandConnect = 0x01,
-    kCommandBind = 0x02,
-    kCommandUDPAssociate = 0x03,
-  };
-
-  static const unsigned int kGreetReadHeaderSize;
-  static const unsigned int kReadHeaderSize;
-  static const char kSOCKS5Version;
-  static const char kSOCKS5Reserved;
-  static const char kAuthMethodNone;
-  static const char kAuthMethodNoAcceptable;
-  static const char kReplySuccess;
-  static const char kReplyCommandNotSupported;
 
   void DoCallback(int result);
   void OnIOComplete(int result);
   void OnReadWriteComplete(CompletionOnceCallback callback, int result);
 
   int DoLoop(int last_io_result);
-  int DoGreetWrite();
-  int DoGreetWriteComplete(int result);
-  int DoGreetRead();
-  int DoGreetReadComplete(int result);
-  int DoHandshakeRead();
-  int DoHandshakeReadComplete(int result);
-  int DoHandshakeWrite();
-  int DoHandshakeWriteComplete(int result);
+  int DoHeaderWrite();
+  int DoHeaderWriteComplete(int result);
+  int DoHeaderRead();
+  int DoHeaderReadComplete(int result);
 
   CompletionRepeatingCallback io_callback_;
 
@@ -136,28 +104,10 @@ class Socks5ServerSocket : public StreamSocket {
   // read or write.
   scoped_refptr<IOBuffer> handshake_buf_;
 
-  // While writing, this buffer stores the complete write handshake data.
-  // While reading, it stores the handshake information received so far.
   std::string buffer_;
-
-  // This becomes true when the SOCKS handshake has completed and the
-  // overlying connection is free to communicate.
   bool completed_handshake_;
-
-  // These contain the bytes received / sent by the SOCKS handshake.
-  size_t bytes_received_;
-  size_t bytes_sent_;
-
-  size_t greet_read_header_size_;
-  size_t read_header_size_;
-
   bool was_ever_used_;
-
-  SocksEndPointAddressType address_type_;
-  int address_size_;
-
-  char auth_method_;
-  char reply_;
+  int header_write_size_;
 
   HostPortPair request_endpoint_;
 
@@ -166,8 +116,8 @@ class Socks5ServerSocket : public StreamSocket {
   // Traffic annotation for socket control.
   NetworkTrafficAnnotationTag traffic_annotation_;
 
-  DISALLOW_COPY_AND_ASSIGN(Socks5ServerSocket);
+  DISALLOW_COPY_AND_ASSIGN(HttpProxySocket);
 };
 
 }  // namespace net
-#endif  // NET_TOOLS_NAIVE_SOCKS5_SERVER_SOCKET_H_
+#endif  // NET_TOOLS_NAIVE_HTTP_PROXY_SOCKET_H_
