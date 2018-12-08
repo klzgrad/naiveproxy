@@ -293,6 +293,27 @@ int InitSocketHandleForWebSocketRequest(
       proxy_auth_callback);
 }
 
+int InitSocketHandleForRawConnect2(const HostPortPair& endpoint,
+                                   HttpNetworkSession* session,
+                                   int request_load_flags,
+                                   RequestPriority request_priority,
+                                   const ProxyInfo& proxy_info,
+                                   const SSLConfig& ssl_config_for_origin,
+                                   const SSLConfig& ssl_config_for_proxy,
+                                   PrivacyMode privacy_mode,
+                                   const NetLogWithSource& net_log,
+                                   ClientSocketHandle* socket_handle,
+                                   CompletionOnceCallback callback) {
+  DCHECK(socket_handle);
+  return InitSocketPoolHelper(
+      ClientSocketPoolManager::NORMAL_GROUP, endpoint, request_load_flags,
+      request_priority, session, proxy_info, ssl_config_for_origin,
+      ssl_config_for_proxy, /*is_for_websockets=*/true, privacy_mode,
+      NetworkIsolationKey(), /*disable_secure_dns=*/true, SocketTag(), net_log,
+      0, socket_handle, HttpNetworkSession::NORMAL_SOCKET_POOL,
+      std::move(callback), ClientSocketPool::ProxyAuthCallback());
+}
+
 int PreconnectSocketsForHttpRequest(
     ClientSocketPoolManager::SocketGroupType group_type,
     const HostPortPair& endpoint,
