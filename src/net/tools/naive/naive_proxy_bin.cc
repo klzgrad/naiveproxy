@@ -108,17 +108,19 @@ std::unique_ptr<net::URLRequestContext> BuildURLRequestContext(
     net::NetLog* net_log) {
   net::URLRequestContextBuilder builder;
 
+  builder.DisableHttpCache();
+  builder.set_net_log(net_log);
+
   net::ProxyConfig proxy_config;
-  proxy_config.proxy_rules().ParseFromString(params.proxy_url);
+  if (params.use_proxy) {
+    proxy_config.proxy_rules().ParseFromString(params.proxy_url);
+  }
   auto proxy_service = net::ProxyResolutionService::CreateWithoutProxyResolver(
       std::make_unique<net::ProxyConfigServiceFixed>(
           net::ProxyConfigWithAnnotation(proxy_config, kTrafficAnnotation)),
       net_log);
   proxy_service->ForceReloadProxyConfig();
-
   builder.set_proxy_resolution_service(std::move(proxy_service));
-  builder.DisableHttpCache();
-  builder.set_net_log(net_log);
 
   if (!params.host_resolver_rules.empty()) {
     builder.set_host_mapping_rules(params.host_resolver_rules);
@@ -126,15 +128,17 @@ std::unique_ptr<net::URLRequestContext> BuildURLRequestContext(
 
   auto context = builder.Build();
 
-  net::HttpNetworkSession* session =
-      context->http_transaction_factory()->GetSession();
-  net::HttpAuthCache* auth_cache = session->http_auth_cache();
-  GURL auth_origin(params.proxy_url);
-  net::AuthCredentials credentials(base::ASCIIToUTF16(params.proxy_user),
-                                   base::ASCIIToUTF16(params.proxy_pass));
-  auth_cache->Add(auth_origin, /*realm=*/std::string(),
-                  net::HttpAuth::AUTH_SCHEME_BASIC, /*challenge=*/"Basic",
-                  credentials, /*path=*/"/");
+  if (params.use_proxy) {
+    net::HttpNetworkSession* session =
+        context->http_transaction_factory()->GetSession();
+    net::HttpAuthCache* auth_cache = session->http_auth_cache();
+    GURL auth_origin(params.proxy_url);
+    net::AuthCredentials credentials(base::ASCIIToUTF16(params.proxy_user),
+                                     base::ASCIIToUTF16(params.proxy_pass));
+    auth_cache->Add(auth_origin, /*realm=*/std::string(),
+                    net::HttpAuth::AUTH_SCHEME_BASIC, /*challenge=*/"Basic",
+                    credentials, /*path=*/"/");
+  }
 
   return context;
 }
@@ -202,6 +206,7 @@ bool ParseCommandLineFlags(Params* params) {
     }
   }
 
+  params->use_proxy = false;
   GURL url(line.GetSwitchValueASCII("proxy"));
   if (line.HasSwitch("proxy")) {
     params->use_proxy = true;
