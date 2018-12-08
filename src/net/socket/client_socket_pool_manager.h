@@ -120,6 +120,20 @@ int InitSocketHandleForWebSocketRequest(
     CompletionOnceCallback callback,
     const ClientSocketPool::ProxyAuthCallback& proxy_auth_callback);
 
+NET_EXPORT int InitSocketHandleForRawConnect2(
+    url::SchemeHostPort endpoint,
+    int request_load_flags,
+    RequestPriority request_priority,
+    HttpNetworkSession* session,
+    const ProxyInfo& proxy_info,
+    const SSLConfig& ssl_config_for_origin,
+    const SSLConfig& ssl_config_for_proxy,
+    PrivacyMode privacy_mode,
+    NetworkAnonymizationKey network_anonymization_key,
+    const NetLogWithSource& net_log,
+    ClientSocketHandle* socket_handle,
+    CompletionOnceCallback callback);
+
 // Similar to InitSocketHandleForHttpRequest except that it initiates the
 // desired number of preconnect streams from the relevant socket pool.
 int PreconnectSocketsForHttpRequest(
