@@ -7,6 +7,7 @@
 #define NET_TOOLS_NAIVE_NAIVE_CONNECTION_H_
 
 #include <memory>
+#include <string>
 
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
@@ -27,6 +28,14 @@ class NaiveConnection {
  public:
   using TimeFunc = base::TimeTicks (*)();
 
+  // From this direction.
+  enum Direction {
+    kClient = 0,
+    kServer = 1,
+    kNumDirections = 2,
+    kNone = 2,
+  };
+
   class Delegate {
    public:
     Delegate() {}
@@ -42,6 +51,7 @@ class NaiveConnection {
   };
 
   NaiveConnection(unsigned int id,
+                  Direction pad_direction,
                   std::unique_ptr<StreamSocket> accepted_socket,
                   Delegate* delegate,
                   const NetworkTrafficAnnotationTag& traffic_annotation);
@@ -61,11 +71,12 @@ class NaiveConnection {
     STATE_NONE,
   };
 
-  // From this direction.
-  enum Direction {
-    kClient = 0,
-    kServer = 1,
-    kNumDirections = 2,
+  enum PaddingState {
+    STATE_READ_PAYLOAD_LENGTH_1,
+    STATE_READ_PAYLOAD_LENGTH_2,
+    STATE_READ_PADDING_LENGTH,
+    STATE_READ_PAYLOAD,
+    STATE_READ_PADDING,
   };
 
   void DoCallback(int result);
@@ -86,6 +97,7 @@ class NaiveConnection {
   void OnPushComplete(Direction from, Direction to, int result);
 
   unsigned int id_;
+  Direction pad_direction_;
 
   CompletionRepeatingCallback io_callback_;
   CompletionOnceCallback connect_callback_;
@@ -109,6 +121,11 @@ class NaiveConnection {
   bool early_pull_pending_;
   bool can_push_to_server_;
   int early_pull_result_;
+
+  int num_paddings_[kNumDirections];
+  PaddingState read_padding_state_;
+  int payload_length_;
+  int padding_length_;
 
   bool full_duplex_;
 

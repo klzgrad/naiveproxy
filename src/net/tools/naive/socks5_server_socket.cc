@@ -32,13 +32,9 @@ const char Socks5ServerSocket::kReplyCommandNotSupported = '\x07';
 static_assert(sizeof(struct in_addr) == 4, "incorrect system size of IPv4");
 static_assert(sizeof(struct in6_addr) == 16, "incorrect system size of IPv6");
 
-namespace {
-constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
-    net::DefineNetworkTrafficAnnotation("naive", "");
-}  // namespace
-
 Socks5ServerSocket::Socks5ServerSocket(
-    std::unique_ptr<StreamSocket> transport_socket)
+    std::unique_ptr<StreamSocket> transport_socket,
+    const NetworkTrafficAnnotationTag& traffic_annotation)
     : io_callback_(base::BindRepeating(&Socks5ServerSocket::OnIOComplete,
                                        base::Unretained(this))),
       transport_(std::move(transport_socket)),
@@ -50,7 +46,7 @@ Socks5ServerSocket::Socks5ServerSocket(
       read_header_size_(kReadHeaderSize),
       was_ever_used_(false),
       net_log_(transport_->NetLog()),
-      traffic_annotation_(kTrafficAnnotation) {}
+      traffic_annotation_(traffic_annotation) {}
 
 Socks5ServerSocket::~Socks5ServerSocket() {
   Disconnect();
