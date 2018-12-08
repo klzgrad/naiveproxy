@@ -106,7 +106,7 @@ class NET_EXPORT_PRIVATE ClientSocketPoolManager {
 // |resolution_callback| will be invoked after the the hostname is
 // resolved.  If |resolution_callback| does not return OK, then the
 // connection will be aborted with that value.
-NET_EXPORT int InitSocketHandleForHttpRequest(
+int InitSocketHandleForHttpRequest(
     ClientSocketPoolManager::SocketGroupType group_type,
     const HostPortPair& endpoint,
     const HttpRequestHeaders& request_extra_headers,
@@ -160,6 +160,20 @@ NET_EXPORT int InitSocketHandleForRawConnect(
     int request_load_flags,
     RequestPriority request_priority,
     const ProxyInfo& proxy_info,
+    const SSLConfig& ssl_config_for_origin,
+    const SSLConfig& ssl_config_for_proxy,
+    PrivacyMode privacy_mode,
+    const NetLogWithSource& net_log,
+    ClientSocketHandle* socket_handle,
+    CompletionOnceCallback callback);
+
+NET_EXPORT int InitSocketHandleForRawConnect2(
+    const HostPortPair& host_port_pair,
+    HttpNetworkSession* session,
+    int request_load_flags,
+    RequestPriority request_priority,
+    const ProxyInfo& proxy_info,
+    quic::QuicTransportVersion quic_version,
     const SSLConfig& ssl_config_for_origin,
     const SSLConfig& ssl_config_for_proxy,
     PrivacyMode privacy_mode,
