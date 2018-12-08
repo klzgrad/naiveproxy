@@ -424,6 +424,30 @@ int InitSocketHandleForRawConnect(const HostPortPair& host_port_pair,
       OnHostResolutionCallback(), std::move(callback));
 }
 
+int InitSocketHandleForRawConnect2(
+    const HostPortPair& host_port_pair,
+    HttpNetworkSession* session,
+    int request_load_flags,
+    RequestPriority request_priority,
+    const ProxyInfo& proxy_info,
+    quic::QuicTransportVersion quic_version,
+    const SSLConfig& ssl_config_for_origin,
+    const SSLConfig& ssl_config_for_proxy,
+    PrivacyMode privacy_mode,
+    const NetLogWithSource& net_log,
+    ClientSocketHandle* socket_handle,
+    CompletionOnceCallback callback) {
+  DCHECK(socket_handle);
+  HttpRequestHeaders request_extra_headers;
+  return InitSocketPoolHelper(
+      ClientSocketPoolManager::NORMAL_GROUP, host_port_pair,
+      request_extra_headers, request_load_flags, request_priority, session,
+      proxy_info, quic_version, ssl_config_for_origin, ssl_config_for_proxy,
+      /*force_tunnel=*/true, privacy_mode, SocketTag(), net_log, 0,
+      socket_handle, HttpNetworkSession::NORMAL_SOCKET_POOL,
+      OnHostResolutionCallback(), std::move(callback));
+}
+
 int InitSocketHandleForTlsConnect(const HostPortPair& endpoint,
                                   HttpNetworkSession* session,
                                   int request_load_flags,
