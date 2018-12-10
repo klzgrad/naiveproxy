@@ -23,6 +23,7 @@
 #include "base/task/task_scheduler/task_scheduler.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "components/version_info/version_info.h"
 #include "net/base/auth.h"
 #include "net/dns/host_resolver.h"
 #include "net/dns/mapped_host_resolver.h"
@@ -149,6 +150,7 @@ bool ParseCommandLineFlags(Params* params) {
                  "\n"
                  "Options:\n"
                  "-h, --help                 Show this message\n"
+                 "--version                  Print version\n"
                  "--addr=<address>           Address to listen on (0.0.0.0)\n"
                  "--port=<port>              Port to listen on (1080)\n"
                  "--proto=[socks|http]       Protocol to accept (socks)\n"
@@ -157,6 +159,12 @@ bool ParseCommandLineFlags(Params* params) {
                  "--log                      Log to stderr, otherwise no log\n"
                  "--log-net-log=<path>       Save NetLog\n"
                  "--ssl-key-log-file=<path>  Save SSL keys for Wireshark\n";
+    exit(EXIT_SUCCESS);
+    return false;
+  }
+
+  if (line.HasSwitch("version")) {
+    LOG(INFO) << "Version: " << version_info::GetVersionNumber();
     exit(EXIT_SUCCESS);
     return false;
   }
