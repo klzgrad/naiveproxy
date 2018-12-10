@@ -7,6 +7,7 @@
 #include <unordered_set>
 
 #include "base/metrics/histogram_macros.h"
+#include "base/rand_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "net/base/host_port_pair.h"
@@ -42,6 +43,8 @@ void ProxyClientSocket::BuildTunnelRequest(
     request_headers->SetHeader(HttpRequestHeaders::kUserAgent, user_agent);
 
   request_headers->MergeFrom(extra_headers);
+  request_headers->SetHeader("Padding",
+                             std::string(base::RandInt(16, 32), '.'));
 }
 
 // static
