@@ -1,0 +1,43 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module media.mojom;
+
+import "mojo/public/mojom/base/unguessable_token.mojom";
+
+struct SessionData {
+  array<uint8> key_set_id;
+  string mime_type;
+};
+
+// Allows MediaDrmBridge to store and retrieve persistent data. This is needed
+// for features like per-origin provisioning and persistent license support.
+// The persistent data stored by MediaDrmStorage is auxiliary data, which will
+// be used by MediaDrmBridge to retrieve the actual license. MediaDrm in media
+// service is the true source for the persistent license and origin
+// provisioning.
+interface MediaDrmStorage {
+  // Initializes |this| and returns a random identifier than can be used to
+  // identify the current origin. The origin ID should be randomly generated if
+  // it doesn't exist. |origin_id| must be valid and unique among all origins.
+  // If origin information doesn't exist, the implementation will persist the
+  // the information (e.g. origin ID, provision time) in the storage.
+  Initialize() => (mojo_base.mojom.UnguessableToken origin_id);
+
+  // Saves origin information (e.g. origin ID, provision time) in the storage
+  // after MediaDrm is provisioned for current origin. It will clear all
+  // existing persistent session data for the origin.
+  OnProvisioned() => (bool success);
+
+  // Saves persistent session data for |session_id|.
+  SavePersistentSession(
+    string session_id, SessionData session_data) => (bool success);
+
+  // Loads persistent session data for |session_id|.
+  // Upon failure, null |session_data| will be returned.
+  LoadPersistentSession(string session_id) => (SessionData? session_data);
+
+  // Removes the persistent session data for |session_id|.
+  RemovePersistentSession(string session_id) => (bool success);
+};

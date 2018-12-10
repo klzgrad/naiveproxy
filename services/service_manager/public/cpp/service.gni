@@ -1,0 +1,122 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/toolchain/toolchain.gni")
+
+if (is_android) {
+  import("//build/config/android/rules.gni")
+  import("//build/config/zip.gni")
+}
+
+# Generates a Service binary. The parameters of this template are those of an
+# executable.
+template("service") {
+  base_target_name = target_name
+  if (defined(invoker.output_name)) {
+    base_target_name = invoker.output_name
+  }
+
+  service_deps = []
+  if (defined(invoker.deps)) {
+    service_deps += invoker.deps
+  }
+
+  service_data_deps =
+      [ "//services/service_manager/public/cpp/standalone_service:main" ]
+
+  if (defined(invoker.data_deps)) {
+    service_data_deps += invoker.data_deps
+  }
+
+  if (defined(invoker.resources)) {
+    # TODO(rockot): Remove this once all existing service targets have stopped
+    # setting |resources|. This target serves no purpose other than to ensure
+    # that |resources| is actually used, avoiding GN complaints.
+    source_set("${target_name}__unused_resources_target") {
+      testonly = true
+      sources = invoker.resources
+      deps = invoker.deps
+    }
+  }
+
+  if (is_win) {
+    executable_extension = "service.exe"
+  } else {
+    executable_extension = "service"
+  }
+
+  executable(target_name) {
+    output_name = base_target_name
+    output_extension = executable_extension
+
+    if (defined(invoker.cflags)) {
+      cflags = invoker.cflags
+    }
+    if (defined(invoker.cflags_c)) {
+      cflags_c = invoker.cflags_c
+    }
+    if (defined(invoker.cflags_cc)) {
+      cflags_cc = invoker.cflags_cc
+    }
+    if (defined(invoker.cflags_objc)) {
+      cflags_objc = invoker.cflags_objc
+    }
+    if (defined(invoker.cflags_objcc)) {
+      cflags_objcc = invoker.cflags_objcc
+    }
+    if (defined(invoker.defines)) {
+      defines = invoker.defines
+    }
+    if (defined(invoker.include_dirs)) {
+      include_dirs = invoker.include_dirs
+    }
+    if (defined(invoker.ldflags)) {
+      ldflags = invoker.ldflags
+    }
+    if (defined(invoker.lib_dirs)) {
+      lib_dirs = invoker.lib_dirs
+    }
+    if (defined(invoker.libs)) {
+      libs = invoker.libs
+    }
+
+    data_deps = service_data_deps
+
+    deps = [
+      "//services/service_manager/public/cpp/standalone_service:main",
+    ]
+
+    deps += service_deps
+    if (defined(invoker.public_deps)) {
+      public_deps = invoker.public_deps
+    }
+    if (defined(invoker.all_dependent_configs)) {
+      all_dependent_configs = invoker.all_dependent_configs
+    }
+    if (defined(invoker.public_configs)) {
+      public_configs = invoker.public_configs
+    }
+    if (defined(invoker.check_includes)) {
+      check_includes = invoker.check_includes
+    }
+    if (defined(invoker.configs)) {
+      configs += invoker.configs
+    }
+    if (defined(invoker.data)) {
+      data = invoker.data
+    }
+    if (defined(invoker.inputs)) {
+      inputs = invoker.inputs
+    }
+    if (defined(invoker.public)) {
+      public = invoker.public
+    }
+    if (defined(invoker.sources)) {
+      sources = invoker.sources
+    }
+    if (defined(invoker.testonly)) {
+      testonly = invoker.testonly
+    }
+  }
+}

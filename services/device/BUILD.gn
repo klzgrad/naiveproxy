@@ -1,0 +1,289 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/features.gni")
+import("//services/catalog/public/tools/catalog.gni")
+import("//services/service_manager/public/cpp/service.gni")
+import("//services/service_manager/public/service_manifest.gni")
+
+if (is_android) {
+  import("//build/config/android/rules.gni")
+}
+
+is_serial_enabled_platform = is_win || (is_linux && use_udev) || is_mac
+
+source_set("lib") {
+  # This should be visible only to embedders of the Device Service, and the
+  # dependence should only be for the purpose of embedding the Device Service.
+  visibility = [
+    ":test_support",
+    "//content/browser",
+  ]
+  sources = [
+    "device_service.cc",
+    "device_service.h",
+  ]
+
+  deps = [
+    "//base",
+    "//services/device/fingerprint",
+    "//services/device/generic_sensor",
+    "//services/device/geolocation",
+    "//services/device/power_monitor",
+    "//services/device/public/cpp:device_features",
+    "//services/device/public/mojom",
+    "//services/device/screen_orientation",
+    "//services/device/time_zone_monitor",
+    "//services/device/wake_lock",
+    "//services/service_manager/public/cpp",
+    "//ui/gfx",
+  ]
+
+  if (is_android) {
+    deps += [ ":device_service_jni_headers" ]
+  } else {
+    deps += [
+      "//services/device/battery",
+      "//services/device/hid",
+      "//services/device/vibration",
+    ]
+  }
+
+  if (is_chromeos && use_dbus) {
+    deps += [ "//services/device/media_transfer_protocol" ]
+  }
+
+  if (is_serial_enabled_platform) {
+    deps += [ "//services/device/serial" ]
+  }
+}
+
+is_linux_without_udev = is_linux && !use_udev
+
+source_set("tests") {
+  testonly = true
+
+  sources = [
+    "battery/battery_status_manager_win_unittest.cc",
+    "battery/battery_status_service_unittest.cc",
+    "generic_sensor/absolute_orientation_euler_angles_fusion_algorithm_using_accelerometer_and_magnetometer_unittest.cc",
+    "generic_sensor/fake_platform_sensor_and_provider.cc",
+    "generic_sensor/fake_platform_sensor_and_provider.h",
+    "generic_sensor/fake_platform_sensor_fusion.cc",
+    "generic_sensor/fake_platform_sensor_fusion.h",
+    "generic_sensor/generic_sensor_service_unittest.cc",
+    "generic_sensor/linear_acceleration_fusion_algorithm_using_accelerometer_unittest.cc",
+    "generic_sensor/orientation_euler_angles_fusion_algorithm_using_quaternion_unittest.cc",
+    "generic_sensor/orientation_quaternion_fusion_algorithm_using_euler_angles_unittest.cc",
+    "generic_sensor/orientation_test_data.h",
+    "generic_sensor/platform_sensor_and_provider_unittest.cc",
+    "generic_sensor/platform_sensor_and_provider_unittest_win.cc",
+    "generic_sensor/platform_sensor_fusion_unittest.cc",
+    "generic_sensor/platform_sensor_provider_unittest_android.cc",
+    "generic_sensor/relative_orientation_euler_angles_fusion_algorithm_using_accelerometer_and_gyroscope_unittest.cc",
+    "generic_sensor/relative_orientation_euler_angles_fusion_algorithm_using_accelerometer_unittest.cc",
+    "geolocation/geolocation_provider_impl_unittest.cc",
+    "geolocation/geolocation_service_unittest.cc",
+    "geolocation/location_arbitrator_unittest.cc",
+    "geolocation/network_location_provider_unittest.cc",
+    "geolocation/public_ip_address_geolocator_unittest.cc",
+    "geolocation/public_ip_address_location_notifier_unittest.cc",
+    "geolocation/wifi_data_provider_chromeos_unittest.cc",
+    "geolocation/wifi_data_provider_common_unittest.cc",
+    "geolocation/wifi_data_provider_win_unittest.cc",
+    "geolocation/wifi_polling_policy_unittest.cc",
+    "power_monitor/power_monitor_message_broadcaster_unittest.cc",
+    "public/cpp/power_monitor/power_monitor_broadcast_source_unittest.cc",
+    "vibration/vibration_manager_impl_unittest.cc",
+    "wake_lock/wake_lock_unittest.cc",
+  ]
+
+  deps = [
+    ":test_support",
+    "//base",
+    "//base/test:test_support",
+    "//base/third_party/dynamic_annotations",
+    "//device/base/synchronization",
+    "//mojo/core/embedder",
+    "//mojo/public/cpp/bindings",
+    "//net",
+    "//net:test_support",
+    "//services/device/generic_sensor",
+    "//services/device/geolocation",
+    "//services/device/geolocation:test_support",
+    "//services/device/power_monitor",
+    "//services/device/public/cpp:device_features",
+    "//services/device/public/cpp/power_monitor",
+    "//services/device/public/mojom",
+    "//services/device/wake_lock",
+    "//services/network:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+
+  if (!is_linux_without_udev) {
+    sources +=
+        [ "generic_sensor/platform_sensor_and_provider_unittest_linux.cc" ]
+  }
+
+  if (is_linux && !is_chromeos && use_dbus) {
+    sources += [
+      "battery/battery_status_manager_linux_unittest.cc",
+      "geolocation/wifi_data_provider_linux_unittest.cc",
+    ]
+    deps += [ "//dbus:test_support" ]
+  }
+
+  if (is_chromeos) {
+    sources += [ "fingerprint/fingerprint_chromeos_unittest.cc" ]
+    deps += [
+      "//chromeos",
+      "//dbus",
+      "//services/device/fingerprint",
+      "//third_party/protobuf:protobuf_lite",
+    ]
+  }
+
+  if (is_android) {
+    sources -= [
+      "battery/battery_status_service_unittest.cc",
+      "geolocation/network_location_provider_unittest.cc",
+      "geolocation/wifi_data_provider_common_unittest.cc",
+    ]
+    deps += [
+      ":device_service_jni_headers",
+      "//services/device/public/java:geolocation_java_test_support",
+      "//services/device/vibration/android:vibration_jni_headers",
+    ]
+  } else {
+    sources += [
+      "battery/battery_monitor_impl_unittest.cc",
+      "hid/hid_manager_unittest.cc",
+    ]
+    deps += [
+      "//services/device/battery",
+      "//services/device/hid:mocks",
+      "//services/device/public/cpp/hid",
+      "//services/device/vibration",
+    ]
+
+    if (!is_linux_without_udev && !is_android) {
+      sources += [
+        "hid/hid_service_unittest.cc",
+        "hid/input_service_linux_unittest.cc",
+        "hid/test_report_descriptors.cc",
+        "hid/test_report_descriptors.h",
+        "public/cpp/hid/hid_device_filter_unittest.cc",
+        "public/cpp/hid/hid_report_descriptor_unittest.cc",
+      ]
+      if (!is_ios) {
+        sources += [ "hid/hid_connection_unittest.cc" ]
+        deps += [
+          "//device:usb_test_gadget",
+          "//device/usb",
+          "//net:test_support",
+        ]
+      }
+    }
+  }
+
+  if (is_serial_enabled_platform) {
+    sources += [
+      "serial/serial_device_enumerator_impl_unittest.cc",
+      "serial/serial_io_handler_impl_unittest.cc",
+    ]
+    deps += [ "//services/device/serial" ]
+  }
+
+  if (is_win) {
+    # Needed for "generic_sensor/platform_sensor_and_provider_unittest_win.cc"
+    libs = [
+      "propsys.lib",
+      "sensorsapi.lib",
+    ]
+  }
+}
+
+service_manifest("manifest") {
+  name = "device"
+  source = "manifest.json"
+}
+
+service_manifest("unittest_manifest") {
+  name = "device_unittests"
+  source = "unittest_manifest.json"
+  packaged_services = [ ":manifest" ]
+}
+
+catalog("tests_catalog") {
+  testonly = true
+  embedded_services = [ ":unittest_manifest" ]
+}
+
+source_set("test_support") {
+  testonly = true
+
+  sources = [
+    "device_service_test_base.cc",
+    "device_service_test_base.h",
+  ]
+
+  deps = [
+    ":lib",
+    "//base",
+    "//base/test:test_support",
+    "//mojo/public/cpp/bindings",
+    "//net",
+    "//net:test_support",
+    "//services/device/public/cpp/geolocation",
+    "//services/device/public/mojom:constants",
+    "//services/network:test_support",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/cpp:service_test_support",
+  ]
+}
+
+if (is_android) {
+  generate_jni("device_service_jni_headers") {
+    sources = [
+      "android/java/src/org/chromium/services/device/InterfaceRegistrar.java",
+    ]
+    jni_package = "device_service"
+  }
+
+  android_library("java") {
+    # This should be visible only to embedders of the Device Service, and the
+    # dependence should only be for the purpose of embedding the Device Service.
+    # //content/public/android:* here actually wants to identify the
+    # //content/public/android:content_java target and all of its generated
+    # targets which also need to see this target as well.
+    # //services:* identifies //services:service_unittests and all of its
+    # generated targets.
+    visibility = [
+      "//content/public/android:*",
+      "//services:*",
+    ]
+    java_files = [
+      "android/java/src/org/chromium/services/device/InterfaceRegistrar.java",
+    ]
+    deps = [
+      "//base:base_java",
+      "//mojo/public/java:bindings_java",
+      "//mojo/public/java:system_java",
+      "//mojo/public/java/system:system_impl_java",
+      "//services/device/battery/android:battery_monitor_java",
+      "//services/device/generic_sensor:java",
+      "//services/device/geolocation:geolocation_java",
+      "//services/device/nfc/android:java",
+      "//services/device/public/java:nfc_java",
+      "//services/device/public/mojom:mojom_java",
+      "//services/device/screen_orientation:java",
+      "//services/device/time_zone_monitor:java",
+      "//services/device/vibration/android:vibration_manager_java",
+      "//services/device/wake_lock/power_save_blocker:java",
+      "//services/service_manager/public/java:service_manager_java",
+      "//services/service_manager/public/mojom:mojom_java",
+    ]
+  }
+}

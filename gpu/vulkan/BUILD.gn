@@ -1,0 +1,93 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("features.gni")
+import("//build/config/ui.gni")
+import("//build/buildflag_header.gni")
+import("//testing/test.gni")
+
+# Generate a buildflag header for compile-time checking of Vulkan support.
+buildflag_header("buildflags") {
+  header = "buildflags.h"
+  flags = [ "ENABLE_VULKAN=$enable_vulkan" ]
+}
+
+if (enable_vulkan) {
+  component("vulkan") {
+    output_name = "vulkan_wrapper"
+
+    sources = [
+      "vulkan_command_buffer.cc",
+      "vulkan_command_buffer.h",
+      "vulkan_command_pool.cc",
+      "vulkan_command_pool.h",
+      "vulkan_descriptor_layout.cc",
+      "vulkan_descriptor_layout.h",
+      "vulkan_descriptor_pool.cc",
+      "vulkan_descriptor_pool.h",
+      "vulkan_descriptor_set.cc",
+      "vulkan_descriptor_set.h",
+      "vulkan_device_queue.cc",
+      "vulkan_device_queue.h",
+      "vulkan_export.h",
+      "vulkan_function_pointers.cc",
+      "vulkan_function_pointers.h",
+      "vulkan_image_view.cc",
+      "vulkan_image_view.h",
+      "vulkan_implementation.cc",
+      "vulkan_implementation.h",
+      "vulkan_instance.cc",
+      "vulkan_instance.h",
+      "vulkan_render_pass.cc",
+      "vulkan_render_pass.h",
+      "vulkan_sampler.cc",
+      "vulkan_sampler.h",
+      "vulkan_shader_module.cc",
+      "vulkan_shader_module.h",
+      "vulkan_surface.cc",
+      "vulkan_surface.h",
+      "vulkan_swap_chain.cc",
+      "vulkan_swap_chain.h",
+    ]
+
+    configs += [ "//build/config:precompiled_headers" ]
+
+    defines = [ "VULKAN_IMPLEMENTATION" ]
+
+    all_dependent_configs = [ "//third_party/vulkan:vulkan_config" ]
+
+    deps = [
+      "//base",
+      "//ui/gfx",
+    ]
+  }
+
+  # TODO(cblume): These tests should run on each platform -- crbug.com/858614
+  if (use_x11) {
+    test("vulkan_tests") {
+      sources = [
+        "tests/basic_vulkan_test.cc",
+        "tests/basic_vulkan_test.h",
+        "tests/native_window.h",
+        "tests/vulkan_test.cc",
+        "tests/vulkan_tests_main.cc",
+      ]
+
+      deps = [
+        "//base/test:test_support",
+        "//gpu/vulkan/init",
+        "//testing/gmock",
+        "//testing/gtest",
+        "//ui/gfx:native_widget_types",
+        "//ui/gfx/geometry",
+      ]
+
+      if (use_x11) {
+        sources += [ "tests/native_window_x11.cc" ]
+        deps += [ "//ui/gfx/x" ]
+        configs += [ "//build/config/linux:x11" ]
+      }
+    }
+  }
+}

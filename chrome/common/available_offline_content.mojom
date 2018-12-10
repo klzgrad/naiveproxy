@@ -1,0 +1,65 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module chrome.mojom;
+
+import "url/mojom/url.mojom";
+
+// Categorizes suggested content for metrics reporting.
+// This enum is backed by a UMA histogram therefore its entries should not be
+// deleted or re-ordered and new ones should only be appended.
+enum AvailableContentType {
+  // The offline page is prefetched suggested content.
+  kPrefetchedUnopenedPage = 0,
+  kVideo = 1,
+  kAudio = 2,
+  // The offline page was downloaded in some other way.
+  kOtherPage = 3,
+  kUninteresting = 4,
+};
+
+// A single piece of content that is available offline.
+struct AvailableOfflineContent {
+  // Together id and name_space define a unique ID for this item.
+  string id;
+  string name_space;
+  // A brief title for the item.
+  string title;
+  // Descriptive text about the item.
+  string snippet;
+  // A user-friendly description of the modified date.
+  string date_modified;
+  // A brief description of the source. May be empty.
+  string attribution;
+  // A data URI for a thumbnail that is related to the content.
+  url.mojom.Url thumbnail_data_uri;
+  // Type of this content.
+  AvailableContentType content_type;
+};
+
+// A summary of available offline content.
+struct AvailableOfflineContentSummary {
+  // Total number of offline content items.
+  uint32 total_items;
+  // True if at least one prefetched article (Articles For You) is available.
+  bool has_prefetched_page;
+  // True if at least one offline page is available.
+  bool has_offline_page;
+  // True if at least one video file is available.
+  bool has_video;
+  // True if at least one audio file is available.
+  bool has_audio;
+};
+
+// Provides access to items available while offline.
+interface AvailableOfflineContentProvider {
+  // Returns some available pieces of content from downloads.
+  List() => (array<AvailableOfflineContent> out);
+  // Returns summary of available offline content.
+  Summarize() => (AvailableOfflineContentSummary out);
+  // Opens one of the items returned by List().
+  LaunchItem(string item_id, string name_space);
+  // Opens the downloads page to view all offline content.
+  LaunchDownloadsPage();
+};

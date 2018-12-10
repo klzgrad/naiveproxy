@@ -1,0 +1,58 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/android/rules.gni")
+import("//device/vr/buildflags/buildflags.gni")
+
+assert(enable_arcore)
+
+template("ar_module_tmpl") {
+  assert(defined(invoker.manifest_package))
+  assert(defined(invoker.module_name))
+
+  _manifest = "$target_gen_dir/$target_name/AndroidManifest.xml"
+  _manifest_target = "${target_name}__manifest"
+  jinja_template(_manifest_target) {
+    input = "//chrome/android/modules/ar/AndroidManifest.xml"
+    output = _manifest
+    variables = [
+      "target_sdk_version=$android_sdk_version",
+      "manifest_package=${invoker.manifest_package}",
+    ]
+  }
+
+  android_app_bundle_module(target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "module_name",
+                             "version_code",
+                           ])
+    android_manifest = _manifest
+    android_manifest_dep = ":$_manifest_target"
+    deps = [
+      "//third_party/arcore-android-sdk:libdynamite_client_java",
+    ]
+
+    # We only want to add the 32 bit arcore shim even for 64 bit monochrome
+    # builds. AR is never used in 64 bit mode. We store the arcore shim as a
+    # separate .so in the bundle module and only load as needed.
+    if (android_64bit_target_cpu && build_apk_secondary_abi) {
+      secondary_abi_loadable_modules = [ "//third_party/arcore-android-sdk/libraries/android_arm/libarcore_sdk_c_minimal.so" ]
+
+      # Bundletool requires all modules of a bundle to support the same set of
+      # architectures. Monochrome base module supports arm64. Add a zero-byte,
+      # "64 bit" dummy library to trick bundletool into thinking that the AR
+      # module does support arm64, too.
+      loadable_modules =
+          [ "//third_party/arcore-android-sdk/libarcore_dummy.so" ]
+    } else if (android_64bit_target_cpu && !build_apk_secondary_abi) {
+      loadable_modules = [ "//third_party/arcore-android-sdk/libraries/android_arm64/libarcore_sdk_c_minimal.so" ]
+    } else {
+      loadable_modules = [ "//third_party/arcore-android-sdk/libraries/android_arm/libarcore_sdk_c_minimal.so" ]
+    }
+    uncompress_shared_libraries = true
+
+    proguard_enabled = !is_java_debug
+  }
+}

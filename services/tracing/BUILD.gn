@@ -1,0 +1,128 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# There should be only one tracing service. It is currently
+# in the browser process. So, only //content/browser should link to this target.
+# Others modules should only need the public targets.
+import("//services/catalog/public/tools/catalog.gni")
+import("//services/service_manager/public/cpp/service.gni")
+import("//services/service_manager/public/service_manifest.gni")
+import("//services/service_manager/public/tools/test/service_test.gni")
+
+source_set("lib") {
+  sources = [
+    "agent_registry.cc",
+    "agent_registry.h",
+    "coordinator.cc",
+    "coordinator.h",
+    "recorder.cc",
+    "recorder.h",
+    "tracing_service.cc",
+    "tracing_service.h",
+  ]
+
+  public_deps = [
+    "//base",
+    "//mojo/public/cpp/bindings",
+    "//services/tracing/public/cpp",
+  ]
+
+  if (is_mac || is_linux || is_android || is_win) {
+    sources += [
+      "perfetto/json_trace_exporter.cc",
+      "perfetto/json_trace_exporter.h",
+      "perfetto/perfetto_service.cc",
+      "perfetto/perfetto_service.h",
+      "perfetto/perfetto_tracing_coordinator.cc",
+      "perfetto/perfetto_tracing_coordinator.h",
+      "perfetto/producer_host.cc",
+      "perfetto/producer_host.h",
+    ]
+
+    deps = [
+      "//third_party/perfetto/protos/perfetto/trace/chrome:minimal_complete_lite",
+    ]
+
+    public_deps += [ "//third_party/perfetto:libperfetto" ]
+  }
+}
+
+service_manifest("manifest") {
+  name = "tracing"
+  source = "manifest.json"
+}
+
+service("tracing") {
+  sources = [
+    "service_main.cc",
+  ]
+
+  deps = [
+    ":lib",
+    "//mojo/public/cpp/system",
+  ]
+}
+
+source_set("tests") {
+  testonly = true
+
+  sources = [
+    "agent_registry_unittest.cc",
+    "coordinator_unittest.cc",
+    "public/cpp/trace_event_agent_unittest.cc",
+    "recorder_unittest.cc",
+    "test_util.cc",
+    "test_util.h",
+  ]
+
+  if (is_mac || is_linux || is_android) {
+    sources += [ "public/cpp/perfetto/trace_event_data_source_unittest.cc" ]
+  }
+
+  if (!is_android) {
+    sources += [ "tracing_service_unittest.cc" ]
+  }
+
+  deps = [
+    ":lib",
+    "//base",
+    "//base/test:test_support",
+    "//mojo/public/cpp/bindings",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/cpp:service_test_support",
+    "//services/service_manager/public/mojom",
+    "//services/tracing:lib",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+
+  if (is_mac || is_linux || is_android) {
+    sources += [
+      "perfetto/json_trace_exporter_unittest.cc",
+      "perfetto/perfetto_integration_unittest.cc",
+    ]
+
+    deps += [
+      "//third_party/perfetto/include/perfetto/protozero:protozero",
+      "//third_party/perfetto/protos/perfetto/common",
+      "//third_party/perfetto/protos/perfetto/trace:lite",
+      "//third_party/perfetto/protos/perfetto/trace/chrome:lite",
+    ]
+  }
+
+  data_deps = [
+    ":tracing",
+  ]
+}
+
+service_manifest("unittest_manifest") {
+  name = "tracing_unittests"
+  source = "unittest_manifest.json"
+}
+
+catalog("tests_catalog") {
+  testonly = true
+  embedded_services = [ ":unittest_manifest" ]
+  standalone_services = [ ":manifest" ]
+}

@@ -1,0 +1,59 @@
+# Copyright (C) 2017 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("//build_overrides/build.gni")
+
+if (!build_with_chromium) {
+  import("//gn/standalone/proto_library.gni")
+} else {
+  import("//third_party/protobuf/proto_library.gni")
+}
+
+# Equivalent to proto_library (generation of .h/.cc from .proto files) but
+# enables also generation using the protozero plugin.
+# The generated files will have the .pbzero.{cc,h} suffix, as opposed to the
+# .pb.{cc,h} of the official proto library.
+template("protozero_library") {
+  proto_library(target_name) {
+    perfetto_root_path = invoker.perfetto_root_path
+
+    generate_cc = false
+    generate_python = false
+    generator_plugin_label = perfetto_root_path + "src/protozero/protoc_plugin"
+    generator_plugin_suffix = ".pbzero"
+    if (build_with_chromium) {
+      component_build_force_source_set = true
+    }
+
+    if (defined(invoker.deps)) {
+      deps = invoker.deps
+    } else {
+      deps = []
+    }
+
+    deps += [ perfetto_root_path + "src/protozero" ]
+
+    forward_variables_from(invoker,
+                           [
+                             "defines",
+                             "generator_plugin_options",
+                             "include_dirs",
+                             "proto_in_dir",
+                             "proto_out_dir",
+                             "sources",
+                             "testonly",
+                             "visibility",
+                           ])
+  }
+}

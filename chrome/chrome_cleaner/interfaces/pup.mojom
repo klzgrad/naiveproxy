@@ -1,0 +1,61 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module chrome_cleaner.mojom;
+
+import "chrome/chrome_cleaner/interfaces/string16_embedded_nulls.mojom";
+import "chrome/chrome_cleaner/interfaces/windows_handle.mojom";
+import "components/chrome_cleaner/public/interfaces/chrome_prompt.mojom";
+import "mojo/public/mojom/base/string16.mojom";
+
+// Source:
+//   https://msdn.microsoft.com/en-us/library/windows/desktop/aa384129.aspx
+enum Wow64Access {
+  kNone = 0,
+  // KEY_WOW64_64KEY
+  k64Key = 0x0100,
+  // KEY_WOW64_32KEY
+  k32Key = 0x0200,
+};
+
+// Typemapped to chrome_cleaner::RegKeyPath.
+struct RegKeyPath {
+  WindowsHandle rootkey;
+  // This is only sent by URZA, which currently doesn't support registry paths
+  // with embedded nulls.
+  mojo_base.mojom.String16 subkey;
+  Wow64Access wow64access;
+};
+
+// Used for reporting detected registry footprints.
+// Typemapped to chrome_cleaner::PUPData::RegistryFootprint.
+struct RegistryFootprint {
+  RegKeyPath key_path;
+  String16EmbeddedNulls value_name;
+  String16EmbeddedNulls value_substring;
+  // An enumerator of chrome_cleaner::RegistryMatchRule.
+  uint32 rule;
+};
+
+// Typemapped to chrome_cleaner::UwS::TraceLocation enumeration from
+// chrome_cleaner/logging/proto/shared_data.proto.
+// The struct is used here as a work-around to make Mojo check passed values
+// without having to duplicate the enum definition.
+struct TraceLocation {
+  int32 value;
+};
+
+// Typemapped to chrome_cleaner::PUPData::FileInfo.
+struct FileInfo {
+  array<TraceLocation> found_in;
+};
+
+// Partially typemapped to chrome_cleaner::PUPData::PUP.
+// UwS signatures are not included.
+struct PUP {
+  array<FilePath> expanded_disk_footprints;
+  array<RegistryFootprint> expanded_registry_footprints;
+  array<mojo_base.mojom.String16> expanded_scheduled_tasks;
+  map<FilePath, FileInfo> disk_footprints_info;
+};

@@ -1,0 +1,93 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module blink.mojom;
+
+import "third_party/blink/public/mojom/message_port/message_port.mojom";
+import "third_party/blink/public/mojom/service_worker/service_worker_error_type.mojom";
+import "third_party/blink/public/mojom/service_worker/service_worker_client.mojom";
+import "url/mojom/url.mojom";
+
+// Host for a running service worker execution context. Implemented in the
+// browser process. The service worker running in the renderer process uses this
+// interface to ask the browser process to do operations needed for
+// ServiceWorkerGlobalScope functionalities.
+interface ServiceWorkerHost {
+  // Sets V8 code cache |data| for the given service worker script |url|, which
+  // may be the main script or an imported script.
+  SetCachedMetadata(url.mojom.Url url, array<uint8> data);
+
+  // Clears V8 code cache for |url| set by the above |SetCachedMetadata| before.
+  ClearCachedMetadata(url.mojom.Url url);
+
+  // Corresponds to Clients#matchAll(options). Gets information of all service
+  // worker clients matching |options|.
+  GetClients(ServiceWorkerClientQueryOptions options)
+    => (array<ServiceWorkerClientInfo> clients);
+
+  // Corresponds to Clients#get(id). Gets information of the service worker
+  // client with |client_uuid|. |client| is null if it was not found or is not
+  // same-origin with this service worker.
+  GetClient(string client_uuid) => (ServiceWorkerClientInfo? client);
+
+  // Corresponds to Clients#openWindow(url). Requests the browser to open a tab
+  // with |url|.
+  // If the tab was successfully opened, |success| is true. |client| contains
+  // information about the newly opened window, but may be null if that
+  // information could not be obtained (this can happen for a cross-origin
+  // window, or if the browser process could not get the information in time
+  // before the window was closed).
+  // If |success| is false, |error_msg| describes the failure.
+  OpenNewTab(url.mojom.Url url)
+    => (bool success, ServiceWorkerClientInfo? client, string? error_msg);
+
+  // Corresponds to PaymentRequestEvent#openWindow(url).
+  // Spec: https://w3c.github.io/payment-handler/#openwindow-method
+  // Requests the browser to open a payment handler window with |url|.
+  // If the window was successfully opened, |success| is true. |client| contains
+  // information about the newly opened window, but may be null if that
+  // information could not be obtained (this can happen for a cross-origin
+  // window, or if the browser process could not get the information in time
+  // before the window was closed).
+  // If |success| is false, |error_msg| describes the failure.
+  OpenPaymentHandlerWindow(url.mojom.Url url)
+    => (bool success, ServiceWorkerClientInfo? client, string? error_msg);
+
+  // Corresponds to Client#postMessage(). Requests the browser to post |message|
+  // to the client with |client_uuid|.
+  PostMessageToClient(string client_uuid, TransferableMessage message);
+
+  // Corresponds to WindowClient#focus(). Requests the browser to focus the
+  // client with |client_uuid|.
+  // On success, |client| contains service worker client information of the
+  // focused window.
+  // Otherwise, |client| is null.
+  FocusClient(string client_uuid) => (ServiceWorkerClientInfo? client);
+
+  // Corresponds to WindowClient#navigate(). Requests the browser to navigate
+  // the client with |client_uuid| to |url|.
+  // If the navigation was successful, |success| is true. |client| contains
+  // information about the navigated window, but may be null if that
+  // information could not be obtained (this can happen for a cross-origin
+  // window, or if the browser process could not get the information in time
+  // before the window was closed).
+  // If |success| is false, |error_msg| describes the failure.
+  NavigateClient(string client_uuid, url.mojom.Url url)
+    => (bool success, ServiceWorkerClientInfo? client, string? error_msg);
+
+  // Corresponds to ServiceWorkerGlobalScope#skipWaiting(). Allows this service
+  // worker to progress from the registration's waiting position to active even
+  // while service worker clients are using the registration.
+  // The callback is called with |success| true when the skipWaiting() promise
+  // should be resolved. If |success| is false, the operation failed fatally,
+  // but per spec the skipWaiting() promise should be left unresolved as it can
+  // never reject.
+  SkipWaiting() => (bool success);
+
+  // Corresponds to Clients#claim(). Allows an active service worker to set
+  // itself as the controller for all clients within its scope.
+  // On success, |error| is kNone without |error_msg| set.
+  // Otherwise, |error| and |error_msg| describe the failure.
+  ClaimClients() => (ServiceWorkerErrorType error, string? error_msg);
+};

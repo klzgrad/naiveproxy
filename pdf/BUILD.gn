@@ -1,0 +1,158 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/buildflag_header.gni")
+import("//build/config/features.gni")
+import("//build/config/jumbo.gni")
+import("//pdf/features.gni")
+import("//testing/test.gni")
+import("//third_party/pdfium/pdfium.gni")
+import("//v8/gni/v8.gni")
+
+# Generate a buildflag header for compile-time checking of PDF support.
+buildflag_header("buildflags") {
+  header = "buildflags.h"
+  flags = [ "ENABLE_PDF=$enable_pdf" ]
+}
+
+if (enable_pdf) {
+  pdf_engine = 0  # 0 PDFium
+
+  jumbo_static_library("pdf") {
+    deps = [
+      "//base",
+      "//gin",
+      "//net",
+      "//ppapi/cpp:objects",
+      "//ppapi/cpp/private:internal_module",
+      "//ui/base",
+      "//ui/gfx/range",
+    ]
+
+    public = [
+      "pdf.h",
+      "pdf_ppapi.h",
+    ]
+
+    sources = [
+      "chunk_stream.h",
+      "document_loader.h",
+      "document_loader_impl.cc",
+      "document_loader_impl.h",
+      "draw_utils.cc",
+      "draw_utils.h",
+      "out_of_process_instance.cc",
+      "out_of_process_instance.h",
+      "paint_aggregator.cc",
+      "paint_aggregator.h",
+      "paint_manager.cc",
+      "paint_manager.h",
+      "pdf.cc",
+      "pdf.h",
+      "pdf_engine.cc",
+      "pdf_engine.h",
+      "pdf_ppapi.cc",
+      "pdf_ppapi.h",
+      "pdf_transform.cc",
+      "pdf_transform.h",
+      "preview_mode_client.cc",
+      "preview_mode_client.h",
+      "range_set.cc",
+      "range_set.h",
+      "url_loader_wrapper.h",
+      "url_loader_wrapper_impl.cc",
+      "url_loader_wrapper_impl.h",
+    ]
+
+    include_dirs = []
+    defines = []
+
+    if (pdf_engine == 0) {
+      deps += [
+        "//pdf/pdfium/fuzzers",
+        "//printing",
+        "//third_party/pdfium",
+      ]
+
+      sources += [
+        "pdfium/pdfium_api_string_buffer_adapter.cc",
+        "pdfium/pdfium_api_string_buffer_adapter.h",
+        "pdfium/pdfium_assert_matching_enums.cc",
+        "pdfium/pdfium_document.cc",
+        "pdfium/pdfium_document.h",
+        "pdfium/pdfium_engine.cc",
+        "pdfium/pdfium_engine.h",
+        "pdfium/pdfium_engine_exports.cc",
+        "pdfium/pdfium_engine_exports.h",
+        "pdfium/pdfium_form_filler.cc",
+        "pdfium/pdfium_form_filler.h",
+        "pdfium/pdfium_mem_buffer_file_read.cc",
+        "pdfium/pdfium_mem_buffer_file_read.h",
+        "pdfium/pdfium_mem_buffer_file_write.cc",
+        "pdfium/pdfium_mem_buffer_file_write.h",
+        "pdfium/pdfium_page.cc",
+        "pdfium/pdfium_page.h",
+        "pdfium/pdfium_print.cc",
+        "pdfium/pdfium_print.h",
+        "pdfium/pdfium_range.cc",
+        "pdfium/pdfium_range.h",
+        "pdfium/pdfium_unsupported_features.cc",
+        "pdfium/pdfium_unsupported_features.h",
+      ]
+
+      include_dirs += [ "//third_party/pdfium" ]
+
+      defines += [ "PDFIUM_PRINT_TEXT_WITH_GDI" ]
+      if (pdf_enable_xfa) {
+        defines += [ "PDF_ENABLE_XFA" ]
+      }
+    }
+  }
+
+  test("pdf_unittests") {
+    sources = [
+      "chunk_stream_unittest.cc",
+      "document_loader_impl_unittest.cc",
+      "pdf_transform_unittest.cc",
+      "range_set_unittest.cc",
+      "run_all_unittests.cc",
+    ]
+
+    deps = [
+      ":pdf",
+      "//base",
+      "//base/test:test_support",
+      "//ppapi/c",
+      "//ppapi/cpp",
+      "//testing/gmock",
+      "//testing/gtest",
+      "//ui/gfx/range",
+    ]
+
+    data = [
+      "test/data/",
+    ]
+
+    if (pdf_engine == 0) {
+      configs += [ "//v8:external_startup_data" ]
+      sources += [
+        "pdfium/findtext_unittest.cc",
+        "pdfium/pdfium_engine_exports_unittest.cc",
+      ]
+      include_dirs = [ "//third_party/pdfium" ]
+
+      if (v8_use_external_startup_data) {
+        data += [
+          "$root_out_dir/natives_blob.bin",
+          "$root_out_dir/snapshot_blob.bin",
+        ]
+      }
+    }
+  }
+} else {
+  # Dummy group when PDF support is disabled so targets can unconditionally
+  # depend on it.
+  group("pdf") {
+  }
+}

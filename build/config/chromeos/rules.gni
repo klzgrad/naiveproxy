@@ -1,0 +1,97 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+assert(is_chromeos)
+
+declare_args() {
+  cros_board = ""
+  cros_sdk_version = ""
+}
+
+# Creates a script at $generated_script that can be used to launch a cros VM
+# and optionally run a test within it.
+# Args:
+#   generated_script: Path to place the generated script.
+#   deploy_chrome: If true, deploys a locally built chrome located in the root
+#                  build dir to the VM after launching it.
+template("generate_vm_runner_script") {
+  _cache_path_prefix =
+      "//build/cros_cache/chrome-sdk/tarballs/${cros_board}+${cros_sdk_version}"
+  _vm_image_path = "${_cache_path_prefix}+chromiumos_qemu_image.tar.xz/"
+  _qemu_dir = "${_cache_path_prefix}+qemu/"
+
+  action(target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "testonly",
+                             "need_toolchain",
+                           ])
+
+    script = "//build/chromeos/create_vm_test_script.py"
+
+    outputs = [
+      invoker.generated_script,
+    ]
+
+    deps = [
+      "//testing/buildbot/filters:chromeos_filters",
+    ]
+
+    data = [
+      # We use android test-runner's results libs to construct gtest output
+      # json.
+      "//build/android/pylib/__init__.py",
+      "//build/android/pylib/base/",
+      "//build/android/pylib/results/",
+      invoker.generated_script,
+      "//build/chromeos/",
+      "//build/cros_cache/chrome-sdk/misc/",
+
+      # We use luci-py's subprocess42 to launch test processes.
+      "//tools/swarming_client/utils/",
+
+      # The LKGM file controls what version of the VM image to download. Add it
+      # as data here so that changes to it will trigger analyze.
+      "//chromeos/CHROMEOS_LKGM",
+      "//third_party/chromite/",
+      _vm_image_path,
+      _qemu_dir,
+    ]
+    if (defined(need_toolchain) && need_toolchain) {
+      data += [ "${_cache_path_prefix}+target_toolchain/" ]
+    }
+
+    # Required arguments used at build time by the runner script generator.
+    args = [
+      "--script-output-path",
+      rebase_path(invoker.generated_script, root_build_dir),
+      "--cros-cache",
+      rebase_path("//build/cros_cache/", root_build_dir),
+      "--board",
+      cros_board,
+      "--output-directory",
+      rebase_path(root_out_dir, root_build_dir),
+    ]
+
+    if (defined(invoker.deploy_chrome) && invoker.deploy_chrome) {
+      args += [ "--deploy-chrome" ]
+    }
+
+    # When --test-exe is specified, run_vm_test will push the exe to the VM and
+    # execute it. Otherwise it wraps a host-side command and just takes care
+    # launching & tearing-down the VM.
+    if (defined(invoker.test_exe)) {
+      args += [
+        "--test-exe",
+        rebase_path(invoker.test_exe, root_build_dir),
+      ]
+      if (defined(invoker.runtime_deps_file)) {
+        args += [
+          "--runtime-deps-path",
+          rebase_path(invoker.runtime_deps_file, root_build_dir),
+        ]
+      }
+    }
+  }
+}

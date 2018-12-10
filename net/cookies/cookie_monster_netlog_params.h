@@ -1,0 +1,55 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#ifndef NET_COOKIES_COOKIE_MONSTER_NETLOG_PARAMS_H_
+#define NET_COOKIES_COOKIE_MONSTER_NETLOG_PARAMS_H_
+
+#include <memory>
+
+#include "base/values.h"
+#include "net/cookies/canonical_cookie.h"
+#include "net/cookies/cookie_change_dispatcher.h"
+#include "net/cookies/cookie_monster.h"
+#include "net/cookies/cookie_store.h"
+#include "net/log/net_log_capture_mode.h"
+
+namespace net {
+
+// Returns a Value containing NetLog parameters for constructing
+// a CookieMonster.
+std::unique_ptr<base::Value> NetLogCookieMonsterConstructorCallback(
+    bool persistent_store,
+    bool channel_id_service,
+    NetLogCaptureMode capture_mode);
+
+// Returns a Value containing NetLog parameters for adding a cookie.
+std::unique_ptr<base::Value> NetLogCookieMonsterCookieAdded(
+    const CanonicalCookie* cookie,
+    bool sync_requested,
+    NetLogCaptureMode capture_mode);
+
+// Returns a Value containing NetLog parameters for deleting a cookie.
+std::unique_ptr<base::Value> NetLogCookieMonsterCookieDeleted(
+    const CanonicalCookie* cookie,
+    CookieChangeCause cause,
+    bool sync_requested,
+    NetLogCaptureMode capture_mode);
+
+// Returns a Value containing NetLog parameters for when a cookie addition
+// is rejected because of a conflict with a secure cookie.
+std::unique_ptr<base::Value> NetLogCookieMonsterCookieRejectedSecure(
+    const CanonicalCookie* old_cookie,
+    const CanonicalCookie* new_cookie,
+    NetLogCaptureMode capture_mode);
+
+// Returns a Value containing NetLog parameters for when a cookie addition
+// is rejected because of a conflict with an httponly cookie.
+std::unique_ptr<base::Value> NetLogCookieMonsterCookieRejectedHttponly(
+    const CanonicalCookie* old_cookie,
+    const CanonicalCookie* new_cookie,
+    NetLogCaptureMode capture_mode);
+
+}  // namespace net
+
+#endif  // NET_COOKIES_COOKIE_MONSTER_NETLOG_PARAMS_H_

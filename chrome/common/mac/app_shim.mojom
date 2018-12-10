@@ -1,0 +1,62 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module chrome.mojom;
+
+import "mojo/public/mojom/base/file_path.mojom";
+
+[Native]
+enum AppShimLaunchType;
+
+[Native]
+enum AppShimLaunchResult;
+
+[Native]
+enum AppShimFocusType;
+
+[Native]
+enum AppShimAttentionType;
+
+// Interface through which the browser communicates to a shim process.
+interface AppShim {
+  // Signals that a previous LaunchApp message has been processed, and lets the
+  // app shim process know whether it was registered successfully.
+  LaunchAppDone(AppShimLaunchResult launch_result);
+
+  // Instructs the shim to hide the app.
+  Hide();
+
+  // Instructs the shim to show the app.
+  UnhideWithoutActivation();
+
+  // Instructs the shim to request or cancel user attention.
+  SetUserAttention(AppShimAttentionType attention_type);
+};
+
+// Interface through which the a process communicates to the browser process.
+interface AppShimHost {
+  // Signals to the main Chrome process that a shim has started. The app shim
+  // process is requesting to be associated with the given profile and app_id.
+  // Once the profile and app_id are stored, and all future messages from the
+  // app shim relate to this app.
+  LaunchApp(AppShim app_shim,
+            mojo_base.mojom.FilePath profile_dir,
+            string app_mode_id,
+            AppShimLaunchType launch_type,
+            array<mojo_base.mojom.FilePath> files);
+
+  // Sent when the user has indicated a desire to focus the app, either by
+  // clicking on the app's icon in the dock or by selecting it with Cmd+Tab. In
+  // response, Chrome brings the app's windows to the foreground, or relaunches
+  // if the focus type indicates a reopen and there are no open windows.
+  FocusApp(AppShimFocusType focus_type,
+           array<mojo_base.mojom.FilePath> files);
+
+  // Sent when the app shim is hidden or unhidden.
+  SetAppHidden(bool hidden);
+
+  // Called when the app shim process notifies that the app should quit.
+  QuitApp();
+};
+

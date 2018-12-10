@@ -1,0 +1,139 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module device.mojom;
+
+struct SerialDeviceInfo {
+  string path;
+  uint16 vendor_id;
+  bool has_vendor_id = false;
+  uint16 product_id;
+  bool has_product_id = false;
+  string? display_name;
+};
+
+enum SerialSendError {
+  NONE,
+  DISCONNECTED,
+  PENDING,
+  TIMEOUT,
+  SYSTEM_ERROR,
+};
+
+enum SerialReceiveError {
+  NONE,
+  DISCONNECTED,
+  TIMEOUT,
+  DEVICE_LOST,
+  BREAK,
+  FRAME_ERROR,
+  OVERRUN,
+  BUFFER_OVERFLOW,
+  PARITY_ERROR,
+  SYSTEM_ERROR,
+};
+
+enum SerialDataBits {
+  NONE,
+  SEVEN,
+  EIGHT,
+};
+
+enum SerialParityBit {
+  NONE,
+  NO_PARITY,
+  ODD,
+  EVEN,
+};
+
+enum SerialStopBits {
+  NONE,
+  ONE,
+  TWO,
+};
+
+struct SerialConnectionOptions {
+  uint32 bitrate = 0;
+  SerialDataBits data_bits = NONE;
+  SerialParityBit parity_bit = NONE;
+  SerialStopBits stop_bits = NONE;
+  bool cts_flow_control;
+  bool has_cts_flow_control = false;
+};
+
+struct SerialConnectionInfo {
+  uint32 bitrate = 0;
+  SerialDataBits data_bits = NONE;
+  SerialParityBit parity_bit = NONE;
+  SerialStopBits stop_bits = NONE;
+  bool cts_flow_control;
+};
+
+struct SerialHostControlSignals {
+  bool dtr;
+  bool has_dtr = false;
+  bool rts;
+  bool has_rts = false;
+};
+
+struct SerialDeviceControlSignals {
+  bool dcd;
+  bool cts;
+  bool ri;
+  bool dsr;
+};
+
+// Discovers and enumerates serial devices available to the host.
+interface SerialDeviceEnumerator {
+  GetDevices() => (array<SerialDeviceInfo> devices);
+};
+
+// Performs asynchronous I/O on serial devices.
+interface SerialIoHandler {
+  // Initiates an Open of the device then returns result.
+  Open(string port, SerialConnectionOptions options) => (bool success);
+
+  // Performs a Read operation then returns retrieved data and the
+  // result. Note that the Read may succeed partially, means that even if
+  // |error| indicates an error other than NONE, |data| may still contain
+  // some retrieved data with the max size |bytes|. Behavior is undefined if
+  // this is called while a Read is already pending.
+  Read(uint32 bytes) => (array<uint8> data, SerialReceiveError error);
+
+  // Performs a Write operation then returns written data and the result.
+  // Note that the Write may succeed partially, means that even if |error|
+  // indicates an error other than NONE, |bytes_written| bytes have already been
+  // written although it may be <= size of |data|. Behavior is undefined if this
+  // is called while a Write is already pending.
+  Write(array<uint8> data) => (uint32 bytes_written, SerialSendError error);
+
+  // Attempts to cancel a pending read operation.
+  CancelRead(SerialReceiveError reason);
+
+  // Attempts to cancel a pending write operation.
+  CancelWrite(SerialSendError reason);
+
+  // Flushes input and output buffers.
+  Flush() => (bool success);
+
+  // Reads current control signals (DCD, CTS, etc.).
+  GetControlSignals() => (SerialDeviceControlSignals signals);
+
+  // Sets one or more control signals (DTR and/or RTS) and returns result.
+  SetControlSignals(SerialHostControlSignals signals) => (bool success);
+
+  // Performs platform-specific port configuration and returns result.
+  ConfigurePort(SerialConnectionOptions options) => (bool success);
+
+  // Performs a platform-specific port configuration query and returns got info.
+  GetPortInfo() => (SerialConnectionInfo info);
+
+  // Initiates a BREAK signal. Places the transmission line in a break state
+  // until the |ClearBreak| is called.
+  SetBreak() => (bool success);
+
+  // Terminates the BREAK signal. Places the transmission line in a nonbreak
+  // state.
+  ClearBreak() => (bool success);
+};

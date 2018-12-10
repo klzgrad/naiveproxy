@@ -1,0 +1,22 @@
+#!/usr/bin/env python
+
+import os
+src_dir = os.path.abspath(os.path.join(os.path.dirname(__file__),'..','..'))
+
+def r(c):
+  print c
+  os.system(c)
+
+os.chdir(src_dir)
+r('gn gen out/Debug')
+r('ninja -C out/Debug js_embed')
+os.chdir('third_party/protobuf/src/google/protobuf/compiler/js')
+js_embed = os.path.join(src_dir,'out/Debug/js_embed')
+r('{} ./well_known_types/any.js ./well_known_types/struct.js \
+  ./well_known_types/timestamp.js > well_known_types_embed.cc'.format(js_embed))
+os.chdir(src_dir)
+r('ninja -C out/Debug protoc')
+os.chdir('third_party/protobuf/src')
+protoc = os.path.join(src_dir,'out/Debug/protoc')
+r('{} --python_out=../python google/protobuf/descriptor.proto'.format(protoc))
+

@@ -1,0 +1,232 @@
+# Copyright (c) 2014 The WebRTC project authors. All Rights Reserved.
+#
+# Use of this source code is governed by a BSD-style license
+# that can be found in the LICENSE file in the root of the source
+# tree. An additional intellectual property rights grant can be found
+# in the file PATENTS.  All contributing project authors may
+# be found in the AUTHORS file in the root of the source tree.
+
+if (is_android) {
+  import("//build/config/android/config.gni")
+  import("//build/config/android/rules.gni")
+}
+import("../webrtc.gni")
+
+rtc_static_library("system_wrappers") {
+  visibility = [ "*" ]
+  sources = [
+    "include/clock.h",
+    "include/cpu_info.h",
+    "include/event_wrapper.h",
+    "include/ntp_time.h",
+    "include/rtp_to_ntp_estimator.h",
+    "include/sleep.h",
+    "source/clock.cc",
+    "source/cpu_features.cc",
+    "source/cpu_info.cc",
+    "source/event.cc",
+    "source/event_timer_win.cc",
+    "source/event_timer_win.h",
+    "source/rtp_to_ntp_estimator.cc",
+    "source/sleep.cc",
+  ]
+
+  defines = []
+  libs = []
+  deps = [
+    ":cpu_features_api",
+    ":field_trial_api",
+    ":metrics_api",
+    ":runtime_enabled_features_api",
+    "..:webrtc_common",
+    "../modules:module_api_public",
+    "../rtc_base:checks",
+    "../rtc_base/synchronization:rw_lock_wrapper",
+    "../rtc_base/system:arch",
+    "//third_party/abseil-cpp/absl/types:optional",
+  ]
+
+  if (is_posix || is_fuchsia) {
+    sources += [
+      "source/event_timer_posix.cc",
+      "source/event_timer_posix.h",
+    ]
+  }
+
+  if (is_android) {
+    defines += [ "WEBRTC_THREAD_RR" ]
+
+    if (build_with_mozilla) {
+      include_dirs = [
+        "/config/external/nspr",
+        "/nsprpub/lib/ds",
+        "/nsprpub/pr/include",
+      ]
+    } else {
+      deps += [ ":cpu_features_android" ]
+    }
+
+    libs += [ "log" ]
+  }
+
+  if (is_linux) {
+    defines += [ "WEBRTC_THREAD_RR" ]
+
+    if (!build_with_chromium) {
+      deps += [ ":cpu_features_linux" ]
+    }
+
+    libs += [ "rt" ]
+  }
+
+  if (is_ios || is_mac) {
+    defines += [ "WEBRTC_THREAD_RR" ]
+  }
+
+  if (is_win) {
+    libs += [ "winmm.lib" ]
+
+    # Windows needs ../rtc_base:rtc_base due to include of
+    # webrtc/rtc_base/win32.h in source/clock.cc.
+    deps += [ "../rtc_base:rtc_base" ]
+  }
+
+  deps += [
+    "../rtc_base:rtc_base_approved",
+    "../rtc_base:rtc_numerics",
+  ]
+}
+
+rtc_source_set("cpu_features_api") {
+  sources = [
+    "include/cpu_features_wrapper.h",
+  ]
+  deps = [
+    "..:webrtc_common",
+  ]
+}
+
+rtc_source_set("field_trial_api") {
+  sources = [
+    "include/field_trial.h",
+  ]
+}
+
+rtc_source_set("runtime_enabled_features_api") {
+  visibility = [ "*" ]
+  sources = [
+    "include/runtime_enabled_features.h",
+  ]
+}
+
+rtc_source_set("metrics_api") {
+  visibility = [ "*" ]
+  sources = [
+    "include/metrics.h",
+  ]
+  deps = [
+    "..:webrtc_common",
+    "../rtc_base:checks",
+    "../rtc_base:rtc_base_approved",
+  ]
+}
+
+rtc_source_set("field_trial_default") {
+  visibility = [ "*" ]
+  sources = [
+    "include/field_trial_default.h",
+    "source/field_trial_default.cc",
+  ]
+  deps = [
+    ":field_trial_api",
+  ]
+}
+
+rtc_source_set("runtime_enabled_features_default") {
+  visibility = [ "*" ]
+  sources = [
+    "source/runtime_enabled_features_default.cc",
+  ]
+  deps = [
+    ":runtime_enabled_features_api",
+    "../rtc_base:rtc_base_approved",
+  ]
+}
+
+rtc_source_set("metrics_default") {
+  visibility = [ "*" ]
+  sources = [
+    "include/metrics_default.h",
+    "source/metrics_default.cc",
+  ]
+  deps = [
+    ":metrics_api",
+    "../rtc_base:rtc_base_approved",
+  ]
+}
+
+group("system_wrappers_default") {
+  deps = [
+    ":field_trial_default",
+    ":metrics_default",
+    ":runtime_enabled_features_default",
+    ":system_wrappers",
+  ]
+}
+
+if (is_android && !build_with_mozilla) {
+  rtc_static_library("cpu_features_android") {
+    sources = [
+      "source/cpu_features_android.c",
+    ]
+
+    deps = [
+      "//third_party/android_tools:cpu_features",
+    ]
+  }
+}
+
+if (is_linux) {
+  rtc_static_library("cpu_features_linux") {
+    sources = [
+      "source/cpu_features_linux.c",
+    ]
+    deps = [
+      ":cpu_features_api",
+      "../rtc_base/system:arch",
+    ]
+  }
+}
+
+if (rtc_include_tests) {
+  rtc_test("system_wrappers_unittests") {
+    testonly = true
+    sources = [
+      "source/clock_unittest.cc",
+      "source/metrics_default_unittest.cc",
+      "source/metrics_unittest.cc",
+      "source/ntp_time_unittest.cc",
+      "source/rtp_to_ntp_estimator_unittest.cc",
+    ]
+
+    if (is_posix || is_fuchsia) {
+      sources += [ "source/event_timer_posix_unittest.cc" ]
+    }
+
+    deps = [
+      ":metrics_api",
+      ":metrics_default",
+      ":system_wrappers",
+      "..:webrtc_common",
+      "../rtc_base:rtc_base_approved",
+      "../test:test_main",
+      "//testing/gtest",
+    ]
+
+    if (is_android) {
+      deps += [ "//testing/android/native_test:native_test_support" ]
+
+      shard_timeout = 900
+    }
+  }
+}
