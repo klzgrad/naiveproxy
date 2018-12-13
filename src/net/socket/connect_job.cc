@@ -162,7 +162,8 @@ std::unique_ptr<ConnectJob> ConnectJob::CreateConnectJob(
         std::move(ssl_params), delegate, nullptr /* net_log */);
   }
 
-  if (proxy_server.is_http() || proxy_server.is_https()) {
+  if (proxy_server.is_http() || proxy_server.is_https() ||
+      proxy_server.is_quic()) {
     return std::make_unique<HttpProxyConnectJob>(
         request_priority, socket_tag, common_connect_job_params,
         std::move(http_proxy_params), delegate, nullptr /* net_log */);
