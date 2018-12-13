@@ -241,7 +241,7 @@ int InitSocketPoolHelper(ClientSocketPoolManager::SocketGroupType group_type,
 
   // Finally, get the connection started.
 
-  if (proxy_info.is_http() || proxy_info.is_https()) {
+  if (proxy_info.is_http() || proxy_info.is_https() || proxy_info.is_quic()) {
     HttpProxyClientSocketPool* pool =
         session->GetSocketPoolForHTTPProxy(socket_pool_type, *proxy_host_port);
     if (num_preconnect_streams) {
