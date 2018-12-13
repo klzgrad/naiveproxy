@@ -51,6 +51,8 @@
 #include "net/url_request/url_request_context_builder.h"
 #include "url/gurl.h"
 #include "url/scheme_host_port.h"
+#include "base/strings/strcat.h"
+#include "base/strings/string_util.h"
 
 #if defined(OS_MACOSX)
 #include "base/mac/scoped_nsautorelease_pool.h"
@@ -72,6 +74,7 @@ struct Params {
   net::NaiveProxy::Protocol protocol;
   bool use_proxy;
   std::string proxy_url;
+  bool is_quic;
   std::string proxy_user;
   std::string proxy_pass;
   std::string host_resolver_rules;
@@ -113,7 +116,11 @@ std::unique_ptr<net::URLRequestContext> BuildURLRequestContext(
 
   net::ProxyConfig proxy_config;
   if (params.use_proxy) {
-    proxy_config.proxy_rules().ParseFromString(params.proxy_url);
+    std::string proxy_url = params.proxy_url;
+    if (params.is_quic) {
+      proxy_url = base::StrCat({"quic://", proxy_url.substr(sizeof("https://") - 1)});
+    }
+    proxy_config.proxy_rules().ParseFromString(proxy_url);
   }
   auto proxy_service = net::ProxyResolutionService::CreateWithoutProxyResolver(
       std::make_unique<net::ProxyConfigServiceFixed>(
@@ -131,7 +138,7 @@ std::unique_ptr<net::URLRequestContext> BuildURLRequestContext(
 
   auto context = builder.Build();
 
-  if (params.use_proxy) {
+  if (params.use_proxy && !params.proxy_user.empty() && !params.proxy_pass.empty()) {
     net::HttpNetworkSession* session =
         context->http_transaction_factory()->GetSession();
     net::HttpAuthCache* auth_cache = session->http_auth_cache();
@@ -155,10 +162,10 @@ bool ParseCommandLineFlags(Params* params) {
                  "Options:\n"
                  "-h, --help                 Show this message\n"
                  "--version                  Print version\n"
+                 "--proto=[socks|http]       Protocol to accept (socks)\n"
                  "--addr=<address>           Address to listen on (0.0.0.0)\n"
                  "--port=<port>              Port to listen on (1080)\n"
-                 "--proto=[socks|http]       Protocol to accept (socks)\n"
-                 "--proxy=https://<user>:<pass>@<hostname>[:<port>]\n"
+                 "--proxy=[https|quic]://<user>:<pass>@<hostname>[:<port>]\n"
                  "                           Proxy specification.\n"
                  "--log                      Log to stderr, otherwise no log\n"
                  "--log-net-log=<path>       Save NetLog\n"
@@ -173,7 +180,24 @@ bool ParseCommandLineFlags(Params* params) {
     return false;
   }
 
-  params->listen_addr = "0.0.0.0";
+  params->protocol = net::NaiveProxy::kSocks5;
+  if (line.HasSwitch("proto")) {
+    const auto& proto = line.GetSwitchValueASCII("proto");
+    if (proto == "socks") {
+      params->protocol = net::NaiveProxy::kSocks5;
+    } else if (proto == "http") {
+      params->protocol = net::NaiveProxy::kHttp;
+    } else {
+      LOG(ERROR) << "Invalid --proto";
+      return false;
+    }
+  }
+
+  if (params->protocol == net::NaiveProxy::kSocks5) {
+    params->listen_addr = "0.0.0.0";
+  } else {
+    params->listen_addr = "127.0.0.1";
+  }
   if (line.HasSwitch("addr")) {
     params->listen_addr = line.GetSwitchValueASCII("addr");
   }
@@ -196,21 +220,14 @@ bool ParseCommandLineFlags(Params* params) {
     }
   }
 
-  params->protocol = net::NaiveProxy::kSocks5;
-  if (line.HasSwitch("proto")) {
-    const auto& proto = line.GetSwitchValueASCII("proto");
-    if (proto == "socks") {
-      params->protocol = net::NaiveProxy::kSocks5;
-    } else if (proto == "http") {
-      params->protocol = net::NaiveProxy::kHttp;
-    } else {
-      LOG(ERROR) << "Invalid --proto";
-      return false;
-    }
-  }
-
   params->use_proxy = false;
-  GURL url(line.GetSwitchValueASCII("proxy"));
+  params->is_quic = false;
+  std::string proxy_str = line.GetSwitchValueASCII("proxy");
+  if (base::StartsWith(proxy_str, "quic://", base::CompareCase::SENSITIVE)) {
+    proxy_str = base::StrCat({"https://", proxy_str.substr(sizeof("quic://") - 1)});
+    params->is_quic = true;
+  }
+  GURL url(proxy_str);
   if (line.HasSwitch("proxy")) {
     params->use_proxy = true;
     if (!url.is_valid()) {
@@ -219,10 +236,6 @@ bool ParseCommandLineFlags(Params* params) {
     }
     if (url.scheme() != "https") {
       LOG(ERROR) << "Must be HTTPS proxy";
-      return false;
-    }
-    if (url.username().empty() || url.password().empty()) {
-      LOG(ERROR) << "Missing user or pass";
       return false;
     }
     params->proxy_url = url::SchemeHostPort(url).Serialize();

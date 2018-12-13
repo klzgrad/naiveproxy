@@ -90,6 +90,7 @@ void NaiveProxy::DoConnect() {
   } else {
     return;
   }
+  pad_direction = NaiveConnection::kNone;
   auto connection_ptr = std::make_unique<NaiveConnection>(
       ++last_id_, pad_direction, std::move(socket), this, traffic_annotation_);
   auto* connection = connection_ptr.get();
@@ -149,6 +150,9 @@ int NaiveProxy::OnConnectServer(unsigned int connection_id,
             << request_endpoint.ToString();
 
   auto quic_version = quic::QUIC_VERSION_UNSUPPORTED;
+  if (proxy_info.is_quic()) {
+    quic_version = quic::QUIC_VERSION_43;
+  }
 
   return InitSocketHandleForRawConnect2(
       request_endpoint, session_, request_load_flags, request_priority,
