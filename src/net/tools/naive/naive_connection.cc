@@ -12,19 +12,18 @@
 #include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/rand_util.h"
+#include "base/strings/strcat.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "net/base/privacy_mode.h"
-#include "net/http/http_network_session.h"
-#include "net/proxy_resolution/proxy_config.h"
 #include "net/proxy_resolution/proxy_info.h"
-#include "net/proxy_resolution/proxy_list.h"
-#include "net/proxy_resolution/proxy_resolution_service.h"
 #include "net/socket/client_socket_handle.h"
 #include "net/socket/client_socket_pool_manager.h"
 #include "net/socket/stream_socket.h"
 #include "net/spdy/spdy_session.h"
+#include "net/tools/naive/http_proxy_socket.h"
+#include "net/tools/naive/socks5_server_socket.h"
 
 namespace net {
 
@@ -37,14 +36,24 @@ constexpr int kMaxPaddingSize = 255;
 
 NaiveConnection::NaiveConnection(
     unsigned int id,
+    Protocol protocol,
     Direction pad_direction,
+    const ProxyInfo& proxy_info,
+    const SSLConfig& server_ssl_config,
+    const SSLConfig& proxy_ssl_config,
+    HttpNetworkSession* session,
+    const NetLogWithSource& net_log,
     std::unique_ptr<StreamSocket> accepted_socket,
-    Delegate* delegate,
     const NetworkTrafficAnnotationTag& traffic_annotation)
     : id_(id),
+      protocol_(protocol),
       pad_direction_(pad_direction),
+      proxy_info_(proxy_info),
+      server_ssl_config_(server_ssl_config),
+      proxy_ssl_config_(proxy_ssl_config),
+      session_(session),
+      net_log_(net_log),
       next_state_(STATE_NONE),
-      delegate_(delegate),
       client_socket_(std::move(accepted_socket)),
       server_socket_handle_(std::make_unique<ClientSocketHandle>()),
       sockets_{client_socket_.get(), nullptr},
@@ -167,11 +176,38 @@ int NaiveConnection::DoConnectClientComplete(int result) {
 }
 
 int NaiveConnection::DoConnectServer() {
-  DCHECK(delegate_);
   next_state_ = STATE_CONNECT_SERVER_COMPLETE;
 
-  return delegate_->OnConnectServer(id_, client_socket_.get(),
-                                    server_socket_handle_.get(), io_callback_);
+  HostPortPair origin;
+  if (protocol_ == kSocks5) {
+    const auto* socket =
+        static_cast<const Socks5ServerSocket*>(client_socket_.get());
+    origin = socket->request_endpoint();
+  } else if (protocol_ == kHttp) {
+    const auto* socket =
+        static_cast<const HttpProxySocket*>(client_socket_.get());
+    origin = socket->request_endpoint();
+  }
+
+  if (origin.IsEmpty()) {
+    LOG(ERROR) << "Connection " << id_ << " to invalid origin";
+    return ERR_ADDRESS_INVALID;
+  }
+
+  LOG(INFO) << "Connection " << id_ << " to " << origin.ToString();
+
+  auto quic_version = quic::QUIC_VERSION_UNSUPPORTED;
+  const auto& quic_versions = session_->params().quic_supported_versions;
+  if (proxy_info_.is_quic() && !quic_versions.empty()) {
+    quic_version = quic_versions[0];
+  }
+
+  // Ignores socket limit set by socket pool for this type of socket.
+  return InitSocketHandleForRawConnect2(
+      origin, session_, LOAD_IGNORE_LIMITS, MAXIMUM_PRIORITY, proxy_info_,
+      quic_version, server_ssl_config_, proxy_ssl_config_,
+      PRIVACY_MODE_DISABLED, net_log_, server_socket_handle_.get(),
+      io_callback_, net::ClientSocketPool::ProxyAuthCallback());
 }
 
 int NaiveConnection::DoConnectServerComplete(int result) {

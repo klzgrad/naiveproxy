@@ -193,7 +193,7 @@ CreateSocketParamsAndGetGroupName(
         std::move(ssl_params));
   }
 
-  if (proxy_info.is_http() || proxy_info.is_https()) {
+  if (proxy_info.is_http() || proxy_info.is_https() || proxy_info.is_quic()) {
     return TransportClientSocketPool::SocketParams::
         CreateFromHttpProxySocketParams(std::move(http_proxy_params));
   }
