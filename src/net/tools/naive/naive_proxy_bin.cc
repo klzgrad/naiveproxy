@@ -4,6 +4,7 @@
 // found in the LICENSE file.
 
 #include <cstdlib>
+#include <iostream>
 #include <limits>
 #include <memory>
 #include <string>
@@ -47,12 +48,14 @@
 #include "net/socket/ssl_client_socket.h"
 #include "net/socket/tcp_server_socket.h"
 #include "net/ssl/ssl_key_logger_impl.h"
+#include "net/third_party/quiche/src/quic/core/quic_versions.h"
 #include "net/tools/naive/naive_proxy.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_builder.h"
 #include "url/gurl.h"
 #include "url/scheme_host_port.h"
+#include "url/url_util.h"
 
 #if defined(OS_MACOSX)
 #include "base/mac/scoped_nsautorelease_pool.h"
@@ -68,15 +71,16 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
     net::DefineNetworkTrafficAnnotation("naive", "");
 
 struct Params {
+  net::NaiveConnection::Protocol protocol;
   std::string listen_addr;
   int listen_port;
-  net::NaiveProxy::Protocol protocol;
-  bool use_proxy;
+  bool use_padding;
   std::string proxy_url;
   std::u16string proxy_user;
   std::u16string proxy_pass;
   std::string host_resolver_rules;
   logging::LoggingSettings log_settings;
+  base::FilePath log_path;
   base::FilePath net_log_path;
   base::FilePath ssl_key_path;
 };
@@ -103,9 +107,7 @@ std::unique_ptr<net::URLRequestContext> BuildURLRequestContext(
   builder.set_net_log(net_log);
 
   net::ProxyConfig proxy_config;
-  if (params.use_proxy) {
-    proxy_config.proxy_rules().ParseFromString(params.proxy_url);
-  }
+  proxy_config.proxy_rules().ParseFromString(params.proxy_url);
   auto proxy_service =
       net::ConfiguredProxyResolutionService::CreateWithoutProxyResolver(
           std::make_unique<net::ProxyConfigServiceFixed>(
@@ -120,11 +122,19 @@ std::unique_ptr<net::URLRequestContext> BuildURLRequestContext(
 
   auto context = builder.Build();
 
-  if (params.use_proxy) {
-    net::HttpNetworkSession* session =
-        context->http_transaction_factory()->GetSession();
-    net::HttpAuthCache* auth_cache = session->http_auth_cache();
-    GURL auth_origin(params.proxy_url);
+  if (!params.proxy_url.empty() && !params.proxy_user.empty() &&
+      !params.proxy_pass.empty()) {
+    auto* session = context->http_transaction_factory()->GetSession();
+    auto* auth_cache = session->http_auth_cache();
+    std::string proxy_url = params.proxy_url;
+    if (proxy_url.compare(0, 7, "quic://") == 0) {
+      proxy_url.replace(0, 4, "https");
+      auto* quic = context->quic_context()->params();
+      quic->supported_versions = {quic::ParsedQuicVersion::RFCv1()};
+      quic->origins_to_force_quic_on.insert(
+          net::HostPortPair::FromURL(GURL(proxy_url)));
+    }
+    GURL auth_origin(proxy_url);
     net::AuthCredentials credentials(params.proxy_user, params.proxy_pass);
     auth_cache->Add(auth_origin, net::HttpAuth::AUTH_PROXY,
                     /*realm=*/std::string(), net::HttpAuth::AUTH_SCHEME_BASIC,
@@ -139,83 +149,82 @@ bool ParseCommandLineFlags(Params* params) {
   const base::CommandLine& line = *base::CommandLine::ForCurrentProcess();
 
   if (line.HasSwitch("h") || line.HasSwitch("help")) {
-    LOG(INFO) << "Usage: naive [options]\n"
+    std::cout << "Usage: naive [options]\n"
                  "\n"
                  "Options:\n"
                  "-h, --help                 Show this message\n"
                  "--version                  Print version\n"
-                 "--addr=<address>           Address to listen on (0.0.0.0)\n"
-                 "--port=<port>              Port to listen on (1080)\n"
-                 "--proto=[socks|http]       Protocol to accept (socks)\n"
-                 "--proxy=https://<user>:<pass>@<hostname>[:<port>]\n"
-                 "                           Proxy specification.\n"
-                 "--log                      Log to stderr, otherwise no log\n"
+                 "--listen=<proto>://[addr][:port]\n"
+                 "                           proto: socks, http\n"
+                 "--proxy=<proto>://[<user>:<pass>@]<hostname>[:<port>]\n"
+                 "                           proto: https, quic\n"
+                 "--padding                  Use padding\n"
+                 "--log[=<path>]             Log to stderr, or file\n"
                  "--log-net-log=<path>       Save NetLog\n"
-                 "--ssl-key-log-file=<path>  Save SSL keys for Wireshark\n";
+                 "--ssl-key-log-file=<path>  Save SSL keys for Wireshark\n"
+              << std::endl;
     exit(EXIT_SUCCESS);
     return false;
   }
 
   if (line.HasSwitch("version")) {
-    LOG(INFO) << "Version: " << version_info::GetVersionNumber();
+    std::cout << "Version: " << version_info::GetVersionNumber() << std::endl;
     exit(EXIT_SUCCESS);
     return false;
   }
 
+  params->protocol = net::NaiveConnection::kSocks5;
   params->listen_addr = "0.0.0.0";
-  if (line.HasSwitch("addr")) {
-    params->listen_addr = line.GetSwitchValueASCII("addr");
-  }
-  if (params->listen_addr.empty()) {
-    LOG(ERROR) << "Invalid --addr";
-    return false;
-  }
-
   params->listen_port = 1080;
-  if (line.HasSwitch("port")) {
-    if (!base::StringToInt(line.GetSwitchValueASCII("port"),
-                           &params->listen_port)) {
-      LOG(ERROR) << "Invalid --port";
-      return false;
-    }
-    if (params->listen_port <= 0 ||
-        params->listen_port > std::numeric_limits<uint16_t>::max()) {
-      LOG(ERROR) << "Invalid --port";
-      return false;
-    }
-  }
-
-  params->protocol = net::NaiveProxy::kSocks5;
-  if (line.HasSwitch("proto")) {
-    const auto& proto = line.GetSwitchValueASCII("proto");
-    if (proto == "socks") {
-      params->protocol = net::NaiveProxy::kSocks5;
-    } else if (proto == "http") {
-      params->protocol = net::NaiveProxy::kHttp;
+  url::AddStandardScheme("socks", url::SCHEME_WITH_HOST_AND_PORT);
+  if (line.HasSwitch("listen")) {
+    GURL url(line.GetSwitchValueASCII("listen"));
+    if (url.scheme() == "socks") {
+      params->protocol = net::NaiveConnection::kSocks5;
+      params->listen_port = 1080;
+    } else if (url.scheme() == "http") {
+      params->protocol = net::NaiveConnection::kHttp;
+      params->listen_port = 8080;
     } else {
-      LOG(ERROR) << "Invalid --proto";
+      LOG(ERROR) << "Invalid scheme in --listen";
       return false;
+    }
+    if (!url.host().empty()) {
+      params->listen_addr = url.host();
+    }
+    if (!url.port().empty()) {
+      if (!base::StringToInt(url.port(), &params->listen_port)) {
+        LOG(ERROR) << "Invalid port in --listen";
+        return false;
+      }
+      if (params->listen_port <= 0 ||
+          params->listen_port > std::numeric_limits<uint16_t>::max()) {
+        LOG(ERROR) << "Invalid port in --listen";
+        return false;
+      }
     }
   }
 
-  params->use_proxy = false;
+  url::AddStandardScheme("quic",
+                         url::SCHEME_WITH_HOST_PORT_AND_USER_INFORMATION);
+  params->proxy_url = "direct://";
   GURL url(line.GetSwitchValueASCII("proxy"));
   if (line.HasSwitch("proxy")) {
-    params->use_proxy = true;
     if (!url.is_valid()) {
       LOG(ERROR) << "Invalid proxy URL";
       return false;
     }
-    if (url.scheme() != "https") {
-      LOG(ERROR) << "Must be HTTPS proxy";
-      return false;
-    }
-    if (url.username().empty() || url.password().empty()) {
-      LOG(ERROR) << "Missing user or pass";
+    if (url.scheme() != "https" && url.scheme() != "quic") {
+      LOG(ERROR) << "Must be HTTPS or QUIC proxy";
       return false;
     }
     params->proxy_url = url::SchemeHostPort(url).Serialize();
     net::GetIdentityFromURL(url, &params->proxy_user, &params->proxy_pass);
+  }
+
+  params->use_padding = false;
+  if (line.HasSwitch("padding")) {
+    params->use_padding = true;
   }
 
   if (line.HasSwitch("host-resolver-rules")) {
@@ -224,7 +233,14 @@ bool ParseCommandLineFlags(Params* params) {
   }
 
   if (line.HasSwitch("log")) {
-    params->log_settings.logging_dest = logging::LOG_TO_SYSTEM_DEBUG_LOG;
+    params->log_settings.logging_dest = logging::LOG_DEFAULT;
+    params->log_path = line.GetSwitchValuePath("log");
+    if (!params->log_path.empty()) {
+      params->log_settings.logging_dest = logging::LOG_TO_FILE;
+    } else if (params->log_settings.logging_dest == logging::LOG_TO_FILE) {
+      params->log_path = base::FilePath::FromUTF8Unsafe("naive.log");
+    }
+    params->log_settings.log_file_path = params->log_path.value().c_str();
   } else {
     params->log_settings.logging_dest = logging::LOG_NONE;
   }
@@ -340,6 +356,7 @@ int main(int argc, char* argv[]) {
   }
 
   auto context = BuildURLRequestContext(params, net_log);
+  auto* session = context->http_transaction_factory()->GetSession();
 
   auto listen_socket =
       std::make_unique<net::TCPServerSocket>(net_log, net::NetLogSource());
@@ -351,9 +368,8 @@ int main(int argc, char* argv[]) {
     return EXIT_FAILURE;
   }
 
-  net::NaiveProxy naive_proxy(
-      std::move(listen_socket), params.protocol, params.use_proxy,
-      context->http_transaction_factory()->GetSession(), kTrafficAnnotation);
+  net::NaiveProxy naive_proxy(std::move(listen_socket), params.protocol,
+                              params.use_padding, session, kTrafficAnnotation);
 
   base::RunLoop().Run();
 
