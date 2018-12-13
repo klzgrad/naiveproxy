@@ -8,37 +8,26 @@
 #include <utility>
 
 #include "net/third_party/quic/core/http/quic_spdy_stream.h"
-#include "net/third_party/quic/core/http/spdy_utils.h"
-#include "net/third_party/quic/platform/api/quic_bug_tracker.h"
-#include "net/third_party/quic/platform/api/quic_flags.h"
 #include "net/third_party/quic/platform/api/quic_logging.h"
-#include "net/third_party/quic/platform/api/quic_map_util.h"
-#include "net/third_party/quic/platform/api/quic_text_utils.h"
 #include "net/third_party/quic/tools/quic_simple_server_session.h"
-#include "net/third_party/spdy/core/spdy_protocol.h"
 
 namespace quic {
 
-QuicNaiveServerStream::QuicNaiveServerStream(
-    QuicStreamId id,
-    QuicSpdySession* session,
-    QuicSimpleServerBackend* backend)
-    : QuicSpdyServerStreamBase(id, session),
-      backend_(backend) {}
+QuicNaiveServerStream::QuicNaiveServerStream(QuicStreamId id,
+                                             QuicSpdySession* session,
+                                             QuicSimpleServerBackend* backend)
+    : QuicSpdyServerStreamBase(id, session), backend_(backend) {}
 
 QuicNaiveServerStream::~QuicNaiveServerStream() {
-  backend_->OnCloseStream(this);
+  backend_->OnDeleteStream(this);
 }
 
-void QuicNaiveServerStream::SendErrorResponse(int resp_code) {
-  QUIC_DVLOG(1) << "Stream " << id() << " sending error response.";
-  spdy::SpdyHeaderBlock headers;
-  if (resp_code <= 0) {
-    headers[":status"] = "500";
-  } else {
-    headers[":status"] = QuicTextUtils::Uint64ToString(resp_code);
-  }
-  WriteHeaders(std::move(headers), /*fin=*/true, nullptr);
+void QuicNaiveServerStream::set_naive_id(unsigned int id) {
+  naive_id_ = id;
+}
+
+unsigned int QuicNaiveServerStream::naive_id() {
+  return naive_id_;
 }
 
 void QuicNaiveServerStream::OnInitialHeadersComplete(
@@ -55,7 +44,9 @@ void QuicNaiveServerStream::OnTrailingHeadersComplete(
     size_t frame_len,
     const QuicHeaderList& header_list) {
   QUIC_BUG << "Server does not support receiving Trailers.";
-  SendErrorResponse(0);
+  spdy::SpdyHeaderBlock headers;
+  headers[":status"] = "500";
+  WriteHeaders(std::move(headers), /*fin=*/true, nullptr);
 }
 
 void QuicNaiveServerStream::OnDataAvailable() {
@@ -93,7 +84,6 @@ QuicString QuicNaiveServerStream::peer_host() const {
 
 void QuicNaiveServerStream::OnResponseBackendComplete(
     const QuicBackendResponse* response,
-    std::list<QuicBackendResponse::ServerPushInfo> resources) {
-}
+    std::list<QuicBackendResponse::ServerPushInfo> resources) {}
 
 }  // namespace quic

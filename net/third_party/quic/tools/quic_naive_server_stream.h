@@ -7,18 +7,16 @@
 
 #include "base/macros.h"
 #include "net/third_party/quic/core/http/quic_spdy_server_stream_base.h"
-#include "net/third_party/quic/core/quic_packets.h"
 #include "net/third_party/quic/platform/api/quic_string_piece.h"
 #include "net/third_party/quic/tools/quic_backend_response.h"
 #include "net/third_party/quic/tools/quic_simple_server_backend.h"
-#include "net/third_party/spdy/core/spdy_framer.h"
 
 namespace quic {
 
 // All this does right now is aggregate data, and on fin, send an HTTP
 // response.
 class QuicNaiveServerStream : public QuicSpdyServerStreamBase,
-                               public QuicSimpleServerBackend::RequestHandler {
+                              public QuicSimpleServerBackend::RequestHandler {
  public:
   QuicNaiveServerStream(QuicStreamId id,
                         QuicSpdySession* session,
@@ -27,7 +25,8 @@ class QuicNaiveServerStream : public QuicSpdyServerStreamBase,
   QuicNaiveServerStream& operator=(const QuicNaiveServerStream&) = delete;
   ~QuicNaiveServerStream() override;
 
-  void SendErrorResponse(int resp_code);
+  void set_naive_id(unsigned int value);
+  unsigned int naive_id() const;
 
   // QuicSpdyStream
   void OnInitialHeadersComplete(bool fin,
@@ -53,6 +52,7 @@ class QuicNaiveServerStream : public QuicSpdyServerStreamBase,
 
  private:
   QuicSimpleServerBackend* backend_;  // Not owned.
+  unsigned int naive_id_;
 };
 
 }  // namespace quic

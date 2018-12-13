@@ -16,7 +16,9 @@
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/sys_info.h"
@@ -25,6 +27,8 @@
 #include "build/build_config.h"
 #include "components/version_info/version_info.h"
 #include "net/base/auth.h"
+#include "net/base/ip_address.h"
+#include "net/base/ip_endpoint.h"
 #include "net/dns/host_resolver.h"
 #include "net/dns/mapped_host_resolver.h"
 #include "net/http/http_auth.h"
@@ -41,18 +45,21 @@
 #include "net/proxy_resolution/proxy_config_service_fixed.h"
 #include "net/proxy_resolution/proxy_config_with_annotation.h"
 #include "net/proxy_resolution/proxy_resolution_service.h"
+#include "net/quic/crypto/proof_source_chromium.h"
 #include "net/socket/client_socket_pool_manager.h"
 #include "net/socket/ssl_client_socket.h"
 #include "net/socket/tcp_server_socket.h"
 #include "net/ssl/ssl_key_logger_impl.h"
+#include "net/third_party/quic/core/crypto/quic_crypto_server_config.h"
+#include "net/third_party/quic/core/quic_config.h"
 #include "net/tools/naive/naive_proxy.h"
+#include "net/tools/naive/quic_proxy_backend.h"
+#include "net/tools/quic/quic_simple_server.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_builder.h"
 #include "url/gurl.h"
 #include "url/scheme_host_port.h"
-#include "base/strings/strcat.h"
-#include "base/strings/string_util.h"
 
 #if defined(OS_MACOSX)
 #include "base/mac/scoped_nsautorelease_pool.h"
@@ -121,7 +128,8 @@ std::unique_ptr<net::URLRequestContext> BuildURLRequestContext(
   if (params.use_proxy) {
     std::string proxy_url = params.proxy_url;
     if (params.is_quic_proxy) {
-      proxy_url = base::StrCat({"quic://", proxy_url.substr(sizeof("https://") - 1)});
+      proxy_url =
+          base::StrCat({"quic://", proxy_url.substr(sizeof("https://") - 1)});
     }
     proxy_config.proxy_rules().ParseFromString(proxy_url);
   }
@@ -141,7 +149,8 @@ std::unique_ptr<net::URLRequestContext> BuildURLRequestContext(
 
   auto context = builder.Build();
 
-  if (params.use_proxy && !params.proxy_user.empty() && !params.proxy_pass.empty()) {
+  if (params.use_proxy && !params.proxy_user.empty() &&
+      !params.proxy_pass.empty()) {
     net::HttpNetworkSession* session =
         context->http_transaction_factory()->GetSession();
     net::HttpAuthCache* auth_cache = session->http_auth_cache();
@@ -228,7 +237,8 @@ bool ParseCommandLineFlags(Params* params) {
   params->is_quic_proxy = false;
   std::string proxy_str = line.GetSwitchValueASCII("proxy");
   if (base::StartsWith(proxy_str, "quic://", base::CompareCase::SENSITIVE)) {
-    proxy_str = base::StrCat({"https://", proxy_str.substr(sizeof("quic://") - 1)});
+    proxy_str =
+        base::StrCat({"https://", proxy_str.substr(sizeof("quic://") - 1)});
     params->is_quic_proxy = true;
   }
   GURL url(proxy_str);
@@ -395,15 +405,16 @@ int main(int argc, char* argv[]) {
   auto context = BuildURLRequestContext(params, &net_log);
   auto* session = context->http_transaction_factory()->GetSession();
 
-  if (params->is_quic) {
-    auto backend = std::make_unique<net::QuicNaiveProxyBackend>(session);
+  if (params.is_quic) {
+    auto backend =
+        std::make_unique<net::QuicProxyBackend>(session, kTrafficAnnotation);
     quic::QuicConfig config;
     auto proof_source = std::make_unique<net::ProofSourceChromium>();
-    CHECK(proof_source->Initialize(params.certificate_file, params.key_file, base::FilePath()));
-    net::QuicSimpleServer server(
-        std::move(proof_source),
-        config, quic::QuicCryptoServerConfig::ConfigOptions(),
-        quic::AllSupportedVersions(), backend.get());
+    CHECK(proof_source->Initialize(params.certificate_file, params.key_file,
+                                   base::FilePath()));
+    net::QuicSimpleServer server(std::move(proof_source), config,
+                                 quic::QuicCryptoServerConfig::ConfigOptions(),
+                                 quic::AllSupportedVersions(), backend.get());
 
     net::IPAddress ip;
     int result = net::ERR_ADDRESS_INVALID;
@@ -416,25 +427,22 @@ int main(int argc, char* argv[]) {
     }
 
     base::RunLoop().Run();
+  } else {
+    auto listen_socket =
+        std::make_unique<net::TCPServerSocket>(&net_log, net::NetLogSource());
 
-    return EXIT_SUCCESS;
+    int result = listen_socket->ListenWithAddressAndPort(
+        params.listen_addr, params.listen_port, kListenBackLog);
+    if (result != net::OK) {
+      LOG(ERROR) << "Failed to listen: " << result;
+      return EXIT_FAILURE;
+    }
+
+    net::NaiveProxy naive_proxy(std::move(listen_socket), params.protocol,
+                                params.use_proxy, session, kTrafficAnnotation);
+
+    base::RunLoop().Run();
   }
-
-  auto listen_socket =
-      std::make_unique<net::TCPServerSocket>(&net_log, net::NetLogSource());
-
-  int result = listen_socket->ListenWithAddressAndPort(
-      params.listen_addr, params.listen_port, kListenBackLog);
-  if (result != net::OK) {
-    LOG(ERROR) << "Failed to listen: " << result;
-    return EXIT_FAILURE;
-  }
-
-  net::NaiveProxy naive_proxy(
-      std::move(listen_socket), params.protocol, params.use_proxy,
-      session, kTrafficAnnotation);
-
-  base::RunLoop().Run();
 
   return EXIT_SUCCESS;
 }
