@@ -19,13 +19,22 @@ namespace net {
 
 class ClientSocketHandle;
 class DrainableIOBuffer;
+class HttpNetworkSession;
 class IOBuffer;
+class NetLogWithSource;
+class ProxyInfo;
 class StreamSocket;
 struct NetworkTrafficAnnotationTag;
+struct SSLConfig;
 
 class NaiveConnection {
  public:
   using TimeFunc = base::TimeTicks (*)();
+
+  enum Protocol {
+    kSocks5,
+    kHttp,
+  };
 
   // From this direction.
   enum Direction {
@@ -35,24 +44,15 @@ class NaiveConnection {
     kNone = 2,
   };
 
-  class Delegate {
-   public:
-    Delegate() {}
-    virtual ~Delegate() {}
-
-    virtual int OnConnectServer(unsigned int connection_id,
-                                const StreamSocket* accepted_socket,
-                                ClientSocketHandle* server_socket,
-                                CompletionRepeatingCallback callback) = 0;
-
-   private:
-    DISALLOW_COPY_AND_ASSIGN(Delegate);
-  };
-
   NaiveConnection(unsigned int id,
+                  Protocol protocol,
                   Direction pad_direction,
+                  const ProxyInfo& proxy_info,
+                  const SSLConfig& server_ssl_config,
+                  const SSLConfig& proxy_ssl_config,
+                  HttpNetworkSession* session,
+                  const NetLogWithSource& net_log,
                   std::unique_ptr<StreamSocket> accepted_socket,
-                  Delegate* delegate,
                   const NetworkTrafficAnnotationTag& traffic_annotation);
   ~NaiveConnection();
   NaiveConnection(const NaiveConnection&) = delete;
@@ -98,15 +98,19 @@ class NaiveConnection {
   void OnPushComplete(Direction from, Direction to, int result);
 
   unsigned int id_;
+  Protocol protocol_;
   Direction pad_direction_;
+  const ProxyInfo& proxy_info_;
+  const SSLConfig& server_ssl_config_;
+  const SSLConfig& proxy_ssl_config_;
+  HttpNetworkSession* session_;
+  const NetLogWithSource& net_log_;
 
   CompletionRepeatingCallback io_callback_;
   CompletionOnceCallback connect_callback_;
   CompletionOnceCallback run_callback_;
 
   State next_state_;
-
-  Delegate* delegate_;
 
   std::unique_ptr<StreamSocket> client_socket_;
   std::unique_ptr<ClientSocketHandle> server_socket_handle_;

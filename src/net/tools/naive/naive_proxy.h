@@ -12,6 +12,8 @@
 #include "base/memory/weak_ptr.h"
 #include "net/base/completion_repeating_callback.h"
 #include "net/log/net_log_with_source.h"
+#include "net/proxy_resolution/proxy_info.h"
+#include "net/ssl/ssl_config.h"
 #include "net/tools/naive/naive_connection.h"
 
 namespace net {
@@ -23,26 +25,16 @@ class ServerSocket;
 class StreamSocket;
 struct NetworkTrafficAnnotationTag;
 
-class NaiveProxy : public NaiveConnection::Delegate {
+class NaiveProxy {
  public:
-  enum Protocol {
-    kSocks5,
-    kHttp,
-  };
-
   NaiveProxy(std::unique_ptr<ServerSocket> server_socket,
-             Protocol protocol,
-             bool use_proxy,
+             NaiveConnection::Protocol protocol,
+             bool use_padding,
              HttpNetworkSession* session,
              const NetworkTrafficAnnotationTag& traffic_annotation);
-  ~NaiveProxy() override;
+  ~NaiveProxy();
   NaiveProxy(const NaiveProxy&) = delete;
   NaiveProxy& operator=(const NaiveProxy&) = delete;
-
-  int OnConnectServer(unsigned int connection_id,
-                      const StreamSocket* accepted_socket,
-                      ClientSocketHandle* server_socket,
-                      CompletionRepeatingCallback callback) override;
 
  private:
   void DoAcceptLoop();
@@ -50,21 +42,23 @@ class NaiveProxy : public NaiveConnection::Delegate {
   void HandleAcceptResult(int result);
 
   void DoConnect();
-  void OnConnectComplete(int connection_id, int result);
+  void OnConnectComplete(unsigned int connection_id, int result);
   void HandleConnectResult(NaiveConnection* connection, int result);
 
   void DoRun(NaiveConnection* connection);
-  void OnRunComplete(int connection_id, int result);
+  void OnRunComplete(unsigned int connection_id, int result);
   void HandleRunResult(NaiveConnection* connection, int result);
 
-  void Close(int connection_id, int reason);
+  void Close(unsigned int connection_id, int reason);
 
-  NaiveConnection* FindConnection(int connection_id);
-  bool HasClosedConnection(NaiveConnection* connection);
+  NaiveConnection* FindConnection(unsigned int connection_id);
 
   std::unique_ptr<ServerSocket> listen_socket_;
-  Protocol protocol_;
-  bool use_proxy_;
+  NaiveConnection::Protocol protocol_;
+  bool use_padding_;
+  ProxyInfo proxy_info_;
+  SSLConfig server_ssl_config_;
+  SSLConfig proxy_ssl_config_;
   HttpNetworkSession* session_;
   NetLogWithSource net_log_;
 
