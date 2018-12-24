@@ -14,7 +14,6 @@
 #include "net/base/completion_repeating_callback.h"
 #include "net/log/net_log_with_source.h"
 #include "net/tools/naive/naive_connection.h"
-#include "net/traffic_annotation/network_traffic_annotation.h"
 
 namespace net {
 
@@ -23,6 +22,7 @@ class HttpNetworkSession;
 class NaiveConnection;
 class ServerSocket;
 class StreamSocket;
+struct NetworkTrafficAnnotationTag;
 
 class NaiveProxy : public NaiveConnection::Delegate {
  public:
@@ -73,7 +73,7 @@ class NaiveProxy : public NaiveConnection::Delegate {
 
   std::map<unsigned int, std::unique_ptr<NaiveConnection>> connection_by_id_;
 
-  NetworkTrafficAnnotationTag traffic_annotation_;
+  const NetworkTrafficAnnotationTag& traffic_annotation_;
 
   base::WeakPtrFactory<NaiveProxy> weak_ptr_factory_;
 
