@@ -20,7 +20,7 @@
 #include "net/third_party/quic/core/quic_packets.h"
 #include "net/third_party/quic/tools/quic_memory_cache_backend.h"
 #include "net/third_party/quic/tools/quic_simple_server_backend.h"
-#include "net/tools/quic/quic_http_proxy_backend.h"
+#include "net/tools/quic/quic_naive_proxy_backend.h"
 #include "net/tools/quic/quic_simple_server.h"
 
 // The port the quic server will listen on.
@@ -104,7 +104,7 @@ int main(int argc, char* argv[]) {
       FLAGS_quic_proxy_backend_url =
           line->GetSwitchValueASCII("quic_proxy_backend_url");
       quic_simple_server_backend =
-          std::make_unique<net::QuicHttpProxyBackend>();
+          std::make_unique<net::QuicNaiveProxyBackend>();
       if (quic_simple_server_backend->InitializeBackend(
               FLAGS_quic_proxy_backend_url) != true) {
         LOG(ERROR) << "--quic_proxy_backend_url "

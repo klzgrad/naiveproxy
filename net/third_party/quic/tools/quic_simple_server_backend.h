@@ -11,6 +11,7 @@ namespace spdy {
 class SpdyHeaderBlock;
 }  // namespace spdy
 namespace quic {
+class QuicSpdyStream;
 
 // This interface implements the functionality to fetch a response
 // from the backend (such as cache, http-proxy etc) to serve
@@ -52,6 +53,10 @@ class QuicSimpleServerBackend {
       RequestHandler* request_handler) = 0;
   // Clears the state of the backend  instance
   virtual void CloseBackendResponseStream(RequestHandler* request_handler) = 0;
+
+  virtual void OnReadHeaders(QuicSpdyStream* stream, const QuicHeaderList& header_list) {};
+  virtual void OnReadData(QuicSpdyStream* stream, void* data, size_t len) {};
+  virtual void OnCloseStream(QuicSpdyStream* stream) {};
 };
 
 }  // namespace quic

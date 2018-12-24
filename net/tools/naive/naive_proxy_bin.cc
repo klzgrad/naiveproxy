@@ -72,15 +72,18 @@ struct Params {
   std::string listen_addr;
   int listen_port;
   net::NaiveProxy::Protocol protocol;
+  bool is_quic;
   bool use_proxy;
   std::string proxy_url;
-  bool is_quic;
+  bool is_quic_proxy;
   std::string proxy_user;
   std::string proxy_pass;
   std::string host_resolver_rules;
   logging::LoggingSettings log_settings;
   base::FilePath net_log_path;
   base::FilePath ssl_key_path;
+  base::FilePath certificate_file;
+  base::FilePath key_file;
 };
 
 std::unique_ptr<base::Value> GetConstants(
@@ -117,7 +120,7 @@ std::unique_ptr<net::URLRequestContext> BuildURLRequestContext(
   net::ProxyConfig proxy_config;
   if (params.use_proxy) {
     std::string proxy_url = params.proxy_url;
-    if (params.is_quic) {
+    if (params.is_quic_proxy) {
       proxy_url = base::StrCat({"quic://", proxy_url.substr(sizeof("https://") - 1)});
     }
     proxy_config.proxy_rules().ParseFromString(proxy_url);
@@ -162,11 +165,13 @@ bool ParseCommandLineFlags(Params* params) {
                  "Options:\n"
                  "-h, --help                 Show this message\n"
                  "--version                  Print version\n"
-                 "--proto=[socks|http]       Protocol to accept (socks)\n"
+                 "--proto=[socks|http|quic]  Protocol to accept (socks)\n"
                  "--addr=<address>           Address to listen on (0.0.0.0)\n"
                  "--port=<port>              Port to listen on (1080)\n"
                  "--proxy=[https|quic]://<user>:<pass>@<hostname>[:<port>]\n"
                  "                           Proxy specification.\n"
+                 "--certificate_file=<file>\n"
+                 "--key_file=<file>\n"
                  "--log                      Log to stderr, otherwise no log\n"
                  "--log-net-log=<path>       Save NetLog\n"
                  "--ssl-key-log-file=<path>  Save SSL keys for Wireshark\n";
@@ -181,23 +186,22 @@ bool ParseCommandLineFlags(Params* params) {
   }
 
   params->protocol = net::NaiveProxy::kSocks5;
+  params->is_quic = false;
   if (line.HasSwitch("proto")) {
     const auto& proto = line.GetSwitchValueASCII("proto");
     if (proto == "socks") {
       params->protocol = net::NaiveProxy::kSocks5;
     } else if (proto == "http") {
       params->protocol = net::NaiveProxy::kHttp;
+    } else if (proto == "quic") {
+      params->is_quic = true;
     } else {
       LOG(ERROR) << "Invalid --proto";
       return false;
     }
   }
 
-  if (params->protocol == net::NaiveProxy::kSocks5) {
-    params->listen_addr = "0.0.0.0";
-  } else {
-    params->listen_addr = "127.0.0.1";
-  }
+  params->listen_addr = "0.0.0.0";
   if (line.HasSwitch("addr")) {
     params->listen_addr = line.GetSwitchValueASCII("addr");
   }
@@ -221,11 +225,11 @@ bool ParseCommandLineFlags(Params* params) {
   }
 
   params->use_proxy = false;
-  params->is_quic = false;
+  params->is_quic_proxy = false;
   std::string proxy_str = line.GetSwitchValueASCII("proxy");
   if (base::StartsWith(proxy_str, "quic://", base::CompareCase::SENSITIVE)) {
     proxy_str = base::StrCat({"https://", proxy_str.substr(sizeof("quic://") - 1)});
-    params->is_quic = true;
+    params->is_quic_proxy = true;
   }
   GURL url(proxy_str);
   if (line.HasSwitch("proxy")) {
@@ -272,6 +276,19 @@ bool ParseCommandLineFlags(Params* params) {
 
   if (line.HasSwitch("ssl-key-log-file")) {
     params->ssl_key_path = line.GetSwitchValuePath("ssl-key-log-file");
+  }
+
+  if (params->is_quic) {
+    if (!line.HasSwitch("certificate_file")) {
+      LOG(ERROR) << "Missing --certificate_file";
+      return false;
+    }
+    if (!line.HasSwitch("key_file")) {
+      LOG(ERROR) << "Missing --key_file";
+      return false;
+    }
+    params->certificate_file = line.GetSwitchValuePath("certificate_file");
+    params->key_file = line.GetSwitchValuePath("key_file");
   }
 
   return true;
@@ -376,6 +393,32 @@ int main(int argc, char* argv[]) {
                       net::NetLogCaptureMode::Default());
 
   auto context = BuildURLRequestContext(params, &net_log);
+  auto* session = context->http_transaction_factory()->GetSession();
+
+  if (params->is_quic) {
+    auto backend = std::make_unique<net::QuicNaiveProxyBackend>(session);
+    quic::QuicConfig config;
+    auto proof_source = std::make_unique<net::ProofSourceChromium>();
+    CHECK(proof_source->Initialize(params.certificate_file, params.key_file, base::FilePath()));
+    net::QuicSimpleServer server(
+        std::move(proof_source),
+        config, quic::QuicCryptoServerConfig::ConfigOptions(),
+        quic::AllSupportedVersions(), backend.get());
+
+    net::IPAddress ip;
+    int result = net::ERR_ADDRESS_INVALID;
+    if (ip.AssignFromIPLiteral(params.listen_addr)) {
+      result = server.Listen(net::IPEndPoint(ip, params.listen_port));
+    }
+    if (result != net::OK) {
+      LOG(ERROR) << "Failed to listen: " << result;
+      return EXIT_FAILURE;
+    }
+
+    base::RunLoop().Run();
+
+    return EXIT_SUCCESS;
+  }
 
   auto listen_socket =
       std::make_unique<net::TCPServerSocket>(&net_log, net::NetLogSource());
@@ -389,7 +432,7 @@ int main(int argc, char* argv[]) {
 
   net::NaiveProxy naive_proxy(
       std::move(listen_socket), params.protocol, params.use_proxy,
-      context->http_transaction_factory()->GetSession(), kTrafficAnnotation);
+      session, kTrafficAnnotation);
 
   base::RunLoop().Run();
 

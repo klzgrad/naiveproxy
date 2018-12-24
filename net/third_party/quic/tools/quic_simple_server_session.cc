@@ -11,6 +11,7 @@
 #include "net/third_party/quic/platform/api/quic_logging.h"
 #include "net/third_party/quic/platform/api/quic_ptr_util.h"
 #include "net/third_party/quic/tools/quic_simple_server_stream.h"
+#include "net/third_party/quic/tools/quic_naive_server_stream.h"
 
 namespace quic {
 
@@ -93,20 +94,13 @@ QuicSpdyStream* QuicSimpleServerSession::CreateIncomingDynamicStream(
   }
 
   QuicSpdyStream* stream =
-      new QuicSimpleServerStream(id, this, quic_simple_server_backend_);
+      new QuicNaiveServerStream(id, this, quic_simple_server_backend_);
   ActivateStream(QuicWrapUnique(stream));
   return stream;
 }
 
 QuicSimpleServerStream* QuicSimpleServerSession::CreateOutgoingDynamicStream() {
-  if (!ShouldCreateOutgoingDynamicStream()) {
-    return nullptr;
-  }
-
-  QuicSimpleServerStream* stream = new QuicSimpleServerStream(
-      GetNextOutgoingStreamId(), this, quic_simple_server_backend_);
-  ActivateStream(QuicWrapUnique(stream));
-  return stream;
+  return nullptr;
 }
 
 void QuicSimpleServerSession::CloseStreamInner(QuicStreamId stream_id,
