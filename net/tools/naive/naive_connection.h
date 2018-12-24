@@ -15,7 +15,6 @@
 #include "base/time/time.h"
 #include "net/base/completion_once_callback.h"
 #include "net/base/completion_repeating_callback.h"
-#include "net/traffic_annotation/network_traffic_annotation.h"
 
 namespace net {
 
@@ -23,6 +22,7 @@ class ClientSocketHandle;
 class DrainableIOBuffer;
 class IOBuffer;
 class StreamSocket;
+struct NetworkTrafficAnnotationTag;
 
 class NaiveConnection {
  public:
@@ -132,7 +132,7 @@ class NaiveConnection {
   TimeFunc time_func_;
 
   // Traffic annotation for socket control.
-  NetworkTrafficAnnotationTag traffic_annotation_;
+  const NetworkTrafficAnnotationTag& traffic_annotation_;
 
   base::WeakPtrFactory<NaiveConnection> weak_ptr_factory_;
 
