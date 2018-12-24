@@ -23,9 +23,9 @@
 #include "net/socket/next_proto.h"
 #include "net/socket/stream_socket.h"
 #include "net/ssl/ssl_info.h"
-#include "net/traffic_annotation/network_traffic_annotation.h"
 
 namespace net {
+struct NetworkTrafficAnnotationTag;
 
 // This StreamSocket is used to setup a HTTP CONNECT tunnel.
 class HttpProxySocket : public StreamSocket {
@@ -114,7 +114,7 @@ class HttpProxySocket : public StreamSocket {
   NetLogWithSource net_log_;
 
   // Traffic annotation for socket control.
-  NetworkTrafficAnnotationTag traffic_annotation_;
+  const NetworkTrafficAnnotationTag& traffic_annotation_;
 
   DISALLOW_COPY_AND_ASSIGN(HttpProxySocket);
 };
