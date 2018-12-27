@@ -36,14 +36,16 @@ constexpr int kMaxPaddingSize = 255;
 
 NaiveConnection::NaiveConnection(
     unsigned int id,
+    Protocol protocol,
+    bool use_proxy,
     Direction pad_direction,
     std::unique_ptr<StreamSocket> accepted_socket,
-    Delegate* delegate,
     const NetworkTrafficAnnotationTag& traffic_annotation)
     : id_(id),
+      protocol_(protocol),
+      use_proxy_(use_proxy),
       pad_direction_(pad_direction),
       next_state_(STATE_NONE),
-      delegate_(delegate),
       client_socket_(std::move(accepted_socket)),
       server_socket_handle_(std::make_unique<ClientSocketHandle>()),
       sockets_{client_socket_.get(), nullptr},
@@ -62,19 +64,51 @@ NaiveConnection::NaiveConnection(
                                      weak_ptr_factory_.GetWeakPtr());
 }
 
+NaiveConnection::NaiveConnection(
+    unsigned int id,
+    Direction pad_direction,
+    quic::QuicNaiveServerStream* quic_stream,
+    const quic::QuicHeaderList& quic_headers,
+    const NetworkTrafficAnnotationTag& traffic_annotation)
+    : id_(id),
+      protocol_(kQuic),
+      use_proxy_(false),
+      pad_direction_(kNone),
+      next_state_(STATE_NONE),
+      client_socket_(nullptr),
+      client_quic_stream_(stream),
+      client_quic_headers_(client_quic_headers),
+      server_socket_handle_(std::make_unique<ClientSocketHandle>()),
+      sockets_{nullptr, nullptr},
+      errors_{OK, OK},
+      write_pending_{false, false},
+      early_pull_pending_(false),
+      can_push_to_server_(false),
+      early_pull_result_(ERR_IO_PENDING),
+      num_paddings_{0, 0},
+      read_padding_state_(STATE_READ_PAYLOAD_LENGTH_1),
+      full_duplex_(false),
+      time_func_(&base::TimeTicks::Now),
+      traffic_annotation_(traffic_annotation),
+      weak_ptr_factory_(this) {}
+
 NaiveConnection::~NaiveConnection() {
   Disconnect();
 }
 
 int NaiveConnection::Connect(CompletionOnceCallback callback) {
-  DCHECK(client_socket_);
+  DCHECK(client_socket_ || protocol == kQuic);
   DCHECK_EQ(next_state_, STATE_NONE);
   DCHECK(!connect_callback_);
 
   if (full_duplex_)
     return OK;
 
-  next_state_ = STATE_CONNECT_CLIENT;
+  if (protocol_ != kQuic) {
+    next_state_ = STATE_CONNECT_CLIENT;
+  } else {
+    next_state_ = STATE_CONNECT_SERVER;
+  }
 
   int rv = DoLoop(OK);
   if (rv == ERR_IO_PENDING) {
@@ -83,12 +117,30 @@ int NaiveConnection::Connect(CompletionOnceCallback callback) {
   return rv;
 }
 
+void NaiveConnection::OnReadData() {
+  DCHECK_EQ(protocol_, kQuic);
+  if (!client_quic_stream_)
+    return;
+
+  
+}
+
+void NaiveConnection::OnDeleteStream() {
+  DCHECK_EQ(protocol_, kQuic);
+  client_quic_stream_ = nullptr;
+}
+
 void NaiveConnection::Disconnect() {
   full_duplex_ = false;
   // Closes server side first because latency is higher.
   if (server_socket_handle_->socket())
     server_socket_handle_->socket()->Disconnect();
-  client_socket_->Disconnect();
+  if (protocol_ != kQuic) {
+    client_socket_->Disconnect();
+  } else if (client_quic_stream_) {
+    client_quic_stream_->Reset(quic::QUIC_STREAM_NO_ERROR);
+    client_quic_stream_ = nullptr;
+  }
 
   next_state_ = STATE_NONE;
   connect_callback_.Reset();
@@ -166,11 +218,78 @@ int NaiveConnection::DoConnectClientComplete(int result) {
 }
 
 int NaiveConnection::DoConnectServer() {
-  DCHECK(delegate_);
   next_state_ = STATE_CONNECT_SERVER_COMPLETE;
 
-  return delegate_->OnConnectServer(id_, client_socket_.get(),
-                                    server_socket_handle_.get(), io_callback_);
+  // Ignores socket limit set by socket pool for this type of socket.
+  constexpr int request_load_flags = LOAD_IGNORE_LIMITS;
+  constexpr RequestPriority request_priority = MAXIMUM_PRIORITY;
+
+  ProxyInfo proxy_info;
+  SSLConfig server_ssl_config;
+  SSLConfig proxy_ssl_config;
+
+  if (use_proxy_) {
+    const auto& proxy_config = session_->proxy_resolution_service()->config();
+    DCHECK(proxy_config);
+    const ProxyList& proxy_list =
+        proxy_config.value().value().proxy_rules().single_proxies;
+    if (proxy_list.IsEmpty())
+      return ERR_MANDATORY_PROXY_CONFIGURATION_FAILED;
+    proxy_info.UseProxyList(proxy_list);
+    proxy_info.set_traffic_annotation(
+        net::MutableNetworkTrafficAnnotationTag(traffic_annotation_));
+
+    HttpRequestInfo req_info;
+    session_->GetSSLConfig(req_info, &server_ssl_config, &proxy_ssl_config);
+    proxy_ssl_config.disable_cert_verification_network_fetches = true;
+  } else {
+    proxy_info.UseDirect();
+  }
+
+  HostPortPair request_endpoint;
+  if (protocol_ == kSocks5) {
+    const auto* socket = static_cast<const Socks5ServerSocket*>(client_socket_.get());
+    request_endpoint = socket->request_endpoint();
+  } else if (protocol_ == kHttp) {
+    const auto* socket = static_cast<const HttpProxySocket*>(client_socket_.get());
+    request_endpoint = socket->request_endpoint();
+  } else if (protocol_ == kQuic) {
+    // client_quic_headers is cleared after OnReadHeaders.
+    // This function is synchronous inside NaiveProxy::OnReadHeaders so
+    // client_quic_headers is ok to be a reference.
+    for (const auto& p : client_quic_headers) {
+      const auto& name = p.first;
+      const auto& value = p.second;
+      if (name == ":method" && value != "CONNECT") {
+        LOG(ERROR) << "Connection " << id_ << " method not supported " << value;
+        return ERR_METHOD_NOT_SUPPORTED;
+      }
+      if (name == ":authority") {
+        request_endpoint = HostPortPair::FromString(value);
+      }
+    }
+    spdy::SpdyHeaderBlock headers;
+    headers[":status"] = "200";
+    client_quic_stream_->WriteHeaders(std::move(headers), /*fin=*/false, nullptr);
+  }
+
+  if (request_endpoint.IsEmpty()) {
+    LOG(ERROR) << "Connection " << id_ << " to invalid origin";
+    return ERR_ADDRESS_INVALID;
+  }
+
+  LOG(INFO) << "Connection " << id_ << " to "
+            << request_endpoint.ToString();
+
+  auto quic_version = quic::QUIC_VERSION_UNSUPPORTED;
+  if (proxy_info.is_quic()) {
+    quic_version = quic::QUIC_VERSION_43;
+  }
+
+  return InitSocketHandleForRawConnect2(
+      request_endpoint, session_, request_load_flags, request_priority,
+      proxy_info, quic_version, server_ssl_config, proxy_ssl_config,
+      PRIVACY_MODE_DISABLED, net_log_, server_socket_handle_.get(), callback);
 }
 
 int NaiveConnection::DoConnectServerComplete(int result) {
@@ -186,7 +305,7 @@ int NaiveConnection::DoConnectServerComplete(int result) {
 }
 
 int NaiveConnection::Run(CompletionOnceCallback callback) {
-  DCHECK(sockets_[kClient]);
+  DCHECK(sockets_[kClient] || protocol_ == kQuic);
   DCHECK(sockets_[kServer]);
   DCHECK_EQ(next_state_, STATE_NONE);
   DCHECK(!connect_callback_);
@@ -207,7 +326,7 @@ int NaiveConnection::Run(CompletionOnceCallback callback) {
   yield_after_time_[kServer] = yield_after_time_[kClient];
 
   can_push_to_server_ = true;
-  if (!early_pull_pending_) {
+  if (!early_pull_pending_ && protocol_ != kQuic) {
     DCHECK_GT(early_pull_result_, 0);
     Push(kClient, kServer, early_pull_result_);
   }

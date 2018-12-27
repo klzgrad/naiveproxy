@@ -37,6 +37,7 @@ void QuicProxyBackend::CloseBackendResponseStream(
 
 void QuicProxyBackend::OnReadHeaders(quic::QuicSpdyStream* stream,
                                      const quic::QuicHeaderList& header_list) {
+  HostPortPair request_endpoint;
   for (const auto& p : header_list) {
     const auto& name = p.first;
     const auto& value = p.second;
@@ -47,11 +48,90 @@ void QuicProxyBackend::OnReadHeaders(quic::QuicSpdyStream* stream,
       return;
     }
     if (name == ":authority") {
+      request_endpoint = HostPortPair::FromString(value);
     }
   }
 
-  LOG(INFO) << "OnReadHeaders " << stream;
+  if (request_endpoint.IsEmpty()) {
+    spdy::SpdyHeaderBlock headers;
+    headers[":status"] = "400";
+    stream->WriteHeaders(std::move(headers), /*fin=*/true, nullptr);
+    LOG(ERROR) << "Invalid origin";
+    return;
+  }
+
+  
+  auto connection_ptr = std::make_unique<QuicConnection>(++last_id_, stream, this, traffic_annotation_);
+  auto* connection = connection_ptr.get();
+  connection_by_id_[connection->id()] = std::move(connection_ptr);
+  int result = connection->Connect(
+      base::BindRepeating(&QuicProxyBackend::OnConnectComplete,
+                          weak_ptr_factory_.GetWeakPtr(), connection->id()));
+  if (result == ERR_IO_PENDING)
+    return;
+  HandleConnectResult(connection, result);
 }
+
+void QuicProxyBackend::OnConnectComplete(int connection_id, int result) {
+  auto* connection = FindConnection(connection_id);
+  if (!connection)
+    return;
+  HandleConnectResult(connection, result);
+}
+
+void QuicProxyBackend::HandleConnectResult(QuicConnection* connection, int result) {
+  if (result != OK) {
+    Close(connection->id(), result);
+    return;
+  }
+  DoRun(connection);
+}
+
+void QuicProxyBackend::DoRun(QuicConnection* connection) {
+  int result = connection->Run(
+      base::BindRepeating(&QuicProxyBackend::OnRunComplete,
+                          weak_ptr_factory_.GetWeakPtr(), connection->id()));
+  if (result == ERR_IO_PENDING)
+    return;
+  HandleRunResult(connection, result);
+}
+
+void QuicProxyBackend::OnRunComplete(int connection_id, int result) {
+  auto* connection = FindConnection(connection_id);
+  if (!connection)
+    return;
+  HandleRunResult(connection, result);
+}
+
+void QuicProxyBackend::HandleRunResult(QuicConnection* connection, int result) {
+  Close(connection->id(), result);
+}
+
+void QuicProxyBackend::Close(int connection_id, int reason) {
+  auto it = connection_by_id_.find(connection_id);
+  if (it == connection_by_id_.end())
+    return;
+
+  LOG(INFO) << "Connection " << connection_id
+            << " closed: " << ErrorToShortString(reason);
+
+  it->second->Close();
+  // The call stack might have callbacks which still have the pointer of
+  // connection. Instead of referencing connection with ID all the time,
+  // destroys the connection in next run loop to make sure any pending
+  // callbacks in the call stack return.
+  base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE,
+                                                  std::move(it->second));
+  connection_by_id_.erase(it);
+}
+
+QuicConnection* QuicProxyBackend::FindConnection(int connection_id) {
+  auto it = connection_by_id_.find(connection_id);
+  if (it == connection_by_id_.end())
+    return nullptr;
+  return it->second.get();
+}
+
 
 void QuicProxyBackend::OnReadData(quic::QuicSpdyStream* stream,
                                   void* data,

@@ -20,14 +20,17 @@
 #include "net/socket/client_socket_pool_manager.h"
 #include "net/socket/server_socket.h"
 #include "net/socket/stream_socket.h"
+#include "net/third_party/quic/core/http/quic_header_list.h"
 #include "net/third_party/quic/core/quic_versions.h"
+#include "net/third_party/quic/tools/quic_naive_server_stream.h"
+#include "net/third_party/spdy/core/spdy_header_block.h"
 #include "net/tools/naive/http_proxy_socket.h"
 #include "net/tools/naive/socks5_server_socket.h"
 
 namespace net {
 
 NaiveProxy::NaiveProxy(std::unique_ptr<ServerSocket> listen_socket,
-                       Protocol protocol,
+                       NaiveConnection::Protocol protocol,
                        bool use_proxy,
                        HttpNetworkSession* session,
                        const NetworkTrafficAnnotationTag& traffic_annotation)
@@ -41,14 +44,68 @@ NaiveProxy::NaiveProxy(std::unique_ptr<ServerSocket> listen_socket,
       traffic_annotation_(traffic_annotation),
       weak_ptr_factory_(this) {
   DCHECK(listen_socket_);
-  // Start accepting connections in next run loop in case when delegate is not
-  // ready to get callbacks.
+  // Start accepting connections in next run loop in case when delegate is
+  // not ready to get callbacks.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(&NaiveProxy::DoAcceptLoop,
                                 weak_ptr_factory_.GetWeakPtr()));
 }
+NaiveProxy::NaiveProxy(HttpNetworkSession* session,
+                       const NetworkTrafficAnnotationTag& traffic_annotation)
+    : listen_socket_(std::move(listen_socket)),
+      protocol_(NaiveConnection::kQuic),
+      use_proxy_(false),
+      session_(session),
+      net_log_(
+          NetLogWithSource::Make(session->net_log(), NetLogSourceType::NONE)),
+      last_id_(0),
+      traffic_annotation_(traffic_annotation),
+      weak_ptr_factory_(this) {}
 
 NaiveProxy::~NaiveProxy() = default;
+
+bool NaiveProxy::InitializeBackend(const std::string& backend_url) {
+  return true;
+}
+
+bool NaiveProxy::IsBackendInitialized() const {
+  return true;
+}
+
+void NaiveProxy::FetchResponseFromBackend(
+    const spdy::SpdyHeaderBlock& request_headers,
+    const std::string& incoming_body,
+    QuicSimpleServerBackend::RequestHandler* quic_stream) {}
+
+void NaiveProxy::CloseBackendResponseStream(
+    QuicSimpleServerBackend::RequestHandler* quic_stream) {}
+
+void NaiveProxy::OnReadHeaders(quic::QuicNaiveServerStream* stream,
+                               const quic::QuicHeaderList& header_list) {
+  constexpr auto kPadDirection = NaiveConnection::kNone;
+  auto connection_ptr = std::make_unique<NaiveConnection>(
+      ++last_id_, kPadDirection, stream, header_list, traffic_annotation_);
+  auto* connection = connection_ptr.get();
+  stream->set_naive_id(connection->id());
+  connection_by_id_[connection->id()] = std::move(connection_ptr);
+  int result = connection->Connect(
+      base::BindRepeating(&NaiveProxy::OnConnectComplete,
+                          weak_ptr_factory_.GetWeakPtr(), connection->id()));
+  if (result == ERR_IO_PENDING)
+    return;
+  HandleConnectResult(connection, result);
+}
+
+void NaiveProxy::OnReadData(quic::QuicNaiveServerStream* stream) {
+  auto* connection = FindConnection(stream->naive_id());
+  if (connection) {
+    connection->OnReadData();
+  }
+}
+
+void NaiveProxy::OnDeleteStream(quic::QuicNaiveServerStream* stream) {
+  Close(stream->naive_id(), OK);
+}
 
 void NaiveProxy::DoAcceptLoop() {
   int result;
@@ -92,7 +149,7 @@ void NaiveProxy::DoConnect() {
   }
   pad_direction = NaiveConnection::kNone;
   auto connection_ptr = std::make_unique<NaiveConnection>(
-      ++last_id_, pad_direction, std::move(socket), this, traffic_annotation_);
+      ++last_id_, protocol_, use_proxy_, pad_direction, std::move(socket), traffic_annotation_);
   auto* connection = connection_ptr.get();
   connection_by_id_[connection->id()] = std::move(connection_ptr);
   int result = connection->Connect(
@@ -103,65 +160,8 @@ void NaiveProxy::DoConnect() {
   HandleConnectResult(connection, result);
 }
 
-int NaiveProxy::OnConnectServer(unsigned int connection_id,
-                                const StreamSocket* client_socket,
-                                ClientSocketHandle* server_socket,
-                                CompletionRepeatingCallback callback) {
-  // Ignores socket limit set by socket pool for this type of socket.
-  constexpr int request_load_flags = LOAD_IGNORE_LIMITS;
-  constexpr RequestPriority request_priority = MAXIMUM_PRIORITY;
-
-  ProxyInfo proxy_info;
-  SSLConfig server_ssl_config;
-  SSLConfig proxy_ssl_config;
-
-  if (use_proxy_) {
-    const auto& proxy_config = session_->proxy_resolution_service()->config();
-    DCHECK(proxy_config);
-    const ProxyList& proxy_list =
-        proxy_config.value().value().proxy_rules().single_proxies;
-    if (proxy_list.IsEmpty())
-      return ERR_MANDATORY_PROXY_CONFIGURATION_FAILED;
-    proxy_info.UseProxyList(proxy_list);
-    proxy_info.set_traffic_annotation(
-        net::MutableNetworkTrafficAnnotationTag(traffic_annotation_));
-
-    HttpRequestInfo req_info;
-    session_->GetSSLConfig(req_info, &server_ssl_config, &proxy_ssl_config);
-    proxy_ssl_config.disable_cert_verification_network_fetches = true;
-  } else {
-    proxy_info.UseDirect();
-  }
-
-  HostPortPair request_endpoint;
-  if (protocol_ == kSocks5) {
-    const auto* socket = static_cast<const Socks5ServerSocket*>(client_socket);
-    request_endpoint = socket->request_endpoint();
-  } else if (protocol_ == kHttp) {
-    const auto* socket = static_cast<const HttpProxySocket*>(client_socket);
-    request_endpoint = socket->request_endpoint();
-  }
-  if (request_endpoint.IsEmpty()) {
-    LOG(ERROR) << "Connection " << connection_id << " to invalid origin";
-    return ERR_ADDRESS_INVALID;
-  }
-
-  LOG(INFO) << "Connection " << connection_id << " to "
-            << request_endpoint.ToString();
-
-  auto quic_version = quic::QUIC_VERSION_UNSUPPORTED;
-  if (proxy_info.is_quic()) {
-    quic_version = quic::QUIC_VERSION_43;
-  }
-
-  return InitSocketHandleForRawConnect2(
-      request_endpoint, session_, request_load_flags, request_priority,
-      proxy_info, quic_version, server_ssl_config, proxy_ssl_config,
-      PRIVACY_MODE_DISABLED, net_log_, server_socket, callback);
-}
-
-void NaiveProxy::OnConnectComplete(int connection_id, int result) {
-  NaiveConnection* connection = FindConnection(connection_id);
+void NaiveProxy::OnConnectComplete(unsigned int connection_id, int result) {
+  auto* connection = FindConnection(connection_id);
   if (!connection)
     return;
   HandleConnectResult(connection, result);
@@ -184,8 +184,8 @@ void NaiveProxy::DoRun(NaiveConnection* connection) {
   HandleRunResult(connection, result);
 }
 
-void NaiveProxy::OnRunComplete(int connection_id, int result) {
-  NaiveConnection* connection = FindConnection(connection_id);
+void NaiveProxy::OnRunComplete(unsigned int connection_id, int result) {
+  auto* connection = FindConnection(connection_id);
   if (!connection)
     return;
   HandleRunResult(connection, result);
@@ -195,13 +195,18 @@ void NaiveProxy::HandleRunResult(NaiveConnection* connection, int result) {
   Close(connection->id(), result);
 }
 
-void NaiveProxy::Close(int connection_id, int reason) {
+void NaiveProxy::Close(unsigned int connection_id, int reason) {
   auto it = connection_by_id_.find(connection_id);
   if (it == connection_by_id_.end())
     return;
 
   LOG(INFO) << "Connection " << connection_id
             << " closed: " << ErrorToShortString(reason);
+
+  // QUIC stream must be deleted immediately.
+  if (protocol_ == NaiveConnection::kQuic) {
+    it->second->OnDeleteStream();
+  }
 
   // The call stack might have callbacks which still have the pointer of
   // connection. Instead of referencing connection with ID all the time,
@@ -212,19 +217,11 @@ void NaiveProxy::Close(int connection_id, int reason) {
   connection_by_id_.erase(it);
 }
 
-NaiveConnection* NaiveProxy::FindConnection(int connection_id) {
+NaiveConnection* NaiveProxy::FindConnection(unsigned int connection_id) {
   auto it = connection_by_id_.find(connection_id);
   if (it == connection_by_id_.end())
     return nullptr;
   return it->second.get();
-}
-
-// This is called after any delegate callbacks are called to check if Close()
-// has been called during callback processing. Using the pointer of connection,
-// |connection| is safe here because Close() deletes the connection in next run
-// loop.
-bool NaiveProxy::HasClosedConnection(NaiveConnection* connection) {
-  return FindConnection(connection->id()) != connection;
 }
 
 }  // namespace net

@@ -16,6 +16,11 @@
 #include "net/base/completion_once_callback.h"
 #include "net/base/completion_repeating_callback.h"
 
+namespace quic {
+class QuicNaiveServerStream;
+class QuicHeaderList;
+}  // namespace quic
+
 namespace net {
 
 class ClientSocketHandle;
@@ -28,6 +33,12 @@ class NaiveConnection {
  public:
   using TimeFunc = base::TimeTicks (*)();
 
+  enum Protocol {
+    kSocks5,
+    kHttp,
+    kQuic,
+  };
+
   // From this direction.
   enum Direction {
     kClient = 0,
@@ -36,24 +47,15 @@ class NaiveConnection {
     kNone = 2,
   };
 
-  class Delegate {
-   public:
-    Delegate() {}
-    virtual ~Delegate() {}
-
-    virtual int OnConnectServer(unsigned int connection_id,
-                                const StreamSocket* accepted_socket,
-                                ClientSocketHandle* server_socket,
-                                CompletionRepeatingCallback callback) = 0;
-
-   private:
-    DISALLOW_COPY_AND_ASSIGN(Delegate);
-  };
-
   NaiveConnection(unsigned int id,
+                  Protocol protocol,
+                  bool use_proxy,
                   Direction pad_direction,
                   std::unique_ptr<StreamSocket> accepted_socket,
-                  Delegate* delegate,
+                  const NetworkTrafficAnnotationTag& traffic_annotation);
+  NaiveConnection(unsigned int id,
+                  quic::QuicNaiveServerStream* stream,
+                  const quic::QuicHeaderList& header_list,
                   const NetworkTrafficAnnotationTag& traffic_annotation);
   ~NaiveConnection();
 
@@ -97,6 +99,8 @@ class NaiveConnection {
   void OnPushComplete(Direction from, Direction to, int result);
 
   unsigned int id_;
+  Protocol protocol_;
+  bool use_proxy_;
   Direction pad_direction_;
 
   CompletionRepeatingCallback io_callback_;
