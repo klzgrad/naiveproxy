@@ -2,8 +2,9 @@
 set -ex
 
 ARCH=$(uname)
-case "$ARCH" in MINGW*)
-  ARCH=Windows
+case "$ARCH" in
+  MINGW*) ARCH=Windows;;
+  MSYS*) ARCH=Windows;;
 esac
 
 # Clang
@@ -36,7 +37,7 @@ if [ "$ARCH" = Windows ]; then
     ./rustup-init.exe -y -v --no-modify-path
   fi
   if ! which sccache >/dev/null 2>&1; then
-    cargo install --git https://github.com/mozilla/sccache.git --debug
+    cargo install --git https://github.com/mozilla/sccache.git
   fi
 fi
 
