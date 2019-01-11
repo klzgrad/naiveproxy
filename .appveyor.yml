@@ -1,0 +1,29 @@
+version: '{build}'
+image: Visual Studio 2017
+install:
+  - cinst ninja
+cache:
+  - '%USERPROFILE%\.cargo\bin'
+  - '%LOCALAPPDATA%\Mozilla\sccache'
+build_script:
+  - bash ./tools/import-upstream.sh
+  - cd src
+  - bash ./get-clang.sh
+  - bash -c '~/.cargo/bin/sccache -s'
+  - bash ./build.sh
+  - bash -c '~/.cargo/bin/sccache -s'
+  - bash -c 'mkdir naive-$APPVEYOR_REPO_TAG_NAME-win64'
+  - bash -c 'cp out/Release/naive.exe config.json LICENSE naive-$APPVEYOR_REPO_TAG_NAME-win64/'
+  - bash -c '7z a ../naive-$APPVEYOR_REPO_TAG_NAME-win64.zip naive-$APPVEYOR_REPO_TAG_NAME-win64/'
+test: off
+artifacts:
+  - path: naive-$(APPVEYOR_REPO_TAG_NAME)-win64.zip
+deploy:
+  - provider: GitHub
+    auth_token:
+      secure: h+qwIoof/3ET7LOldWwlb6XQLmpxYPuaZL4YcFQ8QyclfBrnywzwzDaSqdE2unPg
+    artifact: naive-$(APPVEYOR_REPO_TAG_NAME)-win64.zip
+    prerelease: true
+    force_update: true
+    on:
+      APPVEYOR_REPO_TAG: true
