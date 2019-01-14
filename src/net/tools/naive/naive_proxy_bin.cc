@@ -128,6 +128,7 @@ std::unique_ptr<net::URLRequestContext> BuildURLRequestContext(
 
   net::ProxyConfig proxy_config;
   proxy_config.proxy_rules().ParseFromString(params.proxy_url);
+  LOG(INFO) << "Proxying via " << params.proxy_url;
   auto proxy_service = net::ProxyResolutionService::CreateWithoutProxyResolver(
       std::make_unique<net::ProxyConfigServiceFixed>(
           net::ProxyConfigWithAnnotation(proxy_config, kTrafficAnnotation)),
@@ -233,6 +234,15 @@ void GetCommandLineFromConfig(const base::FilePath& config_path, CommandLine* cm
   }
 }
 
+std::string GetProxyFromURL(const GURL& url) {
+  auto shp = url::SchemeHostPort(url);
+  if (url::DefaultPortForScheme(shp.scheme().c_str(), shp.scheme().size()) == url::PORT_UNSPECIFIED) {
+    return shp.Serialize() + ":" + base::IntToString(shp.port());
+  } else {
+    return shp.Serialize();
+  }
+}
+
 bool ParseCommandLine(const CommandLine& cmdline, Params* params) {
   params->protocol = net::NaiveConnection::kSocks5;
   params->listen_addr = "0.0.0.0";
@@ -270,12 +280,17 @@ bool ParseCommandLine(const CommandLine& cmdline, Params* params) {
                          url::SCHEME_WITH_HOST_PORT_AND_USER_INFORMATION);
   params->proxy_url = "direct://";
   GURL url(cmdline.proxy);
+  GURL::Replacements remove_auth;
+  remove_auth.ClearUsername();
+  remove_auth.ClearPassword();
+  GURL url_no_auth = url.ReplaceComponents(remove_auth);
   if (!cmdline.proxy.empty()) {
     if (!url.is_valid()) {
       std::cerr << "Invalid proxy URL" << std::endl;
       return false;
     }
-    params->proxy_url = url::SchemeHostPort(url).Serialize();
+    params->proxy_url = GetProxyFromURL(url_no_auth);
+    params->proxy_url.erase();
     params->proxy_user = url.username();
     params->proxy_pass = url.password();
   }
@@ -287,10 +302,9 @@ bool ParseCommandLine(const CommandLine& cmdline, Params* params) {
   } else {
     // SNI should only contain DNS hostnames not IP addresses per RFC 6066.
     if (url.HostIsIPAddress()) {
-      GURL::Replacements replacements;
-      replacements.SetHostStr(kDefaultHostName);
-      params->proxy_url =
-          url::SchemeHostPort(url.ReplaceComponents(replacements)).Serialize();
+      GURL::Replacements set_host;
+      set_host.SetHostStr(kDefaultHostName);
+      params->proxy_url = GetProxyFromURL(url_no_auth.ReplaceComponents(set_host));
       LOG(INFO) << "Using '" << kDefaultHostName << "' as the hostname for "
                 << url.host();
       params->host_resolver_rules =
@@ -440,6 +454,7 @@ int main(int argc, char* argv[]) {
     LOG(ERROR) << "Failed to listen: " << result;
     return EXIT_FAILURE;
   }
+  LOG(INFO) << "Listening on " << params.listen_addr << ":" << params.listen_port;
 
   net::NaiveProxy naive_proxy(std::move(listen_socket), params.protocol,
                               params.use_padding, session, kTrafficAnnotation);
