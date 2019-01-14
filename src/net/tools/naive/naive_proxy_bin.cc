@@ -275,10 +275,6 @@ bool ParseCommandLine(const CommandLine& cmdline, Params* params) {
       std::cerr << "Invalid proxy URL" << std::endl;
       return false;
     }
-    if (url.scheme() != "https" && url.scheme() != "quic") {
-      std::cerr << "Must be HTTPS or QUIC proxy" << std::endl;
-      return false;
-    }
     params->proxy_url = url::SchemeHostPort(url).Serialize();
     params->proxy_user = url.username();
     params->proxy_pass = url.password();
