@@ -1,0 +1,222 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+assert(is_fuchsia)
+
+import("fuchsia_sdk_pkg.gni")
+
+config("sdk_lib_dirs_config") {
+  visibility = [ ":*" ]
+  lib_dirs = [ "sdk/arch/${target_cpu}/lib" ]
+}
+
+fuchsia_sdk_pkg("async") {
+  sources = [
+    "include/lib/async/dispatcher.h",
+    "include/lib/async/receiver.h",
+    "include/lib/async/task.h",
+    "include/lib/async/time.h",
+    "include/lib/async/trap.h",
+    "include/lib/async/wait.h",
+    "ops.c",
+  ]
+}
+
+# async-default keep a per-thread dispatcher for async.
+fuchsia_sdk_pkg("async_default") {
+  package_name = "async-default"
+  sources = [
+    "include/lib/async/default.h",
+  ]
+
+  libs = [ "async-default" ]
+}
+
+fuchsia_sdk_pkg("fdio") {
+  sources = [
+    "include/lib/fdio/debug.h",
+    "include/lib/fdio/io.h",
+    "include/lib/fdio/limits.h",
+    "include/lib/fdio/module.modulemap",
+    "include/lib/fdio/namespace.h",
+    "include/lib/fdio/private.h",
+    "include/lib/fdio/remoteio.h",
+    "include/lib/fdio/socket.h",
+    "include/lib/fdio/spawn.h",
+    "include/lib/fdio/util.h",
+    "include/lib/fdio/vfs.h",
+    "include/lib/fdio/watcher.h",
+  ]
+
+  libs = [ "fdio" ]
+}
+
+fuchsia_sdk_pkg("fidl") {
+  # FIDL headers include async headers. These dependencies needs to be public
+  # to ensure that dependent targets get correct include paths.
+  public_deps = [
+    ":async",
+    ":async_default",
+  ]
+
+  sources = [
+    "builder.cpp",
+    "decoding.cpp",
+    "encoding.cpp",
+    "formatting.cpp",
+    "include/lib/fidl/coding.h",
+    "include/lib/fidl/cpp/builder.h",
+    "include/lib/fidl/cpp/message.h",
+    "include/lib/fidl/cpp/message_buffer.h",
+    "include/lib/fidl/cpp/message_builder.h",
+    "include/lib/fidl/cpp/message_part.h",
+    "include/lib/fidl/cpp/string_view.h",
+    "include/lib/fidl/cpp/vector_view.h",
+    "include/lib/fidl/internal.h",
+    "message.cpp",
+    "message_buffer.cpp",
+    "message_builder.cpp",
+    "validating.cpp",
+  ]
+}
+
+fuchsia_sdk_pkg("fidl_cpp") {
+  public_deps = [
+    ":fidl",
+    ":fidl_cpp_sync",
+    ":fit",
+    ":zx",
+  ]
+  sources = [
+    "clone.cc",
+    "include/lib/fidl/cpp/binding.h",
+    "include/lib/fidl/cpp/binding_set.h",
+    "include/lib/fidl/cpp/clone.h",
+    "include/lib/fidl/cpp/interface_ptr.h",
+    "include/lib/fidl/cpp/interface_ptr_set.h",
+    "include/lib/fidl/cpp/internal/header.h",
+    "include/lib/fidl/cpp/internal/implementation.h",
+    "include/lib/fidl/cpp/internal/message_handler.h",
+    "include/lib/fidl/cpp/internal/message_reader.h",
+    "include/lib/fidl/cpp/internal/pending_response.h",
+    "include/lib/fidl/cpp/internal/proxy.h",
+    "include/lib/fidl/cpp/internal/proxy_controller.h",
+    "include/lib/fidl/cpp/internal/stub.h",
+    "include/lib/fidl/cpp/internal/stub_controller.h",
+    "include/lib/fidl/cpp/internal/weak_stub_controller.h",
+    "include/lib/fidl/cpp/optional.h",
+    "include/lib/fidl/cpp/string.h",
+    "include/lib/fidl/cpp/thread_safe_binding_set.h",
+    "internal/message_handler.cc",
+    "internal/message_reader.cc",
+    "internal/pending_response.cc",
+    "internal/proxy.cc",
+    "internal/proxy_controller.cc",
+    "internal/stub.cc",
+    "internal/stub_controller.cc",
+    "internal/weak_stub_controller.cc",
+    "string.cc",
+  ]
+}
+
+fuchsia_sdk_pkg("fidl_cpp_sync") {
+  public_deps = [
+    ":fidl",
+    ":fit",
+    ":zx",
+  ]
+  sources = [
+    "coding_traits.cc",
+    "decoder.cc",
+    "encoder.cc",
+    "include/lib/fidl/cpp/array.h",
+    "include/lib/fidl/cpp/coding_traits.h",
+    "include/lib/fidl/cpp/comparison.h",
+    "include/lib/fidl/cpp/decoder.h",
+    "include/lib/fidl/cpp/encoder.h",
+    "include/lib/fidl/cpp/interface_handle.h",
+    "include/lib/fidl/cpp/interface_request.h",
+    "include/lib/fidl/cpp/internal/logging.h",
+    "include/lib/fidl/cpp/internal/synchronous_proxy.h",
+    "include/lib/fidl/cpp/synchronous_interface_ptr.h",
+    "include/lib/fidl/cpp/traits.h",
+    "include/lib/fidl/cpp/vector.h",
+    "internal/logging.cc",
+    "internal/synchronous_proxy.cc",
+  ]
+}
+
+fuchsia_sdk_pkg("fit") {
+  sources = [
+    "include/lib/fit/function.h",
+  ]
+}
+
+fuchsia_sdk_pkg("svc") {
+  sources = [
+    "include/lib/svc/dir.h",
+  ]
+
+  libs = [ "svc" ]
+}
+
+fuchsia_sdk_pkg("zx") {
+  sources = [
+    "channel.cpp",
+    "event.cpp",
+    "eventpair.cpp",
+    "fifo.cpp",
+    "guest.cpp",
+    "include/lib/zx/bti.h",
+    "include/lib/zx/channel.h",
+    "include/lib/zx/event.h",
+    "include/lib/zx/eventpair.h",
+    "include/lib/zx/fifo.h",
+    "include/lib/zx/guest.h",
+    "include/lib/zx/handle.h",
+    "include/lib/zx/interrupt.h",
+    "include/lib/zx/job.h",
+    "include/lib/zx/log.h",
+    "include/lib/zx/object.h",
+    "include/lib/zx/object_traits.h",
+    "include/lib/zx/pmt.h",
+    "include/lib/zx/port.h",
+    "include/lib/zx/process.h",
+    "include/lib/zx/resource.h",
+    "include/lib/zx/socket.h",
+    "include/lib/zx/task.h",
+    "include/lib/zx/thread.h",
+    "include/lib/zx/time.h",
+    "include/lib/zx/timer.h",
+    "include/lib/zx/vmar.h",
+    "include/lib/zx/vmo.h",
+    "interrupt.cpp",
+    "job.cpp",
+    "log.cpp",
+    "port.cpp",
+    "process.cpp",
+    "resource.cpp",
+    "socket.cpp",
+    "thread.cpp",
+    "timer.cpp",
+    "vmar.cpp",
+    "vmo.cpp",
+  ]
+}
+
+copy("vulkan_layers") {
+  sources = [
+    "sdk/pkg/vulkan_layers/data/vulkan/explicit_layer.d/VkLayer_core_validation.json",
+    "sdk/pkg/vulkan_layers/data/vulkan/explicit_layer.d/VkLayer_image_pipe_swapchain.json",
+    "sdk/pkg/vulkan_layers/data/vulkan/explicit_layer.d/VkLayer_object_tracker.json",
+    "sdk/pkg/vulkan_layers/data/vulkan/explicit_layer.d/VkLayer_parameter_validation.json",
+    "sdk/pkg/vulkan_layers/data/vulkan/explicit_layer.d/VkLayer_standard_validation.json",
+    "sdk/pkg/vulkan_layers/data/vulkan/explicit_layer.d/VkLayer_threading.json",
+    "sdk/pkg/vulkan_layers/data/vulkan/explicit_layer.d/VkLayer_unique_objects.json",
+  ]
+
+  outputs = [
+    "${root_gen_dir}/data/vulkan/explicit_layer.d/{{source_file_part}}",
+  ]
+}

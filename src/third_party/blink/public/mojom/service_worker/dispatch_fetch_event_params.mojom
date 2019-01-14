@@ -1,0 +1,47 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module blink.mojom;
+
+import "services/network/public/mojom/url_loader.mojom";
+import "third_party/blink/public/mojom/blob/blob.mojom";
+
+// Used for service worker navigation preload, to create
+// FetchEvent#preloadResponse.
+struct FetchEventPreloadHandle {
+  network.mojom.URLLoader url_loader;
+  network.mojom.URLLoaderClient& url_loader_client_request;
+};
+
+// Parameters used for dispatching a FetchEvent.
+struct DispatchFetchEventParams {
+  // FetchEvent#request.
+  network.mojom.URLRequest request;
+
+  // The following fields are used to create FetchEvent#request#body, depending
+  // on whether S13nServiceWorker/NetworkService are enabled.
+
+  // (A) S13nServiceWorker with NetworkService on:
+  // All information about the request body is provided in
+  // |request.request_body|.
+
+  // (B) S13nServiceWorker with NetworkService off:
+  // All information about the request body except for BlobPtrs is provided in
+  // |request.request_body|. These BlobPtrs need to be passed separately.
+  // Once the NetworkService is enabled, this will be no longer used since all
+  // Blobs are passed as data pipes which can live in |request.request_body|.
+  array<Blob> request_body_blob_ptrs;
+
+  // (C) non-S13nServiceWorker:
+  // All information to create the request body are packed into a blob. These
+  // params are for passing the blob.
+  string request_body_blob_uuid;
+  uint64 request_body_blob_size;
+  Blob? request_body_blob;
+
+  // FetchEvent#clientId.
+  string client_id;
+  // FetchEvent#preloadResponse.
+  FetchEventPreloadHandle? preload_handle;
+};

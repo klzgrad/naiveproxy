@@ -1,0 +1,65 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//mojo/public/tools/bindings/mojom.gni")
+import("//services/catalog/public/tools/catalog.gni")
+import("//services/service_manager/public/cpp/service.gni")
+import("//services/service_manager/public/service_manifest.gni")
+import("//testing/test.gni")
+
+source_set("unittests") {
+  testonly = true
+  sources = [
+    "background_service_manager_unittest.cc",
+  ]
+
+  deps = [
+    ":test_service_interfaces",
+    "//base",
+    "//base/test:test_support",
+    "//services/service_manager/background:lib",
+    "//services/service_manager/public/cpp",
+    "//testing/gtest",
+    "//url",
+  ]
+
+  data_deps = [
+    ":background_service_manager_test_service",
+  ]
+}
+
+mojom("test_service_interfaces") {
+  sources = [
+    "test.mojom",
+  ]
+}
+
+service("background_service_manager_test_service") {
+  sources = [
+    "test_service.cc",
+  ]
+
+  deps = [
+    ":test_service_interfaces",
+    "//base",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/mojom",
+  ]
+}
+
+service_manifest("test_manifest") {
+  name = "background_service_manager_unittest"
+  source = "test_manifest.json"
+}
+
+service_manifest("test_service_manifest") {
+  name = "background_service_manager_test_service"
+  source = "test_service_manifest.json"
+}
+
+catalog("catalog") {
+  embedded_services = [ ":test_manifest" ]
+
+  standalone_services = [ ":test_service_manifest" ]
+}

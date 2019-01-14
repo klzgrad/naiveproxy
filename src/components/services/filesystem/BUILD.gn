@@ -1,0 +1,94 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//services/catalog/public/tools/catalog.gni")
+import("//services/service_manager/public/cpp/service.gni")
+import("//services/service_manager/public/service_manifest.gni")
+import("//services/service_manager/public/tools/test/service_test.gni")
+import("//testing/test.gni")
+
+static_library("lib") {
+  sources = [
+    "directory_impl.cc",
+    "directory_impl.h",
+    "file_impl.cc",
+    "file_impl.h",
+    "file_system_impl.cc",
+    "file_system_impl.h",
+    "lock_table.cc",
+    "lock_table.h",
+    "shared_temp_dir.cc",
+    "shared_temp_dir.h",
+    "util.cc",
+    "util.h",
+  ]
+
+  deps = [
+    "//base",
+    "//components/services/filesystem/public/interfaces",
+    "//mojo/public/cpp/system",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/mojom",
+    "//url",
+  ]
+}
+
+if (!is_ios) {
+  # service binaries are not supported on iOS.
+  service("filesystem") {
+    sources = [
+      "file_system_app.cc",
+      "file_system_app.h",
+      "main.cc",
+    ]
+
+    deps = [
+      ":lib",
+      "//base",
+      "//components/services/filesystem/public/interfaces",
+      "//mojo/public/cpp/bindings",
+      "//mojo/public/cpp/system",
+      "//services/service_manager/public/cpp",
+    ]
+  }
+
+  service_manifest("manifest") {
+    name = "filesystem"
+    source = "manifest.json"
+  }
+
+  service_test("filesystem_service_unittests") {
+    sources = [
+      "directory_impl_unittest.cc",
+      "file_impl_unittest.cc",
+      "files_test_base.cc",
+      "files_test_base.h",
+    ]
+
+    catalog = ":filesystem_service_unittests_catalog"
+
+    deps = [
+      "//base",
+      "//components/services/filesystem/public/interfaces",
+      "//mojo/public/cpp/bindings",
+      "//mojo/public/cpp/system",
+      "//services/service_manager/public/cpp",
+      "//services/service_manager/public/cpp:service_test_support",
+    ]
+
+    data_deps = [
+      ":filesystem",
+    ]
+  }
+
+  service_manifest("test_manifest") {
+    name = "filesystem_service_unittests"
+    source = "test_manifest.json"
+  }
+
+  catalog("filesystem_service_unittests_catalog") {
+    embedded_services = [ ":test_manifest" ]
+    standalone_services = [ ":manifest" ]
+  }
+}

@@ -1,0 +1,301 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+assert(is_fuchsia)
+
+import("//build/config/fuchsia/fidl_library.gni")
+import("//build/config/fuchsia/rules.gni")
+import("//build/util/process_version.gni")
+import("//testing/test.gni")
+import("//tools/grit/repack.gni")
+
+config("webrunner_implementation") {
+  defines = [ "WEBRUNNER_IMPLEMENTATION" ]
+}
+
+fuchsia_package("webrunner_pkg") {
+  binary = ":webrunner_exe"
+  package_name_override = "web_runner"
+  sandbox_policy = "app/sandbox_policy"
+}
+
+fuchsia_package_runner("webrunner") {
+  package = ":webrunner_pkg"
+  package_name_override = "web_runner"
+  install_only = true
+  package_deps = [ [
+        ":service_pkg",
+        "chromium",
+      ] ]
+}
+
+executable("webrunner_exe") {
+  sources = [
+    "app/component_controller_impl.cc",
+    "app/component_controller_impl.h",
+    "app/main.cc",
+    "app/web_content_runner.cc",
+    "app/web_content_runner.h",
+  ]
+  deps = [
+    ":fidl",
+    "//base",
+    "//url",
+  ]
+}
+
+fuchsia_package("service_pkg") {
+  binary = ":service_exe"
+  package_name_override = "chromium"
+  sandbox_policy = "service/sandbox_policy"
+}
+
+executable("service_exe") {
+  deps = [
+    ":fidl",
+    ":service_lib",
+    "//base",
+    "//content/public/app:both",
+    "//services/service_manager/embedder:embedder_switches",
+  ]
+  sources = [
+    "service/web_content_service_main.cc",
+  ]
+}
+
+fuchsia_package_runner("service_runner") {
+  package = ":service_pkg"
+  package_name_override = "chromium"
+  install_only = true
+}
+
+component("service_lib") {
+  deps = [
+    ":service_pak",
+    "//base",
+    "//components/version_info",
+    "//content/public/app:both",
+    "//content/public/browser",
+    "//content/public/child",
+    "//content/public/common",
+    "//content/public/renderer",
+    "//services/network/public/cpp",
+    "//ui/aura",
+    "//ui/display",
+    "//ui/ozone",
+    "//ui/platform_window",
+    "//ui/wm",
+    "//ui/wm/public",
+  ]
+
+  data_deps = [
+    ":service_pak",
+  ]
+  data = [
+    "$root_out_dir/webrunner.pak",
+  ]
+  public_deps = [
+    ":fidl",
+  ]
+  configs += [ ":webrunner_implementation" ]
+
+  sources = [
+    "browser/context_impl.cc",
+    "browser/context_impl.h",
+    "browser/frame_impl.cc",
+    "browser/frame_impl.h",
+    "browser/webrunner_browser_context.cc",
+    "browser/webrunner_browser_context.h",
+    "browser/webrunner_browser_main.cc",
+    "browser/webrunner_browser_main.h",
+    "browser/webrunner_browser_main_parts.cc",
+    "browser/webrunner_browser_main_parts.h",
+    "browser/webrunner_content_browser_client.cc",
+    "browser/webrunner_content_browser_client.h",
+    "browser/webrunner_net_log.cc",
+    "browser/webrunner_net_log.h",
+    "browser/webrunner_screen.cc",
+    "browser/webrunner_screen.h",
+    "browser/webrunner_url_request_context_getter.cc",
+    "browser/webrunner_url_request_context_getter.h",
+    "common/webrunner_content_client.cc",
+    "common/webrunner_content_client.h",
+    "common/webrunner_export.h",
+    "service/common.cc",
+    "service/common.h",
+    "service/context_provider_impl.cc",
+    "service/context_provider_impl.h",
+    "service/context_provider_main.cc",
+    "service/context_provider_main.h",
+    "service/webrunner_main_delegate.cc",
+    "service/webrunner_main_delegate.h",
+  ]
+}
+
+repack("service_pak") {
+  sources = [
+    "$root_gen_dir/components/components_resources.pak",
+    "$root_gen_dir/components/strings/components_strings_en-US.pak",
+    "$root_gen_dir/content/app/resources/content_resources_100_percent.pak",
+    "$root_gen_dir/content/app/strings/content_strings_en-US.pak",
+    "$root_gen_dir/content/browser/devtools/devtools_resources.pak",
+    "$root_gen_dir/content/browser/tracing/tracing_resources.pak",
+    "$root_gen_dir/content/content_resources.pak",
+    "$root_gen_dir/mojo/public/js/mojo_bindings_resources.pak",
+    "$root_gen_dir/net/net_resources.pak",
+    "$root_gen_dir/third_party/blink/public/resources/blink_resources.pak",
+    "$root_gen_dir/third_party/blink/public/resources/blink_scaled_resources_100_percent.pak",
+    "$root_gen_dir/ui/resources/ui_resources_100_percent.pak",
+    "$root_gen_dir/ui/resources/webui_resources.pak",
+    "$root_gen_dir/ui/strings/app_locale_settings_en-US.pak",
+    "$root_gen_dir/ui/strings/ui_strings_en-US.pak",
+  ]
+
+  deps = [
+    "//components/resources:components_resources",
+    "//components/strings",
+    "//content:resources",
+    "//content/app/resources",
+    "//content/app/strings",
+    "//content/browser/devtools:resources",
+    "//content/browser/tracing:resources",
+    "//mojo/public/js:resources",
+    "//net:net_resources",
+    "//third_party/blink/public:resources",
+    "//third_party/blink/public:scaled_resources_100_percent",
+    "//ui/resources",
+    "//ui/strings",
+  ]
+
+  output = "$root_out_dir/webrunner.pak"
+}
+
+test("webrunner_browsertests") {
+  sources = [
+    "browser/context_impl_browsertest.cc",
+    "browser/frame_impl_browsertest.cc",
+    "browser/test_common.cc",
+    "browser/test_common.h",
+    "browser/webrunner_browser_test.cc",
+    "browser/webrunner_browser_test.h",
+    "browser/webrunner_test_launcher.cc",
+  ]
+  defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+  data = [
+    "browser/test/data",
+  ]
+  deps = [
+    ":fidl",
+    ":service_lib",
+    "//base/test:test_support",
+    "//content/test:test_support",
+    "//net:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//ui/ozone",
+  ]
+}
+
+test("webrunner_unittests") {
+  sources = [
+    "service/context_provider_impl_unittest.cc",
+  ]
+  deps = [
+    ":fidl",
+    ":service_lib",
+    "//base/test:run_all_unittests",
+    "//base/test:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+}
+
+fidl_library("fidl") {
+  library_name = "web"
+  namespace = "chromium"
+
+  sources = [
+    "fidl/context.fidl",
+    "fidl/context_provider.fidl",
+    "fidl/frame.fidl",
+    "fidl/navigation_controller.fidl",
+    "fidl/navigation_event_observer.fidl",
+  ]
+
+  public_deps = [
+    "//third_party/fuchsia-sdk/sdk:gfx",
+    "//third_party/fuchsia-sdk/sdk:sys",
+    "//third_party/fuchsia-sdk/sdk:viewsv1",
+  ]
+}
+
+# gn binary location.
+if (host_os == "mac") {
+  _gn_path = "//buildtools/mac/gn"
+} else if (host_os == "linux") {
+  _gn_path = "//buildtools/linux64/gn"
+}
+
+# Build location where all Fuchsia archive source files are placed.
+_artifact_root = "$root_out_dir/fuchsia_artifacts"
+
+# Produces a LICENSE file for webrunner and its transitive dependencies.
+_license_path = "$_artifact_root/LICENSE"
+action("license") {
+  script = "//tools/licenses.py"
+  inputs = [
+    "$_gn_path",
+  ]
+  outputs = [
+    _license_path,
+  ]
+  args = [
+    "license_file",
+    rebase_path(_license_path, root_build_dir),
+    "--gn-target",
+    "//webrunner:webrunner_pkg",
+    "--gn-out-dir",
+    ".",
+  ]
+}
+
+# Extracts the numeric Chrome build ID and writes it to a file in the output
+# directory.
+#
+# To check out the repository on the commit where the build ID was generated,
+# simply call `git checkout <build-id>`, and Git will check out the commit
+# associated with the <build-id> tag.
+process_version("build_id") {
+  template_file = "cipd/build_id.template"
+  sources = [
+    "//chrome/VERSION",
+  ]
+  output = "$_artifact_root/build_id.txt"
+  process_only = true
+}
+
+# Puts copies of files at the top level of the CIPD archive's structure.
+copy("restaged_packages") {
+  sources = [
+    "$root_gen_dir/webrunner/chromium/chromium.far",
+    "$root_gen_dir/webrunner/web_runner/web_runner.far",
+  ]
+  outputs = [
+    "$_artifact_root/{{source_file_part}}",
+  ]
+  deps = [
+    ":service_pkg",
+    ":webrunner_pkg",
+  ]
+}
+
+# Specifies the build steps that must be performed before the creation of
+# a CIPD archive.
+group("archive_sources") {
+  deps = [
+    ":build_id",
+    ":license",
+    ":restaged_packages",
+  ]
+}

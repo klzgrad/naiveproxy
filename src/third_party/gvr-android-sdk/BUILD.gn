@@ -1,0 +1,128 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/android/rules.gni")
+import("//build/config/c++/c++.gni")
+
+android_aar_prebuilt("controller_test_api_java") {
+  aar_path = "test-libraries/controller_test_api.aar"
+  proguard_configs = [ "test-libraries/proguard.txt" ]
+
+  # Jar includes conflicting copies of Desugar-runtime.jar classes.
+  jar_excluded_patterns = [ "*ThrowableExtension*.class" ]
+}
+
+android_aar_prebuilt("gvr_common_java") {
+  aar_path = "src/libraries/sdk-common-1.130.0.aar"
+  proguard_configs = [
+    "src/proguard-gvr.txt",
+    "proguard-gvr-chromium.txt",
+  ]
+  ignore_native_libraries = true
+
+  jar_included_patterns = [
+    # The following list contains all the java classes in com.google.vr. that we
+    # use. Gvr allows loading GvrLayout and GvrUiLayout from VrCore. So a lot of
+    # classes are not needed.
+    "*google/common/logging/nano/Vr\$VREvent.class",
+    "*google/common/logging/nano/Vr\$VREvent\$SdkConfigurationParams*",
+    "*google/vr/cardboard/AndroidNCompat*.class",
+    "*google/vr/cardboard/ConfigUtils.class",
+    "*google/vr/cardboard/ContentProviderVrParamsProvider.class",
+    "*google/vr/cardboard/ContextUtils.class",
+    "*google/vr/cardboard/DisplaySynchronizer.class",
+    "*google/vr/cardboard/DisplayUtils.class",
+    "*google/vr/cardboard/FrameMonitor.class",
+    "*google/vr/cardboard/IsEmulator.class",
+    "*google/vr/cardboard/PackageUtils.class",
+    "*google/vr/cardboard/StoragePermissionUtils.class",
+    "*google/vr/cardboard/UiUtils.class",
+    "*google/vr/cardboard/VrContextWrapper.class",
+    "*google/vr/cardboard/VrCoreLibraryLoader.class",
+    "*google/vr/cardboard/VrParamsProvider.class",
+    "*google/vr/cardboard/VrParamsProviderFactory.class",
+    "*google/vr/cardboard/VrParamsProviderFactory\$ContentProviderClientHandle.class",
+    "*google/vr/cardboard/VrSettingsProviderContract.class",
+    "*google/vr/internal/controller/ControllerServiceBridge.class",
+    "*google/vr/internal/controller/ControllerServiceBridge\$*",
+    "*google/vr/internal/controller/NativeCallbacks.class",
+    "*google/vr/ndk/base/AndroidCompat.class",
+    "*google/vr/ndk/base/BuildConstants.class",
+    "*google/vr/ndk/base/DaydreamApi*.class",
+    "*google/vr/ndk/base/DaydreamUtils.class",
+    "*google/vr/ndk/base/DefaultNativeLibraryLoader.class",
+    "*google/vr/ndk/base/GvrApi.class",
+    "*google/vr/ndk/base/GvrLayout.class",
+    "*google/vr/ndk/base/GvrLayoutFactory.class",
+    "*google/vr/ndk/base/GvrUiLayout.class",
+    "*google/vr/ndk/base/SdkConfigurationReader.class",
+    "*google/vr/ndk/base/TraceCompat.class",
+    "*google/vr/ndk/base/Version.class",
+    "*google/vr/sdk/common/deps/a.class",
+    "*google/vr/sdk/common/deps/b.class",
+    "*google/vr/sdk/common/deps/c.class",
+    "*google/vr/sdk/proto/nano/CardboardDevice.class",
+    "*google/vr/sdk/proto/nano/CardboardDevice\$*",
+    "*google/vr/sdk/proto/nano/Display.class",
+    "*google/vr/sdk/proto/nano/Display\$*",
+    "*google/vr/sdk/proto/nano/Preferences.class",
+    "*google/vr/sdk/proto/nano/Preferences\$*",
+    "*google/vr/sdk/proto/nano/SdkConfiguration.class",
+    "*google/vr/sdk/proto/nano/SdkConfiguration\$*",
+    "*google/vr/vrcore/base/api/ParcelableProto.class",
+    "*google/vr/vrcore/base/api/VrCoreConstants.class",
+    "*google/vr/vrcore/base/api/VrCoreNotAvailableException.class",
+    "*google/vr/vrcore/base/api/VrCoreUtils.class",
+    "*google/vr/vrcore/base/api/VrCoreUtils\$*",
+    "*google/vr/vrcore/common/api/IDaydream*",
+    "*google/vr/vrcore/common/api/ITransition*",
+    "*google/vr/vrcore/common/api/IVrCore*",
+    "*google/vr/vrcore/controller/api/IController*",
+    "*google/vr/vrcore/controller/api/Controller*",
+    "*google/vr/vrcore/library/api/*",
+  ]
+
+  deps = [
+    "//third_party/android_protobuf:protobuf_nano_javalib",
+  ]
+}
+
+android_aar_prebuilt("gvr_controller_java") {
+  aar_path = "src/libraries/sdk-controller-1.130.0.aar"
+  deps = [
+    ":gvr_common_java",
+  ]
+}
+
+config("libgvr_config") {
+  include_dirs = [ "src/libraries/headers/" ]
+}
+
+component("gvr_shim") {
+  libs = [
+    "android",
+    "log",
+  ]
+  if (enable_chrome_android_internal && !is_official_build) {
+    deps = [
+      "//clank/third_party/gvr_shim",
+    ]
+  } else {
+    if (use_custom_libcxx) {
+      library = "//third_party/gvr-android-sdk/libgvr_shim_static_custom_libcxx_${current_cpu}.a"
+    } else {
+      library =
+          "//third_party/gvr-android-sdk/libgvr_shim_static_${current_cpu}.a"
+    }
+    libs += [ library ]
+
+    if (is_component_build) {
+      ldflags = [
+        "-Wl,--whole-archive",
+        rebase_path(library, root_build_dir),
+        "-Wl,--no-whole-archive",
+      ]
+    }
+  }
+}

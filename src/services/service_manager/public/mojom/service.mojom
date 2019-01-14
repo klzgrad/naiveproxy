@@ -1,0 +1,75 @@
+// Copyright 2014 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module service_manager.mojom;
+
+import "services/service_manager/public/mojom/connector.mojom";
+import "services/service_manager/public/mojom/interface_provider.mojom";
+import "services/service_manager/public/mojom/interface_provider_spec.mojom";
+import "services/service_manager/public/mojom/service_control.mojom";
+
+// Metadata describing an instance of a service that originated a call to
+// BindInterface().
+struct BindSourceInfo {
+  // The service's identity.
+  Identity identity;
+
+  // An array of the capabilities exposed by the target that are required by the
+  // source.
+  CapabilitySet required_capabilities;
+};
+
+// Implemented by any service which is known to the Service Manager, for which
+// instances may be tracked. It allows the implementor to receive lifecycle
+// events and service inbound connection attempts.
+interface Service {
+  // Called by the service manager once an instance for this service has been
+  // created. This method will be called exactly once before any other method is
+  // called.
+  //
+  // Parameters:
+  //
+  //  identity
+  //    The identity of this instance in the service manager. Includes:
+  //    * The resolved name used in the connection request that resulted in this
+  //      instance being initialized.
+  //    * The user associated with this instance in the service manager. This
+  //      will never be kInheritUserID.
+  //    * The instance group this instance belongs to.
+  //
+  // Response parameters:
+  //
+  //  connector_request
+  //    An optional Connector request for the service manager to bind, allowing
+  //    the initialized client to connect to others.
+  //
+  //  control_request
+  //    An optional associated ServiceControl request.
+  //
+  OnStart(Identity identity) => (Connector&? connector_request,
+                                 associated ServiceControl&? control_request);
+
+  // Called when a request to bind an interface is received from another
+  // ("source") service. This is the result of that service calling
+  // BindInterface() on a Connector. By the time this method is called, the
+  // service manager has already completed a policy check to determine that this
+  // interface can be bound.
+  //
+  // The Service must respond to acknowledge receipt of the request.
+  //
+  // Parameters:
+  //
+  //  source
+  //    Contains information about the source of the request.
+  //
+  //  interface_name
+  //    The name of the interface to be bound.
+  //
+  //  interface_pipe
+  //    The message pipe to bind the interface implementation to.
+  //
+  OnBindInterface(BindSourceInfo source,
+                  string interface_name,
+                  handle<message_pipe> interface_pipe) => ();
+};

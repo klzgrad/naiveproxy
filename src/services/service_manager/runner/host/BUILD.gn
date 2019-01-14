@@ -1,0 +1,88 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//services/service_manager/public/cpp/service.gni")
+import("//services/service_manager/public/service_manifest.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
+import("//testing/test.gni")
+
+source_set("lib") {
+  sources = [
+    # These interfaces are shared between iOS and other platforms to minimize
+    # the amount of iddef'ing necessary to handle the fact that iOS does not
+    # support ServiceProcessLauncher.
+    "service_process_launcher_delegate.h",
+    "service_process_launcher_factory.h",
+  ]
+
+  deps = [
+    "//base:base_static",
+    "//base:i18n",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/runner:init",
+    "//services/service_manager/runner/common",
+    "//services/service_manager/sandbox",
+  ]
+
+  public_deps = [
+    "//base",
+    "//mojo/public/cpp/platform",
+    "//mojo/public/cpp/system",
+  ]
+
+  if (is_linux) {
+    deps += [ "//sandbox/linux:sandbox_services" ]
+  }
+
+  if (!is_ios) {
+    sources += [
+      # iOS does not support launching services in their own processes.
+      "service_process_launcher.cc",
+      "service_process_launcher.h",
+    ]
+
+    deps += [ "//services/service_manager/public/cpp/standalone_service" ]
+  }
+}
+
+if (!is_ios) {
+  # The below targets rely on the host_test_service service binary. Service
+  # binaries are not supported on iOS.
+  source_set("unittests") {
+    testonly = true
+    sources = [
+      "service_process_launcher_unittest.cc",
+    ]
+
+    deps = [
+      ":lib",
+      "//base",
+      "//base/test:test_support",
+      "//services/service_manager",
+      "//services/service_manager/runner:init",
+      "//services/service_manager/runner/common",
+      "//testing/gtest",
+    ]
+
+    data_deps = [
+      ":host_test_service",
+    ]
+  }
+
+  service("host_test_service") {
+    sources = [
+      "host_test_service_main.cc",
+    ]
+
+    deps = [
+      "//mojo/public/cpp/system",
+      "//services/service_manager/public/cpp/standalone_service:main",
+    ]
+  }
+
+  service_manifest("host_test_service_manifest") {
+    name = "host_test_service"
+    source = "host_test_service_manifest.json"
+  }
+}

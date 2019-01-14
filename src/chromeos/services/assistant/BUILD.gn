@@ -1,0 +1,151 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//chromeos/assistant/assistant.gni")
+import("//services/catalog/public/tools/catalog.gni")
+import("//services/service_manager/public/cpp/service.gni")
+import("//services/service_manager/public/service_manifest.gni")
+
+assert(is_chromeos)
+assert(enable_cros_assistant)
+
+source_set("lib") {
+  sources = [
+    "assistant_manager_service.h",
+    "assistant_settings_manager.h",
+    "fake_assistant_manager_service_impl.cc",
+    "fake_assistant_manager_service_impl.h",
+    "fake_assistant_settings_manager_impl.cc",
+    "fake_assistant_settings_manager_impl.h",
+    "service.cc",
+    "service.h",
+  ]
+
+  deps = [
+    "//base",
+    "//build/util:webkit_version",
+    "//chromeos",
+    "//chromeos/assistant:buildflags",
+    "//chromeos/services/assistant/public/mojom",
+    "//components/account_id",
+    "//services/device/public/mojom",
+    "//services/identity/public/mojom",
+    "//ui/accessibility:ax_assistant",
+  ]
+
+  public_deps = [
+    "//ash/public/cpp:cpp",
+    "//mojo/public/cpp/bindings:bindings",
+    "//services/audio/public/cpp:cpp",
+    "//services/service_manager/public/cpp:cpp",
+  ]
+
+  if (enable_cros_libassistant) {
+    sources += [
+      "assistant_manager_service_impl.cc",
+      "assistant_manager_service_impl.h",
+      "assistant_settings_manager_impl.cc",
+      "assistant_settings_manager_impl.h",
+      "platform/audio_input_provider_impl.cc",
+      "platform/audio_input_provider_impl.h",
+      "platform/audio_media_data_source.cc",
+      "platform/audio_media_data_source.h",
+      "platform/audio_output_provider_impl.cc",
+      "platform/audio_output_provider_impl.h",
+      "platform/audio_stream_handler.cc",
+      "platform/audio_stream_handler.h",
+      "platform/file_provider_impl.cc",
+      "platform/file_provider_impl.h",
+      "platform/network_provider_impl.cc",
+      "platform/network_provider_impl.h",
+      "platform/system_provider_impl.cc",
+      "platform/system_provider_impl.h",
+      "platform_api_impl.cc",
+      "platform_api_impl.h",
+      "utils.cc",
+      "utils.h",
+    ]
+
+    deps += [
+      "//chromeos/assistant/internal",
+      "//chromeos/assistant/internal:build_libassistant",
+      "//chromeos/assistant/internal/action",
+      "//chromeos/assistant/internal/proto/google3",
+      "//chromeos/resources",
+      "//chromeos/services/assistant/public/proto",
+      "//chromeos/strings",
+      "//libassistant/contrib/core",
+      "//libassistant/contrib/platform/audio",
+      "//libassistant/shared/internal_api/c:api_wrappers_entrypoint",
+      "//libassistant/shared/public",
+      "//libassistant/shared/public:export",
+      "//ui/base",
+    ]
+
+    libs = [ "$root_out_dir/libassistant.so" ]
+
+    include_dirs = [
+      "//libassistant/contrib",
+      "//libassistant/shared",
+    ]
+  }
+}
+
+service_manifest("manifest") {
+  name = "assistant"
+  source = "manifest.json"
+}
+
+source_set("tests") {
+  testonly = true
+  deps = [
+    ":lib",
+    "//base",
+    "//base/test:test_support",
+    "//chromeos",
+    "//mojo/public/cpp/bindings:bindings",
+    "//services/device/public/mojom",
+    "//services/identity/public/mojom",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/cpp:service_test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+  sources = [
+    "service_unittest.cc",
+  ]
+
+  if (enable_cros_libassistant) {
+    sources += [
+      "platform/audio_output_provider_impl_unittest.cc",
+      "platform/system_provider_impl_unittest.cc",
+    ]
+
+    deps += [ "//libassistant/shared/public" ]
+  }
+}
+
+service_manifest("unittest_manifest") {
+  name = "assistant_unittests"
+  source = "unittest_manifest.json"
+  packaged_services = [ ":manifest" ]
+}
+
+catalog("tests_catalog") {
+  testonly = true
+  embedded_services = [ ":unittest_manifest" ]
+}
+
+static_library("test_support") {
+  testonly = true
+  sources = [
+    "test_support/mock_assistant.cc",
+    "test_support/mock_assistant.h",
+  ]
+  deps = [
+    "//base",
+    "//chromeos/services/assistant/public/mojom",
+    "//testing/gmock",
+  ]
+}

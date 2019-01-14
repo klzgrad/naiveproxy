@@ -1,0 +1,56 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module service_manager.test.mojom;
+
+import "services/service_manager/public/mojom/connector.mojom";
+
+interface ConnectTestService {
+  GetTitle() => (string title);
+  GetInstance() => (string instance);
+};
+
+interface ClassInterface {
+  Ping() => (string response);
+};
+
+// Interface implemented by a standalone (non-package) app,
+// mojo:connect_test_app.
+interface StandaloneApp {
+  // Attempts to connect to an application whose name is explicitly allowed by
+  // the standalone app's CapabilitySpec, but whose enclosing package is not.
+  // The connection should succeed anyway.
+  ConnectToAllowedAppInBlockedPackage() => (string title);
+
+  // Connects to mojo:connect_test_class_app & requests ClassInterface from it.
+  // This should be permitted because mojo:connect_test_app requests class
+  // "class" from mojo:connect_test_class_app, which mojo:connect_test_class_app
+  // defines as including ClassInterface.
+  // The response contains the response from ClassInterface::Ping() and
+  // ConnectTestService::GetTitle().
+  ConnectToClassInterface() => (string class_interface_response, string title);
+};
+
+interface IdentityTest {
+  // Attempts to connect to mojo:connect_test_class_app as |target|.
+  // The callback takes the connection response result, and the identity
+  // mojo:connect_test_class_app was run as, which should match |target|.
+  ConnectToClassAppWithIdentity(service_manager.mojom.Identity target) =>
+      (int32 connection_result, service_manager.mojom.Identity target);
+};
+
+struct ConnectionState {
+  string connection_remote_name;
+  string connection_remote_userid;
+  string initialize_local_name;
+  string initialize_userid;
+};
+
+interface ExposedInterface {
+  ConnectionAccepted(ConnectionState state);
+};
+
+interface BlockedInterface {
+  GetTitleBlocked() => (string blocked_title);
+};

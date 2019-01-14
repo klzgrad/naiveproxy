@@ -1,0 +1,80 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//services/service_manager/public/cpp/service.gni")
+import("//services/service_manager/public/service_manifest.gni")
+import("//testing/libfuzzer/fuzzer_test.gni")
+
+static_library("heap_profiling") {
+  sources = [
+    "address.h",
+    "allocation_event.cc",
+    "allocation_event.h",
+    "allocation_tracker.cc",
+    "allocation_tracker.h",
+    "backtrace.cc",
+    "backtrace.h",
+    "backtrace_storage.cc",
+    "backtrace_storage.h",
+    "connection_manager.cc",
+    "connection_manager.h",
+    "heap_profiling_service.cc",
+    "heap_profiling_service.h",
+    "json_exporter.cc",
+    "json_exporter.h",
+    "receiver.h",
+    "receiver_pipe.cc",
+    "receiver_pipe.h",
+    "receiver_pipe_win.cc",
+    "receiver_pipe_win.h",
+    "stream_parser.cc",
+    "stream_parser.h",
+    "stream_receiver.h",
+  ]
+
+  deps = [
+    "//base",
+    "//components/services/heap_profiling/public/cpp",
+    "//services/resource_coordinator/public/cpp:resource_coordinator_cpp",
+    "//third_party/zlib",
+  ]
+
+  if (is_posix) {
+    sources += [
+      "receiver_pipe_posix.cc",
+      "receiver_pipe_posix.h",
+    ]
+  }
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "backtrace_storage_unittest.cc",
+    "json_exporter_unittest.cc",
+    "stream_parser_unittest.cc",
+  ]
+  deps = [
+    ":heap_profiling",
+    "//base",
+    "//services/resource_coordinator/public/cpp:resource_coordinator_cpp",
+    "//testing/gtest",
+  ]
+}
+
+service_manifest("manifest") {
+  name = "heap_profiling"
+  source = "heap_profiling_manifest.json"
+}
+
+fuzzer_test("profiling_fuzzer") {
+  sources = [
+    "stream_fuzzer.cc",
+  ]
+  deps = [
+    ":heap_profiling",
+  ]
+  libfuzzer_options = [ "max_len = 64000" ]
+  dict = "stream_fuzzer.dict"
+}

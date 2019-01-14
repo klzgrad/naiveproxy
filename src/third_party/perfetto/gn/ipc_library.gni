@@ -1,0 +1,50 @@
+# Copyright (C) 2017 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("//build_overrides/build.gni")
+
+if (!build_with_chromium) {
+  import("//gn/standalone/proto_library.gni")
+} else {
+  import("//third_party/protobuf/proto_library.gni")
+}
+
+# Generates .ipc.{h,cc} stubs for IPC services defined in .proto files.
+template("ipc_library") {
+  proto_library(target_name) {
+    perfetto_root_path = invoker.perfetto_root_path
+
+    generate_python = false
+    generator_plugin_label =
+        "$perfetto_root_path/src/ipc/protoc_plugin:ipc_plugin"
+    generator_plugin_suffix = ".ipc"
+    deps = [
+      "$perfetto_root_path/src/ipc",
+    ]
+    if (defined(invoker.deps)) {
+      deps += invoker.deps
+    }
+    forward_variables_from(invoker,
+                           [
+                             "defines",
+                             "extra_configs",
+                             "include_dirs",
+                             "proto_in_dir",
+                             "proto_out_dir",
+                             "sources",
+                             "testonly",
+                             "visibility",
+                           ])
+  }
+}

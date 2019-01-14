@@ -1,0 +1,65 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/chrome_build.gni")
+import("//build/config/chromecast_build.gni")
+import("//build/config/gclient_args.gni")
+import("//chrome/android/channel.gni")
+
+declare_args() {
+  # TODO(733935): Enable for other Android architectures too. Currently we only
+  # support arm and arm64.
+  enable_gvr_services = is_android && !is_chromecast &&
+                        (current_cpu == "arm" || current_cpu == "arm64")
+  enable_openvr = is_win
+
+  # To build with Oculus support, the Oculus SDK for Windows will need to be
+  # installed in third_party/libovr/src.  See
+  # third_party/libovr/README.chromium for details.
+  enable_oculus_vr = checkout_oculus_sdk && is_chrome_branded && is_win
+}
+
+declare_args() {
+  # Enable VR device support whenever VR device SDK(s) are supported.
+  # We enable VR on Linux even though VR features aren't usable because
+  # the binary size impact is small and allows many VR tests to run on Linux
+  enable_vr =
+      enable_gvr_services || enable_openvr || enable_oculus_vr ||
+      (is_desktop_linux && (current_cpu == "x64" || current_cpu == "x86"))
+
+  # Whether to include VR extras like test APKs in non-VR-specific targets
+  include_vr_data = false
+}
+
+declare_args() {
+  # TODO(crbug.com/837999, crbug.com/841389): We currently only support arm and
+  # we are limiting to canary and dev until binary size issues are resolved.
+  # TODO(crbug.com/836524): once we've refactored AR code out from vr
+  # directories, we can stop requiring |enable_vr| here.
+  package_arcore = enable_vr && is_android && !is_chromecast &&
+                   (current_cpu == "arm" || current_cpu == "arm64") &&
+                   (android_channel == "default" ||
+                    android_channel == "canary" || android_channel == "dev")
+
+  # TODO(crbug.com/841389): We should eventually have a single flag for
+  # enabling arcore, but we currently don't support ARCore in 64bit, and we do
+  # not support all channels. This flag governs the inclusion of code that must
+  # be identical across configs.
+  # TODO(crbug.com/836524): once we've refactored AR code out from vr
+  # directories, we can stop requiring |enable_vr| here.
+  enable_arcore = enable_vr && is_android && !is_chromecast &&
+                  (current_cpu == "arm" || current_cpu == "arm64")
+
+  # When enabled, host Desktop VR devices (OpenVR and Oculus) in a separate
+  # process.  When disabled, and Oculus/OpenVR are enabled, they are hosted
+  # in the browser process.
+  enable_isolated_xr_service = enable_oculus_vr || enable_openvr
+}
+
+declare_args() {
+  # Whether to create a VR/AR module when building bundles. If false, VR/AR code
+  # will become part of the base module.
+  modularize_vr = enable_vr
+  modularize_ar = enable_arcore
+}

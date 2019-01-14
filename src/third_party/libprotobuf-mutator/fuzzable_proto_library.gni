@@ -1,0 +1,55 @@
+import("//testing/libfuzzer/fuzzer_test.gni")
+import("//third_party/protobuf/proto_library.gni")
+
+template("fuzzable_proto_library") {
+  forward_variables_from(invoker, "*")
+  if (use_libfuzzer) {
+    proto_library("proto_library_" + target_name) {
+      assert(current_toolchain == host_toolchain)
+      if (!defined(deps)) {
+        deps = []
+      }
+      deps +=
+          [ "//third_party/libprotobuf-mutator:override_lite_runtime_plugin" ]
+      generator_plugin_label =
+          "//third_party/libprotobuf-mutator:override_lite_runtime_plugin"
+      generator_plugin_suffix = ".pb"
+
+      # The plugin will generate cc, so don't ask for it to be done by protoc.
+      generate_cc = false
+      generate_python = false
+    }
+
+    # Inspired by proto_library.gni's handling of
+    # component_build_force_source_set.
+    if (defined(component_build_force_source_set) &&
+        component_build_force_source_set && is_component_build) {
+      link_target_type = "source_set"
+    } else {
+      link_target_type = "static_library"
+    }
+
+    # Use a static_library for the build target with target_name or
+    # source_set. That way we can also force dependencies to build using
+    # protobuf_full.
+    target(link_target_type, target_name) {
+      public_deps = [
+        ":proto_library_" + target_name,
+        "//third_party/libprotobuf-mutator:protobuf_full",
+      ]
+
+      # Don't bother doing builds for CF if we aren't on Linux because of build
+      # breakages on Mac.
+      # TODO(crbug.com/869035): Figure out what is causing this issue and fix
+      # instead of working around it.
+      if (!is_linux) {
+        all_dependent_configs = [ "//testing/libfuzzer:no_clusterfuzz" ]
+      }
+    }
+  } else {
+    # fuzzable_proto_library should behave like a proto_library when
+    # !use_libfuzzer.
+    proto_library(target_name) {
+    }
+  }
+}

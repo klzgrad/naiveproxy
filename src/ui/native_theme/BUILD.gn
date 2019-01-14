@@ -1,0 +1,104 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/jumbo.gni")
+import("//build/config/ui.gni")
+import("//testing/test.gni")
+
+jumbo_component("native_theme") {
+  sources = [
+    "common_theme.cc",
+    "common_theme.h",
+    "native_theme.cc",
+    "native_theme.h",
+    "native_theme_android.cc",
+    "native_theme_android.h",
+    "native_theme_base.cc",
+    "native_theme_base.h",
+    "native_theme_export.h",
+    "native_theme_features.cc",
+    "native_theme_features.h",
+    "native_theme_mac.h",
+    "native_theme_mac.mm",
+    "native_theme_observer.cc",
+    "native_theme_observer.h",
+  ]
+
+  if (use_aura || toolkit_views) {
+    sources += [
+      "native_theme_aura.cc",
+      "native_theme_aura.h",
+      "native_theme_dark_aura.cc",
+      "native_theme_dark_aura.h",
+      "overlay_scrollbar_constants_aura.h",
+    ]
+  }
+
+  defines = [ "NATIVE_THEME_IMPLEMENTATION" ]
+
+  deps = [
+    "//base",
+    "//base/third_party/dynamic_annotations",
+    "//cc/paint",
+    "//skia",
+    "//ui/base",
+    "//ui/display",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+    "//ui/resources",
+  ]
+
+  if (is_mac) {
+    libs = [
+      "CoreGraphics.framework",
+      "AppKit.framework",
+    ]
+  }
+}
+
+if (is_win) {
+  jumbo_component("native_theme_browser") {
+    defines = [ "NATIVE_THEME_IMPLEMENTATION" ]
+
+    # These files cannot work in the renderer on Windows.
+    sources = [
+      "native_theme_win.cc",
+      "native_theme_win.h",
+    ]
+
+    deps = [
+      ":native_theme",
+      "//base",
+      "//cc/paint",
+      "//ui/base",
+      "//ui/display",
+      "//ui/gfx",
+    ]
+  }
+} else {
+  jumbo_source_set("native_theme_browser") {
+  }
+}
+
+test("native_theme_unittests") {
+  sources = []
+
+  if (use_aura) {
+    sources += [ "native_theme_aura_unittest.cc" ]
+  }
+
+  if (is_mac) {
+    sources += [ "native_theme_mac_unittest.cc" ]
+  }
+
+  deps = [
+    ":native_theme",
+    "//base/test:run_all_unittests",
+    "//base/test:test_support",
+    "//skia",
+    "//testing/gtest",
+    "//ui/base",
+    "//ui/gfx/geometry:geometry",
+  ]
+}

@@ -1,0 +1,48 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/buildflag_header.gni")
+import("//build/config/allocator.gni")
+import("//build/config/clang/clang.gni")
+import("//build/config/compiler/compiler.gni")
+import("//build/config/dcheck_always_on.gni")
+import("//build/nocompile.gni")
+import("//chrome/process_version_rc_template.gni")
+import("//testing/libfuzzer/fuzzer_test.gni")
+import("//testing/test.gni")
+
+process_version_rc_template("version") {
+  template_file = "gcp_setup.rc.version"
+  output = "$root_out_dir/gcp_setup_version.rc"
+}
+
+source_set("common") {
+  sources = [
+    "setup_lib.cc",
+    "setup_lib.h",
+  ]
+  public_deps = [
+    "//base:base",
+  ]
+  deps = [
+    ":version",
+    "//chrome/installer/util:with_no_strings",
+    "../gaiacp:common",
+  ]
+}
+
+executable("gcp_setup") {
+  sources = [
+    "setup.cc",
+  ]
+  deps = [
+    ":common",
+    "//chrome/common:version_header",
+    "../eventlog:gcp_eventlog_messages",
+    "../gaiacp:common",
+  ]
+  configs += [
+    "//build/config/win:windowed",
+  ]
+}
