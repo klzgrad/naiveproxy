@@ -19,14 +19,14 @@ case "$ARCH" in
 esac
 if [ ! -d third_party/llvm-build/Release+Asserts/bin ]; then
   mkdir -p third_party/llvm-build/Release+Asserts
-  curl "$clang_url" -o- | tar xzf - -C third_party/llvm-build/Release+Asserts
+  curl "$clang_url" | tar xzf - -C third_party/llvm-build/Release+Asserts
 fi
 
 # AFDO profile (Linux)
 if [ "$ARCH" = Linux -a ! -f chrome/android/profiles/afdo.prof ]; then
   AFDO_PATH=$(cat chrome/android/profiles/newest.txt)
   afdo_url="https://storage.googleapis.com/chromeos-prebuilt/afdo-job/llvm/$AFDO_PATH"
-  curl "$afdo_url" -o- | bzip2 -cd >chrome/android/profiles/afdo.prof
+  curl "$afdo_url" | bzip2 -cd >chrome/android/profiles/afdo.prof
 fi
 
 # sccache (Windows)
@@ -43,25 +43,12 @@ fi
 
 # gn
 if [ ! -f gn/out/gn ]; then
-  if [ "$CI" -o "$ARCH" = Windows ]; then
-    mkdir -p gn/out
-    cd gn/out
-    case "$ARCH" in
-      Linux) curl -L https://chrome-infra-packages.appspot.com/dl/gn/gn/linux-amd64/+/latest -o gn.zip;;
-      Darwin) curl -L https://chrome-infra-packages.appspot.com/dl/gn/gn/mac-amd64/+/latest -o gn.zip;;
-      Windows) curl -L https://chrome-infra-packages.appspot.com/dl/gn/gn/windows-amd64/+/latest -o gn.zip;;
-    esac
-    unzip gn.zip
-  else
-    rm -rf gn
-    git clone --single-branch https://gn.googlesource.com/gn
-    export PATH="$PWD/third_party/llvm-build/Release+Asserts/bin:$PATH"
-    cd gn
-    if which ccache >/dev/null 2>&1; then
-      export CC='ccache clang' CXX='ccache clang++' CCACHE_BASEDIR="$PWD"
-    fi
-    python2=$(which python2 2>/dev/null || which python 2>/dev/null)
-    $python2 build/gen.py
-    ninja -C out gn
-  fi
+  mkdir -p gn/out
+  cd gn/out
+  case "$ARCH" in
+    Linux) curl -L https://chrome-infra-packages.appspot.com/dl/gn/gn/linux-amd64/+/latest -o gn.zip;;
+    Darwin) curl -L https://chrome-infra-packages.appspot.com/dl/gn/gn/mac-amd64/+/latest -o gn.zip;;
+    Windows) curl -L https://chrome-infra-packages.appspot.com/dl/gn/gn/windows-amd64/+/latest -o gn.zip;;
+  esac
+  unzip gn.zip
 fi
