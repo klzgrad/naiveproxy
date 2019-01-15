@@ -1,3 +1,6 @@
+branches:
+  except:
+    - dev
 version: '{build}'
 image: Visual Studio 2017
 install:
@@ -11,17 +14,19 @@ build_script:
   - bash -c '~/.cargo/bin/sccache -s'
   - bash -c 'cd src; ./build.sh'
   - bash -c '~/.cargo/bin/sccache -s'
-  - bash -c 'mkdir naive-$APPVEYOR_REPO_TAG_NAME-win64'
-  - bash -c 'cp src/out/Release/naive.exe src/config.json LICENSE naive-$APPVEYOR_REPO_TAG_NAME-win64/'
-  - bash -c '7z a naive-$APPVEYOR_REPO_TAG_NAME-win64.zip naive-$APPVEYOR_REPO_TAG_NAME-win64/'
-test: off
+  - ps: $env:BUILD_NAME="naiveproxy-$env:APPVEYOR_REPO_TAG_NAME-win64"
+  - bash -c 'mkdir $BUILD_NAME'
+  - bash -c 'cp src/out/Release/naive.exe src/config.json LICENSE $BUILD_NAME'
+  - bash -c '7z a $BUILD_NAME.zip $BUILD_NAME'
+test_script:
+  - bash -c './tests/basic.sh src/out/Release/naive'
 artifacts:
-  - path: naive-$(APPVEYOR_REPO_TAG_NAME)-win64.zip
+  - path: $(BUILD_NAME).zip
 deploy:
   - provider: GitHub
     auth_token:
       secure: h+qwIoof/3ET7LOldWwlb6XQLmpxYPuaZL4YcFQ8QyclfBrnywzwzDaSqdE2unPg
-    artifact: naive-$(APPVEYOR_REPO_TAG_NAME)-win64.zip
+    artifact: $(BUILD_NAME).zip
     prerelease: true
     force_update: true
     on:
