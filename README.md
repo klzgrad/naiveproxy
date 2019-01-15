@@ -19,7 +19,7 @@ NaiveProxy uses Chromium's network stack. What the censor can see is exactly reg
 
 Frontend also reroutes unauthenticated users and active probes to a backend HTTP server, making it impossible to detect the existence of a proxy:
 
-<p align="center">Probe ⟶ [Frontend → Nginx]</p>
+<p align="center">Probe ⟶ [Frontend → Nginx] ⟶ index.html</p>
 
 ## Download
 
@@ -54,22 +54,18 @@ curl -v --proxy socks5h://127.0.0.1:1080 google.com
 
 ## Setup
 
-The `naive` binary functions as both the client and the server. Naive client can be run as `./naive --proxy=https://user:pass@domain.example`, which accepts SOCKS5 traffic at port 1080 and proxies it via `domain.example`. Naive server can be run as `./naive --listen=http://127.0.0.1:8080` behind the frontend. You can also store the parameters in `config.json` and `./naive` will detect it automatically.
+The `naive` binary functions as both the client and the server. Naive client can be run as `./naive --proxy=https://user:pass@domain.example`, which accepts SOCKS5 traffic at port 1080 and proxies it via `domain.example` as HTTP/2 traffic. Naive server can be run as `./naive --listen=http://127.0.0.1:8080` behind the frontend. You can also store the parameters in `config.json` and `./naive` will detect it automatically.
 
 For details on setting up the server part [Frontend → Naive (server)], see [Server Setup](https://github.com/klzgrad/naiveproxy/wiki/Server-Setup).
 
-There are also simplified setups:
+For more information on parameter usage, see USAGE.txt. See also [Parameter Tuning](https://github.com/klzgrad/naiveproxy/wiki/Parameter-Tuning) to improve client-side performance.
 
-### Portable mode
+### Portable setup
 
-Browser ⟶ [HAProxy → Tinyproxy] → Internet
+<p align="center">Browser ⟶ [HAProxy → Tinyproxy] ⟶ Internet</p>
 
 This mode is clientless: point your browser directly to the server as an HTTPS proxy. You don't need to download, build, or run anything client-side.
 
 But this setup is prone to traffic analysis due to lack of obfuscation. Also, the browser will introduce an extra 1RTT delay during connection setup.
 
-Tinyproxy is used in place of Naive server in this mode so you only need to `apt-get install tinyproxy` without downloading anything manually.
-
-For more information on parameter usage and Naive server, see USAGE.txt.
-
-See also [Parameter Tuning](https://github.com/klzgrad/naiveproxy/wiki/Parameter-Tuning) to improve client-side performance.
+Tinyproxy is used in place of Naive server in this mode, so you only need to `apt-get install tinyproxy` without downloading anything manually.
