@@ -128,6 +128,7 @@ std::unique_ptr<net::URLRequestContext> BuildURLRequestContext(
 
   net::ProxyConfig proxy_config;
   proxy_config.proxy_rules().ParseFromString(params.proxy_url);
+  LOG(INFO) << "Proxying via " << params.proxy_url;
   auto proxy_service = net::ProxyResolutionService::CreateWithoutProxyResolver(
       std::make_unique<net::ProxyConfigServiceFixed>(
           net::ProxyConfigWithAnnotation(proxy_config, kTrafficAnnotation)),
@@ -187,20 +188,23 @@ void GetCommandLine(const base::CommandLine& proc, CommandLine* cmdline) {
   cmdline->listen = proc.GetSwitchValueASCII("listen");
   cmdline->proxy = proc.GetSwitchValueASCII("proxy");
   cmdline->padding = proc.HasSwitch("padding");
-  cmdline->host_resolver_rules = proc.GetSwitchValueASCII("host-resolver-rules");
+  cmdline->host_resolver_rules =
+      proc.GetSwitchValueASCII("host-resolver-rules");
   cmdline->no_log = !proc.HasSwitch("log");
   cmdline->log = proc.GetSwitchValuePath("log");
   cmdline->log_net_log = proc.GetSwitchValuePath("log-net-log");
   cmdline->ssl_key_log_file = proc.GetSwitchValuePath("ssl-key-log-file");
 }
 
-void GetCommandLineFromConfig(const base::FilePath& config_path, CommandLine* cmdline) {
+void GetCommandLineFromConfig(const base::FilePath& config_path,
+                              CommandLine* cmdline) {
   JSONFileValueDeserializer reader(config_path);
   int error_code;
   std::string error_message;
   auto value = reader.Deserialize(&error_code, &error_message);
   if (value == nullptr) {
-    std::cerr << "Error reading " << config_path << ": (" << error_code << ") " << error_message << std::endl;
+    std::cerr << "Error reading " << config_path << ": (" << error_code << ") "
+              << error_message << std::endl;
     exit(EXIT_FAILURE);
   }
   if (!value->is_dict()) {
@@ -218,18 +222,32 @@ void GetCommandLineFromConfig(const base::FilePath& config_path, CommandLine* cm
     cmdline->padding = value->FindKey("padding")->GetBool();
   }
   if (value->FindKeyOfType("host-resolver-rules", base::Value::Type::STRING)) {
-    cmdline->host_resolver_rules = value->FindKey("host-resolver-rules")->GetString();
+    cmdline->host_resolver_rules =
+        value->FindKey("host-resolver-rules")->GetString();
   }
   cmdline->no_log = true;
   if (value->FindKeyOfType("log", base::Value::Type::STRING)) {
     cmdline->no_log = false;
-    cmdline->log = base::FilePath::FromUTF8Unsafe(value->FindKey("log")->GetString());
+    cmdline->log =
+        base::FilePath::FromUTF8Unsafe(value->FindKey("log")->GetString());
   }
   if (value->FindKeyOfType("log-net-log", base::Value::Type::STRING)) {
-    cmdline->log_net_log = base::FilePath::FromUTF8Unsafe(value->FindKey("log-net-log")->GetString());
+    cmdline->log_net_log = base::FilePath::FromUTF8Unsafe(
+        value->FindKey("log-net-log")->GetString());
   }
   if (value->FindKeyOfType("ssl-key-log-file", base::Value::Type::STRING)) {
-    cmdline->ssl_key_log_file = base::FilePath::FromUTF8Unsafe(value->FindKey("ssl-key-log-file")->GetString());
+    cmdline->ssl_key_log_file = base::FilePath::FromUTF8Unsafe(
+        value->FindKey("ssl-key-log-file")->GetString());
+  }
+}
+
+std::string GetProxyFromURL(const GURL& url) {
+  auto shp = url::SchemeHostPort(url);
+  if (url::DefaultPortForScheme(shp.scheme().c_str(), shp.scheme().size()) ==
+      url::PORT_UNSPECIFIED) {
+    return shp.Serialize() + ":" + base::IntToString(shp.port());
+  } else {
+    return shp.Serialize();
   }
 }
 
@@ -270,16 +288,17 @@ bool ParseCommandLine(const CommandLine& cmdline, Params* params) {
                          url::SCHEME_WITH_HOST_PORT_AND_USER_INFORMATION);
   params->proxy_url = "direct://";
   GURL url(cmdline.proxy);
+  GURL::Replacements remove_auth;
+  remove_auth.ClearUsername();
+  remove_auth.ClearPassword();
+  GURL url_no_auth = url.ReplaceComponents(remove_auth);
   if (!cmdline.proxy.empty()) {
     if (!url.is_valid()) {
       std::cerr << "Invalid proxy URL" << std::endl;
       return false;
     }
-    if (url.scheme() != "https" && url.scheme() != "quic") {
-      std::cerr << "Must be HTTPS or QUIC proxy" << std::endl;
-      return false;
-    }
-    params->proxy_url = url::SchemeHostPort(url).Serialize();
+    params->proxy_url = GetProxyFromURL(url_no_auth);
+    params->proxy_url.erase();
     params->proxy_user = url.username();
     params->proxy_pass = url.password();
   }
@@ -291,10 +310,10 @@ bool ParseCommandLine(const CommandLine& cmdline, Params* params) {
   } else {
     // SNI should only contain DNS hostnames not IP addresses per RFC 6066.
     if (url.HostIsIPAddress()) {
-      GURL::Replacements replacements;
-      replacements.SetHostStr(kDefaultHostName);
+      GURL::Replacements set_host;
+      set_host.SetHostStr(kDefaultHostName);
       params->proxy_url =
-          url::SchemeHostPort(url.ReplaceComponents(replacements)).Serialize();
+          GetProxyFromURL(url_no_auth.ReplaceComponents(set_host));
       LOG(INFO) << "Using '" << kDefaultHostName << "' as the hostname for "
                 << url.host();
       params->host_resolver_rules =
@@ -444,6 +463,8 @@ int main(int argc, char* argv[]) {
     LOG(ERROR) << "Failed to listen: " << result;
     return EXIT_FAILURE;
   }
+  LOG(INFO) << "Listening on " << params.listen_addr << ":"
+            << params.listen_port;
 
   net::NaiveProxy naive_proxy(std::move(listen_socket), params.protocol,
                               params.use_padding, session, kTrafficAnnotation);
