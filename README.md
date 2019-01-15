@@ -2,13 +2,13 @@
 
 A secure, censorship-resistent proxy.
 
-This tool improves censorship resistence by obfuscating traffic as common HTTP/2 traffic with minimal distinguishable features. Privacy and integrity are simultaneously achieved through implementations of TLS best practices.
+NaiveProxy resists censorship by obfuscating as common HTTP/2 traffic with minimal distinguishable features. Privacy and integrity are simultaneously achieved through implementations of TLS best practices.
 
 The following attacks are mitigated:
 
 * Website fingerprinting / traffic classification: [mitigated](https://arxiv.org/abs/1707.00641) by traffic multiplexing in HTTP/2.
 * [TLS parameter fingerprinting](https://arxiv.org/abs/1607.01639): defeated by using identical behaviors from [Chromium's network stack](https://www.chromium.org/developers/design-documents/network-stack).
-* [Active probing](https://ensa.fi/active-probing/): defeated by application fronting, using a common frontend with application-layer routing capability, e.g. HAProxy.
+* [Active probing](https://ensa.fi/active-probing/): defeated by *application fronting*, i.e. hiding proxy servers behind a commonly used frontend with application-layer routing.
 * Length-based traffic analysis: mitigated by length padding.
 
 ## Architecture
@@ -54,7 +54,7 @@ curl -v --proxy socks5h://127.0.0.1:1080 google.com
 
 ## Setup
 
-The `naive` binary functions as both the client and the server. Naive client can be run as `./naive --proxy=https://user:pass@domain.example`, which accepts SOCKS5 traffic at port 1080 and proxies it via `domain.example` as HTTP/2 traffic. Naive server can be run as `./naive --listen=http://127.0.0.1:8080` behind the frontend. You can also store the parameters in `config.json` and `./naive` will detect it automatically.
+The `naive` binary functions as both the client and the server. Naive client can be run as `./naive --proxy=https://user:pass@domain.example`, which accepts SOCKS5 traffic at port 1080 and proxies it via `domain.example` as HTTP/2 traffic. Naive server can be run as `./naive --listen=http://127.0.0.1:8080` behind the frontend as a regular HTTP proxy. You can also store the parameters in `config.json` and `./naive` will detect it automatically.
 
 For details on setting up the server part [Frontend → Naive (server)], see [Server Setup](https://github.com/klzgrad/naiveproxy/wiki/Server-Setup).
 
