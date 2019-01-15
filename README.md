@@ -1,8 +1,8 @@
 # NaiveProxy [![Build Status](https://travis-ci.com/klzgrad/naiveproxy.svg?branch=master)](https://travis-ci.com/klzgrad/naiveproxy) [![Build status](https://ci.appveyor.com/api/projects/status/ohpyaf49baihmxa9?svg=true)](https://ci.appveyor.com/project/klzgrad/naiveproxy)
 
-A secure, analysis-resistent proxy framework.
+A secure, censorship-resistent proxy.
 
-The main goal is to improve censorship resistence by reducing distinguishable traffic features. Privacy and integrity are simultaneously achieved through implementations of TLS best practices.
+This tool improves censorship resistence by obfuscating traffic as common HTTP/2 traffic with minimal distinguishable features. Privacy and integrity are simultaneously achieved through implementations of TLS best practices.
 
 The following attacks are mitigated:
 
@@ -10,6 +10,16 @@ The following attacks are mitigated:
 * [TLS parameter fingerprinting](https://arxiv.org/abs/1607.01639): defeated by using identical behaviors from [Chromium's network stack](https://www.chromium.org/developers/design-documents/network-stack).
 * [Active probing](https://ensa.fi/active-probing/): defeated by application fronting, using a common frontend with application-layer routing capability, e.g. HAProxy.
 * Length-based traffic analysis: mitigated by length padding.
+
+## Architecture
+
+<p align="center">[Browser → Naive (client)] ⟶ Censor ⟶ [Frontend → Naive (server)] ⟶ Internet</p>
+
+NaiveProxy uses Chromium's network stack. What the censor can see is exactly regular HTTP/2 traffic between Chrome and Frontend (e.g. HAProxy), two of the most commonly used browsers and servers. Being as common as possible reduces the viability of traffic classification censorship.
+
+Frontend also reroutes unauthenticated users and active probes to a backend HTTP server, making it impossible to detect the existence of a proxy:
+
+<p align="center">Probe ⟶ [Frontend → Nginx]</p>
 
 ## Download
 
@@ -44,25 +54,21 @@ curl -v --proxy socks5h://127.0.0.1:1080 google.com
 
 ## Setup
 
-Server setup is required first, see [Server Setup](https://github.com/klzgrad/naiveproxy/wiki/Server-Setup).
+The `naive` binary functions as both the client and the server. Naive client can be run as `./naive --proxy=https://user:pass@domain.example`, which accepts SOCKS5 traffic at port 1080 and proxies it via `domain.example`. Naive server can be run as `./naive --listen=http://127.0.0.1:8080` behind the frontend. You can also store the parameters in `config.json` and `./naive` will detect it automatically.
 
-There are three tiers of client setup:
+For details on setting up the server part [Frontend → Naive (server)], see [Server Setup](https://github.com/klzgrad/naiveproxy/wiki/Server-Setup).
 
-* The portable setup is clientless: point your browser directly to the server as an HTTPS proxy. You don't need to download, build, or run anything client-side, but this setup is prone to traffic analysis due to lack of obfuscation.
-* The fast setup improves performance by running Naive client locally as a SOCKS5 proxy. Point your browser to the address of Naive client. You don't need to run Naive server in this setup.
-* The full setup obfuscates traffic by running both Naive client and server. Point your browser to the local SOCKS5 proxy provided by Naive client.
+There are also simplified setups:
 
-To run Naive client:
-```
-./naive --proxy=https://user:pass@domainname.example
-```
-You can also store the config in `config.json`, example:
-```
-{
-  "proxy": "https://user:pass@domainname.example"
-}
-```
-Naive client will detect and read from `config.json` by default. The default listening port is 1080 as SOCKS5.
+### Portable mode
+
+Browser ⟶ [HAProxy → Tinyproxy] → Internet
+
+This mode is clientless: point your browser directly to the server as an HTTPS proxy. You don't need to download, build, or run anything client-side.
+
+But this setup is prone to traffic analysis due to lack of obfuscation. Also, the browser will introduce an extra 1RTT delay during connection setup.
+
+Tinyproxy is used in place of Naive server in this mode so you only need to `apt-get install tinyproxy` without downloading anything manually.
 
 For more information on parameter usage and Naive server, see USAGE.txt.
 
