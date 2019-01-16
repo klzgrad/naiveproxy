@@ -88,7 +88,7 @@ If you do roll your own cryptos, see what [happened](https://groups.google.com/d
 
 ### Why not use HTTP/2 proxy from browser directly?
 
-You may have wondered why not use Chrome directly if NaiveProxy reuses Chrome's network stack. The answer is yes, you can. You will get 80% of what NaiveProxy does (TLS, connection multiplexing, application fronting) without NaiveProxy. Simply point your browser to Caddy as an HTTP/2 or HTTP/3 forward proxy directly.
+You may have wondered why not use Chrome directly if NaiveProxy reuses Chrome's network stack. The answer is yes, you can. You will get 80% of what NaiveProxy does (TLS, connection multiplexing, application fronting) without NaiveProxy, which is also what makes NaiveProxy indistinguishale from normal traffic. Simply point your browser to Caddy as an HTTP/2 or HTTP/3 forward proxy directly.
 
 But this setup is prone to basic traffic analysis due to lack of obfuscation and predictable packet sizes in TLS handshakes. [The bane of "TLS-in-TLS" tunnels](http://blog.zorinaq.com/my-experience-with-the-great-firewall-of-china/) is that this combination is just so different from any normal protocols (nobody does 3-way handshakes twice in a row) and the record sizes of TLS handshakes are so predictable that no machine learning is needed to [detect it](https://github.com/shadowsocks/shadowsocks-org/issues/86#issuecomment-362809854).
 
