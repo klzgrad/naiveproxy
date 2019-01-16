@@ -15,11 +15,11 @@ The following attacks are mitigated:
 
 [Browser → Naive (client)] ⟶ Censor ⟶ [Frontend → Naive (server)] ⟶ Internet
 
-NaiveProxy uses Chrome's network stack. What the censor can see is exactly regular HTTP/2 traffic between Chrome and Frontend (e.g. Caddy, HAProxy).
+NaiveProxy uses Chrome's network stack. What the censor can see is exactly regular HTTP/2 traffic between Chrome and standard Frontend (e.g. Caddy, HAProxy).
 
 Frontend also reroutes unauthenticated users and active probes to a backend HTTP server, making it impossible to detect the existence of a proxy:
 
-Probe ⟶ [Frontend → Nginx] ⟶ index.html
+Probe ⟶ Frontend ⟶ index.html
 
 ## Download
 
@@ -33,7 +33,7 @@ Locally run `./naive --proxy=https://user:pass@domain.example` and point the bro
 
 On the server run `./caddy -quic` as the frontend and `./naive --listen=http://127.0.0.1:8080` behind it. See [Server Setup](https://github.com/klzgrad/naiveproxy/wiki/Server-Setup) for detail.
 
-For more information on parameter usage, see [USAGE.txt](https://github.com/klzgrad/naiveproxy/blob/master/USAGE.txt). See also [Parameter Tuning](https://github.com/klzgrad/naiveproxy/wiki/Parameter-Tuning) to improve client-side performance.
+For more information on parameter usage and format of `config.json`, see [USAGE.txt](https://github.com/klzgrad/naiveproxy/blob/master/USAGE.txt). See also [Parameter Tuning](https://github.com/klzgrad/naiveproxy/wiki/Parameter-Tuning) to improve client-side performance.
 
 ### Portable setup
 
