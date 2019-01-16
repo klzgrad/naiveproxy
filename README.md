@@ -1,15 +1,25 @@
 # NaiveProxy [![Build Status](https://travis-ci.com/klzgrad/naiveproxy.svg?branch=master)](https://travis-ci.com/klzgrad/naiveproxy) [![Build status](https://ci.appveyor.com/api/projects/status/ohpyaf49baihmxa9?svg=true)](https://ci.appveyor.com/project/klzgrad/naiveproxy)
 
-A secure, analysis-resistent proxy framework.
+A secure, censorship-resistent proxy.
 
-The main goal is to improve censorship resistence by reducing distinguishable traffic features. Privacy and integrity are simultaneously achieved through implementations of TLS best practices.
+NaiveProxy resists censorship by obfuscating as common HTTP/2 traffic with minimal distinguishable features. Privacy and integrity are simultaneously achieved through implementations of TLS best practices.
 
 The following attacks are mitigated:
 
 * Website fingerprinting / traffic classification: [mitigated](https://arxiv.org/abs/1707.00641) by traffic multiplexing in HTTP/2.
 * [TLS parameter fingerprinting](https://arxiv.org/abs/1607.01639): defeated by using identical behaviors from [Chromium's network stack](https://www.chromium.org/developers/design-documents/network-stack).
-* [Active probing](https://ensa.fi/active-probing/): defeated by application fronting, using a common frontend with application-layer routing capability, e.g. HAProxy.
+* [Active probing](https://ensa.fi/active-probing/): defeated by *application fronting*, i.e. hiding proxy servers behind a commonly used frontend with application-layer routing.
 * Length-based traffic analysis: mitigated by length padding.
+
+## Architecture
+
+<p align="center">[Browser → Naive (client)] ⟶ Censor ⟶ [Frontend → Naive (server)] ⟶ Internet</p>
+
+NaiveProxy uses Chromium's network stack. What the censor can see is exactly regular HTTP/2 traffic between Chrome and Frontend (e.g. HAProxy), two of the most commonly used browsers and servers. Being as common as possible reduces the viability of traffic classification censorship.
+
+Frontend also reroutes unauthenticated users and active probes to a backend HTTP server, making it impossible to detect the existence of a proxy:
+
+<p align="center">Probe ⟶ [Frontend → Nginx] ⟶ index.html</p>
 
 ## Download
 
@@ -21,10 +31,10 @@ Note: On Linux libnss3 must be installed before using the prebuilt binary.
 
 If you don't like to use downloaded binaries, you can build it.
 
-* Prerequisites:
-  * Ubuntu (apt-get install): git, python2, ninja-build (>= 1.7), pkg-config, libnss3-dev, ccache (optional)
-  * MacOS (brew install): git, ninja, ccache (optional)
-  * Windows ([choco install](https://chocolatey.org/)): git, python2, ninja, visualstudio2017community. See [Chromium's page](https://chromium.googlesource.com/chromium/src/+/master/docs/windows_build_instructions.md#Visual-Studio) for detail on Visual Studio setup requirements.
+Prerequisites:
+* Ubuntu (apt-get install): git, python2, ninja-build (>= 1.7), pkg-config, libnss3-dev, ccache (optional)
+* MacOS (brew install): git, ninja, ccache (optional)
+* Windows ([choco install](https://chocolatey.org/)): git, python2, ninja, visualstudio2017community. See [Chromium's page](https://chromium.googlesource.com/chromium/src/+/master/docs/windows_build_instructions.md#Visual-Studio) for detail on Visual Studio setup requirements.
 
 
 Build it:
@@ -34,7 +44,7 @@ cd naiveproxy/src
 ./get-clang.sh
 ./build.sh
 ```
-The build scripts download tools from Google servers with curl. If there is trouble try to set a proxy environment variable for curl, e.g.: `export ALL_PROXY=socks5h://127.0.0.1:1080`.
+The build scripts download tools from Google servers with curl. If there is trouble try to set a proxy environment variable for curl, e.g. `export ALL_PROXY=socks5h://127.0.0.1:1080`.
 
 Verify:
 ```
@@ -44,26 +54,26 @@ curl -v --proxy socks5h://127.0.0.1:1080 google.com
 
 ## Setup
 
-Server setup is required first, see [Server Setup](https://github.com/klzgrad/naiveproxy/wiki/Server-Setup).
+The `naive` binary functions as both the client and the server. Naive client can be run as `./naive --proxy=https://user:pass@domain.example`, which accepts SOCKS5 traffic at port 1080 and proxies it via `domain.example` as HTTP/2 traffic. Naive server can be run as `./naive --listen=http://127.0.0.1:8080` behind the frontend as a regular HTTP proxy. You can also store the parameters in `config.json` and `./naive` will detect it automatically.
 
-There are three tiers of client setup:
+For details on setting up the server part [Frontend → Naive (server)], see [Server Setup](https://github.com/klzgrad/naiveproxy/wiki/Server-Setup).
 
-* The portable setup is clientless: point your browser directly to the server as an HTTPS proxy. You don't need to download, build, or run anything client-side, but this setup is prone to traffic analysis due to lack of obfuscation.
-* The fast setup improves performance by running Naive client locally as a SOCKS5 proxy. Point your browser to the address of Naive client. You don't need to run Naive server in this setup.
-* The full setup obfuscates traffic by running both Naive client and server. Point your browser to the local SOCKS5 proxy provided by Naive client.
+For more information on parameter usage, see [USAGE.txt](https://github.com/klzgrad/naiveproxy/blob/master/USAGE.txt). See also [Parameter Tuning](https://github.com/klzgrad/naiveproxy/wiki/Parameter-Tuning) to improve client-side performance.
 
-To run Naive client:
-```
-./naive --proxy=https://user:pass@domainname.example
-```
-You can also store the config in `config.json`, example:
-```
-{
-  "proxy": "https://user:pass@domainname.example"
-}
-```
-Naive client will detect and read from `config.json` by default. The default listening port is 1080 as SOCKS5.
+### Portable setup
 
-For more information on parameter usage and Naive server, see USAGE.txt.
+<p align="center">Browser ⟶ [HAProxy → Tinyproxy] ⟶ Internet</p>
 
-See also [Parameter Tuning](https://github.com/klzgrad/naiveproxy/wiki/Parameter-Tuning) to improve client-side performance.
+This mode is clientless: point your browser directly to the server as an HTTPS proxy. You don't need to download, build, or run anything client-side.
+
+But this setup is prone to traffic analysis due to lack of obfuscation. Also, the browser will introduce an extra 1RTT delay during connection setup.
+
+Tinyproxy is used in place of Naive server in this mode, so you only need to `apt-get install tinyproxy` without downloading anything manually.
+
+## FAQ
+
+### Why not use Go, Node, etc.?
+
+Their TLS stacks have distinct features that can be [easily detected](https://arxiv.org/abs/1607.01639) and generally TLS parameters are very distinguishable.
+
+Previously, Tor tried to mimic Firefox's TLS signature and still got [identified and blocked by firewalls](https://groups.google.com/d/msg/traffic-obf/BpFSCVgi5rs/nCqNwoeRKQAJ), because that signature was of an outdated version of Firefox and the firewall determined the rate of collateral damage would be acceptable. It would be unacceptable to block the most commonly used browsers.
