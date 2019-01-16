@@ -53,20 +53,14 @@ Prerequisites:
 * Windows ([choco install](https://chocolatey.org/)): git, python2, ninja, visualstudio2017community. See [Chromium's page](https://chromium.googlesource.com/chromium/src/+/master/docs/windows_build_instructions.md#Visual-Studio) for detail on Visual Studio setup requirements.
 
 
-Build it:
+Build it (output to `./out/Release/naive`):
 ```
 git clone https://github.com/klzgrad/naiveproxy.git
 cd naiveproxy/src
 ./get-clang.sh
 ./build.sh
 ```
-The build scripts download tools from Google servers with curl. If there is trouble try to set a proxy environment variable for curl, e.g. `export ALL_PROXY=socks5h://127.0.0.1:1080`.
-
-Verify:
-```
-./out/Release/naive --log &
-curl -v --proxy socks5h://127.0.0.1:1080 google.com
-```
+The scripts download tools from Google servers with curl. If there is trouble try to set a proxy environment variable for curl, e.g. `export ALL_PROXY=socks5h://127.0.0.1:1080`.
 
 ## FAQ
 
