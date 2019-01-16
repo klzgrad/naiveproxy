@@ -2,7 +2,7 @@
 
 A secure, censorship-resistent proxy.
 
-NaiveProxy is naive as it simply reuses standard protocols (HTTP/2, HTTP/3) and common network stacks (Chrome, Caddy) with little room for variations. By being as common and boring as possible NaiveProxy is practically indistinguishable from mainstream traffic. Reusing common software stacks also ensures best practices in performance and security.
+NaiveProxy is naive as it simply reuses standard protocols (HTTP/2, HTTP/3) and common network stacks (Chrome, Caddy) with little room for variation. By being as common and boring as possible NaiveProxy is practically indistinguishable from mainstream traffic. Reusing common software stacks also ensures best practices in performance and security.
 
 The following attacks are mitigated:
 
@@ -31,11 +31,22 @@ Note: On Linux libnss3 must be installed before using the prebuilt binary.
 
 Locally run `./naive --proxy=https://user:pass@domain.example` and point the browser to a SOCKS5 proxy at port 1080.
 
-On the server run `./caddy -quic` as the frontend and `./naive --listen=http://127.0.0.1:8080` behind it. See [Server Setup](https://github.com/klzgrad/naiveproxy/wiki/Server-Setup) for detail.
+On the server run `./caddy` as the frontend with the following Caddyfile
+```
+domain.example
+root /var/www/html
+index index.html
+forwardproxy {
+  basicauth user pass
+  hide_ip
+  hide_via
+  probe_resistance secret.localhost
+  upstream http://127.0.0.1:8080
+}
+```
+and `./naive --listen=http://127.0.0.1:8080` behind it. See [Server Setup](https://github.com/klzgrad/naiveproxy/wiki/Server-Setup) for more details.
 
 For more information on parameter usage and format of `config.json`, see [USAGE.txt](https://github.com/klzgrad/naiveproxy/blob/master/USAGE.txt). See also [Parameter Tuning](https://github.com/klzgrad/naiveproxy/wiki/Parameter-Tuning) to improve client-side performance.
-
-### Portable setup
 
 ## Build
 
@@ -60,7 +71,7 @@ The scripts download tools from Google servers with curl. If there is trouble tr
 
 ### Why not use Go, Node, etc. for TLS?
 
-Their TLS stacks have distinct features that can be [easily detected](https://arxiv.org/abs/1607.01639). TLS parameters are generally very informative and distinguishable.
+Their TLS stacks have distinct features that can be [easily detected](https://arxiv.org/abs/1607.01639). TLS parameters are generally very informative and distinguishable. Most client-originated traffic comes from browsers, putting the custom network stacks in the minority.
 
 Previously, Tor tried to mimic Firefox's TLS signature and still got [identified and blocked by firewalls](https://groups.google.com/d/msg/traffic-obf/BpFSCVgi5rs/nCqNwoeRKQAJ), because that signature was of an outdated version of Firefox and the firewall determined the rate of collateral damage would be acceptable. If we use the signature of the most commonly used browser the collateral damage of blocking it would be unacceptable.
 
