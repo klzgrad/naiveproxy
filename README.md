@@ -2,30 +2,46 @@
 
 A secure, censorship-resistent proxy.
 
-NaiveProxy resists censorship by obfuscating as common HTTP/2 traffic with minimal distinguishable features. Privacy and integrity are simultaneously achieved through implementations of TLS best practices.
+NaiveProxy is naive as it simply reuses standard protocols (HTTP/2, HTTP/3) and common network stacks (Chrome, Caddy) with little room for variations. By being as common and boring as possible NaiveProxy is practically indistinguishable from mainstream traffic. Reusing common software stacks also ensures best practices in performance and security.
 
 The following attacks are mitigated:
 
 * Website fingerprinting / traffic classification: [mitigated](https://arxiv.org/abs/1707.00641) by traffic multiplexing in HTTP/2.
-* [TLS parameter fingerprinting](https://arxiv.org/abs/1607.01639): defeated by using identical behaviors from [Chromium's network stack](https://www.chromium.org/developers/design-documents/network-stack).
+* [TLS parameter fingerprinting](https://arxiv.org/abs/1607.01639): defeated by reusing [Chromium's network stack](https://www.chromium.org/developers/design-documents/network-stack).
 * [Active probing](https://ensa.fi/active-probing/): defeated by *application fronting*, i.e. hiding proxy servers behind a commonly used frontend with application-layer routing.
 * Length-based traffic analysis: mitigated by length padding.
 
 ## Architecture
 
-<p align="center">[Browser → Naive (client)] ⟶ Censor ⟶ [Frontend → Naive (server)] ⟶ Internet</p>
+[Browser → Naive (client)] ⟶ Censor ⟶ [Frontend → Naive (server)] ⟶ Internet
 
-NaiveProxy uses Chromium's network stack. What the censor can see is exactly regular HTTP/2 traffic between Chrome and Frontend (e.g. HAProxy), two of the most commonly used browsers and servers. Being as common as possible reduces the viability of traffic classification censorship.
+NaiveProxy uses Chromium's network stack. What the censor can see is exactly regular HTTP/2 traffic between Chrome and Frontend (e.g. Caddy, HAProxy).
 
 Frontend also reroutes unauthenticated users and active probes to a backend HTTP server, making it impossible to detect the existence of a proxy:
 
-<p align="center">Probe ⟶ [Frontend → Nginx] ⟶ index.html</p>
+Probe ⟶ [Frontend → Nginx] ⟶ index.html
 
 ## Download
 
 See [latest release](https://github.com/klzgrad/naiveproxy/releases/latest).
 
 Note: On Linux libnss3 must be installed before using the prebuilt binary.
+
+## Setup
+
+Locally run `./naive --proxy=https://user:pass@domain.example` and point the browser to a SOCKS5 proxy at port 1080.
+
+On the server run `./caddy -quic` as the frontend and `./naive --listen=http://127.0.0.1:8080` behind it. See [Server Setup](https://github.com/klzgrad/naiveproxy/wiki/Server-Setup) for detail.
+
+For more information on parameter usage, see [USAGE.txt](https://github.com/klzgrad/naiveproxy/blob/master/USAGE.txt). See also [Parameter Tuning](https://github.com/klzgrad/naiveproxy/wiki/Parameter-Tuning) to improve client-side performance.
+
+### Portable setup
+
+Browser ⟶ Caddy ⟶ Internet
+
+You can get 80% of what NaiveProxy does without NaiveProxy: run Caddy as an HTTP/2 or HTTP/3 forward proxy directly.
+
+But this setup is prone to basic traffic analysis due to lack of obfuscation. Also, the browser will introduce an extra 1RTT delay during proxy connection setup.
 
 ## Build
 
@@ -51,24 +67,6 @@ Verify:
 ./out/Release/naive --log &
 curl -v --proxy socks5h://127.0.0.1:1080 google.com
 ```
-
-## Setup
-
-The `naive` binary functions as both the client and the server. Naive client can be run as `./naive --proxy=https://user:pass@domain.example`, which accepts SOCKS5 traffic at port 1080 and proxies it via `domain.example` as HTTP/2 traffic. Naive server can be run as `./naive --listen=http://127.0.0.1:8080` behind the frontend as a regular HTTP proxy. You can also store the parameters in `config.json` and `./naive` will detect it automatically.
-
-For details on setting up the server part [Frontend → Naive (server)], see [Server Setup](https://github.com/klzgrad/naiveproxy/wiki/Server-Setup).
-
-For more information on parameter usage, see [USAGE.txt](https://github.com/klzgrad/naiveproxy/blob/master/USAGE.txt). See also [Parameter Tuning](https://github.com/klzgrad/naiveproxy/wiki/Parameter-Tuning) to improve client-side performance.
-
-### Portable setup
-
-<p align="center">Browser ⟶ [HAProxy → Tinyproxy] ⟶ Internet</p>
-
-This mode is clientless: point your browser directly to the server as an HTTPS proxy. You don't need to download, build, or run anything client-side.
-
-But this setup is prone to traffic analysis due to lack of obfuscation. Also, the browser will introduce an extra 1RTT delay during connection setup.
-
-Tinyproxy is used in place of Naive server in this mode, so you only need to `apt-get install tinyproxy` without downloading anything manually.
 
 ## FAQ
 
