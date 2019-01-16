@@ -37,12 +37,6 @@ For more information on parameter usage and format of `config.json`, see [USAGE.
 
 ### Portable setup
 
-Browser ⟶ Caddy ⟶ Internet
-
-You may have wondered why not use Chrome directly if NaiveProxy reuses Chrome's network stack. The answer is yes, you can get 80% of what NaiveProxy does without NaiveProxy: point your browser to Caddy as an HTTP/2 or HTTP/3 forward proxy directly.
-
-But this setup is prone to basic traffic analysis due to lack of obfuscation and predictable packet sizes in TLS handshakes. Also, the browser will introduce an extra 1RTT delay during proxy connection setup.
-
 ## Build
 
 If you don't like to use downloaded binaries, you can build it.
@@ -68,7 +62,7 @@ The scripts download tools from Google servers with curl. If there is trouble tr
 
 Their TLS stacks have distinct features that can be [easily detected](https://arxiv.org/abs/1607.01639). TLS parameters are generally very informative and distinguishable.
 
-Previously, Tor tried to mimic Firefox's TLS signature and still got [identified and blocked by firewalls](https://groups.google.com/d/msg/traffic-obf/BpFSCVgi5rs/nCqNwoeRKQAJ), because that signature was of an outdated version of Firefox and the firewall determined the rate of collateral damage would be acceptable. It would be unacceptable to block the most commonly used browsers.
+Previously, Tor tried to mimic Firefox's TLS signature and still got [identified and blocked by firewalls](https://groups.google.com/d/msg/traffic-obf/BpFSCVgi5rs/nCqNwoeRKQAJ), because that signature was of an outdated version of Firefox and the firewall determined the rate of collateral damage would be acceptable. If we use the signature of the most commonly used browser the collateral damage of blocking it would be unacceptable.
 
 ### Why not use Go, Node, etc. for performance?
 
@@ -85,3 +79,19 @@ And the real reason Google never enabled TCP Fast Open by default is that it was
 It was obvious to Google then and is obvious to us now that the road to zero latency at the cost of compromising security and interoperability is a dead end under the 1:1 connection model, which is why Google pursued connection persistence and 1:N connection multiplexing in HTTP/2 and more radical overhaul of HTTP/TLS/TCP in QUIC. In a 1:N connection model, the cost of setting up the first connection is amortized, and the following connections cost nothing to set up without any security or stability compromises.
 
 Complex, battle-tested logic for connection management was [implemented](https://web.archive.org/web/20161222115511/https://insouciant.org/tech/connection-management-in-chromium/) in Chromium. The same thing is not so easy to do again from scratch with the aforementioned languages.
+
+### Why not reinvent cryptos?
+
+Because the first rule of cryptography is: [Don't roll your](http://loup-vaillant.fr/articles/rolling-your-own-crypto) [own cryptos](https://security.stackexchange.com/questions/18197/why-shouldnt-we-roll-our-own).
+
+If you do roll your own cryptos, see what [happened](https://groups.google.com/d/msg/traffic-obf/CWO0peBJLGc/Py-clLSTBwAJ) with Shadowsocks. (Spoiler: it encrypts, but doesn't authenticates, leading to active probing exploits, and more exploits after duct-tape fixes.)
+
+### Why not use HTTP/2 proxy from browser directly?
+
+You may have wondered why not use Chrome directly if NaiveProxy reuses Chrome's network stack. The answer is yes, you can. You will get 80% of what NaiveProxy does (TLS, connection multiplexing, application fronting) without NaiveProxy. Simply point your browser to Caddy as an HTTP/2 or HTTP/3 forward proxy directly.
+
+But this setup is prone to basic traffic analysis due to lack of obfuscation and predictable packet sizes in TLS handshakes. [The bane of "TLS-in-TLS" tunnels](http://blog.zorinaq.com/my-experience-with-the-great-firewall-of-china/) is that this combination is just so different from any normal protocols (nobody does 3-way handshakes twice in a row) and the record sizes of TLS handshakes are so predictable that no machine learning is needed to [detect it](https://github.com/shadowsocks/shadowsocks-org/issues/86#issuecomment-362809854).
+
+The browser will introduce an extra 1RTT delay during proxied connection setup because of interpretation of HTTP RFCs. The browser will wait for a 200 response after a CONNECT request, incuring 1RTT which is not necessary. NaiveProxy does a HTTP Fast CONNECT similar to TCP Fast Open, i.e. send subsequent data immediately after CONNECT. Also, you may have to type in the password for the proxy everytime you open the browser. NaiveProxy sends the password directly.
+
+But if you don't need the best performance, and unobfuscated TLS-in-TLS somehow still works for you, you can just set up Caddy and use it with your browser.
