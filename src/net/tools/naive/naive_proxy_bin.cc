@@ -149,7 +149,11 @@ std::unique_ptr<net::URLRequestContext> BuildURLRequestContext(
       !params.proxy_pass.empty()) {
     auto* session = context->http_transaction_factory()->GetSession();
     auto* auth_cache = session->http_auth_cache();
-    GURL auth_origin(params.proxy_url);
+    std::string proxy_url = params.proxy_url;
+    if (proxy_url.compare(0, 7, "quic://") == 0) {
+      proxy_url.replace(0, 4, "https");
+    }
+    GURL auth_origin(proxy_url);
     net::AuthCredentials credentials(base::ASCIIToUTF16(params.proxy_user),
                                      base::ASCIIToUTF16(params.proxy_pass));
     auth_cache->Add(auth_origin, /*realm=*/std::string(),
