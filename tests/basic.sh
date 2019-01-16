@@ -40,18 +40,22 @@ echo '{"listen":"socks://127.0.0.1:61080","log":""}' >/tmp/config.json
 test_naive 'Config file' socks5h://127.0.0.1:61080 '/tmp/config.json'
 rm -f /tmp/config.json
 
-test_naive 'Trivial - scheme only' socks5h://127.0.0.1:1080 \
+test_naive 'Trivial - listen scheme only' socks5h://127.0.0.1:1080 \
   '--log --listen=socks://'
 
-test_naive 'Trivial - no host' socks5h://127.0.0.1:61080 \
+test_naive 'Trivial - listen no host' socks5h://127.0.0.1:61080 \
   '--log --listen=socks://:61080'
 
-test_naive 'Trivial - no port' socks5h://127.0.0.1:1080 \
+test_naive 'Trivial - listen no port' socks5h://127.0.0.1:1080 \
   '--log --listen=socks://127.0.0.1'
 
 test_naive 'SOCKS-SOCKS' socks5h://127.0.0.1:11080 \
   '--log --listen=socks://:11080 --proxy=socks://127.0.0.1:21080' \
   '--log --listen=socks://:21080'
+
+test_naive 'SOCKS-SOCKS - proxy no port' socks5h://127.0.0.1:11080 \
+  '--log --listen=socks://:11080 --proxy=socks://127.0.0.1' \
+  '--log --listen=socks://:1080'
 
 test_naive 'SOCKS-HTTP' socks5h://127.0.0.1:11080 \
   '--log --listen=socks://:11080 --proxy=http://127.0.0.1:28080' \
