@@ -242,13 +242,11 @@ void GetCommandLineFromConfig(const base::FilePath& config_path,
 }
 
 std::string GetProxyFromURL(const GURL& url) {
-  auto shp = url::SchemeHostPort(url);
-  if (url::DefaultPortForScheme(shp.scheme().c_str(), shp.scheme().size()) ==
-      url::PORT_UNSPECIFIED) {
-    return shp.Serialize() + ":" + base::IntToString(shp.port());
-  } else {
-    return shp.Serialize();
+  std::string str = url.GetWithEmptyPath().spec();
+  if (str.size() && str.back() == '/') {
+    str.pop_back();
   }
+  return str;
 }
 
 bool ParseCommandLine(const CommandLine& cmdline, Params* params) {
@@ -298,7 +296,6 @@ bool ParseCommandLine(const CommandLine& cmdline, Params* params) {
       return false;
     }
     params->proxy_url = GetProxyFromURL(url_no_auth);
-    params->proxy_url.erase();
     params->proxy_user = url.username();
     params->proxy_pass = url.password();
   }
