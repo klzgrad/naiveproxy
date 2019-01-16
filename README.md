@@ -7,7 +7,7 @@ NaiveProxy is naive as it simply reuses standard protocols (HTTP/2, HTTP/3) and 
 The following attacks are mitigated:
 
 * Website fingerprinting / traffic classification: [mitigated](https://arxiv.org/abs/1707.00641) by traffic multiplexing in HTTP/2.
-* [TLS parameter fingerprinting](https://arxiv.org/abs/1607.01639): defeated by reusing [Chromium's network stack](https://www.chromium.org/developers/design-documents/network-stack).
+* [TLS parameter fingerprinting](https://arxiv.org/abs/1607.01639): defeated by reusing [Chrome's network stack](https://www.chromium.org/developers/design-documents/network-stack).
 * [Active probing](https://ensa.fi/active-probing/): defeated by *application fronting*, i.e. hiding proxy servers behind a commonly used frontend with application-layer routing.
 * Length-based traffic analysis: mitigated by length padding.
 
@@ -15,7 +15,7 @@ The following attacks are mitigated:
 
 [Browser → Naive (client)] ⟶ Censor ⟶ [Frontend → Naive (server)] ⟶ Internet
 
-NaiveProxy uses Chromium's network stack. What the censor can see is exactly regular HTTP/2 traffic between Chrome and Frontend (e.g. Caddy, HAProxy).
+NaiveProxy uses Chrome's network stack. What the censor can see is exactly regular HTTP/2 traffic between Chrome and Frontend (e.g. Caddy, HAProxy).
 
 Frontend also reroutes unauthenticated users and active probes to a backend HTTP server, making it impossible to detect the existence of a proxy:
 
@@ -39,9 +39,9 @@ For more information on parameter usage, see [USAGE.txt](https://github.com/klzg
 
 Browser ⟶ Caddy ⟶ Internet
 
-You can get 80% of what NaiveProxy does without NaiveProxy: run Caddy as an HTTP/2 or HTTP/3 forward proxy directly.
+You may have wondered why not use Chrome directly if NaiveProxy reuses Chrome's network stack. The answer is yes, you can get 80% of what NaiveProxy does without NaiveProxy: point your browser to Caddy as an HTTP/2 or HTTP/3 forward proxy directly.
 
-But this setup is prone to basic traffic analysis due to lack of obfuscation. Also, the browser will introduce an extra 1RTT delay during proxy connection setup.
+But this setup is prone to basic traffic analysis due to lack of obfuscation and predictable packet sizes in TLS handshakes. Also, the browser will introduce an extra 1RTT delay during proxy connection setup.
 
 ## Build
 
