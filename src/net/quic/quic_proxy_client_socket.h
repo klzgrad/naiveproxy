@@ -164,6 +164,9 @@ class NET_EXPORT_PRIVATE QuicProxyClientSocket : public ProxyClientSocket {
 
   std::string user_agent_;
 
+  bool use_fastopen_ = false;
+  std::optional<bool> read_headers_pending_;
+
   const NetLogWithSource net_log_;
 
   // The default weak pointer factory.
