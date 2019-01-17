@@ -35,7 +35,6 @@ On the server run `./caddy` as the frontend with the following Caddyfile
 ```
 domain.example
 root /var/www/html
-index index.html
 forwardproxy {
   basicauth user pass
   hide_ip
