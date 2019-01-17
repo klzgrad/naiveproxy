@@ -874,6 +874,11 @@ int QuicChromiumClientStream::DeliverInitialHeaders(
     return ERR_INVALID_RESPONSE;
   }
 
+  // During proxy Fast Open, DeliverInitialHeaders() queued from
+  // OnInitialHeadersComplete() can be delayed after OnBodyAvailable(),
+  // which then does nothing and stalls ReadBody(). Resumes it here.
+  OnBodyAvailable();
+
   net_log_.AddEvent(
       NetLogEventType::QUIC_CHROMIUM_CLIENT_STREAM_READ_RESPONSE_HEADERS,
       [&](NetLogCaptureMode capture_mode) {
