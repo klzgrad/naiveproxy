@@ -80,7 +80,7 @@ Any languages can be used for high performance architectures, but not all archit
 
 Go, Node, etc. make it easy to implement a 1:1 connection proxy model, i.e. creating one upstream connection for every user connection. Then under this model the goal of performance is to reduce overhead in setting up each upstream connection. Toward that goal people start to reinvent their own 0-RTT cryptographic protocols (badly) as TLS goes out of the window because it either spends take several round trips in handshakes or makes it [a pain to set up 0-RTT properly](https://tools.ietf.org/html/rfc8446#section-8). Then people also start to look at low level optimization such as TCP Fast Open.
 
-Meanwhile, Google has removed the code for TCP Fast Open in Chromium all together (they authored the RFC of TCP Fast Open in 2014). The literal reason given for this reversal was
+Meanwhile, Google has removed the code for TCP Fast Open in Chromium all together (they [authored](https://tools.ietf.org/html/rfc7413) the RFC of TCP Fast Open in 2014). The literal reason given for this reversal was
 
 > We never enabled it by default, and have no plans to, so we should just remove it.  QUIC also makes it less useful, and TLS 1.2 0-RTT session restore means it potentially mutates state.
 
