@@ -2,7 +2,7 @@
 
 A secure, censorship-resistent proxy.
 
-NaiveProxy is naive as it simply reuses standard protocols (HTTP/2, HTTP/3) and common network stacks (Chrome, Caddy) with little room for variation. By being as common and boring as possible NaiveProxy is practically indistinguishable from mainstream traffic. Reusing common software stacks also ensures best practices in performance and security.
+NaiveProxy is naive as it reuses standard protocols (HTTP/2, HTTP/3) and common network stacks (Chrome, Caddy) with little variation. By being as common and boring as possible NaiveProxy is practically indistinguishable from mainstream traffic. Reusing common software stacks also ensures best practices in performance and security.
 
 The following attacks are mitigated:
 
@@ -49,7 +49,7 @@ For more information on parameter usage and format of `config.json`, see [USAGE.
 
 ## Build
 
-If you don't like to use downloaded binaries, you can build it.
+If you don't like to download binaries, you can build NaiveProxy.
 
 Prerequisites:
 * Ubuntu (apt-get install): git, python2, ninja-build (>= 1.7), pkg-config, libnss3-dev, ccache (optional)
@@ -57,7 +57,7 @@ Prerequisites:
 * Windows ([choco install](https://chocolatey.org/)): git, python2, ninja, visualstudio2017community. See [Chromium's page](https://chromium.googlesource.com/chromium/src/+/master/docs/windows_build_instructions.md#Visual-Studio) for detail on Visual Studio setup requirements.
 
 
-Build it (output to `./out/Release/naive`):
+Build (output to `./out/Release/naive`):
 ```
 git clone https://github.com/klzgrad/naiveproxy.git
 cd naiveproxy/src
