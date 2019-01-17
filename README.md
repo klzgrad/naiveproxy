@@ -78,7 +78,7 @@ Previously, Tor tried to mimic Firefox's TLS signature and still got [identified
 
 Any languages can be used for high performance architectures, but not all architectures have high performance.
 
-Go, Node, etc. make it easy to implement a 1:1 connection proxy model, i.e. creating one upstream connection for every user connection. Then under this model the goal of performance is to reduce overhead in setting up each upstream connection. Toward that goal people start to reinvent their own 0-RTT cryptographic protocols (badly) as TLS goes out of the window because it either spends take several round trips in handshakes or makes it really hard to set up 0-RTT properly. Then people also start to look at low level optimization such as TCP Fast Open.
+Go, Node, etc. make it easy to implement a 1:1 connection proxy model, i.e. creating one upstream connection for every user connection. Then under this model the goal of performance is to reduce overhead in setting up each upstream connection. Toward that goal people start to reinvent their own 0-RTT cryptographic protocols (badly) as TLS goes out of the window because it either spends take several round trips in handshakes or makes it [a pain to set up 0-RTT properly](https://tools.ietf.org/html/rfc8446#section-8). Then people also start to look at low level optimization such as TCP Fast Open.
 
 Meanwhile, Google has removed the code for TCP Fast Open in Chromium all together (they authored the RFC of TCP Fast Open in 2014). The literal reason given for this reversal was
 
@@ -104,4 +104,6 @@ But this setup is prone to basic traffic analysis due to lack of obfuscation and
 
 The browser will introduce an extra 1RTT delay during proxied connection setup because of interpretation of HTTP RFCs. The browser will wait for a 200 response after a CONNECT request, incuring 1RTT which is not necessary. NaiveProxy does HTTP Fast CONNECT similar to TCP Fast Open, i.e. send subsequent data immediately after CONNECT. Also, you may have to type in the password for the proxy everytime you open the browser. NaiveProxy sends the password automatically.
 
-But if you don't need the best performance, and unobfuscated TLS-in-TLS somehow still works for you, you can just set up Caddy and use it with your browser.
+Thus, traffic obfuscation, HTTP Fast CONNECT, and auto-authentication are the crucial last 20% provided by NaiveProxy. These can't be really achieved inside Chrome as extensions/apps because they don't have access to sockets. NaiveProxy extracts Chromium's network stack without all the other baggage to build a small binary (4% of full Chrome build).
+
+But if you don't need the best performance, and unobfuscated TLS-in-TLS somehow still works for you, you can just keep using Caddy proxy with your browser.
