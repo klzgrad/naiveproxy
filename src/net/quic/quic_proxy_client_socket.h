@@ -144,6 +144,12 @@ class NET_EXPORT_PRIVATE QuicProxyClientSocket : public ProxyClientSocket {
 
   std::string user_agent_;
 
+  // Session connect timing info.
+  LoadTimingInfo::ConnectTiming connect_timing_;
+
+  bool use_fastopen_;
+  bool read_headers_pending_;
+
   const NetLogWithSource net_log_;
 
   // The default weak pointer factory.
