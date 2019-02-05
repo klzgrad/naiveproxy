@@ -1,8 +1,8 @@
-# NaiveProxy [![Build Status](https://travis-ci.com/klzgrad/naiveproxy.svg?branch=master)](https://travis-ci.com/klzgrad/naiveproxy) [![Build status](https://ci.appveyor.com/api/projects/status/ohpyaf49baihmxa9?svg=true)](https://ci.appveyor.com/project/klzgrad/naiveproxy)
+# NaïveProxy [![Build Status](https://travis-ci.com/klzgrad/naiveproxy.svg?branch=master)](https://travis-ci.com/klzgrad/naiveproxy) [![Build status](https://ci.appveyor.com/api/projects/status/ohpyaf49baihmxa9?svg=true)](https://ci.appveyor.com/project/klzgrad/naiveproxy)
 
 A secure, censorship-resistent proxy.
 
-NaiveProxy is naive as it reuses standard protocols (HTTP/2, HTTP/3) and common network stacks (Chrome, Caddy) with little variation. By being as common and boring as possible NaiveProxy is practically indistinguishable from mainstream traffic. Reusing common software stacks also ensures best practices in performance and security.
+NaïveProxy is naive as it reuses standard protocols (HTTP/2, HTTP/3) and common network stacks (Chrome, Caddy) with little variation. By being as common and boring as possible NaïveProxy is practically indistinguishable from mainstream traffic. Reusing common software stacks also ensures best practices in performance and security.
 
 The following attacks are mitigated:
 
@@ -15,7 +15,7 @@ The following attacks are mitigated:
 
 [Browser → Naive (client)] ⟶ Censor ⟶ [Frontend → Naive (server)] ⟶ Internet
 
-NaiveProxy uses Chrome's network stack. What the censor can see is exactly regular HTTP/2 traffic between Chrome and standard Frontend (e.g. Caddy, HAProxy).
+NaïveProxy uses Chrome's network stack. What the censor can see is exactly regular HTTP/2 traffic between Chrome and standard Frontend (e.g. Caddy, HAProxy).
 
 Frontend also reroutes unauthenticated users and active probes to a backend HTTP server, making it impossible to detect the existence of a proxy:
 
@@ -49,7 +49,7 @@ For more information on parameter usage and format of `config.json`, see [USAGE.
 
 ## Build
 
-If you don't like to download binaries, you can build NaiveProxy.
+If you don't like to download binaries, you can build NaïveProxy.
 
 Prerequisites:
 * Ubuntu (apt-get install): git, python2, ninja-build (>= 1.7), pkg-config, libnss3-dev, ccache (optional)
@@ -98,12 +98,12 @@ If you do roll your own cryptos, see what [happened](https://groups.google.com/d
 
 ### Why not use HTTP/2 proxy from browser directly?
 
-You may have wondered why not use Chrome directly if NaiveProxy reuses Chrome's network stack. The answer is yes, you can. You will get 80% of what NaiveProxy does (TLS, connection multiplexing, application fronting) without NaiveProxy, which is also what makes NaiveProxy indistinguishale from normal traffic. Simply point your browser to Caddy as an HTTP/2 or HTTP/3 forward proxy directly.
+You may have wondered why not use Chrome directly if NaïveProxy reuses Chrome's network stack. The answer is yes, you can. You will get 80% of what NaïveProxy does (TLS, connection multiplexing, application fronting) without NaïveProxy, which is also what makes NaïveProxy indistinguishale from normal traffic. Simply point your browser to Caddy as an HTTP/2 or HTTP/3 forward proxy directly.
 
 But this setup is prone to basic traffic analysis due to lack of obfuscation and predictable packet sizes in TLS handshakes. [The bane of "TLS-in-TLS" tunnels](http://blog.zorinaq.com/my-experience-with-the-great-firewall-of-china/) is that this combination is just so different from any normal protocols (nobody does 3-way handshakes twice in a row) and the record sizes of TLS handshakes are so predictable that no machine learning is needed to [detect it](https://github.com/shadowsocks/shadowsocks-org/issues/86#issuecomment-362809854).
 
-The browser will introduce an extra 1RTT delay during proxied connection setup because of interpretation of HTTP RFCs. The browser will wait for a 200 response after a CONNECT request, incuring 1RTT which is not necessary. NaiveProxy does HTTP Fast CONNECT similar to TCP Fast Open, i.e. send subsequent data immediately after CONNECT. Also, you may have to type in the password for the proxy everytime you open the browser. NaiveProxy sends the password automatically.
+The browser will introduce an extra 1RTT delay during proxied connection setup because of interpretation of HTTP RFCs. The browser will wait for a 200 response after a CONNECT request, incuring 1RTT which is not necessary. NaïveProxy does HTTP Fast CONNECT similar to TCP Fast Open, i.e. send subsequent data immediately after CONNECT. Also, you may have to type in the password for the proxy everytime you open the browser. NaïveProxy sends the password automatically.
 
-Thus, traffic obfuscation, HTTP Fast CONNECT, and auto-authentication are the crucial last 20% provided by NaiveProxy. These can't be really achieved inside Chrome as extensions/apps because they don't have access to sockets. NaiveProxy extracts Chromium's network stack without all the other baggage to build a small binary (4% of full Chrome build).
+Thus, traffic obfuscation, HTTP Fast CONNECT, and auto-authentication are the crucial last 20% provided by NaïveProxy. These can't be really achieved inside Chrome as extensions/apps because they don't have access to sockets. NaïveProxy extracts Chromium's network stack without all the other baggage to build a small binary (4% of full Chrome build).
 
 But if you don't need the best performance, and unobfuscated TLS-in-TLS somehow still works for you, you can just keep using Caddy proxy with your browser.
