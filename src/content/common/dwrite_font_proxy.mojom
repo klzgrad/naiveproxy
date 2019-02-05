@@ -1,0 +1,67 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module content.mojom;
+
+import "mojo/public/mojom/base/file.mojom";
+import "mojo/public/mojom/base/file_path.mojom";
+import "mojo/public/mojom/base/string16.mojom";
+
+struct DWriteStringPair {
+  mojo_base.mojom.String16 first;
+  mojo_base.mojom.String16 second;
+};
+
+struct DWriteFontStyle {
+  uint16 font_weight;
+  uint8 font_slant;
+  uint8 font_stretch;
+};
+
+struct MapCharactersResult {
+  uint32 family_index;
+  mojo_base.mojom.String16 family_name;
+  uint32 mapped_length;
+  float scale;
+  DWriteFontStyle font_style;
+};
+
+interface DWriteFontProxy {
+  // Locates the index of the specified font family within the system
+  // collection.
+  [Sync]
+  FindFamily(mojo_base.mojom.String16 family_name) => (uint32 out_index);
+
+  // Returns the number of font families in the system collection.
+  [Sync]
+  GetFamilyCount() => (uint32 out_count);
+
+  // Returns the list of locale and family name pairs for the font family at the
+  // specified index.
+  [Sync]
+  GetFamilyNames(uint32 family_index)
+      => (array<DWriteStringPair> out_family_names);
+
+  // Returns the list of font file paths in the system font directory that
+  // contain font data for the font family at the specified index.
+  [Sync]
+  GetFontFiles(uint32 family_index)
+     => (array<mojo_base.mojom.FilePath> file_paths,
+         array<mojo_base.mojom.File> file_handles);
+
+  // Locates a font family that is able to render the specified text using the
+  // specified style. If successful, the family_index and family_name will
+  // indicate which family in the system font collection can render the
+  // requested text and the mapped_length will indicate how many characters can
+  // be rendered. If no font exists that can render the text, family_index will
+  // be UINT32_MAX and mapped_length will indicate how many characters cannot be
+  // rendered by any installed font.
+  [Sync]
+  MapCharacters(mojo_base.mojom.String16 text,
+                DWriteFontStyle font_style,
+                mojo_base.mojom.String16 locale_name,
+                uint32 reading_direction,
+                mojo_base.mojom.String16 base_family_name)
+      => (MapCharactersResult out);
+};

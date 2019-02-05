@@ -1,0 +1,108 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ios/rules.gni")
+
+declare_args() {
+  # Authorization service implementation used in ios_web_view_shell. Uses a fake
+  # implementation by default. Override this with a real implementation to make
+  # Sync feature work in the shell. The real implementation must provide
+  # implementation of ShellAuthService class.
+  ios_web_view_shell_auth_service =
+      "//ios/web_view/shell:shell_auth_service_fake_impl"
+
+  # Path to an entitlements file used in ios_web_view_shell. Can be overridden
+  # to provide an alternative.
+  ios_web_view_shell_entitlements_path = "//build/config/ios/entitlements.plist"
+}
+
+ios_app_bundle("ios_web_view_shell") {
+  info_plist = "Info.plist"
+
+  deps = [
+    ":shell",
+  ]
+  bundle_deps = [ "//ios/web_view:web_view+bundle" ]
+  entitlements_path = ios_web_view_shell_entitlements_path
+
+  configs += [ "//build/config/compiler:enable_arc" ]
+}
+
+source_set("shell_auth_service_interface") {
+  sources = [
+    "shell_auth_service.h",
+  ]
+
+  deps = [
+    "//ios/web_view:web_view+link",
+  ]
+
+  configs += [ "//build/config/compiler:enable_arc" ]
+}
+
+source_set("shell_auth_service_fake_impl") {
+  sources = [
+    "shell_auth_service_fake.m",
+  ]
+
+  deps = [
+    ":shell_auth_service_interface",
+    "//ios/web_view:web_view+link",
+  ]
+
+  configs += [ "//build/config/compiler:enable_arc" ]
+}
+
+source_set("shell") {
+  sources = [
+    "shell_app_delegate.h",
+    "shell_app_delegate.m",
+    "shell_autofill_delegate.h",
+    "shell_autofill_delegate.m",
+    "shell_exe_main.m",
+    "shell_translation_delegate.h",
+    "shell_translation_delegate.m",
+    "shell_view_controller.h",
+    "shell_view_controller.m",
+  ]
+
+  deps = [
+    ":resources",
+    ":shell_auth_service_interface",
+    "//ios/web_view:web_view+link",
+    ios_web_view_shell_auth_service,
+  ]
+
+  libs = [
+    "CFNetwork.framework",
+    "CoreFoundation.framework",
+    "CoreGraphics.framework",
+    "CoreText.framework",
+    "Foundation.framework",
+    "ImageIO.framework",
+    "MobileCoreServices.framework",
+    "Security.framework",
+    "SystemConfiguration.framework",
+    "UIKit.framework",
+    "WebKit.framework",
+    "resolv",
+  ]
+
+  configs += [ "//build/config/compiler:enable_arc" ]
+}
+
+bundle_data("resources") {
+  visibility = [ ":shell" ]
+  sources = [
+    "Default-568h@2x.png",
+    "textfield_background@2x.png",
+    "toolbar_back@2x.png",
+    "toolbar_forward@2x.png",
+    "toolbar_more_horiz@2x.png",
+    "toolbar_stop@2x.png",
+  ]
+  outputs = [
+    "{{bundle_resources_dir}}/{{source_file_part}}",
+  ]
+}

@@ -1,0 +1,83 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ui.gni")
+import("//media/gpu/args.gni")
+
+# TODO(dstaessens@) Split up in encode/decode/render/common helpers
+source_set("helpers") {
+  testonly = true
+
+  sources = [
+    "rendering_helper.cc",
+    "rendering_helper.h",
+    "texture_ref.cc",
+    "texture_ref.h",
+    "video_accelerator_unittest_helpers.h",
+    "video_decode_accelerator_unittest_helpers.cc",
+    "video_decode_accelerator_unittest_helpers.h",
+    "video_encode_accelerator_unittest_helpers.cc",
+    "video_encode_accelerator_unittest_helpers.h",
+    "video_frame_mapper.h",
+    "video_frame_mapper_factory.cc",
+    "video_frame_mapper_factory.h",
+    "video_frame_validator.cc",
+    "video_frame_validator.h",
+  ]
+  if (is_chromeos) {
+    sources += [
+      "generic_dmabuf_video_frame_mapper.cc",
+      "generic_dmabuf_video_frame_mapper.h",
+    ]
+    if (use_vaapi) {
+      sources += [
+        "vaapi_dmabuf_video_frame_mapper.cc",
+        "vaapi_dmabuf_video_frame_mapper.h",
+      ]
+    }
+  }
+  deps = [
+    "//media/gpu",
+    "//testing/gtest",
+    "//third_party/libyuv",
+    "//ui/gl/init:init",
+  ]
+  if (use_ozone) {
+    deps += [ "//ui/ozone" ]
+  }
+}
+
+# TODO(dstaessens@) Make this work on other platforms too.
+if (is_chromeos) {
+  static_library("video_player") {
+    testonly = true
+
+    sources = [
+      "video_player/frame_renderer.h",
+      "video_player/frame_renderer_dummy.cc",
+      "video_player/frame_renderer_dummy.h",
+      "video_player/video.cc",
+      "video_player/video.h",
+      "video_player/video_collection.cc",
+      "video_player/video_collection.h",
+      "video_player/video_decoder_client.cc",
+      "video_player/video_decoder_client.h",
+      "video_player/video_player.cc",
+      "video_player/video_player.h",
+    ]
+
+    data = [
+      "//media/test/data/",
+    ]
+
+    deps = [
+      ":helpers",
+      "//media/gpu",
+    ]
+
+    if (use_ozone) {
+      deps += [ "//ui/ozone" ]
+    }
+  }
+}

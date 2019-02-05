@@ -1,0 +1,145 @@
+# Copyright (c) 2014 The WebRTC project authors. All Rights Reserved.
+#
+# Use of this source code is governed by a BSD-style license
+# that can be found in the LICENSE file in the root of the source
+# tree. An additional intellectual property rights grant can be found
+# in the file PATENTS.  All contributing project authors may
+# be found in the AUTHORS file in the root of the source tree.
+
+import("../../webrtc.gni")
+
+config("bwe_test_logging") {
+  if (rtc_enable_bwe_test_logging) {
+    defines = [ "BWE_TEST_LOGGING_COMPILE_TIME_ENABLE=1" ]
+  } else {
+    defines = [ "BWE_TEST_LOGGING_COMPILE_TIME_ENABLE=0" ]
+  }
+}
+
+rtc_static_library("congestion_controller") {
+  visibility = [ "*" ]
+  configs += [ ":bwe_test_logging" ]
+  sources = [
+    "include/network_changed_observer.h",
+    "include/receive_side_congestion_controller.h",
+    "include/send_side_congestion_controller.h",
+    "include/send_side_congestion_controller_interface.h",
+    "receive_side_congestion_controller.cc",
+    "send_side_congestion_controller.cc",
+  ]
+
+  if (!build_with_chromium && is_clang) {
+    # Suppress warnings from the Chromium Clang plugin (bugs.webrtc.org/163).
+    suppressed_configs += [ "//build/config/clang:find_bad_constructs" ]
+  }
+
+  deps = [
+    ":transport_feedback",
+    "..:module_api",
+    "../..:webrtc_common",
+    "../../api/transport:network_control",
+    "../../rtc_base:checks",
+    "../../rtc_base:ptr_util",
+    "../../rtc_base:rate_limiter",
+    "../../rtc_base/network:sent_packet",
+    "../../system_wrappers",
+    "../../system_wrappers:field_trial",
+    "../bitrate_controller",
+    "../pacing",
+    "../remote_bitrate_estimator",
+    "../rtp_rtcp:rtp_rtcp_format",
+    "goog_cc:delay_based_bwe",
+    "goog_cc:estimators",
+    "goog_cc:probe_controller",
+    "goog_cc:pushback_controller",
+    "//third_party/abseil-cpp/absl/memory",
+  ]
+
+  if (!build_with_mozilla) {
+    deps += [ "../../rtc_base:rtc_base" ]
+  }
+}
+
+rtc_static_library("transport_feedback") {
+  visibility = [ "*" ]
+  sources = [
+    "transport_feedback_adapter.cc",
+    "transport_feedback_adapter.h",
+  ]
+
+  deps = [
+    "../../api/transport:network_control",
+    "../../modules:module_api",
+    "../../rtc_base:checks",
+    "../../rtc_base:rtc_base_approved",
+    "../../system_wrappers:system_wrappers",
+    "../rtp_rtcp:rtp_rtcp_format",
+    "rtp:transport_feedback",
+  ]
+}
+
+if (rtc_include_tests) {
+  rtc_source_set("test_controller_printer") {
+    testonly = true
+    sources = [
+      "test/controller_printer.cc",
+      "test/controller_printer.h",
+    ]
+    if (!build_with_chromium && is_clang) {
+      # Suppress warnings from the Chromium Clang plugin (bugs.webrtc.org/163).
+      suppressed_configs += [ "//build/config/clang:find_bad_constructs" ]
+    }
+    deps = [
+      "../../api/transport:network_control",
+      "../../rtc_base:checks",
+    ]
+  }
+  rtc_source_set("congestion_controller_unittests") {
+    testonly = true
+
+    sources = [
+      "receive_side_congestion_controller_unittest.cc",
+      "send_side_congestion_controller_unittest.cc",
+      "transport_feedback_adapter_unittest.cc",
+    ]
+    deps = [
+      ":congestion_controller",
+      ":mock_congestion_controller",
+      ":transport_feedback",
+      "../../logging:mocks",
+      "../../rtc_base:checks",
+      "../../rtc_base:rtc_base",
+      "../../rtc_base:rtc_base_approved",
+      "../../rtc_base/network:sent_packet",
+      "../../system_wrappers",
+      "../../test:field_trial",
+      "../../test:test_support",
+      "../bitrate_controller:bitrate_controller",
+      "../bitrate_controller:mocks",
+      "../pacing:mock_paced_sender",
+      "../pacing:pacing",
+      "../remote_bitrate_estimator:remote_bitrate_estimator",
+      "../rtp_rtcp:rtp_rtcp_format",
+      "bbr:bbr_unittests",
+      "goog_cc:estimators",
+      "goog_cc:goog_cc_unittests",
+      "pcc:pcc_unittests",
+      "rtp:congestion_controller_unittests",
+    ]
+    if (!build_with_chromium && is_clang) {
+      # Suppress warnings from the Chromium Clang plugin (bugs.webrtc.org/163).
+      suppressed_configs += [ "//build/config/clang:find_bad_constructs" ]
+    }
+  }
+
+  rtc_source_set("mock_congestion_controller") {
+    testonly = true
+    sources = [
+      "include/mock/mock_congestion_observer.h",
+    ]
+    deps = [
+      ":congestion_controller",
+      "../../test:test_support",
+    ]
+  }
+}
