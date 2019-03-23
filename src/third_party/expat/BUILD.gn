@@ -1,0 +1,60 @@
+# Copyright (c) 2013 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/chromecast_build.gni")
+import("//testing/libfuzzer/fuzzer_test.gni")
+
+# On Linux, we implicitly already depend on expat via fontconfig;
+# let's not pull it in twice.
+# Chromecast doesn't ship expat as a system library.
+# Libfuzzer and AFL need to build library from sources.
+if (is_linux && !is_chromecast && !use_fuzzing_engine) {
+  config("expat_config") {
+    libs = [ "expat" ]
+  }
+
+  group("expat") {
+    public_configs = [ ":expat_config" ]
+  }
+} else {
+  config("expat_config") {
+    include_dirs = [ "files/lib" ]
+    defines = [ "XML_STATIC" ]
+  }
+
+  static_library("expat") {
+    sources = [
+      "files/lib/expat.h",
+      "files/lib/loadlibrary.c",
+      "files/lib/xmlparse.c",
+      "files/lib/xmlrole.c",
+      "files/lib/xmltok.c",
+    ]
+
+    public_configs = [ ":expat_config" ]
+
+    # TODO(thakis): Remove this once clang no longer crashes when building
+    # libexpat with -Oz.
+    configs -= [ "//build/config/compiler:default_optimization" ]
+    configs += [ "//build/config/compiler:optimize_max" ]
+
+    defines = [ "_LIB" ]
+    if (is_win) {
+      defines += [ "COMPILED_FROM_DSP" ]
+    } else {
+      defines += [ "HAVE_EXPAT_CONFIG_H" ]
+    }
+  }
+}
+
+fuzzer_test("expat_xml_parse_fuzzer") {
+  sources = [
+    "fuzz/expat_xml_parse_fuzzer.cc",
+  ]
+  deps = [
+    ":expat",
+  ]
+  dict = "//third_party/libxml/fuzz/xml.dict"
+  seed_corpus = "//third_party/libxml/fuzz/seed_corpus"
+}

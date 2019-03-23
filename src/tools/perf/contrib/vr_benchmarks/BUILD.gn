@@ -1,0 +1,69 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//chrome/browser/vr/features.gni")
+
+assert(is_android)
+
+group("vr_perf_tests") {
+  testonly = true
+  data = [
+    "./data/",
+    "./__init__.py",
+    "./shared_android_vr_page_state.py",
+    "./vr_benchmarks.py",
+    "./vr_browsing_mode_pages.py",
+    "./vr_sample_page.py",
+    "./vr_story_set.py",
+    "./webvr_sample_pages.py",
+    "./webvr_wpr_pages.py",
+    "./webxr_sample_pages.py",
+    "//chrome/android/shared_preference_files/test/",
+    "//third_party/gvr-android-sdk/test-apks/vr_services/vr_services_current.apk",
+    "//third_party/gvr-android-sdk/test-apks/vr_keyboard/vr_keyboard_current.apk",
+    "//chrome/test/data/xr/webvr_info/samples/",
+    "//chrome/test/data/xr/webxr_samples/",
+
+    # Necessary for running on bots
+    "//testing/scripts/common.py",
+    "//testing/xvfb.py",
+    "//testing/scripts/run_telemetry_benchmark_as_googletest.py",
+  ]
+  data_deps = [
+    "//chrome/android:vr_nfc_simulator_apk",
+    "//testing:run_perf_test",
+  ]
+
+  # We'll only ever use the assets if it's a Chrome-branded build. We don't have
+  # a way of checking whether the files are actually present to copy, but the
+  # script will deal with that.
+  if (use_vr_assets_component) {
+    data_deps += [ ":generate_vr_assets_profile" ]
+  }
+  deps = [
+    "//tools/perf:perf",
+  ]
+}
+
+# Copies files to the gen/ directory and creates a manifest so that the VR
+# assets component can be used during Telemetry tests.
+action("generate_vr_assets_profile") {
+  script = "generate_vr_assets_profile.py"
+
+  # We should re-run anytime the version or any related files change.
+  inputs = [
+    "//chrome/browser/resources/vr/assets/google_chrome",
+    "//chrome/browser/resources/vr/assets/VERSION",
+    "//chrome/browser/resources/vr/assets/vr_assets_component_files.json",
+  ]
+  outputs = [
+    "$target_gen_dir/vr_assets_profile/",
+  ]
+  args = [
+    "--output",
+    rebase_path(target_gen_dir, root_build_dir),
+    "--asset-dir",
+    rebase_path("//chrome/browser/resources/vr/assets", root_build_dir),
+  ]
+}

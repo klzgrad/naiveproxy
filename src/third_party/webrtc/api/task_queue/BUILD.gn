@@ -1,0 +1,77 @@
+# Copyright (c) 2018 The WebRTC project authors. All Rights Reserved.
+#
+# Use of this source code is governed by a BSD-style license
+# that can be found in the LICENSE file in the root of the source
+# tree. An additional intellectual property rights grant can be found
+# in the file PATENTS.  All contributing project authors may
+# be found in the AUTHORS file in the root of the source tree.
+
+import("../../webrtc.gni")
+
+rtc_source_set("task_queue") {
+  visibility = [ "*" ]
+  public = [
+    "queued_task.h",
+    "task_queue_priority.h",
+  ]
+}
+
+# TODO(bugs.webrtc.org/10191): Merge the target into task_queue target above
+# when support for link-time injection is dropped.
+rtc_source_set("task_queue_factory") {
+  visibility = [ "*" ]
+  public = [
+    "task_queue_base.h",
+    "task_queue_factory.h",
+  ]
+  sources = [
+    "task_queue_base.cc",
+    "task_queue_impl.cc",
+    "task_queue_impl.h",
+  ]
+
+  deps = [
+    ":task_queue",
+    "../../rtc_base:checks",
+    "../../rtc_base:rtc_task_queue_api",
+    "//third_party/abseil-cpp/absl/base:core_headers",
+    "//third_party/abseil-cpp/absl/strings",
+  ]
+}
+
+rtc_source_set("default_task_queue_factory") {
+  # TODO(bugs.webrtc.org/10191): Make public when implemented for all
+  # supported platforms.
+  visibility = [ ":global_task_queue_factory" ]
+  sources = [
+    "default_task_queue_factory.cc",
+    "default_task_queue_factory.h",
+  ]
+  deps = [
+    ":task_queue_factory",
+    "../../rtc_base:checks",
+  ]
+}
+
+# Linking with global_task_queue_factory adds link-time implementation of the
+# rtc::TaskQueue that allows run-time injection of the TaskQueue implementaion.
+rtc_source_set("global_task_queue_factory") {
+  # TODO(danilchap): Remove this target when task queue factory propagated to
+  # all components that create TaskQueues.
+  visibility = [ "*" ]
+  sources = [
+    "global_task_queue_factory.cc",
+    "global_task_queue_factory.h",
+
+    # TODO(bugs.webrtc.org/10191): Move task_queue.cc to private build
+    # "rtc_task_queue" when "rtc_task_queue_api", "rtc_task_queue",
+    # and "rtc_task_queue_impl" can be joined.
+    "task_queue.cc",
+  ]
+  deps = [
+    ":default_task_queue_factory",
+    ":task_queue_factory",
+    "../../rtc_base:checks",
+    "../../rtc_base:rtc_task_queue_api",
+  ]
+}

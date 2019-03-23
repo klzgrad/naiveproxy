@@ -1,0 +1,99 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/dcheck_always_on.gni")
+
+# Generates code to produce a list service_manager::Manifest objects given a set
+# of service_manager targets to include in the list.
+#
+# This is a temporary helper to transition away from JSON manifests. The catalog
+# target always has a companion catalog_cpp_source target, which yields a
+# source_set defining the generated function.
+#
+# No new uses of these targets should be introduced.
+template("catalog") {
+  group(target_name) {
+    testonly = defined(invoker.testonly) && invoker.testonly
+  }
+
+  # NOTE: There is no longer a practical difference between embedded and
+  # standalone services in terms of manifest data. Some targets use one or the
+  # other or both.
+  submanifests = []
+  if (defined(invoker.embedded_services)) {
+    submanifests += invoker.embedded_services
+  }
+  if (defined(invoker.standalone_services)) {
+    submanifests += invoker.standalone_services
+  }
+
+  write_file("$target_gen_dir/${target_name}.submanifests", submanifests)
+}
+
+template("catalog_cpp_source") {
+  assert(defined(invoker.catalog), "catalog is required")
+  assert(defined(invoker.generated_function_name),
+         "generated_function_name is required")
+
+  generator_target_name = "${target_name}__generator"
+  generated_filename_base = "${target_gen_dir}/${target_name}"
+
+  catalog_target = invoker.catalog
+  catalog_target_dir = get_label_info(catalog_target, "target_gen_dir")
+  catalog_target_name = get_label_info(catalog_target, "name")
+
+  submanifests =
+      read_file("$catalog_target_dir/${catalog_target_name}.submanifests",
+                "list lines")
+
+  action(generator_target_name) {
+    testonly = defined(invoker.testonly) && invoker.testonly
+    script = "//services/catalog/public/tools/sourcify_manifest.py"
+    inputs = [
+      "//services/catalog/public/tools/catalog.cc.tmpl",
+      "//services/catalog/public/tools/catalog.h.tmpl",
+    ]
+    outputs = [
+      "${generated_filename_base}.cc",
+      "${generated_filename_base}.h",
+    ]
+
+    submanifest_info = []
+    foreach(submanifest, submanifests) {
+      manifest_dir = get_label_info(submanifest, "target_gen_dir")
+      manifest_target_name = get_label_info(submanifest, "name")
+      manifest_namespace_input =
+          "$manifest_dir/${manifest_target_name}.namespace"
+      manifest_namespace_path =
+          rebase_path(manifest_namespace_input, root_build_dir)
+      manifest_header_base =
+          rebase_path(manifest_dir, root_gen_dir) + "/${manifest_target_name}"
+      submanifest_info +=
+          [ "packaged@$manifest_namespace_path@$manifest_header_base" ]
+    }
+
+    submanifest_info_file =
+        "$target_gen_dir/${invoker.target_name}.submanifest_info"
+    write_file(submanifest_info_file, submanifest_info)
+
+    args = [
+      "--submanifest-info=" +
+          rebase_path(submanifest_info_file, root_build_dir),
+      "--output-filename-base=" +
+          rebase_path(generated_filename_base, root_build_dir),
+      "--output-function-name=" + invoker.generated_function_name,
+      "--module-path=" + rebase_path(generated_filename_base, root_gen_dir),
+    ]
+  }
+
+  source_set(target_name) {
+    testonly = defined(invoker.testonly) && invoker.testonly
+    sources = get_target_outputs(":$generator_target_name")
+    deps = [
+             ":$generator_target_name",
+             "//base",
+             "//services/service_manager/public/cpp",
+           ] + submanifests
+  }
+}

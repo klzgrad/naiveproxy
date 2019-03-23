@@ -1,0 +1,673 @@
+# Copyright (c) 2016 The WebRTC project authors. All Rights Reserved.
+#
+# Use of this source code is governed by a BSD-style license
+# that can be found in the LICENSE file in the root of the source
+# tree. An additional intellectual property rights grant can be found
+# in the file PATENTS.  All contributing project authors may
+# be found in the AUTHORS file in the root of the source tree.
+
+import("../webrtc.gni")
+if (is_android) {
+  import("//build/config/android/config.gni")
+  import("//build/config/android/rules.gni")
+}
+
+group("pc") {
+  deps = [
+    ":rtc_pc",
+  ]
+}
+
+config("rtc_pc_config") {
+  defines = []
+  if (rtc_enable_sctp) {
+    defines += [ "HAVE_SCTP" ]
+  }
+}
+
+rtc_static_library("rtc_pc_base") {
+  visibility = [ "*" ]
+  defines = []
+  sources = [
+    "channel.cc",
+    "channel.h",
+    "channel_interface.h",
+    "channel_manager.cc",
+    "channel_manager.h",
+    "channelinterface.h",
+    "channelmanager.h",
+    "dtls_srtp_transport.cc",
+    "dtls_srtp_transport.h",
+    "dtls_transport.cc",
+    "dtls_transport.h",
+    "dtlssrtptransport.h",
+    "dtlstransport.h",
+    "external_hmac.cc",
+    "external_hmac.h",
+    "externalhmac.h",
+    "jsep_transport.cc",
+    "jsep_transport.h",
+    "jsep_transport_controller.cc",
+    "jsep_transport_controller.h",
+    "jseptransport.h",
+    "jseptransportcontroller.h",
+    "media_session.cc",
+    "media_session.h",
+    "mediasession.h",
+    "rtcp_mux_filter.cc",
+    "rtcp_mux_filter.h",
+    "rtcpmuxfilter.h",
+    "rtp_media_utils.cc",
+    "rtp_media_utils.h",
+    "rtp_transport.cc",
+    "rtp_transport.h",
+    "rtp_transport_internal.h",
+    "rtp_transport_internal_adapter.h",
+    "rtpmediautils.h",
+    "rtptransport.h",
+    "rtptransportinternal.h",
+    "rtptransportinternaladapter.h",
+    "session_description.cc",
+    "session_description.h",
+    "sessiondescription.h",
+    "simulcast_description.cc",
+    "simulcast_description.h",
+    "simulcastdescription.h",
+    "srtp_filter.cc",
+    "srtp_filter.h",
+    "srtp_session.cc",
+    "srtp_session.h",
+    "srtp_transport.cc",
+    "srtp_transport.h",
+    "srtpfilter.h",
+    "srtpsession.h",
+    "srtptransport.h",
+    "transport_stats.cc",
+    "transport_stats.h",
+    "transportstats.h",
+    "unique_id_generator.cc",
+    "unique_id_generator.h",
+  ]
+
+  deps = [
+    "..:webrtc_common",
+    "../api:array_view",
+    "../api:audio_options_api",
+    "../api:call_api",
+    "../api:libjingle_peerconnection_api",
+    "../api:ortc_api",
+    "../api/video:video_frame",
+    "../call:call_interfaces",
+    "../call:rtp_interfaces",
+    "../call:rtp_receiver",
+    "../common_video:common_video",
+    "../logging:rtc_event_log_api",
+    "../media:rtc_data",
+    "../media:rtc_h264_profile_id",
+    "../media:rtc_media_base",
+    "../media:rtc_media_config",
+    "../modules/rtp_rtcp:rtp_rtcp_format",
+    "../p2p:rtc_p2p",
+    "../rtc_base:checks",
+    "../rtc_base:rtc_base",
+    "../rtc_base:rtc_task_queue",
+    "../rtc_base:stringutils",
+    "../rtc_base/third_party/base64",
+    "../rtc_base/third_party/sigslot",
+    "../system_wrappers:metrics",
+    "//third_party/abseil-cpp/absl/memory",
+    "//third_party/abseil-cpp/absl/strings",
+    "//third_party/abseil-cpp/absl/types:optional",
+  ]
+
+  if (rtc_build_libsrtp) {
+    deps += [ "//third_party/libsrtp" ]
+  }
+
+  public_configs = [ ":rtc_pc_config" ]
+
+  if (!build_with_chromium && is_clang) {
+    # Suppress warnings from the Chromium Clang plugin (bugs.webrtc.org/163).
+    suppressed_configs += [ "//build/config/clang:find_bad_constructs" ]
+  }
+}
+
+rtc_source_set("rtc_pc") {
+  visibility = [ "*" ]
+  allow_poison = [ "audio_codecs" ]  # TODO(bugs.webrtc.org/8396): Remove.
+  deps = [
+    ":rtc_pc_base",
+    "../media:rtc_audio_video",
+  ]
+}
+
+rtc_static_library("peerconnection") {
+  visibility = [ "*" ]
+  cflags = []
+  sources = [
+    "audio_track.cc",
+    "audio_track.h",
+    "audiotrack.h",
+    "data_channel.cc",
+    "data_channel.h",
+    "datachannel.h",
+    "dtmf_sender.cc",
+    "dtmf_sender.h",
+    "dtmfsender.h",
+    "ice_server_parsing.cc",
+    "ice_server_parsing.h",
+    "iceserverparsing.h",
+    "jsep_ice_candidate.cc",
+    "jsep_session_description.cc",
+    "local_audio_source.cc",
+    "local_audio_source.h",
+    "localaudiosource.h",
+    "media_stream.cc",
+    "media_stream.h",
+    "media_stream_observer.cc",
+    "media_stream_observer.h",
+    "media_stream_track.h",
+    "mediastream.h",
+    "mediastreamobserver.h",
+    "mediastreamtrack.h",
+    "peer_connection.cc",
+    "peer_connection.h",
+    "peer_connection_factory.cc",
+    "peer_connection_factory.h",
+    "peer_connection_internal.h",
+    "peerconnection.h",
+    "peerconnectionfactory.h",
+    "peerconnectioninternal.h",
+    "remote_audio_source.cc",
+    "remote_audio_source.h",
+    "remoteaudiosource.h",
+    "rtc_stats_collector.cc",
+    "rtc_stats_collector.h",
+    "rtc_stats_traversal.cc",
+    "rtc_stats_traversal.h",
+    "rtcstatscollector.h",
+    "rtcstatstraversal.h",
+    "rtp_parameters_conversion.cc",
+    "rtp_parameters_conversion.h",
+    "rtp_receiver.cc",
+    "rtp_receiver.h",
+    "rtp_sender.cc",
+    "rtp_sender.h",
+    "rtp_transceiver.cc",
+    "rtp_transceiver.h",
+    "rtpparametersconversion.h",
+    "rtpreceiver.h",
+    "rtpsender.h",
+    "rtptransceiver.h",
+    "sctp_utils.cc",
+    "sctp_utils.h",
+    "sctputils.h",
+    "sdp_serializer.cc",
+    "sdp_serializer.h",
+    "sdp_utils.cc",
+    "sdp_utils.h",
+    "sdpserializer.h",
+    "sdputils.h",
+    "stats_collector.cc",
+    "stats_collector.h",
+    "statscollector.h",
+    "stream_collection.h",
+    "streamcollection.h",
+    "track_media_info_map.cc",
+    "track_media_info_map.h",
+    "trackmediainfomap.h",
+    "video_capturer_track_source.cc",
+    "video_capturer_track_source.h",
+    "video_track.cc",
+    "video_track.h",
+    "video_track_source.cc",
+    "video_track_source.h",
+    "videocapturertracksource.h",
+    "videotrack.h",
+    "videotracksource.h",
+    "webrtc_sdp.cc",
+    "webrtc_sdp.h",
+    "webrtc_session_description_factory.cc",
+    "webrtc_session_description_factory.h",
+    "webrtcsdp.h",
+    "webrtcsessiondescriptionfactory.h",
+  ]
+
+  if (!build_with_chromium && is_clang) {
+    # Suppress warnings from the Chromium Clang plugin (bugs.webrtc.org/163).
+    suppressed_configs += [ "//build/config/clang:find_bad_constructs" ]
+  }
+
+  deps = [
+    ":rtc_pc_base",
+    "..:webrtc_common",
+    "../api:array_view",
+    "../api:audio_options_api",
+    "../api:call_api",
+    "../api:fec_controller_api",
+    "../api:libjingle_peerconnection_api",
+    "../api:rtc_stats_api",
+    "../api/video:video_frame",
+    "../api/video_codecs:video_codecs_api",
+    "../call:call_interfaces",
+    "../common_video:common_video",
+    "../logging:ice_log",
+    "../logging:rtc_event_log_api",
+    "../logging:rtc_event_log_impl_output",
+    "../media:rtc_data",
+    "../media:rtc_media_base",
+    "../p2p:rtc_p2p",
+    "../rtc_base:checks",
+    "../rtc_base:rtc_base",
+    "../rtc_base:rtc_base_approved",
+    "../rtc_base/system:rtc_export",
+    "../rtc_base/third_party/base64",
+    "../rtc_base/third_party/sigslot",
+    "../stats",
+    "../system_wrappers",
+    "../system_wrappers:field_trial",
+    "../system_wrappers:metrics",
+    "//third_party/abseil-cpp/absl/memory",
+    "//third_party/abseil-cpp/absl/strings",
+    "//third_party/abseil-cpp/absl/types:optional",
+  ]
+}
+
+rtc_source_set("libjingle_peerconnection") {
+  visibility = [ "*" ]
+  allow_poison = [ "audio_codecs" ]  # TODO(bugs.webrtc.org/8396): Remove.
+  deps = [
+    ":peerconnection",
+    "../api:create_peerconnection_factory",
+    "../api:libjingle_peerconnection_api",
+  ]
+}
+
+if (rtc_include_tests) {
+  rtc_test("rtc_pc_unittests") {
+    testonly = true
+
+    sources = [
+      "channel_manager_unittest.cc",
+      "channel_unittest.cc",
+      "dtls_srtp_transport_unittest.cc",
+      "dtlstransport_unittest.cc",
+      "jsep_transport_controller_unittest.cc",
+      "jsep_transport_unittest.cc",
+      "media_session_unittest.cc",
+      "rtcp_mux_filter_unittest.cc",
+      "rtp_transport_unittest.cc",
+      "rtptransporttestutil.h",
+      "session_description_unittest.cc",
+      "srtp_filter_unittest.cc",
+      "srtp_session_unittest.cc",
+      "srtp_transport_unittest.cc",
+      "srtptestutil.h",
+      "test/rtp_transport_test_util.h",
+      "test/srtp_test_util.h",
+      "unique_id_generator_unittest.cc",
+    ]
+
+    include_dirs = [ "//third_party/libsrtp/srtp" ]
+
+    if (!build_with_chromium && is_clang) {
+      # Suppress warnings from the Chromium Clang plugin (bugs.webrtc.org/163).
+      suppressed_configs += [ "//build/config/clang:find_bad_constructs" ]
+    }
+
+    if (is_win) {
+      libs = [ "strmiids.lib" ]
+    }
+
+    deps = [
+      ":libjingle_peerconnection",
+      ":pc_test_utils",
+      ":rtc_pc",
+      ":rtc_pc_base",
+      "../api:array_view",
+      "../api:audio_options_api",
+      "../api:fake_media_transport",
+      "../api:libjingle_peerconnection_api",
+      "../call:rtp_interfaces",
+      "../call:rtp_receiver",
+      "../logging:rtc_event_log_api",
+      "../media:rtc_media_base",
+      "../media:rtc_media_tests_utils",
+      "../modules/rtp_rtcp:rtp_rtcp_format",
+      "../p2p:p2p_test_utils",
+      "../p2p:rtc_p2p",
+      "../rtc_base:checks",
+      "../rtc_base:gunit_helpers",
+      "../rtc_base:rtc_base",
+      "../rtc_base:rtc_base_approved",
+      "../rtc_base:rtc_base_tests_main",
+      "../rtc_base:rtc_base_tests_utils",
+      "../rtc_base/third_party/sigslot",
+      "../system_wrappers:metrics",
+      "../test:test_support",
+      "//third_party/abseil-cpp/absl/memory",
+    ]
+
+    if (rtc_build_libsrtp) {
+      deps += [ "//third_party/libsrtp" ]
+    }
+
+    if (is_android) {
+      deps += [ "//testing/android/native_test:native_test_support" ]
+    }
+  }
+
+  rtc_source_set("peerconnection_perf_tests") {
+    testonly = true
+    sources = [
+      "peer_connection_rampup_tests.cc",
+    ]
+    deps = [
+      ":pc_test_utils",
+      ":peerconnection_wrapper",
+      "../api:audio_options_api",
+      "../api:create_peerconnection_factory",
+      "../api:libjingle_peerconnection_api",
+      "../api:rtc_stats_api",
+      "../api/audio:audio_mixer_api",
+      "../api/audio_codecs:audio_codecs_api",
+      "../api/audio_codecs:builtin_audio_decoder_factory",
+      "../api/audio_codecs:builtin_audio_encoder_factory",
+      "../api/video_codecs:builtin_video_decoder_factory",
+      "../api/video_codecs:builtin_video_encoder_factory",
+      "../api/video_codecs:video_codecs_api",
+      "../media:rtc_media_tests_utils",
+      "../modules/audio_device:audio_device_api",
+      "../modules/audio_processing:api",
+      "../p2p:p2p_test_utils",
+      "../p2p:rtc_p2p",
+      "../pc:peerconnection",
+      "../rtc_base:checks",
+      "../rtc_base:gunit_helpers",
+      "../rtc_base:rtc_base",
+      "../rtc_base:rtc_base_tests_utils",
+      "../system_wrappers:system_wrappers",
+      "../test:perf_test",
+      "../test:test_support",
+      "//third_party/abseil-cpp/absl/memory",
+      "//third_party/abseil-cpp/absl/types:optional",
+    ]
+    if (!build_with_chromium && is_clang) {
+      # Suppress warnings from the Chromium Clang plugin (bugs.webrtc.org/163).
+      suppressed_configs += [ "//build/config/clang:find_bad_constructs" ]
+    }
+  }
+
+  rtc_source_set("peerconnection_wrapper") {
+    testonly = true
+    sources = [
+      "peer_connection_wrapper.cc",
+      "peer_connection_wrapper.h",
+      "peerconnectionwrapper.h",
+    ]
+    deps = [
+      ":pc_test_utils",
+      "../api:libjingle_peerconnection_api",
+      "../api:rtc_stats_api",
+      "../pc:peerconnection",
+      "../rtc_base:checks",
+      "../rtc_base:gunit_helpers",
+      "../rtc_base:rtc_base_approved",
+      "../test:test_support",
+    ]
+    if (!build_with_chromium && is_clang) {
+      # Suppress warnings from the Chromium Clang plugin (bugs.webrtc.org/163).
+      suppressed_configs += [ "//build/config/clang:find_bad_constructs" ]
+    }
+  }
+
+  rtc_source_set("pc_test_utils") {
+    testonly = true
+    sources = [
+      "test/fake_audio_capture_module.cc",
+      "test/fake_audio_capture_module.h",
+      "test/fake_data_channel_provider.h",
+      "test/fake_peer_connection_base.h",
+      "test/fake_peer_connection_for_stats.h",
+      "test/fake_periodic_video_source.h",
+      "test/fake_periodic_video_track_source.h",
+      "test/fake_rtc_certificate_generator.h",
+      "test/fake_sctp_transport.h",
+      "test/fake_video_track_renderer.h",
+      "test/fake_video_track_source.h",
+      "test/fakeaudiocapturemodule.h",
+      "test/fakedatachannelprovider.h",
+      "test/fakepeerconnectionbase.h",
+      "test/fakepeerconnectionforstats.h",
+      "test/fakeperiodicvideosource.h",
+      "test/fakeperiodicvideotracksource.h",
+      "test/fakertccertificategenerator.h",
+      "test/fakesctptransport.h",
+      "test/fakevideotrackrenderer.h",
+      "test/fakevideotracksource.h",
+      "test/frame_generator_capturer_video_track_source.h",
+      "test/framegeneratorcapturervideotracksource.h",
+      "test/mock_channel_interface.h",
+      "test/mock_channelinterface.h",
+      "test/mock_data_channel.h",
+      "test/mock_datachannel.h",
+      "test/mock_peer_connection_observers.h",
+      "test/mock_rtp_receiver_internal.h",
+      "test/mock_rtp_sender_internal.h",
+      "test/mock_rtpreceiverinternal.h",
+      "test/mock_rtpsenderinternal.h",
+      "test/mockpeerconnectionobservers.h",
+      "test/peer_connection_test_wrapper.cc",
+      "test/peer_connection_test_wrapper.h",
+      "test/peerconnectiontestwrapper.h",
+      "test/rtc_stats_obtainer.h",
+      "test/rtcstatsobtainer.h",
+      "test/test_sdp_strings.h",
+      "test/testsdpstrings.h",
+    ]
+
+    deps = [
+      ":libjingle_peerconnection",
+      ":peerconnection",
+      ":rtc_pc_base",
+      "..:webrtc_common",
+      "../api:audio_options_api",
+      "../api:create_peerconnection_factory",
+      "../api:libjingle_peerconnection_api",
+      "../api:libjingle_peerconnection_test_api",
+      "../api:rtc_stats_api",
+      "../api/audio:audio_mixer_api",
+      "../api/audio_codecs:audio_codecs_api",
+      "../api/video:video_frame",
+      "../api/video_codecs:builtin_video_decoder_factory",
+      "../api/video_codecs:builtin_video_encoder_factory",
+      "../api/video_codecs:video_codecs_api",
+      "../call:call_interfaces",
+      "../logging:rtc_event_log_api",
+      "../media:rtc_data",
+      "../media:rtc_media",
+      "../media:rtc_media_base",
+      "../media:rtc_media_tests_utils",
+      "../modules/audio_device:audio_device",
+      "../modules/audio_processing:api",
+      "../modules/audio_processing:audio_processing",
+      "../p2p:p2p_test_utils",
+      "../p2p:rtc_p2p",
+      "../rtc_base:checks",
+      "../rtc_base:gunit_helpers",
+      "../rtc_base:rtc_base",
+      "../rtc_base:rtc_base_approved",
+      "../rtc_base:rtc_task_queue",
+      "../rtc_base/task_utils:repeating_task",
+      "../rtc_base/third_party/sigslot",
+      "../test:test_support",
+      "../test:video_test_common",
+      "//third_party/abseil-cpp/absl/memory",
+      "//third_party/abseil-cpp/absl/types:optional",
+    ]
+
+    if (!build_with_chromium && is_clang) {
+      # Suppress warnings from the Chromium Clang plugin (bugs.webrtc.org/163).
+      suppressed_configs += [ "//build/config/clang:find_bad_constructs" ]
+    }
+  }
+
+  rtc_test("peerconnection_unittests") {
+    testonly = true
+    sources = [
+      "data_channel_unittest.cc",
+      "dtmf_sender_unittest.cc",
+      "ice_server_parsing_unittest.cc",
+      "jsep_session_description_unittest.cc",
+      "local_audio_source_unittest.cc",
+      "media_constraints_interface_unittest.cc",
+      "media_stream_unittest.cc",
+      "peer_connection_bundle_unittest.cc",
+      "peer_connection_crypto_unittest.cc",
+      "peer_connection_data_channel_unittest.cc",
+      "peer_connection_end_to_end_unittest.cc",
+      "peer_connection_factory_unittest.cc",
+      "peer_connection_histogram_unittest.cc",
+      "peer_connection_ice_unittest.cc",
+      "peer_connection_integrationtest.cc",
+      "peer_connection_interface_unittest.cc",
+      "peer_connection_jsep_unittest.cc",
+      "peer_connection_media_unittest.cc",
+      "peer_connection_rtp_unittest.cc",
+      "peer_connection_signaling_unittest.cc",
+      "peer_connection_wrapper.cc",
+      "peer_connection_wrapper.h",
+      "peerconnectionwrapper.h",
+      "proxy_unittest.cc",
+      "rtc_stats_collector_unittest.cc",
+      "rtc_stats_integrationtest.cc",
+      "rtc_stats_traversal_unittest.cc",
+      "rtp_media_utils_unittest.cc",
+      "rtp_parameters_conversion_unittest.cc",
+      "rtp_sender_receiver_unittest.cc",
+      "rtp_transceiver_unittest.cc",
+      "sctp_utils_unittest.cc",
+      "sdp_serializer_unittest.cc",
+      "stats_collector_unittest.cc",
+      "test/fake_audio_capture_module_unittest.cc",
+      "test/test_sdp_strings.h",
+      "test/testsdpstrings.h",
+      "track_media_info_map_unittest.cc",
+      "video_capturer_track_source_unittest.cc",
+      "video_track_unittest.cc",
+      "webrtc_sdp_unittest.cc",
+    ]
+
+    if (rtc_enable_sctp) {
+      defines = [ "HAVE_SCTP" ]
+    }
+
+    if (!build_with_chromium && is_clang) {
+      # Suppress warnings from the Chromium Clang plugin (bugs.webrtc.org/163).
+      suppressed_configs += [ "//build/config/clang:find_bad_constructs" ]
+    }
+
+    deps = [
+      ":peerconnection",
+      ":rtc_pc_base",
+      "../api:array_view",
+      "../api:audio_options_api",
+      "../api:create_peerconnection_factory",
+      "../api:fake_frame_decryptor",
+      "../api:fake_frame_encryptor",
+      "../api:libjingle_logging_api",
+      "../api:libjingle_peerconnection_api",
+      "../api:loopback_media_transport",
+      "../api:mock_rtp",
+      "../api/audio:audio_mixer_api",
+      "../api/units:time_delta",
+      "../logging:fake_rtc_event_log",
+      "../media:rtc_media_config",
+      "../modules/audio_device:audio_device_api",
+      "../modules/audio_processing:audio_processing_statistics",
+      "../rtc_base:checks",
+      "../rtc_base:gunit_helpers",
+      "../rtc_base:rtc_base_tests_utils",
+      "../rtc_base/third_party/base64",
+      "../rtc_base/third_party/sigslot:sigslot",
+      "../system_wrappers:metrics",
+      "../test:fileutils",
+      "//third_party/abseil-cpp/absl/memory",
+      "//third_party/abseil-cpp/absl/strings",
+    ]
+    if (is_android) {
+      deps += [ ":android_black_magic" ]
+    }
+
+    deps += [
+      ":libjingle_peerconnection",
+      ":pc_test_utils",
+      "..:webrtc_common",
+      "../api:callfactory_api",
+      "../api:fake_media_transport",
+      "../api:libjingle_peerconnection_test_api",
+      "../api:rtc_stats_api",
+      "../api/audio_codecs:audio_codecs_api",
+      "../api/audio_codecs:builtin_audio_decoder_factory",
+      "../api/audio_codecs:builtin_audio_encoder_factory",
+      "../api/audio_codecs/L16:audio_decoder_L16",
+      "../api/audio_codecs/L16:audio_encoder_L16",
+      "../api/video_codecs:builtin_video_decoder_factory",
+      "../api/video_codecs:builtin_video_encoder_factory",
+      "../api/video_codecs:video_codecs_api",
+      "../call:call_interfaces",
+      "../logging:rtc_event_log_api",
+      "../logging:rtc_event_log_impl_base",
+      "../logging:rtc_event_log_impl_output",
+      "../media:rtc_audio_video",
+      "../media:rtc_data",  # TODO(phoglund): AFAIK only used for one sctp constant.
+      "../media:rtc_media_base",
+      "../media:rtc_media_tests_utils",
+      "../modules/audio_processing:api",
+      "../modules/audio_processing:audio_processing",
+      "../modules/utility:utility",
+      "../p2p:p2p_test_utils",
+      "../p2p:rtc_p2p",
+      "../pc:rtc_pc",
+      "../rtc_base:rtc_base",
+      "../rtc_base:rtc_base_approved",
+      "../rtc_base:rtc_base_tests_main",
+      "../rtc_base:rtc_task_queue",
+      "../rtc_base:safe_conversions",
+      "../test:audio_codec_mocks",
+      "../test:test_support",
+      "//third_party/abseil-cpp/absl/types:optional",
+    ]
+
+    if (is_android) {
+      deps += [
+        "//testing/android/native_test:native_test_support",
+
+        # We need to depend on this one directly, or classloads will fail for
+        # the voice engine BuildInfo, for instance.
+        "../sdk/android:libjingle_peerconnection_java",
+      ]
+
+      shard_timeout = 900
+    }
+  }
+
+  if (is_android) {
+    rtc_source_set("android_black_magic") {
+      # The android code uses hacky includes to chromium-base and the ssl code;
+      # having this in a separate target enables us to keep the peerconnection
+      # unit tests clean.
+      check_includes = false
+      testonly = true
+      sources = [
+        "test/android_test_initializer.cc",
+        "test/android_test_initializer.h",
+        "test/androidtestinitializer.h",
+      ]
+      deps = [
+        "../sdk/android:libjingle_peerconnection_jni",
+        "//testing/android/native_test:native_test_support",
+      ]
+    }
+  }
+}

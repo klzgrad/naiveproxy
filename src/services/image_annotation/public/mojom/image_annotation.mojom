@@ -1,0 +1,41 @@
+// Copyright 2019 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module image_annotation.mojom;
+
+interface ImageProcessor {
+  // Returns the (potentially resized and compressed) pixels for the image.
+  //
+  // TODO(crbug.com/916420): expand this signature to include arguments when we
+  //                         require more sophisticated render-side processing.
+  GetJpgImageData() => (array<uint8> bytes);
+};
+
+enum AnnotateImageError {
+  kCanceled,
+  kFailure,
+};
+
+union AnnotateImageResult {
+  AnnotateImageError error_code;
+  string ocr_text;
+};
+
+interface Annotator {
+  // Requests a11y annotations (i.e. OCR) for the given image.
+  //
+  // |source_id| is either the URL for an image, or some non-URL string that
+  // uniquely identifies an image (e.g. a hash of image content for a data
+  // URI). Source IDs are used to query local and remote caches.
+  //
+  // |result| will contain either the |error_code| value specifying how
+  // annotation failed, or the text |ocr_text| extracted from the image (with
+  // an empty string denoting no image text).
+  //
+  // TODO(crbug.com/916420): expand this signature to include a request
+  //                         argument when we support more than one type of
+  //                         annotation.
+  AnnotateImage(string source_id, ImageProcessor image_processor)
+    => (AnnotateImageResult result);
+};

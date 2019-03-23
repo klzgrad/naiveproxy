@@ -1,0 +1,185 @@
+# Copyright (C) 2018 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../../gn/perfetto.gni")
+import("../../../gn/fuzzer.gni")
+import("//build_overrides/build.gni")
+
+# For use_libfuzzer.
+if (!build_with_chromium) {
+  import("//gn/standalone/sanitizers/vars.gni")
+} else {
+  import("//build/config/sanitizers/sanitizers.gni")
+}
+
+source_set("wire_protocol") {
+  public_configs = [ "../../../buildtools:libunwindstack_config" ]
+  deps = [
+    "../../../buildtools:libunwindstack",
+    "../../../gn:default_deps",
+    "../../base",
+    "../../base:unix_socket",
+  ]
+  sources = [
+    "wire_protocol.cc",
+    "wire_protocol.h",
+  ]
+}
+
+source_set("proc_utils") {
+  deps = [
+    "../../../gn:default_deps",
+    "../../base",
+  ]
+  sources = [
+    "proc_utils.cc",
+    "proc_utils.h",
+  ]
+}
+
+source_set("daemon") {
+  public_configs = [ "../../../buildtools:libunwindstack_config" ]
+  deps = [
+    ":proc_utils",
+    ":wire_protocol",
+    "../../../buildtools:libunwindstack",
+    "../../../gn:default_deps",
+    "../../base",
+    "../../base:unix_socket",
+    "../../tracing",
+    "../../tracing:ipc",
+  ]
+  public_deps = [
+    "../../../protos/perfetto/trace:zero",
+    "../../../protos/perfetto/trace/profiling:zero",
+  ]
+  sources = [
+    "bookkeeping.cc",
+    "bookkeeping.h",
+    "heapprofd_producer.cc",
+    "heapprofd_producer.h",
+    "interner.h",
+    "process_matcher.cc",
+    "process_matcher.h",
+    "queue_messages.h",
+    "record_reader.cc",
+    "record_reader.h",
+    "socket_listener.cc",
+    "socket_listener.h",
+    "system_property.cc",
+    "system_property.h",
+    "unwinding.cc",
+    "unwinding.h",
+  ]
+}
+
+source_set("client") {
+  public_configs = [ "../../../buildtools:libunwindstack_config" ]
+  deps = [
+    ":proc_utils",
+    ":wire_protocol",
+    "../../../buildtools:libunwindstack",
+    "../../../gn:default_deps",
+    "../../base",
+    "../../base:unix_socket",
+  ]
+  sources = [
+    "client.cc",
+    "client.h",
+    "sampler.cc",
+    "sampler.h",
+  ]
+}
+
+source_set("unittests") {
+  public_configs = [ "../../../buildtools:libunwindstack_config" ]
+  testonly = true
+  deps = [
+    ":client",
+    ":daemon",
+    ":proc_utils",
+    ":wire_protocol",
+    "../../../gn:default_deps",
+    "../../../gn:gtest_deps",
+    "../../base",
+    "../../base:test_support",
+  ]
+  sources = [
+    "bookkeeping_unittest.cc",
+    "bounded_queue_unittest.cc",
+    "client_unittest.cc",
+    "heapprofd_integrationtest.cc",
+    "interner_unittest.cc",
+    "proc_utils_unittest.cc",
+    "process_matcher_unittest.cc",
+    "record_reader_unittest.cc",
+    "sampler_unittest.cc",
+    "socket_listener_unittest.cc",
+    "system_property_unittest.cc",
+    "unwinding_unittest.cc",
+    "wire_protocol_unittest.cc",
+  ]
+}
+
+source_set("end_to_end_tests") {
+  public_configs = [ "../../../buildtools:libunwindstack_config" ]
+  testonly = true
+  deps = [
+    ":client",
+    ":daemon",
+    ":wire_protocol",
+    "../../../gn:default_deps",
+    "../../../gn:gtest_deps",
+    "../../../test:test_helper",
+    "../../base",
+    "../../base:test_support",
+  ]
+  sources = [
+    "heapprofd_end_to_end_test.cc",
+  ]
+  if (start_daemons_for_testing) {
+    defines = [ "PERFETTO_START_DAEMONS_FOR_TESTING" ]
+  }
+}
+
+# This will export publicly visibile symbols for the malloc_hooks.
+source_set("malloc_hooks") {
+  deps = [
+    ":client",
+    ":proc_utils",
+    ":wire_protocol",
+    "../../../gn:default_deps",
+    "../../base",
+    "../../base:unix_socket",
+  ]
+  cflags = [
+    "-isystem",
+    rebase_path("../../../buildtools/bionic/libc", root_build_dir),
+  ]
+  sources = [
+    "malloc_hooks.cc",
+  ]
+}
+
+perfetto_fuzzer_test("unwinding_fuzzer") {
+  sources = [
+    "unwinding_fuzzer.cc",
+  ]
+  deps = [
+    ":daemon",
+    ":wire_protocol",
+    "../../../gn:default_deps",
+    "../../../src/base",
+  ]
+}

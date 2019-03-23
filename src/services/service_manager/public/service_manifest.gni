@@ -1,0 +1,209 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/dcheck_always_on.gni")
+
+# Generates code to produce a compiled service_manager::Manifest from a JSON
+# description at build time.
+#
+# This is a temporary helper for the transition away from JSON manifests. Do not
+# introduce new service_manifest targets.
+#
+# This template yields a source_set target which defines a symbol named
+# "${name}::GetManifest()" where ${name} is the service name given in the
+# target.
+#
+# All service_manifest targets should be replaced with in-tree C++ sources.
+template("service_manifest") {
+  assert(defined(invoker.source),
+         "\"source\" must be defined for the $target_name target")
+
+  generator_target_name = "${target_name}__generator"
+  generated_sources = [
+    "$target_gen_dir/${target_name}.cc",
+    "$target_gen_dir/${target_name}.h",
+  ]
+
+  # We prefer to use |name| for the generated function's namespace if a
+  # |generated_namespace| isn't explicitly defined. It turns out that we also
+  # have a few targets which don't specify a |name| though; they all have unique
+  # target names, so we fall back on that if necessary. The important detail is
+  # that all generated GetManifest() functions should live in their own
+  # namespace, and with the current (and final) set of service_manifest targets
+  # in the tree, these rules accomplish that.
+  if (defined(invoker.generated_namespace)) {
+    output_namespace = invoker.generated_namespace
+  } else if (defined(invoker.name)) {
+    output_namespace = invoker.name
+  } else {
+    output_namespace = invoker.target_name
+  }
+
+  write_file("$target_gen_dir/${target_name}.namespace", output_namespace)
+
+  source_set(target_name) {
+    testonly = defined(invoker.testonly) && invoker.testonly
+    sources = generated_sources
+    public_deps = [
+      ":$generator_target_name",
+    ]
+
+    deps = []
+    if (defined(invoker.packaged_services)) {
+      deps += invoker.packaged_services
+    }
+    if (defined(invoker.overlays)) {
+      deps += invoker.overlays
+    }
+  }
+
+  collator_target_name = "${target_name}__collator"
+
+  action(generator_target_name) {
+    testonly = defined(invoker.testonly) && invoker.testonly
+    script = "//services/catalog/public/tools/sourcify_manifest.py"
+
+    inputs = [
+      "//services/catalog/public/tools/catalog.cc.tmpl",
+      "//services/catalog/public/tools/catalog.h.tmpl",
+      invoker.source,
+    ]
+    outputs = generated_sources
+
+    submanifest_info = []
+    if (defined(invoker.packaged_services)) {
+      foreach(submanifest, invoker.packaged_services) {
+        manifest_dir = get_label_info(submanifest, "target_gen_dir")
+        manifest_target_name = get_label_info(submanifest, "name")
+        manifest_namespace_input =
+            "$manifest_dir/${manifest_target_name}.namespace"
+        manifest_namespace_path =
+            rebase_path(manifest_namespace_input, root_build_dir)
+        manifest_header_base =
+            rebase_path(manifest_dir, root_gen_dir) + "/${manifest_target_name}"
+        submanifest_info +=
+            [ "packaged@$manifest_namespace_path@$manifest_header_base" ]
+      }
+    }
+    if (defined(invoker.overlays)) {
+      foreach(submanifest, invoker.overlays) {
+        manifest_dir = get_label_info(submanifest, "target_gen_dir")
+        manifest_target_name = get_label_info(submanifest, "name")
+        manifest_namespace_input =
+            "$manifest_dir/${manifest_target_name}.namespace"
+        manifest_namespace_path =
+            rebase_path(manifest_namespace_input, root_build_dir)
+        manifest_header_base =
+            rebase_path(manifest_dir, root_gen_dir) + "/${manifest_target_name}"
+        submanifest_info +=
+            [ "overlay@$manifest_namespace_path@$manifest_header_base" ]
+      }
+    }
+
+    submanifest_info_file =
+        "${target_gen_dir}/${invoker.target_name}.submanifest_info"
+    write_file(submanifest_info_file, submanifest_info)
+
+    args = [
+      "--root-manifest=" + rebase_path(invoker.source, root_build_dir),
+      "--submanifest-info=" +
+          rebase_path(submanifest_info_file, root_build_dir),
+      "--output-function-name=${output_namespace}::GetManifest",
+      "--output-filename-base=" +
+          rebase_path("$target_gen_dir/${invoker.target_name}", root_build_dir),
+      "--module-path=" +
+          rebase_path("$target_gen_dir/${invoker.target_name}", root_gen_dir),
+    ]
+
+    # We inherit a public dependency on the collator because service_manifest
+    # dependents still expect to use its generated JSON output. We don't
+    # actually depend on the collated JSON at all here, since packaged services
+    # and overlays are added in the generated C++ code by referring to other
+    # generated C++ code.
+    public_deps = [
+      ":$collator_target_name",
+    ]
+  }
+
+  action(collator_target_name) {
+    testonly = defined(invoker.testonly) && invoker.testonly
+
+    script =
+        "//services/service_manager/public/tools/manifest/manifest_collator.py"
+
+    deps = []
+    if (defined(invoker.deps)) {
+      deps += invoker.deps
+    }
+
+    inputs = [
+      invoker.source,
+    ]
+
+    output = "$target_gen_dir/${invoker.target_name}.json"
+    outputs = [
+      output,
+    ]
+
+    rebase_parent = rebase_path(invoker.source, root_build_dir)
+    rebase_output = rebase_path(output, root_build_dir)
+
+    args = [
+      "--parent=$rebase_parent",
+      "--output=$rebase_output",
+    ]
+
+    if (defined(invoker.name)) {
+      args += [
+        "--name",
+        invoker.name,
+      ]
+    }
+
+    if (is_debug || dcheck_always_on) {
+      args += [ "--pretty" ]
+    }
+
+    if (defined(invoker.overlays) && invoker.overlays != []) {
+      args += [ "--overlays" ]
+      foreach(manifest_target, invoker.overlays) {
+        manifest_target_dir = get_label_info(manifest_target, "target_gen_dir")
+        manifest_target_name = get_label_info(manifest_target, "name")
+        manifest_filename = "$manifest_target_dir/${manifest_target_name}.json"
+
+        inputs += [ manifest_filename ]
+        deps += [ manifest_target ]
+        args += [ rebase_path(manifest_filename, root_build_dir) ]
+
+        # Ensure that each entry does in fact reference a manifest rule.
+        label_no_toolchain =
+            get_label_info(manifest_target, "label_no_toolchain")
+        toolchain = get_label_info(manifest_target, "toolchain")
+        deps += [ "${label_no_toolchain}__is_service_manifest(${toolchain})" ]
+      }
+    }
+
+    if (defined(invoker.packaged_services)) {
+      args += [ "--packaged-services" ]
+      foreach(manifest_target, invoker.packaged_services) {
+        manifest_target_dir = get_label_info(manifest_target, "target_gen_dir")
+        manifest_target_name = get_label_info(manifest_target, "name")
+        manifest_filename = "$manifest_target_dir/${manifest_target_name}.json"
+
+        inputs += [ manifest_filename ]
+        deps += [ manifest_target ]
+        args += [ rebase_path(manifest_filename, root_build_dir) ]
+
+        # Ensure that each entry does in fact reference a manifest rule.
+        label_no_toolchain =
+            get_label_info(manifest_target, "label_no_toolchain")
+        toolchain = get_label_info(manifest_target, "toolchain")
+        deps += [ "${label_no_toolchain}__is_service_manifest(${toolchain})" ]
+      }
+    }
+  }
+
+  group("${target_name}__is_service_manifest") {
+  }
+}

@@ -1,0 +1,1104 @@
+# Copyright 2018 The Dawn Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("scripts/dawn_overrides_with_defaults.gni")
+import("scripts/dawn_features.gni")
+import("//build_overrides/build.gni")
+
+import("//testing/test.gni")
+
+# Use Chromium's dcheck_always_on when available so that we respect it when
+# running tests on the GPU builders
+if (build_with_chromium) {
+  import("//build/config/dcheck_always_on.gni")
+} else {
+  dcheck_always_on = false
+}
+
+###############################################################################
+# Template to wrap the Dawn code generator
+###############################################################################
+
+# Template to help with invocation of the Dawn code generator, looks like this:
+#
+#   dawn_generator("my_target_gen") {
+#     # Which generator target to output
+#     target = "my_target"
+#     # The list of expected outputs, generation fails if there's a mismatch
+#     outputs = [
+#       "MyTarget.cpp",
+#       "MyTarget.h",
+#     ]
+#   }
+#
+# Using the generated files is done like so:
+#
+#   shared_library("my_target") {
+#     deps = [ ":my_target_gen "]
+#     sources = get_target_outputs(":my_target_gen")
+#   }
+#
+template("dawn_generator") {
+  # The base arguments for the generator: from this dawn.json, generate this
+  # target using templates in this directory.
+  generator_args = [
+    rebase_path("dawn.json", root_build_dir),
+    "--wire-json",
+    rebase_path("dawn_wire.json", root_build_dir),
+    "--template-dir",
+    rebase_path("generator/templates", root_build_dir),
+    "--targets",
+    invoker.target,
+  ]
+
+  # Use the Jinja2 version pulled from the DEPS file. We do it so we don't
+  # have version problems, and users don't have to install Jinja2.
+  jinja2_python_path = rebase_path("${dawn_jinja2_dir}/..")
+  generator_args += [
+    "--extra-python-path",
+    jinja2_python_path,
+  ]
+
+  # For build parallelism GN wants to know the exact inputs and outputs of
+  # action targets like we use for our code generator. We avoid asking the
+  # generator about its inputs by using the "depfile" feature of GN/Ninja.
+  #
+  # A ninja limitation is that the depfile is a subset of Makefile that can
+  # contain a single target, so we output a single "JSON-tarball" instead.
+  json_tarball = "${target_gen_dir}/${target_name}.json_tarball"
+  json_tarball_depfile = "${json_tarball}.d"
+
+  generator_args += [
+    "--output-json-tarball",
+    rebase_path(json_tarball, root_build_dir),
+    "--depfile",
+    rebase_path(json_tarball_depfile, root_build_dir),
+  ]
+
+  # After the JSON tarball is created we need an action target to extract it
+  # with a list of its outputs. The invoker provided a list of expected
+  # outputs. To make sure the list is in sync between the generator and the
+  # build files, we write it to a file and ask the generator to assert it is
+  # correct.
+  expected_outputs_file = "${target_gen_dir}/${target_name}.expected_outputs"
+  write_file(expected_outputs_file, invoker.outputs)
+
+  generator_args += [
+    "--expected-outputs-file",
+    rebase_path(expected_outputs_file, root_build_dir),
+  ]
+
+  # The code generator invocation that will write the JSON tarball, check the
+  # outputs are what's expected and write a depfile for Ninja.
+  action("${target_name}_json_tarball") {
+    script = "generator/main.py"
+    outputs = [
+      json_tarball,
+    ]
+    depfile = json_tarball_depfile
+    args = generator_args
+  }
+
+  # Extract the JSON tarball into the target_gen_dir
+  action("${target_name}") {
+    script = "generator/extract_json.py"
+    args = [
+      rebase_path(json_tarball, root_build_dir),
+      rebase_path(target_gen_dir, root_build_dir),
+    ]
+
+    deps = [
+      ":${target_name}_json_tarball",
+    ]
+    inputs = [
+      json_tarball,
+    ]
+
+    # The expected output list is relative to the target_gen_dir but action
+    # target outputs are from the root dir so we need to rebase them.
+    outputs = []
+    foreach(source, invoker.outputs) {
+      outputs += [ "${target_gen_dir}/${source}" ]
+    }
+  }
+}
+
+###############################################################################
+# Template to produce static and shared versions of Dawn's libraries
+###############################################################################
+
+# Template that produces static and shared versions of the same library.
+#  - The shared version exports symbols and has dependent import the symbols
+#    as libname.so with target name libname_shared
+#  - The static library doesn't export symbols nor make dependents import them
+#  - The libname target is an alias for libname_shared. This is mostly to keep
+#    the GN convention that target_type(name) defines a "name" target.
+#
+# The DEFINE_PREFIX must be provided and must match the respective "_export.h"
+# file.
+#
+# Example usage:
+#
+#   dawn_static_and_shared_library("my_library") {
+#     // my_library_export.h must use the MY_LIBRARY_IMPLEMENTATION and
+#     // MY_LIBRARY_SHARED_LIBRARY macros.
+#     DEFINE_PREFIX = "MY_LIBRARY"
+#
+#     sources = [...]
+#     deps = [...]
+#     configs = [...]
+#   }
+#
+#   executable("foo") {
+#     deps = [ ":my_library_shared" ] // or :my_library for the same effect
+#   }
+template("dawn_static_and_shared_library") {
+  # Copy the target_name in the local scope so it doesn't get shadowed in the
+  # definition of targets.
+  libname = target_name
+
+  # The config that will apply to dependents of the shared library so they know
+  # they should "import" the symbols
+  config("${libname}_shared_public_config") {
+    defines = [ "${invoker.DEFINE_PREFIX}_SHARED_LIBRARY" ]
+
+    # Executable needs an rpath to find our shared libraries on OSX and Linux
+    if (is_mac) {
+      ldflags = [
+        "-rpath",
+        "@executable_path/",
+      ]
+    }
+    if (is_linux) {
+      configs = [ "//build/config/gcc:rpath_for_built_shared_libraries" ]
+    }
+  }
+
+  shared_library("${libname}_shared") {
+    output_name = libname
+
+    # Copy all variables except "configs", which has a default value
+    forward_variables_from(invoker, "*", [ "configs" ])
+    if (defined(invoker.configs)) {
+      configs += invoker.configs
+    }
+
+    # Tell dependents where to find this shared library
+    if (is_mac) {
+      ldflags = [
+        "-install_name",
+        "@rpath/${libname}.dylib",
+      ]
+    }
+
+    # Use the config that makes the ${DEFINE_PREFIX}_EXPORT macro do something
+    if (!defined(public_configs)) {
+      public_configs = []
+    }
+    public_configs += [ ":${libname}_shared_public_config" ]
+
+    # Tell sources of this library to export the symbols (and not import)
+    if (!defined(defines)) {
+      defines = []
+    }
+    defines += [ "${invoker.DEFINE_PREFIX}_IMPLEMENTATION" ]
+  }
+
+  static_library("${libname}_static") {
+    output_name = libname
+
+    complete_static_lib = dawn_complete_static_libs
+
+    # Copy all variables except "configs", which has a default value
+    forward_variables_from(invoker, "*", [ "configs" ])
+    if (defined(invoker.configs)) {
+      configs += invoker.configs
+    }
+  }
+
+  group(libname) {
+    public_deps = [
+      ":${libname}_shared",
+    ]
+  }
+}
+
+###############################################################################
+# Common dawn libraries and configs
+###############################################################################
+
+config("dawn_public") {
+  include_dirs = [
+    target_gen_dir,
+    "src/include",
+  ]
+}
+
+config("dawn_internal") {
+  include_dirs = [ "src" ]
+
+  defines = []
+  if (dawn_always_assert || dcheck_always_on || is_debug) {
+    defines += [ "DAWN_ENABLE_ASSERTS" ]
+  }
+
+  if (dawn_enable_d3d12) {
+    defines += [ "DAWN_ENABLE_BACKEND_D3D12" ]
+  }
+  if (dawn_enable_metal) {
+    defines += [ "DAWN_ENABLE_BACKEND_METAL" ]
+  }
+  if (dawn_enable_null) {
+    defines += [ "DAWN_ENABLE_BACKEND_NULL" ]
+  }
+  if (dawn_enable_opengl) {
+    defines += [ "DAWN_ENABLE_BACKEND_OPENGL" ]
+  }
+  if (dawn_enable_vulkan) {
+    defines += [ "DAWN_ENABLE_BACKEND_VULKAN" ]
+  }
+
+  configs = [ ":dawn_public" ]
+
+  # Only internal Dawn targets can use this config, this means only targets in
+  # this BUILD.gn file.
+  visibility = [ ":*" ]
+}
+
+static_library("dawn_common") {
+  sources = [
+    "src/common/Assert.cpp",
+    "src/common/Assert.h",
+    "src/common/BitSetIterator.h",
+    "src/common/Compiler.h",
+    "src/common/DynamicLib.cpp",
+    "src/common/DynamicLib.h",
+    "src/common/HashUtils.h",
+    "src/common/Math.cpp",
+    "src/common/Math.h",
+    "src/common/Platform.h",
+    "src/common/Result.h",
+    "src/common/Serial.h",
+    "src/common/SerialMap.h",
+    "src/common/SerialQueue.h",
+    "src/common/SerialStorage.h",
+    "src/common/SwapChainUtils.h",
+    "src/common/vulkan_platform.h",
+    "src/common/windows_with_undefs.h",
+  ]
+
+  configs += [ ":dawn_internal" ]
+  deps = [
+    ":dawn_headers",
+  ]
+}
+
+###############################################################################
+# Dawn headers
+###############################################################################
+
+dawn_generator("dawn_headers_gen") {
+  target = "dawn_headers"
+  outputs = [
+    "dawn/dawncpp.h",
+    "dawn/dawn.h",
+    "dawn/dawncpp_traits.h",
+  ]
+}
+
+source_set("dawn_headers") {
+  public_configs = [ ":dawn_public" ]
+  deps = [
+    ":dawn_headers_gen",
+  ]
+
+  sources = get_target_outputs(":dawn_headers_gen")
+  sources += [
+    "src/include/dawn/EnumClassBitmasks.h",
+    "src/include/dawn/dawn_export.h",
+    "src/include/dawn/dawn_wsi.h",
+  ]
+}
+
+###############################################################################
+# libdawn
+###############################################################################
+
+dawn_generator("libdawn_gen") {
+  target = "libdawn"
+  outputs = [
+    "dawn/dawncpp.cpp",
+    "dawn/dawn.c",
+  ]
+}
+
+dawn_static_and_shared_library("libdawn") {
+  DEFINE_PREFIX = "DAWN"
+
+  public_deps = [
+    ":dawn_headers",
+  ]
+
+  deps = [
+    ":libdawn_gen",
+  ]
+  sources = get_target_outputs(":libdawn_gen")
+}
+
+###############################################################################
+# libdawn_native
+###############################################################################
+
+config("libdawn_native_internal") {
+  configs = [ ":dawn_internal" ]
+
+  # Suppress warnings that Metal isn't in the deployment target of Chrome
+  if (is_mac) {
+    cflags_objcc = [ "-Wno-unguarded-availability" ]
+  }
+}
+
+dawn_generator("libdawn_native_utils_gen") {
+  target = "dawn_native_utils"
+  outputs = [
+    "dawn_native/ProcTable.cpp",
+    "dawn_native/dawn_structs_autogen.h",
+    "dawn_native/dawn_structs_autogen.cpp",
+    "dawn_native/ValidationUtils_autogen.h",
+    "dawn_native/ValidationUtils_autogen.cpp",
+  ]
+}
+
+# Public libdawn_native headers so they can be publically visible for
+# dependencies of libdawn_native
+source_set("libdawn_native_headers") {
+  public_deps = [
+    ":dawn_headers",
+  ]
+  public_configs = [ ":dawn_public" ]
+  sources = [
+    "src/include/dawn_native/DawnNative.h",
+    "src/include/dawn_native/dawn_native_export.h",
+
+    # Include all backend's public headers so that dependencies can include
+    # them even when the backends are disabled.
+    "src/include/dawn_native/D3D12Backend.h",
+    "src/include/dawn_native/MetalBackend.h",
+    "src/include/dawn_native/NullBackend.h",
+    "src/include/dawn_native/OpenGLBackend.h",
+    "src/include/dawn_native/VulkanBackend.h",
+  ]
+}
+
+# The meat of the compilation for libdawn_native so that we can cheaply have
+# shared_library / static_library versions of it. It compiles all the files
+# except those that define exported symbols.
+source_set("libdawn_native_sources") {
+  deps = [
+    ":dawn_common",
+    ":libdawn_native_headers",
+    ":libdawn_native_utils_gen",
+    "${dawn_spirv_tools_dir}:spvtools_val",
+    "third_party:spirv_cross",
+  ]
+
+  configs += [ ":libdawn_native_internal" ]
+  libs = []
+
+  sources = get_target_outputs(":libdawn_native_utils_gen")
+  sources += [
+    "src/dawn_native/Adapter.cpp",
+    "src/dawn_native/Adapter.h",
+    "src/dawn_native/BackendConnection.cpp",
+    "src/dawn_native/BackendConnection.h",
+    "src/dawn_native/BindGroup.cpp",
+    "src/dawn_native/BindGroup.h",
+    "src/dawn_native/BindGroupLayout.cpp",
+    "src/dawn_native/BindGroupLayout.h",
+    "src/dawn_native/Buffer.cpp",
+    "src/dawn_native/Buffer.h",
+    "src/dawn_native/Builder.cpp",
+    "src/dawn_native/Builder.h",
+    "src/dawn_native/CommandAllocator.cpp",
+    "src/dawn_native/CommandAllocator.h",
+    "src/dawn_native/CommandBuffer.cpp",
+    "src/dawn_native/CommandBuffer.h",
+    "src/dawn_native/CommandBufferStateTracker.cpp",
+    "src/dawn_native/CommandBufferStateTracker.h",
+    "src/dawn_native/Commands.cpp",
+    "src/dawn_native/Commands.h",
+    "src/dawn_native/ComputePassEncoder.cpp",
+    "src/dawn_native/ComputePassEncoder.h",
+    "src/dawn_native/ComputePipeline.cpp",
+    "src/dawn_native/ComputePipeline.h",
+    "src/dawn_native/Device.cpp",
+    "src/dawn_native/Device.h",
+    "src/dawn_native/Error.cpp",
+    "src/dawn_native/Error.h",
+    "src/dawn_native/ErrorData.cpp",
+    "src/dawn_native/ErrorData.h",
+    "src/dawn_native/Fence.cpp",
+    "src/dawn_native/Fence.h",
+    "src/dawn_native/FenceSignalTracker.cpp",
+    "src/dawn_native/FenceSignalTracker.h",
+    "src/dawn_native/Forward.h",
+    "src/dawn_native/InputState.cpp",
+    "src/dawn_native/InputState.h",
+    "src/dawn_native/Instance.cpp",
+    "src/dawn_native/Instance.h",
+    "src/dawn_native/ObjectBase.cpp",
+    "src/dawn_native/ObjectBase.h",
+    "src/dawn_native/PassResourceUsage.h",
+    "src/dawn_native/PerStage.cpp",
+    "src/dawn_native/PerStage.h",
+    "src/dawn_native/Pipeline.cpp",
+    "src/dawn_native/Pipeline.h",
+    "src/dawn_native/PipelineLayout.cpp",
+    "src/dawn_native/PipelineLayout.h",
+    "src/dawn_native/ProgrammablePassEncoder.cpp",
+    "src/dawn_native/ProgrammablePassEncoder.h",
+    "src/dawn_native/Queue.cpp",
+    "src/dawn_native/Queue.h",
+    "src/dawn_native/RefCounted.cpp",
+    "src/dawn_native/RefCounted.h",
+    "src/dawn_native/RenderPassDescriptor.cpp",
+    "src/dawn_native/RenderPassDescriptor.h",
+    "src/dawn_native/RenderPassEncoder.cpp",
+    "src/dawn_native/RenderPassEncoder.h",
+    "src/dawn_native/RenderPipeline.cpp",
+    "src/dawn_native/RenderPipeline.h",
+    "src/dawn_native/Sampler.cpp",
+    "src/dawn_native/Sampler.h",
+    "src/dawn_native/ShaderModule.cpp",
+    "src/dawn_native/ShaderModule.h",
+    "src/dawn_native/SwapChain.cpp",
+    "src/dawn_native/SwapChain.h",
+    "src/dawn_native/Texture.cpp",
+    "src/dawn_native/Texture.h",
+    "src/dawn_native/ToBackend.h",
+    "src/dawn_native/dawn_platform.h",
+  ]
+
+  if (dawn_enable_d3d12) {
+    libs += [ "dxguid.lib" ]
+    sources += [
+      "src/dawn_native/d3d12/BindGroupD3D12.cpp",
+      "src/dawn_native/d3d12/BindGroupD3D12.h",
+      "src/dawn_native/d3d12/BindGroupLayoutD3D12.cpp",
+      "src/dawn_native/d3d12/BindGroupLayoutD3D12.h",
+      "src/dawn_native/d3d12/BufferD3D12.cpp",
+      "src/dawn_native/d3d12/BufferD3D12.h",
+      "src/dawn_native/d3d12/CommandAllocatorManager.cpp",
+      "src/dawn_native/d3d12/CommandAllocatorManager.h",
+      "src/dawn_native/d3d12/CommandBufferD3D12.cpp",
+      "src/dawn_native/d3d12/CommandBufferD3D12.h",
+      "src/dawn_native/d3d12/ComputePipelineD3D12.cpp",
+      "src/dawn_native/d3d12/ComputePipelineD3D12.h",
+      "src/dawn_native/d3d12/DescriptorHeapAllocator.cpp",
+      "src/dawn_native/d3d12/DescriptorHeapAllocator.h",
+      "src/dawn_native/d3d12/DeviceD3D12.cpp",
+      "src/dawn_native/d3d12/DeviceD3D12.h",
+      "src/dawn_native/d3d12/Forward.h",
+      "src/dawn_native/d3d12/InputStateD3D12.cpp",
+      "src/dawn_native/d3d12/InputStateD3D12.h",
+      "src/dawn_native/d3d12/NativeSwapChainImplD3D12.cpp",
+      "src/dawn_native/d3d12/NativeSwapChainImplD3D12.h",
+      "src/dawn_native/d3d12/PipelineLayoutD3D12.cpp",
+      "src/dawn_native/d3d12/PipelineLayoutD3D12.h",
+      "src/dawn_native/d3d12/PlatformFunctions.cpp",
+      "src/dawn_native/d3d12/PlatformFunctions.h",
+      "src/dawn_native/d3d12/QueueD3D12.cpp",
+      "src/dawn_native/d3d12/QueueD3D12.h",
+      "src/dawn_native/d3d12/RenderPassDescriptorD3D12.cpp",
+      "src/dawn_native/d3d12/RenderPassDescriptorD3D12.h",
+      "src/dawn_native/d3d12/RenderPipelineD3D12.cpp",
+      "src/dawn_native/d3d12/RenderPipelineD3D12.h",
+      "src/dawn_native/d3d12/ResourceAllocator.cpp",
+      "src/dawn_native/d3d12/ResourceAllocator.h",
+      "src/dawn_native/d3d12/ResourceUploader.cpp",
+      "src/dawn_native/d3d12/ResourceUploader.h",
+      "src/dawn_native/d3d12/SamplerD3D12.cpp",
+      "src/dawn_native/d3d12/SamplerD3D12.h",
+      "src/dawn_native/d3d12/ShaderModuleD3D12.cpp",
+      "src/dawn_native/d3d12/ShaderModuleD3D12.h",
+      "src/dawn_native/d3d12/SwapChainD3D12.cpp",
+      "src/dawn_native/d3d12/SwapChainD3D12.h",
+      "src/dawn_native/d3d12/TextureCopySplitter.cpp",
+      "src/dawn_native/d3d12/TextureCopySplitter.h",
+      "src/dawn_native/d3d12/TextureD3D12.cpp",
+      "src/dawn_native/d3d12/TextureD3D12.h",
+      "src/dawn_native/d3d12/UtilsD3D12.cpp",
+      "src/dawn_native/d3d12/UtilsD3D12.h",
+      "src/dawn_native/d3d12/d3d12_platform.h",
+    ]
+  }
+
+  if (dawn_enable_metal) {
+    libs += [
+      "Metal.framework",
+      "Cocoa.framework",
+      "IOKit.framework",
+    ]
+    sources += [
+      "src/dawn_native/metal/BufferMTL.h",
+      "src/dawn_native/metal/BufferMTL.mm",
+      "src/dawn_native/metal/CommandBufferMTL.h",
+      "src/dawn_native/metal/CommandBufferMTL.mm",
+      "src/dawn_native/metal/ComputePipelineMTL.h",
+      "src/dawn_native/metal/ComputePipelineMTL.mm",
+      "src/dawn_native/metal/DeviceMTL.h",
+      "src/dawn_native/metal/DeviceMTL.mm",
+      "src/dawn_native/metal/Forward.h",
+      "src/dawn_native/metal/InputStateMTL.h",
+      "src/dawn_native/metal/InputStateMTL.mm",
+      "src/dawn_native/metal/PipelineLayoutMTL.h",
+      "src/dawn_native/metal/PipelineLayoutMTL.mm",
+      "src/dawn_native/metal/QueueMTL.h",
+      "src/dawn_native/metal/QueueMTL.mm",
+      "src/dawn_native/metal/RenderPipelineMTL.h",
+      "src/dawn_native/metal/RenderPipelineMTL.mm",
+      "src/dawn_native/metal/ResourceUploader.h",
+      "src/dawn_native/metal/ResourceUploader.mm",
+      "src/dawn_native/metal/SamplerMTL.h",
+      "src/dawn_native/metal/SamplerMTL.mm",
+      "src/dawn_native/metal/ShaderModuleMTL.h",
+      "src/dawn_native/metal/ShaderModuleMTL.mm",
+      "src/dawn_native/metal/SwapChainMTL.h",
+      "src/dawn_native/metal/SwapChainMTL.mm",
+      "src/dawn_native/metal/TextureMTL.h",
+      "src/dawn_native/metal/TextureMTL.mm",
+      "src/dawn_native/metal/UtilsMetal.h",
+      "src/dawn_native/metal/UtilsMetal.mm",
+    ]
+  }
+
+  if (dawn_enable_null) {
+    sources += [
+      "src/dawn_native/null/DeviceNull.cpp",
+      "src/dawn_native/null/DeviceNull.h",
+    ]
+  }
+
+  if (dawn_enable_opengl) {
+    deps += [ "third_party:glad" ]
+    sources += [
+      "src/dawn_native/opengl/BackendGL.cpp",
+      "src/dawn_native/opengl/BackendGL.h",
+      "src/dawn_native/opengl/BufferGL.cpp",
+      "src/dawn_native/opengl/BufferGL.h",
+      "src/dawn_native/opengl/CommandBufferGL.cpp",
+      "src/dawn_native/opengl/CommandBufferGL.h",
+      "src/dawn_native/opengl/ComputePipelineGL.cpp",
+      "src/dawn_native/opengl/ComputePipelineGL.h",
+      "src/dawn_native/opengl/DeviceGL.cpp",
+      "src/dawn_native/opengl/DeviceGL.h",
+      "src/dawn_native/opengl/Forward.h",
+      "src/dawn_native/opengl/InputStateGL.cpp",
+      "src/dawn_native/opengl/InputStateGL.h",
+      "src/dawn_native/opengl/PersistentPipelineStateGL.cpp",
+      "src/dawn_native/opengl/PersistentPipelineStateGL.h",
+      "src/dawn_native/opengl/PipelineGL.cpp",
+      "src/dawn_native/opengl/PipelineGL.h",
+      "src/dawn_native/opengl/PipelineLayoutGL.cpp",
+      "src/dawn_native/opengl/PipelineLayoutGL.h",
+      "src/dawn_native/opengl/QueueGL.cpp",
+      "src/dawn_native/opengl/QueueGL.h",
+      "src/dawn_native/opengl/RenderPipelineGL.cpp",
+      "src/dawn_native/opengl/RenderPipelineGL.h",
+      "src/dawn_native/opengl/SamplerGL.cpp",
+      "src/dawn_native/opengl/SamplerGL.h",
+      "src/dawn_native/opengl/ShaderModuleGL.cpp",
+      "src/dawn_native/opengl/ShaderModuleGL.h",
+      "src/dawn_native/opengl/SwapChainGL.cpp",
+      "src/dawn_native/opengl/SwapChainGL.h",
+      "src/dawn_native/opengl/TextureGL.cpp",
+      "src/dawn_native/opengl/TextureGL.h",
+      "src/dawn_native/opengl/UtilsGL.cpp",
+      "src/dawn_native/opengl/UtilsGL.h",
+    ]
+  }
+
+  if (dawn_enable_vulkan) {
+    deps += [ "third_party:vulkan_headers" ]
+    sources += [
+      "src/dawn_native/vulkan/BindGroupLayoutVk.cpp",
+      "src/dawn_native/vulkan/BindGroupLayoutVk.h",
+      "src/dawn_native/vulkan/BindGroupVk.cpp",
+      "src/dawn_native/vulkan/BindGroupVk.h",
+      "src/dawn_native/vulkan/BufferUploader.cpp",
+      "src/dawn_native/vulkan/BufferUploader.h",
+      "src/dawn_native/vulkan/BufferVk.cpp",
+      "src/dawn_native/vulkan/BufferVk.h",
+      "src/dawn_native/vulkan/CommandBufferVk.cpp",
+      "src/dawn_native/vulkan/CommandBufferVk.h",
+      "src/dawn_native/vulkan/ComputePipelineVk.cpp",
+      "src/dawn_native/vulkan/ComputePipelineVk.h",
+      "src/dawn_native/vulkan/DeviceVk.cpp",
+      "src/dawn_native/vulkan/DeviceVk.h",
+      "src/dawn_native/vulkan/FencedDeleter.cpp",
+      "src/dawn_native/vulkan/FencedDeleter.h",
+      "src/dawn_native/vulkan/Forward.h",
+      "src/dawn_native/vulkan/InputStateVk.cpp",
+      "src/dawn_native/vulkan/InputStateVk.h",
+      "src/dawn_native/vulkan/MemoryAllocator.cpp",
+      "src/dawn_native/vulkan/MemoryAllocator.h",
+      "src/dawn_native/vulkan/NativeSwapChainImplVk.cpp",
+      "src/dawn_native/vulkan/NativeSwapChainImplVk.h",
+      "src/dawn_native/vulkan/PipelineLayoutVk.cpp",
+      "src/dawn_native/vulkan/PipelineLayoutVk.h",
+      "src/dawn_native/vulkan/QueueVk.cpp",
+      "src/dawn_native/vulkan/QueueVk.h",
+      "src/dawn_native/vulkan/RenderPassCache.cpp",
+      "src/dawn_native/vulkan/RenderPassCache.h",
+      "src/dawn_native/vulkan/RenderPassDescriptorVk.cpp",
+      "src/dawn_native/vulkan/RenderPassDescriptorVk.h",
+      "src/dawn_native/vulkan/RenderPipelineVk.cpp",
+      "src/dawn_native/vulkan/RenderPipelineVk.h",
+      "src/dawn_native/vulkan/SamplerVk.cpp",
+      "src/dawn_native/vulkan/SamplerVk.h",
+      "src/dawn_native/vulkan/ShaderModuleVk.cpp",
+      "src/dawn_native/vulkan/ShaderModuleVk.h",
+      "src/dawn_native/vulkan/SwapChainVk.cpp",
+      "src/dawn_native/vulkan/SwapChainVk.h",
+      "src/dawn_native/vulkan/TextureVk.cpp",
+      "src/dawn_native/vulkan/TextureVk.h",
+      "src/dawn_native/vulkan/UtilsVulkan.cpp",
+      "src/dawn_native/vulkan/UtilsVulkan.h",
+      "src/dawn_native/vulkan/VulkanError.cpp",
+      "src/dawn_native/vulkan/VulkanError.h",
+      "src/dawn_native/vulkan/VulkanFunctions.cpp",
+      "src/dawn_native/vulkan/VulkanFunctions.h",
+      "src/dawn_native/vulkan/VulkanInfo.cpp",
+      "src/dawn_native/vulkan/VulkanInfo.h",
+    ]
+  }
+}
+
+# The static and shared libraries for libdawn_native. Most of the files are
+# already compiled in libdawn_native_sources, but we still need to compile
+# files defining exported symbols.
+dawn_static_and_shared_library("libdawn_native") {
+  DEFINE_PREFIX = "DAWN_NATIVE"
+
+  #Make headers publically visible
+  public_deps = [
+    ":libdawn_native_headers",
+  ]
+
+  deps = [
+    ":dawn_common",
+    ":libdawn_native_sources",
+  ]
+  sources = [
+    "src/dawn_native/DawnNative.cpp",
+  ]
+  configs = [ ":libdawn_native_internal" ]
+
+  if (dawn_enable_d3d12) {
+    sources += [ "src/dawn_native/d3d12/D3D12Backend.cpp" ]
+  }
+  if (dawn_enable_metal) {
+    sources += [ "src/dawn_native/metal/MetalBackend.mm" ]
+  }
+  if (dawn_enable_null) {
+    sources += [ "src/dawn_native/null/NullBackend.cpp" ]
+  }
+  if (dawn_enable_opengl) {
+    sources += [ "src/dawn_native/opengl/OpenGLBackend.cpp" ]
+    deps += [ "third_party:glad" ]
+  }
+  if (dawn_enable_vulkan) {
+    sources += [ "src/dawn_native/vulkan/VulkanBackend.cpp" ]
+    deps += [ "third_party:vulkan_headers" ]
+  }
+}
+
+###############################################################################
+# libdawn_wire
+###############################################################################
+
+# Public libdawn_wire headers so they can be publically visible for
+# dependencies of libdawn_wire
+source_set("libdawn_wire_headers") {
+  public_deps = [
+    ":dawn_headers",
+  ]
+  public_configs = [ ":dawn_public" ]
+  sources = [
+    "src/include/dawn_wire/Wire.h",
+    "src/include/dawn_wire/dawn_wire_export.h",
+  ]
+}
+
+dawn_generator("libdawn_wire_gen") {
+  target = "dawn_wire"
+  outputs = [
+    "dawn_wire/TypeTraits_autogen.h",
+    "dawn_wire/WireCmd_autogen.h",
+    "dawn_wire/WireCmd_autogen.cpp",
+    "dawn_wire/WireServer.cpp",
+    "dawn_wire/client/ApiObjects_autogen.h",
+    "dawn_wire/client/ApiProcs_autogen.cpp",
+    "dawn_wire/client/ApiProcs_autogen.h",
+    "dawn_wire/client/ClientHandlers_autogen.cpp",
+    "dawn_wire/client/ClientPrototypes_autogen.inl",
+    "dawn_wire/client/Device_autogen.h",
+  ]
+}
+
+dawn_static_and_shared_library("libdawn_wire") {
+  DEFINE_PREFIX = "DAWN_WIRE"
+
+  deps = [
+    ":dawn_common",
+    ":libdawn_wire_gen",
+    ":libdawn_wire_headers",
+  ]
+
+  configs = [ ":dawn_internal" ]
+  sources = get_target_outputs(":libdawn_wire_gen")
+  sources += [
+    "src/dawn_wire/DawnWire.cpp",
+    "src/dawn_wire/WireDeserializeAllocator.cpp",
+    "src/dawn_wire/WireDeserializeAllocator.h",
+    "src/dawn_wire/client/ApiObjects.h",
+    "src/dawn_wire/client/ApiProcs.cpp",
+    "src/dawn_wire/client/Buffer.cpp",
+    "src/dawn_wire/client/Buffer.h",
+    "src/dawn_wire/client/Client.cpp",
+    "src/dawn_wire/client/Client.h",
+    "src/dawn_wire/client/ClientHandlers.cpp",
+    "src/dawn_wire/client/Fence.cpp",
+    "src/dawn_wire/client/Fence.h",
+    "src/dawn_wire/client/ObjectAllocator.h",
+  ]
+
+  # Make headers publically visible
+  public_deps = [
+    ":libdawn_wire_headers",
+  ]
+}
+
+###############################################################################
+# Utils for tests and samples
+###############################################################################
+
+static_library("dawn_utils") {
+  configs += [ ":dawn_internal" ]
+
+  sources = [
+    "src/utils/BackendBinding.cpp",
+    "src/utils/BackendBinding.h",
+    "src/utils/ComboRenderPipelineDescriptor.cpp",
+    "src/utils/ComboRenderPipelineDescriptor.h",
+    "src/utils/DawnHelpers.cpp",
+    "src/utils/DawnHelpers.h",
+    "src/utils/SystemUtils.cpp",
+    "src/utils/SystemUtils.h",
+    "src/utils/TerribleCommandBuffer.cpp",
+    "src/utils/TerribleCommandBuffer.h",
+  ]
+  deps = [
+    ":dawn_common",
+    ":libdawn_native",
+    ":libdawn_wire",
+    "${dawn_shaderc_dir}:libshaderc",
+    "third_party:glfw",
+  ]
+  libs = []
+
+  if (dawn_enable_d3d12) {
+    sources += [ "src/utils/D3D12Binding.cpp" ]
+  }
+
+  if (dawn_enable_metal) {
+    sources += [ "src/utils/MetalBinding.mm" ]
+    libs += [
+      "Metal.framework",
+      "QuartzCore.framework",
+    ]
+
+    # Suppress warnings that Metal isn't in the deployment target of Chrome
+    if (is_mac) {
+      cflags_objcc = [ "-Wno-unguarded-availability" ]
+    }
+  }
+
+  if (dawn_enable_null) {
+    sources += [ "src/utils/NullBinding.cpp" ]
+  }
+
+  if (dawn_enable_opengl) {
+    sources += [ "src/utils/OpenGLBinding.cpp" ]
+    deps += [ "third_party:glad" ]
+  }
+
+  if (dawn_enable_vulkan) {
+    sources += [ "src/utils/VulkanBinding.cpp" ]
+    deps += [ "third_party:vulkan_headers" ]
+  }
+}
+
+###############################################################################
+# Dawn test targets
+###############################################################################
+
+dawn_generator("mock_dawn_gen") {
+  target = "mock_dawn"
+  outputs = [
+    "mock/mock_dawn.h",
+    "mock/mock_dawn.cpp",
+  ]
+}
+
+test("dawn_unittests") {
+  configs += [ ":dawn_internal" ]
+
+  deps = [
+    ":dawn_common",
+    ":dawn_headers",
+    ":dawn_utils",
+    ":libdawn",
+    ":libdawn_native",
+    ":libdawn_native_sources",
+    ":libdawn_wire",
+    ":mock_dawn_gen",
+    "third_party:gmock_and_gtest",
+  ]
+
+  # Add internal Dawn Native headers and config for internal unittests.
+  deps += [ ":libdawn_native_headers" ]
+  configs += [ ":libdawn_native_internal" ]
+
+  sources = get_target_outputs(":mock_dawn_gen")
+  sources += [
+    "src/tests/unittests/BitSetIteratorTests.cpp",
+    "src/tests/unittests/CommandAllocatorTests.cpp",
+    "src/tests/unittests/EnumClassBitmasksTests.cpp",
+    "src/tests/unittests/ErrorTests.cpp",
+    "src/tests/unittests/MathTests.cpp",
+    "src/tests/unittests/ObjectBaseTests.cpp",
+    "src/tests/unittests/PerStageTests.cpp",
+    "src/tests/unittests/RefCountedTests.cpp",
+    "src/tests/unittests/ResultTests.cpp",
+    "src/tests/unittests/SerialMapTests.cpp",
+    "src/tests/unittests/SerialQueueTests.cpp",
+    "src/tests/unittests/ToBackendTests.cpp",
+    "src/tests/unittests/WireTests.cpp",
+    "src/tests/unittests/validation/BindGroupValidationTests.cpp",
+    "src/tests/unittests/validation/BufferValidationTests.cpp",
+    "src/tests/unittests/validation/CommandBufferValidationTests.cpp",
+    "src/tests/unittests/validation/ComputeValidationTests.cpp",
+    "src/tests/unittests/validation/CopyCommandsValidationTests.cpp",
+    "src/tests/unittests/validation/DynamicStateCommandValidationTests.cpp",
+    "src/tests/unittests/validation/FenceValidationTests.cpp",
+    "src/tests/unittests/validation/InputStateValidationTests.cpp",
+    "src/tests/unittests/validation/PushConstantsValidationTests.cpp",
+    "src/tests/unittests/validation/QueueSubmitValidationTests.cpp",
+    "src/tests/unittests/validation/RenderPassDescriptorValidationTests.cpp",
+    "src/tests/unittests/validation/RenderPipelineValidationTests.cpp",
+    "src/tests/unittests/validation/ShaderModuleValidationTests.cpp",
+    "src/tests/unittests/validation/TextureValidationTests.cpp",
+    "src/tests/unittests/validation/TextureViewValidationTests.cpp",
+    "src/tests/unittests/validation/ValidationTest.cpp",
+    "src/tests/unittests/validation/ValidationTest.h",
+    "src/tests/unittests/validation/VertexBufferValidationTests.cpp",
+  ]
+
+  if (dawn_enable_d3d12) {
+    sources += [ "src/tests/unittests/d3d12/CopySplitTests.cpp" ]
+  }
+
+  # When building inside Chromium, use their gtest main function because it is
+  # needed to run in swarming correctly.
+  if (build_with_chromium) {
+    sources += [ "//gpu/dawn_unittests_main.cc" ]
+  } else {
+    sources += [ "src/tests/UnittestsMain.cpp" ]
+  }
+}
+
+test("dawn_end2end_tests") {
+  configs += [ ":dawn_internal" ]
+
+  deps = [
+    ":dawn_common",
+    ":dawn_utils",
+    ":libdawn",
+    ":libdawn_native",
+    ":libdawn_wire",
+    "third_party:glfw",
+    "third_party:gmock_and_gtest",
+  ]
+
+  sources = [
+    "src/tests/DawnTest.cpp",
+    "src/tests/DawnTest.h",
+    "src/tests/end2end/BasicTests.cpp",
+    "src/tests/end2end/BindGroupTests.cpp",
+    "src/tests/end2end/BlendStateTests.cpp",
+    "src/tests/end2end/BufferTests.cpp",
+    "src/tests/end2end/ComputeCopyStorageBufferTests.cpp",
+    "src/tests/end2end/CopyTests.cpp",
+    "src/tests/end2end/DepthStencilStateTests.cpp",
+    "src/tests/end2end/DrawIndexedTests.cpp",
+    "src/tests/end2end/FenceTests.cpp",
+    "src/tests/end2end/IndexFormatTests.cpp",
+    "src/tests/end2end/InputStateTests.cpp",
+    "src/tests/end2end/PrimitiveTopologyTests.cpp",
+    "src/tests/end2end/PushConstantTests.cpp",
+    "src/tests/end2end/RenderPassLoadOpTests.cpp",
+    "src/tests/end2end/SamplerTests.cpp",
+    "src/tests/end2end/ScissorTests.cpp",
+    "src/tests/end2end/TextureViewTests.cpp",
+    "src/tests/end2end/ViewportOrientationTests.cpp",
+  ]
+
+  # When building inside Chromium, use their gtest main function because it is
+  # needed to run in swarming correctly.
+  if (build_with_chromium) {
+    sources += [ "//gpu/dawn_end2end_tests_main.cc" ]
+  } else {
+    sources += [ "src/tests/End2EndTestsMain.cpp" ]
+  }
+}
+
+# Temporary groups to make a 5-way patch to fix crbug.com/913171
+group("dawn_unittests_temp_group") {
+  testonly = true
+  deps = [
+    ":dawn_unittests",
+  ]
+}
+
+group("dawn_end2end_tests_temp_group") {
+  testonly = true
+  deps = [
+    ":dawn_end2end_tests",
+  ]
+}
+
+###############################################################################
+# Dawn samples, only in standalone builds
+###############################################################################
+
+if (dawn_standalone) {
+  # Static library to contain code and dependencies common to all samples
+  static_library("dawn_sample_utils") {
+    sources = [
+      "examples/SampleUtils.cpp",
+      "examples/SampleUtils.h",
+    ]
+
+    # Export all of these as public deps so that `gn check` allows includes
+    public_deps = [
+      ":dawn_common",
+      ":dawn_utils",
+      ":libdawn",
+      ":libdawn_native",
+      ":libdawn_wire",
+      "third_party:glfw",
+    ]
+    public_configs = [ ":dawn_internal" ]
+  }
+
+  # Template for samples to avoid listing dawn_sample_utils as a dep every time
+  template("dawn_sample") {
+    executable(target_name) {
+      deps = [
+        ":dawn_sample_utils",
+      ]
+      forward_variables_from(invoker, "*", [ "deps" ])
+
+      if (defined(invoker.deps)) {
+        deps += invoker.deps
+      }
+    }
+  }
+
+  dawn_sample("CppHelloTriangle") {
+    sources = [
+      "examples/CppHelloTriangle.cpp",
+    ]
+  }
+
+  dawn_sample("CHelloTriangle") {
+    sources = [
+      "examples/CHelloTriangle.cpp",
+    ]
+  }
+
+  dawn_sample("ComputeBoids") {
+    sources = [
+      "examples/ComputeBoids.cpp",
+    ]
+    deps = [
+      "third_party:glm",
+    ]
+  }
+
+  dawn_sample("Animometer") {
+    sources = [
+      "examples/Animometer.cpp",
+    ]
+  }
+
+  dawn_sample("CubeReflection") {
+    sources = [
+      "examples/CubeReflection.cpp",
+    ]
+    deps = [
+      "third_party:glm",
+    ]
+  }
+
+  dawn_sample("glTFViewer") {
+    sources = [
+      "examples/glTFViewer/Camera.inl",
+      "examples/glTFViewer/glTFViewer.cpp",
+    ]
+    deps = [
+      "third_party:glm",
+      "third_party:tiny_gltf_loader",
+    ]
+  }
+
+  group("dawn_samples") {
+    deps = [
+      ":Animometer",
+      ":CHelloTriangle",
+      ":ComputeBoids",
+      ":CppHelloTriangle",
+      ":CubeReflection",
+      ":glTFViewer",
+    ]
+  }
+}
+
+###############################################################################
+# Fuzzers
+###############################################################################
+
+group("dawn_fuzzers") {
+  testonly = true
+  deps = [
+    "src/fuzzers:dawn_spirv_cross_glsl_fast_fuzzer",
+    "src/fuzzers:dawn_spirv_cross_glsl_full_fuzzer",
+    "src/fuzzers:dawn_spirv_cross_hlsl_fast_fuzzer",
+    "src/fuzzers:dawn_spirv_cross_hlsl_full_fuzzer",
+    "src/fuzzers:dawn_spirv_cross_msl_fast_fuzzer",
+    "src/fuzzers:dawn_spirv_cross_msl_full_fuzzer",
+    "src/fuzzers:dawn_wire_server_and_frontend_fuzzer",
+  ]
+}

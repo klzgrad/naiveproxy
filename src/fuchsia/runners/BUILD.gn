@@ -1,0 +1,205 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+assert(is_fuchsia)
+
+import("//build/config/fuchsia/rules.gni")
+import("//testing/test.gni")
+
+# Files common to both cast_runner and web_runner targets.
+source_set("common") {
+  sources = [
+    "common/web_component.cc",
+    "common/web_component.h",
+    "common/web_content_runner.cc",
+    "common/web_content_runner.h",
+  ]
+  deps = [
+    "//base",
+    "//third_party/fuchsia-sdk/sdk:ui_app",
+    "//third_party/fuchsia-sdk/sdk:ui_viewsv1",
+    "//url",
+  ]
+  public_deps = [
+    "//fuchsia:web_fidl",
+    "//third_party/fuchsia-sdk/sdk:sys",
+  ]
+  visibility = [ ":*" ]
+}
+
+source_set("cast_runner_core") {
+  sources = [
+    "cast/bindings/cast_channel.cc",
+    "cast/bindings/cast_channel.h",
+    "cast/cast_runner.cc",
+    "cast/cast_runner.h",
+  ]
+  data = [
+    "cast/bindings/cast_channel.js",
+  ]
+  deps = [
+    "//base",
+    "//fuchsia:mem_buffer_common",
+    "//fuchsia:named_message_port_connector",
+    "//url",
+  ]
+  public_deps = [
+    ":common",
+    "//fuchsia:cast_fidl",
+  ]
+  configs += [ "//fuchsia:webrunner_implementation" ]
+  visibility = [ ":*" ]
+}
+
+executable("cast_runner_exe") {
+  sources = [
+    "cast/main.cc",
+  ]
+  deps = [
+    ":cast_runner_core",
+    ":common",
+    "//base",
+  ]
+  visibility = [ ":*" ]
+}
+
+fuchsia_package("cast_runner_pkg") {
+  binary = ":cast_runner_exe"
+  package_name_override = "cast_runner"
+  sandbox_policy = "cast/sandbox_policy"
+}
+
+fuchsia_package_runner("cast_runner") {
+  package = ":cast_runner_pkg"
+  package_name_override = "cast_runner"
+  install_only = true
+  package_deps = [ [
+        "//fuchsia:service_pkg",
+        "chromium",
+      ] ]
+}
+
+source_set("cast_runner_test_core") {
+  testonly = true
+  sources = [
+    "cast/fake_application_config_manager.cc",
+    "cast/fake_application_config_manager.h",
+    "cast/test_common.cc",
+    "cast/test_common.h",
+  ]
+  public_deps = [
+    "//base",
+    "//fuchsia:cast_fidl",
+    "//net:test_support",
+    "//third_party/fuchsia-sdk/sdk:sys",
+  ]
+  visibility = [ ":*" ]
+}
+
+test("cast_runner_unittests") {
+  sources = [
+    "cast/cast_runner_unittest.cc",
+  ]
+  deps = [
+    ":cast_runner_core",
+    ":cast_runner_test_core",
+    "//base/test:run_all_unittests",
+    "//base/test:test_support",
+    "//fuchsia:test_support",
+    "//testing/gtest",
+  ]
+}
+
+test("cast_runner_integration_tests") {
+  sources = [
+    "cast/cast_runner_integration_test.cc",
+  ]
+  deps = [
+    ":cast_runner_core",
+    ":cast_runner_test_core",
+    "//base/test:run_all_unittests",
+    "//base/test:test_support",
+    "//fuchsia:test_support",
+    "//net:test_support",
+    "//testing/gtest",
+  ]
+  package_deps = [ [
+        "//fuchsia:service_pkg",
+        "chromium",
+      ] ]
+}
+
+test("cast_runner_browsertests") {
+  sources = [
+    "cast/bindings/cast_channel_browsertest.cc",
+  ]
+  defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+  data = [
+    "cast/testdata",
+  ]
+  deps = [
+    ":cast_runner_core",
+    "//base/test:test_support",
+    "//content/public/browser",
+    "//fuchsia:browsertest_common",
+    "//fuchsia:mem_buffer_common",
+    "//fuchsia:named_message_port_connector",
+    "//fuchsia:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//ui/ozone",
+  ]
+}
+
+executable("web_runner_exe") {
+  sources = [
+    "web/main.cc",
+  ]
+  deps = [
+    ":common",
+    "//base",
+  ]
+  visibility = [ ":*" ]
+}
+
+fuchsia_package("web_runner_pkg") {
+  binary = ":web_runner_exe"
+  package_name_override = "web_runner"
+  sandbox_policy = "web/sandbox_policy"
+}
+
+fuchsia_package_runner("web_runner") {
+  package = ":web_runner_pkg"
+  package_name_override = "web_runner"
+  install_only = true
+  package_deps = [ [
+        "//fuchsia:service_pkg",
+        "chromium",
+      ] ]
+}
+
+test("web_runner_integration_tests") {
+  sources = [
+    "web/web_runner_smoke_test.cc",
+  ]
+  deps = [
+    "//base",
+    "//base/test:run_all_unittests",
+    "//base/test:test_support",
+    "//fuchsia:test_support",
+    "//net:test_support",
+    "//testing/gtest",
+    "//third_party/fuchsia-sdk/sdk:sys",
+  ]
+  package_deps = [
+    [
+      "//fuchsia:service_pkg",
+      "chromium",
+    ],
+    [
+      ":web_runner_pkg",
+      "web_runner",
+    ],
+  ]
+}

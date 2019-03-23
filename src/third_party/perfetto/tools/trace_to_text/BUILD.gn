@@ -1,0 +1,116 @@
+# Copyright (C) 2017 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../gn/perfetto.gni")
+import("../../gn/proto_library.gni")
+import("../../gn/wasm.gni")
+
+# The core source files that are used both by the "full" version (the host
+# executable) and by the "lite" version (the WASM module for the UI).
+source_set("common") {
+  public_deps = [
+    "../../gn:default_deps",
+    "../../include/perfetto/base",
+    "../../include/perfetto/traced:sys_stats_counters",
+    "../../protos/perfetto/trace:lite",
+    "../../protos/perfetto/trace/ftrace:lite",
+    "../../protos/perfetto/trace/profiling:lite",
+    "../../protos/third_party/pprof:lite",
+    "../../src/base",
+  ]
+  sources = [
+    "ftrace_event_formatter.cc",
+    "ftrace_event_formatter.h",
+    "main.cc",
+    "process_formatter.h",
+    "trace_to_profile.cc",
+    "trace_to_profile.h",
+    "trace_to_systrace.cc",
+    "trace_to_systrace.h",
+    "trace_to_text.h",
+    "utils.cc",
+    "utils.h",
+  ]
+}
+
+# Lite target for the WASM UI. Doesn't have any dependency on libprotobuf-full.
+source_set("lite") {
+  deps = [
+    ":common",
+    "../../gn:default_deps",
+  ]
+  sources = [
+    "lite_fallbacks.cc",
+  ]
+}
+
+# Full traget for the host. Depends on libprotobuf-full.
+source_set("full") {
+  testonly = true
+  deps = [
+    ":common",
+    "../../gn:default_deps",
+    "../../gn:protobuf_full_deps",
+  ]
+  sources = [
+    "proto_full_utils.cc",
+    "proto_full_utils.h",
+    "trace_to_text.cc",
+  ]
+}
+
+if (current_toolchain == host_toolchain) {
+  executable("trace_to_text_host") {
+    testonly = true
+    deps = [
+      ":full",
+      "../../gn:default_deps",
+    ]
+  }
+
+  # WASM is too permissive, build a normal version of the binary to test for
+  # missing symbols.
+  executable("trace_to_text_lite_host") {
+    deps = [
+      ":lite",
+      "../../gn:default_deps",
+    ]
+  }
+}
+
+wasm_lib("trace_to_text_wasm") {
+  name = "trace_to_text"
+  deps = [
+    ":lite",
+    "../../gn:default_deps",
+  ]
+}
+
+# The one for the android tree is defined in the top-level BUILD.gn.
+if (!perfetto_build_with_android) {
+  copy("trace_to_text") {
+    testonly = true
+    host_out_dir_ =
+        get_label_info(":trace_to_text_host($host_toolchain)", "root_out_dir")
+    deps = [
+      ":trace_to_text_host($host_toolchain)",
+    ]
+    sources = [
+      "${host_out_dir_}/trace_to_text_host",
+    ]
+    outputs = [
+      "${root_out_dir}/trace_to_text",
+    ]
+  }
+}

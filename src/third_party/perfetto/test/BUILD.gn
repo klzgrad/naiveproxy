@@ -1,0 +1,157 @@
+# Copyright (C) 2018 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../gn/fuzzer.gni")
+import("../gn/perfetto.gni")
+import("//build_overrides/build.gni")
+
+source_set("end_to_end_integrationtests") {
+  testonly = true
+  deps = [
+    ":task_runner_thread",
+    ":task_runner_thread_delegates",
+    ":test_helper",
+    "../gn:default_deps",
+    "../gn:gtest_deps",
+    "../include/perfetto/traced",
+    "../protos/perfetto/trace:lite",
+    "../protos/perfetto/trace:zero",
+    "../src/base:base",
+    "../src/base:test_support",
+    "../src/traced/probes/ftrace",
+  ]
+  sources = [
+    "end_to_end_integrationtest.cc",
+  ]
+  if (is_android && (perfetto_build_standalone || perfetto_build_with_android)) {
+    deps += [ "../src/base:android_task_runner" ]
+  }
+  if (start_daemons_for_testing) {
+    cflags = [ "-DPERFETTO_START_DAEMONS_FOR_TESTING" ]
+
+    # In CTS mode we use /syste/bin/perfetto for the cmdline tests and the
+    # perfetto_cmd is not required. Outside of CTS mode, instead, we need to
+    # build the cmdline code as part of the test executable.
+    deps += [ "../src/perfetto_cmd" ]
+  }
+}
+
+perfetto_fuzzer_test("end_to_end_shared_memory_fuzzer") {
+  sources = [
+    "end_to_end_shared_memory_fuzzer.cc",
+  ]
+  testonly = true
+  deps = [
+    ":task_runner_thread",
+    ":task_runner_thread_delegates",
+    ":test_helper",
+    "../gn:default_deps",
+    "../protos/perfetto/trace:lite",
+    "../src/base:test_support",
+    "../src/protozero",
+    "../src/tracing",
+    "../src/tracing:ipc",
+  ]
+}
+
+source_set("task_runner_thread") {
+  testonly = true
+  deps = [
+    "../gn:default_deps",
+    "../src/base",
+    "../src/base:test_support",
+  ]
+  sources = [
+    "task_runner_thread.cc",
+    "task_runner_thread.h",
+  ]
+}
+
+source_set("task_runner_thread_delegates") {
+  testonly = true
+  deps = [
+    ":task_runner_thread",
+    "../gn:default_deps",
+    "../include/perfetto/traced",
+    "../src/base:test_support",
+    "../src/traced/probes:probes_src",
+    "../src/tracing:ipc",
+  ]
+  sources = [
+    "fake_producer.cc",
+    "fake_producer.h",
+    "task_runner_thread_delegates.h",
+  ]
+}
+
+source_set("test_helper") {
+  testonly = true
+  public_deps = [
+    "../src/tracing:ipc",
+  ]
+  deps = [
+    ":task_runner_thread",
+    ":task_runner_thread_delegates",
+    "../gn:default_deps",
+    "../include/perfetto/traced",
+    "../protos/perfetto/trace:lite",
+    "../protos/perfetto/trace:zero",
+    "../src/base:test_support",
+  ]
+  sources = [
+    "test_helper.cc",
+    "test_helper.h",
+  ]
+  if (start_daemons_for_testing) {
+    cflags = [ "-DPERFETTO_START_DAEMONS_FOR_TESTING" ]
+  }
+}
+
+if (perfetto_build_standalone) {
+  source_set("end_to_end_benchmarks") {
+    testonly = true
+    deps = [
+      ":task_runner_thread",
+      ":task_runner_thread_delegates",
+      ":test_helper",
+      "../../gn:default_deps",
+      "../buildtools:benchmark",
+      "../gn:gtest_deps",
+      "../include/perfetto/traced",
+      "../protos/perfetto/trace:lite",
+      "../protos/perfetto/trace:zero",
+      "../src/base:test_support",
+    ]
+    sources = [
+      "end_to_end_benchmark.cc",
+    ]
+    if (is_android) {
+      deps += [ "../src/base:android_task_runner" ]
+    }
+    if (start_daemons_for_testing) {
+      cflags = [ "-DPERFETTO_START_DAEMONS_FOR_TESTING" ]
+    }
+  }
+
+  source_set("benchmark_main") {
+    testonly = true
+    deps = [
+      "../../gn:default_deps",
+      "../buildtools:benchmark",
+    ]
+    sources = [
+      "benchmark_main.cc",
+    ]
+  }
+}

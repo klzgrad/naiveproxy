@@ -1,0 +1,1581 @@
+# Copyright (c) 2014 The WebRTC project authors. All Rights Reserved.
+#
+# Use of this source code is governed by a BSD-style license
+# that can be found in the LICENSE file in the root of the source
+# tree. An additional intellectual property rights grant can be found
+# in the file PATENTS.  All contributing project authors may
+# be found in the AUTHORS file in the root of the source tree.
+
+import("//build/config/crypto.gni")
+import("//build/config/ui.gni")
+import("../webrtc.gni")
+
+if (is_android) {
+  import("//build/config/android/config.gni")
+  import("//build/config/android/rules.gni")
+}
+
+config("rtc_base_chromium_config") {
+  defines = [ "NO_MAIN_THREAD_WRAPPING" ]
+}
+
+config("rtc_base_all_dependent_config") {
+  if (is_ios) {
+    libs = [
+      "CFNetwork.framework",
+      "Foundation.framework",
+      "Security.framework",
+      "SystemConfiguration.framework",
+      "UIKit.framework",
+    ]
+  }
+  if (is_mac) {
+    libs = [
+      "Cocoa.framework",
+      "Foundation.framework",
+      "IOKit.framework",
+      "Security.framework",
+      "SystemConfiguration.framework",
+    ]
+  }
+}
+
+if (!rtc_build_ssl) {
+  config("external_ssl_library") {
+    assert(rtc_ssl_root != "",
+           "You must specify rtc_ssl_root when rtc_build_ssl==0.")
+    include_dirs = [ rtc_ssl_root ]
+  }
+}
+
+rtc_source_set("protobuf_utils") {
+  visibility = [ "*" ]
+  sources = [
+    "protobuf_utils.h",
+  ]
+  if (rtc_enable_protobuf) {
+    public_configs = [ "//third_party/protobuf:protobuf_config" ]
+    deps = [
+      "//third_party/protobuf:protobuf_lite",
+    ]
+  }
+}
+
+rtc_source_set("compile_assert_c") {
+  sources = [
+    "compile_assert_c.h",
+  ]
+}
+
+# The subset of rtc_base approved for use outside of libjingle.
+# TODO(bugs.webrtc.org/9838): Create small and focused build targets and remove
+# the old concept of rtc_base and rtc_base_approved.
+rtc_source_set("rtc_base_approved") {
+  visibility = [ "*" ]
+  deps = [
+    ":checks",
+    ":rtc_task_queue",
+    ":safe_compare",
+    ":safe_minmax",
+    ":type_traits",
+    "../api:array_view",
+    "../system_wrappers:field_trial",
+    "experiments:field_trial_parser",
+    "system:arch",
+    "system:unused",
+    "third_party/base64",
+    "//third_party/abseil-cpp/absl/memory",
+    "//third_party/abseil-cpp/absl/types:optional",
+  ]
+
+  sources = [
+    "bind.h",
+    "bit_buffer.cc",
+    "bit_buffer.h",
+    "bitbuffer.h",
+    "bitrate_allocation_strategy.cc",
+    "bitrate_allocation_strategy.h",
+    "bitrateallocationstrategy.h",
+    "buffer.h",
+    "buffer_queue.cc",
+    "buffer_queue.h",
+    "bufferqueue.h",
+    "byte_buffer.cc",
+    "byte_buffer.h",
+    "byte_order.h",
+    "bytebuffer.h",
+    "byteorder.h",
+    "copy_on_write_buffer.cc",
+    "copy_on_write_buffer.h",
+    "copyonwritebuffer.h",
+    "event_tracer.cc",
+    "event_tracer.h",
+    "file.cc",
+    "file.h",
+    "flags.cc",
+    "flags.h",
+    "function_view.h",
+    "ignore_wundef.h",
+    "location.cc",
+    "location.h",
+    "message_buffer_reader.h",
+    "numerics/histogram_percentile_counter.cc",
+    "numerics/histogram_percentile_counter.h",
+    "numerics/mod_ops.h",
+    "numerics/moving_max_counter.h",
+    "numerics/sample_counter.cc",
+    "numerics/sample_counter.h",
+    "one_time_event.h",
+    "onetimeevent.h",
+    "platform_file.cc",
+    "platform_file.h",
+    "race_checker.cc",
+    "race_checker.h",
+    "random.cc",
+    "random.h",
+    "rate_statistics.cc",
+    "rate_statistics.h",
+    "rate_tracker.cc",
+    "rate_tracker.h",
+    "ratetracker.h",
+    "swap_queue.h",
+    "template_util.h",
+    "timestamp_aligner.cc",
+    "timestamp_aligner.h",
+    "timestampaligner.h",
+    "trace_event.h",
+    "zero_memory.cc",
+    "zero_memory.h",
+  ]
+
+  if (is_posix || is_fuchsia) {
+    sources += [ "file_posix.cc" ]
+  }
+
+  if (is_win) {
+    sources += [
+      "file_win.cc",
+      "win/windows_version.cc",
+      "win/windows_version.h",
+    ]
+    data_deps = [
+      "//build/win:runtime_libs",
+    ]
+  }
+
+  if (is_nacl) {
+    deps += [ "//native_client_sdk/src/libraries/nacl_io" ]
+  }
+
+  if (is_android) {
+    libs = [ "log" ]
+  }
+
+  public_deps = [  # no-presubmit-check TODO(webrtc:8603)
+    ":atomicops",
+    ":criticalsection",
+    ":logging",
+    ":macromagic",
+    ":platform_thread",
+    ":platform_thread_types",
+    ":ptr_util",
+    ":refcount",
+    ":rtc_event",
+    ":safe_conversions",
+    ":stringutils",
+    ":thread_checker",
+    ":timeutils",
+  ]
+}
+
+rtc_source_set("macromagic") {
+  # TODO(bugs.webrtc.org/9606): This should not be public.
+  visibility = [ "*" ]
+  sources = [
+    "arraysize.h",
+    "constructor_magic.h",
+    "constructormagic.h",
+    "format_macros.h",
+    "stringize_macros.h",
+    "thread_annotations.h",
+  ]
+  deps = [
+    "system:arch",
+  ]
+}
+
+rtc_source_set("platform_thread_types") {
+  sources = [
+    "platform_thread_types.cc",
+    "platform_thread_types.h",
+  ]
+}
+
+rtc_source_set("ptr_util") {
+  visibility = [ "*" ]
+  sources = [
+    "scoped_ref_ptr.h",
+  ]
+  deps = [
+    "../api:scoped_refptr",
+  ]
+}
+
+rtc_source_set("refcount") {
+  visibility = [ "*" ]
+  sources = [
+    "ref_count.h",
+    "ref_counted_object.h",
+    "ref_counter.h",
+    "refcount.h",
+    "refcountedobject.h",
+    "refcounter.h",
+  ]
+  deps = [
+    ":atomicops",
+    ":macromagic",
+  ]
+}
+
+rtc_source_set("criticalsection") {
+  sources = [
+    "critical_section.cc",
+    "critical_section.h",
+    "criticalsection.h",
+  ]
+  deps = [
+    ":atomicops",
+    ":checks",
+    ":macromagic",
+    ":platform_thread_types",
+    "system:unused",
+  ]
+}
+
+rtc_source_set("platform_thread") {
+  visibility = [
+    ":rtc_base_approved",
+    ":rtc_task_queue_libevent",
+    ":rtc_task_queue_win",
+    ":rtc_task_queue_stdlib",
+    ":sequenced_task_checker",
+  ]
+  sources = [
+    "platform_thread.cc",
+    "platform_thread.h",
+  ]
+  deps = [
+    ":atomicops",
+    ":checks",
+    ":macromagic",
+    ":platform_thread_types",
+    ":rtc_event",
+    ":thread_checker",
+    ":timeutils",
+    "//third_party/abseil-cpp/absl/strings",
+  ]
+}
+
+rtc_source_set("rtc_event") {
+  deps = [
+    ":checks",
+  ]
+
+  if (build_with_chromium) {
+    # Dependency on chromium's waitable_event (in //base).
+    deps += [ "//base:base" ]
+    sources = [
+      "../../webrtc_overrides/rtc_base/event.cc",
+      "../../webrtc_overrides/rtc_base/event.h",
+    ]
+  } else {
+    sources = [
+      "event.cc",
+      "event.h",
+    ]
+  }
+}
+
+rtc_source_set("logging") {
+  visibility = [ "*" ]
+  libs = []
+  deps = [
+    ":checks",
+    ":criticalsection",
+    ":macromagic",
+    ":platform_thread_types",
+    ":stringutils",
+    ":timeutils",
+    "//third_party/abseil-cpp/absl/strings",
+  ]
+
+  if (build_with_chromium) {
+    # Dependency on chromium's logging (in //base).
+    deps += [ "//base:base" ]
+    sources = [
+      "../../webrtc_overrides/rtc_base/logging.cc",
+      "../../webrtc_overrides/rtc_base/logging.h",
+    ]
+  } else {
+    configs += [
+      "..:no_exit_time_destructors",
+      "..:no_global_constructors",
+    ]
+    sources = [
+      "logging.cc",
+      "logging.h",
+    ]
+    deps += [ "system:inline" ]
+
+    if (is_mac) {
+      deps += [ ":logging_mac" ]
+    }
+
+    # logging.h needs the deprecation header while downstream projects are
+    # removing code that depends on logging implementation details.
+    deps += [ ":deprecation" ]
+
+    if (is_android) {
+      libs += [ "log" ]
+    }
+  }
+}
+
+rtc_source_set("thread_checker") {
+  sources = [
+    "thread_checker.h",
+    "thread_checker_impl.cc",
+    "thread_checker_impl.h",
+  ]
+  deps = [
+    ":checks",
+    ":criticalsection",
+    ":macromagic",
+    ":platform_thread_types",
+  ]
+}
+
+rtc_source_set("atomicops") {
+  sources = [
+    "atomic_ops.h",
+    "atomicops.h",
+  ]
+}
+
+rtc_source_set("checks") {
+  # TODO(bugs.webrtc.org/9607): This should not be public.
+  visibility = [ "*" ]
+  libs = []
+  sources = [
+    "checks.cc",
+    "checks.h",
+  ]
+  deps = [
+    ":safe_compare",
+    "system:inline",
+  ]
+  if (is_android) {
+    libs += [ "log" ]
+  }
+}
+
+rtc_source_set("rate_limiter") {
+  sources = [
+    "rate_limiter.cc",
+    "rate_limiter.h",
+  ]
+  deps = [
+    ":rtc_base_approved",
+    "../system_wrappers",
+    "//third_party/abseil-cpp/absl/types:optional",
+  ]
+}
+
+rtc_source_set("sanitizer") {
+  sources = [
+    "sanitizer.h",
+  ]
+  deps = [
+    "//third_party/abseil-cpp/absl/meta:type_traits",
+  ]
+}
+
+rtc_source_set("safe_compare") {
+  sources = [
+    "numerics/safe_compare.h",
+  ]
+  deps = [
+    ":type_traits",
+  ]
+}
+
+rtc_source_set("safe_minmax") {
+  sources = [
+    "numerics/safe_minmax.h",
+  ]
+  deps = [
+    ":checks",
+    ":safe_compare",
+    ":type_traits",
+  ]
+}
+
+rtc_source_set("safe_conversions") {
+  sources = [
+    "numerics/safe_conversions.h",
+    "numerics/safe_conversions_impl.h",
+  ]
+  deps = [
+    ":checks",
+  ]
+}
+
+rtc_source_set("timeutils") {
+  visibility = [ "*" ]
+  sources = [
+    "time_utils.cc",
+    "time_utils.h",
+    "timeutils.h",
+  ]
+  deps = [
+    ":checks",
+    ":safe_conversions",
+    ":stringutils",
+  ]
+}
+
+rtc_source_set("stringutils") {
+  sources = [
+    "string_encode.cc",
+    "string_encode.h",
+    "string_to_number.cc",
+    "string_to_number.h",
+    "string_utils.cc",
+    "string_utils.h",
+    "stringencode.h",
+    "strings/string_builder.cc",
+    "strings/string_builder.h",
+    "stringutils.h",
+  ]
+  deps = [
+    ":checks",
+    ":macromagic",
+    ":safe_minmax",
+    "../api:array_view",
+    "//third_party/abseil-cpp/absl/strings:strings",
+    "//third_party/abseil-cpp/absl/types:optional",
+  ]
+}
+
+rtc_source_set("audio_format_to_string") {
+  sources = [
+    "strings/audio_format_to_string.cc",
+    "strings/audio_format_to_string.h",
+  ]
+  deps = [
+    ":stringutils",
+    "../api/audio_codecs:audio_codecs_api",
+  ]
+}
+
+rtc_source_set("type_traits") {
+  sources = [
+    "type_traits.h",
+  ]
+}
+
+rtc_source_set("deprecation") {
+  sources = [
+    "deprecation.h",
+  ]
+}
+
+if (is_mac && !build_with_chromium) {
+  rtc_source_set("logging_mac") {
+    visibility = [ ":logging" ]
+    libs = [ "Foundation.framework" ]
+    sources = [
+      "logging_mac.h",
+      "logging_mac.mm",
+    ]
+  }
+}
+
+rtc_source_set("rtc_task_queue") {
+  visibility = [ "*" ]
+  deps = []
+  public_deps = [
+    ":rtc_task_queue_api",
+  ]
+
+  if (rtc_link_task_queue_impl) {
+    deps += [ ":rtc_task_queue_impl" ]
+  }
+}
+
+# WebRTC targets must not directly depend on rtc_task_queue_api or
+# rtc_task_queue_impl. Instead, depend on rtc_task_queue.
+# The build flag |rtc_link_task_queue_impl| decides if WebRTC targets will link
+# to the default implemenation in rtc_task_queue_impl or if an externally
+# provided implementation should be used. An external implementation should
+# depend on rtc_task_queue_api.
+rtc_source_set("rtc_task_queue_api") {
+  # The visibility list is commented out so that we won't break external
+  # implementations, but left here to manually test as well as for sake of what
+  # targets we expect to depend on rtc_task_queue_api.
+  # visibility = [
+  #   ":rtc_task_queue",
+  #   ":rtc_task_queue_impl",
+  #   ":sequenced_task_checker",
+  # ]
+  sources = [
+    "task_queue.h",
+  ]
+  deps = [
+    ":macromagic",
+    ":ptr_util",
+    "../api/task_queue",
+    "system:rtc_export",
+    "//third_party/abseil-cpp/absl/memory",
+  ]
+}
+
+if (rtc_enable_libevent) {
+  rtc_source_set("rtc_task_queue_libevent") {
+    visibility = [ ":rtc_task_queue_impl" ]
+    sources = [
+      "task_queue_libevent.cc",
+      "task_queue_posix.cc",
+      "task_queue_posix.h",
+    ]
+    deps = [
+      ":checks",
+      ":criticalsection",
+      ":logging",
+      ":macromagic",
+      ":platform_thread",
+      ":platform_thread_types",
+      ":ptr_util",
+      ":refcount",
+      ":rtc_task_queue_api",
+      ":safe_conversions",
+      ":timeutils",
+      "system:unused",
+    ]
+    if (rtc_build_libevent) {
+      deps += [ "//base/third_party/libevent" ]
+    }
+  }
+}
+
+if (is_mac || is_ios) {
+  rtc_source_set("rtc_task_queue_gcd") {
+    visibility = [ ":rtc_task_queue_impl" ]
+    sources = [
+      "task_queue_gcd.cc",
+      "task_queue_posix.cc",
+      "task_queue_posix.h",
+    ]
+    deps = [
+      ":checks",
+      ":logging",
+      ":ptr_util",
+      ":refcount",
+      ":rtc_task_queue_api",
+    ]
+  }
+}
+
+if (is_win) {
+  rtc_source_set("rtc_task_queue_win") {
+    visibility = [ ":rtc_task_queue_impl" ]
+    sources = [
+      "task_queue_win.cc",
+    ]
+    deps = [
+      ":checks",
+      ":criticalsection",
+      ":logging",
+      ":macromagic",
+      ":platform_thread",
+      ":ptr_util",
+      ":refcount",
+      ":rtc_event",
+      ":rtc_task_queue_api",
+      ":safe_conversions",
+      ":timeutils",
+    ]
+  }
+}
+
+rtc_source_set("rtc_task_queue_stdlib") {
+  visibility = [ ":rtc_task_queue_impl" ]
+  sources = [
+    "task_queue_stdlib.cc",
+  ]
+  deps = [
+    ":checks",
+    ":criticalsection",
+    ":logging",
+    ":macromagic",
+    ":platform_thread",
+    ":ptr_util",
+    ":refcount",
+    ":rtc_event",
+    ":rtc_task_queue_api",
+    ":safe_conversions",
+    ":timeutils",
+  ]
+}
+
+rtc_source_set("rtc_task_queue_impl") {
+  visibility = [ "*" ]
+  if (rtc_enable_libevent) {
+    deps = [
+      ":rtc_task_queue_libevent",
+    ]
+  } else {
+    if (is_mac || is_ios) {
+      deps = [
+        ":rtc_task_queue_gcd",
+      ]
+    }
+    if (is_win) {
+      if (current_os == "winuwp") {
+        deps = [
+          ":rtc_task_queue_stdlib",
+        ]
+      } else {
+        deps = [
+          ":rtc_task_queue_win",
+        ]
+      }
+    }
+  }
+}
+
+rtc_source_set("sequenced_task_checker") {
+  sources = [
+    "sequenced_task_checker.h",
+    "sequenced_task_checker_impl.cc",
+    "sequenced_task_checker_impl.h",
+  ]
+  deps = [
+    ":checks",
+    ":criticalsection",
+    ":macromagic",
+    ":rtc_task_queue",
+    ":thread_checker",
+  ]
+}
+
+rtc_static_library("weak_ptr") {
+  sources = [
+    "weak_ptr.cc",
+    "weak_ptr.h",
+  ]
+  deps = [
+    ":ptr_util",
+    ":refcount",
+    ":sequenced_task_checker",
+  ]
+}
+
+rtc_static_library("rtc_numerics") {
+  sources = [
+    "numerics/exp_filter.cc",
+    "numerics/exp_filter.h",
+    "numerics/moving_average.cc",
+    "numerics/moving_average.h",
+    "numerics/moving_median_filter.h",
+    "numerics/percentile_filter.h",
+    "numerics/samples_stats_counter.cc",
+    "numerics/samples_stats_counter.h",
+    "numerics/sequence_number_util.h",
+  ]
+  deps = [
+    ":checks",
+    ":rtc_base_approved",
+    ":safe_compare",
+    "//third_party/abseil-cpp/absl/types:optional",
+  ]
+}
+
+rtc_source_set("rtc_json") {
+  defines = []
+  sources = [
+    "strings/json.cc",
+    "strings/json.h",
+  ]
+  deps = [
+    ":stringutils",
+  ]
+  all_dependent_configs = [ "//third_party/jsoncpp:jsoncpp_config" ]
+  if (rtc_build_json) {
+    public_deps = [
+      "//third_party/jsoncpp",
+    ]
+  } else {
+    include_dirs = [ "$rtc_jsoncpp_root" ]
+
+    # When defined changes the include path for json.h to where it is
+    # expected to be when building json outside of the standalone build.
+    defines += [ "WEBRTC_EXTERNAL_JSON" ]
+  }
+}
+
+rtc_source_set("net_helpers") {
+  # TODO(bugs.webrtc.org/9987): This build target will soon contain
+  #                             the following files:
+  # sources = [
+  #   "net_helpers.cc",
+  #   "net_helpers.h",
+  # ]
+}
+
+rtc_source_set("async_resolver_interface") {
+  # TODO(bugs.webrtc.org/9987): This build target will soon contain
+  #                             the following files:
+  # sources = [
+  #   "async_resolver_interface.cc",
+  #   "async_resolver_interface.h",
+  # ]
+}
+
+rtc_source_set("ip_address") {
+  # TODO(bugs.webrtc.org/9987): This build target will soon contain
+  #                             the following files:
+  # sources = [
+  #   "ip_address.cc",
+  #   "ip_address.h",
+  # ]
+}
+
+rtc_source_set("socket_address") {
+  # TODO(bugs.webrtc.org/9987): This build target will soon contain
+  #                             the following files:
+  # sources = [
+  #   "socket_address.cc",
+  #   "socket_address.h",
+  # ]
+}
+
+rtc_source_set("null_socket_server") {
+  # TODO(bugs.webrtc.org/9987): This build target will soon contain
+  #                             the following files:
+  # sources = [
+  #   "null_socket_server.cc",
+  #   "null_socket_server.h",
+  # ]
+}
+
+rtc_source_set("socket_server") {
+  # TODO(bugs.webrtc.org/9987): This build target will soon contain
+  #                             the following files:
+  # sources = [
+  #   "socket_server.h",
+  # ]
+}
+
+rtc_source_set("threading") {
+  # TODO(bugs.webrtc.org/9987): This build target will soon contain
+  #                             the following files:
+  # sources = [
+  #   "asyncresolver.cc",
+  #   "asyncresolver.h",
+  #   "defaultsocketserver.cc",
+  #   "defaultsocketserver.h",
+  #   "message_handler.cc",
+  #   "message_handler.h",
+  #   "message_queue.cc",
+  #   "message_queue.h",
+  #   "network_monitor.cc",
+  #   "network_monitor.h",
+  #   "physical_socket_server.cc",
+  #   "physical_socket_server.h",
+  #   "signal_thread.cc",
+  #   "signal_thread.h",
+  #   "thread.cc",
+  #   "thread.h",
+  # ]
+}
+
+rtc_source_set("socket_factory") {
+  # TODO(bugs.webrtc.org/9987): This build target will soon contain
+  #                             the following files:
+  # sources = [
+  #   "socket_factory.h",
+  # ]
+}
+
+rtc_source_set("async_socket") {
+  # TODO(bugs.webrtc.org/9987): This build target will soon contain
+  #                             the following files:
+  # sources = [
+  #   "async_socket.cc",
+  #   "async_socket.h",
+  # ]
+}
+
+rtc_source_set("socket") {
+  # TODO(bugs.webrtc.org/9987): This build target will soon contain
+  #                             the following files:
+  # sources = [
+  #   "socket.cc",
+  #   "socket.h",
+  # ]
+}
+
+rtc_source_set("network_constants") {
+  # TODO(bugs.webrtc.org/9987): This build target will soon contain
+  #                             the following files:
+  # sources = [
+  #   "network_constants.h",
+  # ]
+}
+
+if (is_android) {
+  rtc_source_set("ifaddrs_android") {
+    # TODO(bugs.webrtc.org/9987): This build target will soon contain
+    #                             the following files:
+    # sources = [
+    #   "ifaddrs_android.cc",
+    #   "ifaddrs_android.h",
+    # ]
+  }
+}
+
+if (is_win) {
+  rtc_source_set("win32") {
+    # TODO(bugs.webrtc.org/9987): This build target will soon contain
+    #                             the following files:
+    # sources = [
+    #   "win32.cc",
+    #   "win32.h",
+    # ]
+  }
+}
+
+rtc_static_library("rtc_base") {
+  visibility = [ "*" ]
+  cflags = []
+  cflags_cc = []
+  libs = []
+  defines = []
+  deps = [
+    ":checks",
+    ":stringutils",
+    "..:webrtc_common",
+    "../api:array_view",
+    "network:sent_packet",
+    "system:file_wrapper",
+    "third_party/base64",
+    "third_party/sigslot",
+    "//third_party/abseil-cpp/absl/memory",
+    "//third_party/abseil-cpp/absl/strings",
+    "//third_party/abseil-cpp/absl/types:optional",
+  ]
+  public_deps = [
+    ":rtc_base_approved",
+  ]
+  public_configs = []
+
+  all_dependent_configs = [ ":rtc_base_all_dependent_config" ]
+
+  sources = [
+    "async_invoker.cc",
+    "async_invoker.h",
+    "async_invoker_inl.h",
+    "async_packet_socket.cc",
+    "async_packet_socket.h",
+    "async_resolver_interface.cc",
+    "async_resolver_interface.h",
+    "async_socket.cc",
+    "async_socket.h",
+    "async_tcp_socket.cc",
+    "async_tcp_socket.h",
+    "async_udp_socket.cc",
+    "async_udp_socket.h",
+    "asyncinvoker-inl.h",
+    "asyncinvoker.h",
+    "asyncpacketsocket.h",
+    "asyncresolverinterface.h",
+    "asyncsocket.h",
+    "asynctcpsocket.h",
+    "asyncudpsocket.h",
+    "crc32.cc",
+    "crc32.h",
+    "crypt_string.cc",
+    "crypt_string.h",
+    "cryptstring.h",
+    "data_rate_limiter.cc",
+    "data_rate_limiter.h",
+    "dscp.h",
+    "file_rotating_stream.cc",
+    "file_rotating_stream.h",
+    "filerotatingstream.h",
+    "gunit_prod.h",
+    "helpers.cc",
+    "helpers.h",
+    "http_common.cc",
+    "http_common.h",
+    "httpcommon.h",
+    "ip_address.cc",
+    "ip_address.h",
+    "ipaddress.h",
+    "keep_ref_until_done.h",
+    "key_derivation.cc",
+    "key_derivation.h",
+    "mdns_responder_interface.h",
+    "message_digest.cc",
+    "message_digest.h",
+    "message_handler.cc",
+    "message_handler.h",
+    "message_queue.cc",
+    "message_queue.h",
+    "messagedigest.h",
+    "messagehandler.h",
+    "messagequeue.h",
+    "net_helper.cc",
+    "net_helper.h",
+    "net_helpers.cc",
+    "net_helpers.h",
+    "nethelper.h",
+    "nethelpers.h",
+    "network.cc",
+    "network.h",
+    "network_constants.h",
+    "network_monitor.cc",
+    "network_monitor.h",
+    "network_route.h",
+    "networkmonitor.h",
+    "networkroute.h",
+    "null_socket_server.cc",
+    "null_socket_server.h",
+    "nullsocketserver.h",
+    "openssl.h",
+    "openssl_adapter.cc",
+    "openssl_adapter.h",
+    "openssl_certificate.cc",
+    "openssl_certificate.h",
+    "openssl_digest.cc",
+    "openssl_digest.h",
+    "openssl_identity.cc",
+    "openssl_identity.h",
+    "openssl_key_derivation_hkdf.cc",
+    "openssl_key_derivation_hkdf.h",
+    "openssl_session_cache.cc",
+    "openssl_session_cache.h",
+    "openssl_stream_adapter.cc",
+    "openssl_stream_adapter.h",
+    "openssl_utility.cc",
+    "openssl_utility.h",
+    "openssladapter.h",
+    "opensslcertificate.h",
+    "openssldigest.h",
+    "opensslidentity.h",
+    "opensslsessioncache.h",
+    "opensslstreamadapter.h",
+    "opensslutility.h",
+    "physical_socket_server.cc",
+    "physical_socket_server.h",
+    "physicalsocketserver.h",
+    "proxy_info.cc",
+    "proxy_info.h",
+    "proxyinfo.h",
+    "rtc_certificate.cc",
+    "rtc_certificate.h",
+    "rtc_certificate_generator.cc",
+    "rtc_certificate_generator.h",
+    "rtccertificate.h",
+    "rtccertificategenerator.h",
+    "signal_thread.cc",
+    "signal_thread.h",
+    "signalthread.h",
+    "sigslot_repeater.h",
+    "sigslotrepeater.h",
+    "socket.cc",
+    "socket.h",
+    "socket_adapters.cc",
+    "socket_adapters.h",
+    "socket_address.cc",
+    "socket_address.h",
+    "socket_address_pair.cc",
+    "socket_address_pair.h",
+    "socket_factory.h",
+    "socket_server.h",
+    "socketadapters.h",
+    "socketaddress.h",
+    "socketaddresspair.h",
+    "socketfactory.h",
+    "socketserver.h",
+    "ssl_adapter.cc",
+    "ssl_adapter.h",
+    "ssl_certificate.cc",
+    "ssl_certificate.h",
+    "ssl_fingerprint.cc",
+    "ssl_fingerprint.h",
+    "ssl_identity.cc",
+    "ssl_identity.h",
+    "ssl_stream_adapter.cc",
+    "ssl_stream_adapter.h",
+    "ssladapter.h",
+    "sslcertificate.h",
+    "sslfingerprint.h",
+    "sslidentity.h",
+    "sslstreamadapter.h",
+    "stream.cc",
+    "stream.h",
+    "thread.cc",
+    "thread.h",
+  ]
+
+  if (build_with_chromium) {
+    include_dirs = [ "../../boringssl/src/include" ]
+    public_configs += [ ":rtc_base_chromium_config" ]
+  } else {
+    sources += [
+      "callback.h",
+      "log_sinks.cc",
+      "log_sinks.h",
+      "logsinks.h",
+      "numerics/math_utils.h",
+      "numerics/mathutils.h",
+      "rolling_accumulator.h",
+      "rollingaccumulator.h",
+      "ssl_roots.h",
+      "sslroots.h",
+    ]
+
+    if (is_win) {
+      sources += [
+        "win32_socket_init.h",
+        "win32socketinit.h",
+      ]
+      if (current_os != "winuwp") {
+        sources += [
+          "win32_socket_server.cc",
+          "win32_socket_server.h",
+          "win32socketserver.h",
+        ]
+      }
+    }
+  }  # !build_with_chromium
+
+  if (rtc_build_ssl) {
+    deps += [ "//third_party/boringssl" ]
+  } else {
+    configs += [ ":external_ssl_library" ]
+  }
+
+  if (is_android) {
+    sources += [
+      "ifaddrs-android.h",
+      "ifaddrs_android.cc",
+      "ifaddrs_android.h",
+    ]
+
+    libs += [
+      "log",
+      "GLESv2",
+    ]
+  }
+
+  if (is_ios || is_mac) {
+    sources += [ "mac_ifaddrs_converter.cc" ]
+    deps += [ "system:cocoa_threading" ]
+  }
+
+  if (rtc_use_x11) {
+    libs += [
+      "dl",
+      "rt",
+      "Xext",
+      "X11",
+      "Xcomposite",
+      "Xrender",
+    ]
+  }
+
+  if (is_linux) {
+    libs += [
+      "dl",
+      "rt",
+    ]
+  }
+
+  if (is_mac) {
+    sources += [
+      "mac_utils.cc",
+      "mac_utils.h",
+      "macutils.h",
+    ]
+  }
+
+  if (is_win) {
+    sources += [
+      "win32.cc",
+      "win32.h",
+      "win32_window.cc",
+      "win32_window.h",
+      "win32window.h",
+    ]
+
+    libs += [
+      "crypt32.lib",
+      "iphlpapi.lib",
+      "secur32.lib",
+    ]
+
+    defines += [ "_CRT_NONSTDC_NO_DEPRECATE" ]
+  }
+
+  if (is_posix || is_fuchsia) {
+    sources += [
+      "ifaddrs_converter.cc",
+      "ifaddrs_converter.h",
+    ]
+  }
+
+  if (is_nacl) {
+    deps += [ "//native_client_sdk/src/libraries/nacl_io" ]
+    defines += [ "timezone=_timezone" ]
+    sources -= [ "ifaddrs_converter.cc" ]
+  }
+}
+
+rtc_source_set("gtest_prod") {
+  visibility = [ "*" ]
+  sources = [
+    "gtest_prod_util.h",
+  ]
+}
+
+rtc_source_set("gunit_helpers") {
+  testonly = true
+  sources = [
+    "gunit.cc",
+    "gunit.h",
+  ]
+  deps = [
+    ":logging",
+    ":rtc_base",
+    ":rtc_base_tests_utils",
+    ":stringutils",
+    "../test:test_support",
+    "//third_party/abseil-cpp/absl/strings",
+  ]
+}
+
+rtc_source_set("testclient") {
+  testonly = true
+  sources = [
+    "test_client.cc",
+    "test_client.h",
+    "testclient.h",
+  ]
+  deps = [
+    ":criticalsection",
+    ":gunit_helpers",
+    ":macromagic",
+    ":rtc_base",
+    ":rtc_base_tests_utils",
+    ":timeutils",
+    "//third_party/abseil-cpp/absl/memory",
+  ]
+}
+
+rtc_source_set("rtc_base_tests_utils") {
+  testonly = true
+  sources = [
+    "cpu_time.cc",
+    "cpu_time.h",
+    "fake_clock.cc",
+    "fake_clock.h",
+    "fake_mdns_responder.h",
+    "fake_network.h",
+    "fake_ssl_identity.cc",
+    "fake_ssl_identity.h",
+    "fakeclock.h",
+    "fakenetwork.h",
+    "fakesslidentity.h",
+    "firewall_socket_server.cc",
+    "firewall_socket_server.h",
+    "firewallsocketserver.h",
+    "memory_stream.cc",
+    "memory_stream.h",
+    "memory_usage.cc",
+    "memory_usage.h",
+    "nat_server.cc",
+    "nat_server.h",
+    "nat_socket_factory.cc",
+    "nat_socket_factory.h",
+    "nat_types.cc",
+    "nat_types.h",
+    "natserver.h",
+    "natsocketfactory.h",
+    "nattypes.h",
+    "proxy_server.cc",
+    "proxy_server.h",
+    "proxyserver.h",
+    "server_socket_adapters.cc",
+    "server_socket_adapters.h",
+    "sigslot_tester.h",
+    "sigslottester.h",
+    "sigslottester.h.pump",
+    "socket_stream.cc",
+    "socket_stream.h",
+    "socketstream.h",
+    "test_base64.h",
+    "test_certificate_verifier.h",
+    "test_echo_server.cc",
+    "test_echo_server.h",
+    "test_utils.cc",
+    "test_utils.h",
+    "testbase64.h",
+    "testcertificateverifier.h",
+    "testechoserver.h",
+    "testutils.h",
+    "virtual_socket_server.cc",
+    "virtual_socket_server.h",
+    "virtualsocketserver.h",
+  ]
+  deps = [
+    ":checks",
+    ":rtc_base",
+    "../api/units:time_delta",
+    "third_party/sigslot",
+    "//third_party/abseil-cpp/absl/memory",
+  ]
+}
+
+rtc_source_set("rtc_task_queue_for_test") {
+  visibility = [ "*" ]
+  testonly = true
+
+  sources = [
+    "task_queue_for_test.cc",
+    "task_queue_for_test.h",
+  ]
+  deps = [
+    ":checks",
+    ":rtc_base_approved",
+    ":rtc_task_queue",
+  ]
+}
+
+if (rtc_include_tests) {
+  rtc_source_set("sigslot_unittest") {
+    testonly = true
+    sources = [
+      "sigslot_unittest.cc",
+    ]
+    deps = [
+      ":gunit_helpers",
+      ":rtc_base",
+      ":rtc_base_tests_utils",
+      "../test:test_support",
+      "third_party/sigslot",
+    ]
+  }
+
+  rtc_source_set("rtc_base_tests_main") {
+    testonly = true
+    sources = [
+      "unittest_main.cc",
+    ]
+    deps = [
+      ":gunit_helpers",
+      ":rtc_base",
+      ":rtc_base_approved",
+      ":rtc_base_tests_utils",
+      "../system_wrappers:field_trial",
+      "../system_wrappers:metrics",
+      "../test:field_trial",
+      "../test:test_support",
+    ]
+
+    public_deps = [
+      "//testing/gtest",
+    ]
+  }
+
+  rtc_source_set("rtc_base_nonparallel_tests") {
+    testonly = true
+
+    sources = [
+      "cpu_time_unittest.cc",
+      "file_rotating_stream_unittest.cc",
+      "null_socket_server_unittest.cc",
+      "physical_socket_server_unittest.cc",
+      "socket_address_unittest.cc",
+      "socket_unittest.cc",
+      "socket_unittest.h",
+    ]
+    deps = [
+      ":checks",
+      ":gunit_helpers",
+      ":rtc_base",
+      ":rtc_base_tests_main",
+      ":rtc_base_tests_utils",
+      ":testclient",
+      "../system_wrappers:system_wrappers",
+      "../test:fileutils",
+      "../test:test_support",
+      "third_party/sigslot:sigslot",
+      "//testing/gtest",
+      "//third_party/abseil-cpp/absl/memory",
+    ]
+    if (is_win) {
+      sources += [ "win32_socket_server_unittest.cc" ]
+    }
+  }
+
+  rtc_source_set("rtc_base_approved_unittests") {
+    testonly = true
+    sources = [
+      "atomic_ops_unittest.cc",
+      "base64_unittest.cc",
+      "bind_unittest.cc",
+      "bit_buffer_unittest.cc",
+      "bitrate_allocation_strategy_unittest.cc",
+      "buffer_queue_unittest.cc",
+      "buffer_unittest.cc",
+      "byte_buffer_unittest.cc",
+      "byte_order_unittest.cc",
+      "copy_on_write_buffer_unittest.cc",
+      "critical_section_unittest.cc",
+      "event_tracer_unittest.cc",
+      "event_unittest.cc",
+      "file_unittest.cc",
+      "function_view_unittest.cc",
+      "logging_unittest.cc",
+      "numerics/histogram_percentile_counter_unittest.cc",
+      "numerics/mod_ops_unittest.cc",
+      "numerics/moving_max_counter_unittest.cc",
+      "numerics/safe_compare_unittest.cc",
+      "numerics/safe_minmax_unittest.cc",
+      "numerics/sample_counter_unittest.cc",
+      "one_time_event_unittest.cc",
+      "platform_file_unittest.cc",
+      "platform_thread_unittest.cc",
+      "random_unittest.cc",
+      "rate_limiter_unittest.cc",
+      "rate_statistics_unittest.cc",
+      "rate_tracker_unittest.cc",
+      "ref_counted_object_unittest.cc",
+      "sanitizer_unittest.cc",
+      "string_encode_unittest.cc",
+      "string_to_number_unittest.cc",
+      "string_utils_unittest.cc",
+      "stringize_macros_unittest.cc",
+      "strings/string_builder_unittest.cc",
+      "swap_queue_unittest.cc",
+      "thread_annotations_unittest.cc",
+      "thread_checker_unittest.cc",
+      "time_utils_unittest.cc",
+      "timestamp_aligner_unittest.cc",
+      "virtual_socket_unittest.cc",
+      "zero_memory_unittest.cc",
+    ]
+    if (is_win) {
+      sources += [ "win/windows_version_unittest.cc" ]
+    }
+    deps = [
+      ":checks",
+      ":gunit_helpers",
+      ":rate_limiter",
+      ":rtc_base",
+      ":rtc_base_approved",
+      ":rtc_base_tests_main",
+      ":rtc_base_tests_utils",
+      ":rtc_task_queue",
+      ":safe_compare",
+      ":safe_minmax",
+      ":sanitizer",
+      ":stringutils",
+      ":testclient",
+      "../api:array_view",
+      "../api/units:time_delta",
+      "../system_wrappers:system_wrappers",
+      "../test:fileutils",
+      "../test:test_support",
+      "memory:unittests",
+      "third_party/base64",
+      "third_party/sigslot:sigslot",
+      "//third_party/abseil-cpp/absl/memory",
+    ]
+  }
+
+  rtc_source_set("rtc_task_queue_unittests") {
+    visibility = [ "*" ]
+    testonly = true
+
+    sources = [
+      "task_queue_unittest.cc",
+    ]
+    deps = [
+      ":gunit_helpers",
+      ":rtc_base_approved",
+      ":rtc_base_tests_main",
+      ":rtc_base_tests_utils",
+      ":rtc_task_queue",
+      ":rtc_task_queue_for_test",
+      "../test:test_support",
+      "//third_party/abseil-cpp/absl/memory",
+    ]
+  }
+
+  rtc_source_set("sequenced_task_checker_unittests") {
+    testonly = true
+
+    sources = [
+      "sequenced_task_checker_unittest.cc",
+    ]
+    deps = [
+      ":checks",
+      ":rtc_base_approved",
+      ":rtc_base_tests_main",
+      ":rtc_task_queue",
+      ":sequenced_task_checker",
+      "../test:test_support",
+    ]
+  }
+
+  rtc_source_set("weak_ptr_unittests") {
+    testonly = true
+
+    sources = [
+      "weak_ptr_unittest.cc",
+    ]
+    deps = [
+      ":gunit_helpers",
+      ":rtc_base_approved",
+      ":rtc_base_tests_main",
+      ":rtc_base_tests_utils",
+      ":rtc_event",
+      ":rtc_task_queue",
+      ":weak_ptr",
+      "../test:test_support",
+      "//third_party/abseil-cpp/absl/memory",
+    ]
+  }
+
+  rtc_source_set("rtc_numerics_unittests") {
+    testonly = true
+
+    sources = [
+      "numerics/exp_filter_unittest.cc",
+      "numerics/moving_average_unittest.cc",
+      "numerics/moving_median_filter_unittest.cc",
+      "numerics/percentile_filter_unittest.cc",
+      "numerics/samples_stats_counter_unittest.cc",
+      "numerics/sequence_number_util_unittest.cc",
+    ]
+    deps = [
+      ":rtc_base_approved",
+      ":rtc_base_tests_main",
+      ":rtc_numerics",
+      "../test:test_support",
+    ]
+  }
+
+  rtc_source_set("rtc_json_unittests") {
+    testonly = true
+
+    sources = [
+      "strings/json_unittest.cc",
+    ]
+    deps = [
+      ":gunit_helpers",
+      ":rtc_base_tests_main",
+      ":rtc_base_tests_utils",
+      ":rtc_json",
+      "../test:test_support",
+    ]
+  }
+
+  rtc_source_set("rtc_base_unittests") {
+    testonly = true
+    defines = []
+
+    sources = [
+      "callback_unittest.cc",
+      "crc32_unittest.cc",
+      "data_rate_limiter_unittest.cc",
+      "helpers_unittest.cc",
+      "ip_address_unittest.cc",
+      "memory_usage_unittest.cc",
+      "message_digest_unittest.cc",
+      "message_queue_unittest.cc",
+      "nat_unittest.cc",
+      "network_unittest.cc",
+      "proxy_unittest.cc",
+      "rolling_accumulator_unittest.cc",
+      "rtc_certificate_generator_unittest.cc",
+      "rtc_certificate_unittest.cc",
+      "signal_thread_unittest.cc",
+      "sigslot_tester_unittest.cc",
+      "stream_unittest.cc",
+      "test_client_unittest.cc",
+      "thread_unittest.cc",
+    ]
+    if (is_win) {
+      sources += [
+        "win32_unittest.cc",
+        "win32_window_unittest.cc",
+      ]
+    }
+    if (is_posix || is_fuchsia) {
+      sources += [
+        "openssl_adapter_unittest.cc",
+        "openssl_key_derivation_hkdf_unittest.cc",
+        "openssl_session_cache_unittest.cc",
+        "openssl_utility_unittest.cc",
+        "ssl_adapter_unittest.cc",
+        "ssl_identity_unittest.cc",
+        "ssl_stream_adapter_unittest.cc",
+      ]
+    }
+    deps = [
+      ":checks",
+      ":gunit_helpers",
+      ":rtc_base_tests_main",
+      ":rtc_base_tests_utils",
+      ":stringutils",
+      ":testclient",
+      "../api:array_view",
+      "../test:fileutils",
+      "../test:test_support",
+      "third_party/sigslot",
+      "//third_party/abseil-cpp/absl/memory",
+      "//third_party/abseil-cpp/absl/types:optional",
+    ]
+    public_deps = [
+      ":rtc_base",
+    ]
+    if (build_with_chromium) {
+      include_dirs = [ "../../boringssl/src/include" ]
+    }
+    if (rtc_build_ssl) {
+      deps += [ "//third_party/boringssl" ]
+    } else {
+      configs += [ ":external_ssl_library" ]
+    }
+  }
+}
+
+if (is_android) {
+  rtc_android_library("base_java") {
+    java_files = [
+      "java/src/org/webrtc/ContextUtils.java",
+      "java/src/org/webrtc/Loggable.java",
+      "java/src/org/webrtc/Logging.java",
+      "java/src/org/webrtc/Size.java",
+      "java/src/org/webrtc/ThreadUtils.java",
+    ]
+    deps = [
+      "//third_party/android_deps:android_support_annotations_java",
+    ]
+  }
+}

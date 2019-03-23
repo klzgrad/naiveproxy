@@ -1,0 +1,124 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//testing/test.gni")
+import("//third_party/protobuf/proto_library.gni")
+
+assert(is_chromeos, "Non-Chrome-OS builds must not depend on //chromeos")
+
+component("auth") {
+  defines = [ "IS_CHROMEOS_LOGIN_AUTH_IMPL" ]
+  public_deps = [
+    ":challenge_response_key",
+  ]
+  deps = [
+    "//base",
+    "//base:i18n",
+    "//chromeos:chromeos_constants",
+    "//chromeos/cryptohome",
+    "//chromeos/dbus",
+    "//chromeos/dbus:authpolicy_proto",
+    "//chromeos/dbus:cryptohome_proto",
+    "//chromeos/login/login_state",
+    "//components/account_id",
+    "//components/device_event_log",
+    "//components/password_manager/core/browser:password_hash_data",
+    "//components/prefs",
+    "//components/user_manager",
+    "//crypto",
+    "//google_apis",
+    "//net",
+    "//skia",
+    "//third_party/protobuf:protobuf_lite",
+    "//url",
+  ]
+  sources = [
+    "auth_attempt_state.cc",
+    "auth_attempt_state.h",
+    "auth_attempt_state_resolver.cc",
+    "auth_attempt_state_resolver.h",
+    "auth_status_consumer.cc",
+    "auth_status_consumer.h",
+    "authenticator.cc",
+    "authenticator.h",
+    "authpolicy_login_helper.cc",
+    "authpolicy_login_helper.h",
+    "cryptohome_authenticator.cc",
+    "cryptohome_authenticator.h",
+    "extended_authenticator.cc",
+    "extended_authenticator.h",
+    "extended_authenticator_impl.cc",
+    "extended_authenticator_impl.h",
+    "key.cc",
+    "key.h",
+    "login_event_recorder.cc",
+    "login_event_recorder.h",
+    "login_performer.cc",
+    "login_performer.h",
+    "stub_authenticator.cc",
+    "stub_authenticator.h",
+    "test_attempt_state.cc",
+    "test_attempt_state.h",
+    "user_context.cc",
+    "user_context.h",
+  ]
+}
+
+source_set("test_support") {
+  testonly = true
+  deps = [
+    ":auth",
+    "//base",
+    "//chromeos/login/login_state",
+    "//components/account_id",
+    "//google_apis",
+    "//net",
+    "//net:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+  sources = [
+    "fake_extended_authenticator.cc",
+    "fake_extended_authenticator.h",
+    "mock_auth_attempt_state_resolver.cc",
+    "mock_auth_attempt_state_resolver.h",
+    "mock_auth_status_consumer.cc",
+    "mock_auth_status_consumer.h",
+    "mock_url_fetchers.cc",
+    "mock_url_fetchers.h",
+  ]
+}
+
+# This is a separate targat to avoid a circular dependency with
+# chromeos/cryptohome.
+source_set("challenge_response_key") {
+  defines = [ "IS_CHROMEOS_LOGIN_AUTH_IMPL" ]
+  deps = [
+    "//base",
+  ]
+  sources = [
+    "challenge_response_key.cc",
+    "challenge_response_key.h",
+  ]
+}
+
+source_set("unit_tests") {
+  configs += [ "//build/config/linux/dbus" ]
+  testonly = true
+  deps = [
+    ":auth",
+    "//base",
+    "//base:i18n",
+    "//chromeos:chromeos_constants",
+    "//chromeos/dbus:authpolicy_proto",
+    "//chromeos/dbus:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//third_party/icu",
+  ]
+  sources = [
+    "authpolicy_login_helper_unittest.cc",
+    "key_unittest.cc",
+  ]
+}

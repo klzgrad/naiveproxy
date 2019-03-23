@@ -1,0 +1,120 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module apps.mojom;
+
+import "ui/gfx/image/mojo/image.mojom";
+
+// Information about an app. See chrome/services/app_service/README.md.
+struct App {
+  AppType app_type;
+  string app_id;
+
+  // The fields above are mandatory. Everything else below is optional.
+
+  Readiness readiness;
+  string? name;
+  IconKey? icon_key;
+  // This vector must be treated atomically, if there is a permission
+  // change, the publisher must send through the entire list of permissions.
+  // Should contain no duplicate IDs.
+  // If empty during updates, Subscriber can assume no changes.
+  // There is no guarantee that this is sorted by any criteria.
+  array<Permission> permissions;
+
+  // Whether the app was installed by sync, policy or as a default app.
+  OptionalBool installed_internally;
+
+  // TODO(nigeltao): be more principled, instead of ad hoc show_in_xxx and
+  // show_in_yyy fields?
+  OptionalBool show_in_launcher;
+  OptionalBool show_in_search;
+
+  // When adding new fields, also update the Merge method and other helpers in
+  // chrome/services/app_service/public/cpp/app_update.*
+};
+
+struct Permission {
+  // An AppType-specific value, opaque to the App Service.
+  // Different publishers (with different AppType's) can
+  // re-use the same numerical value to mean different things.
+  uint32 permission_id;
+  PermissionValueType value_type;
+  // The semantics of value depends on the value_type.
+  uint32 value;
+};
+
+// The types of apps available in the registry.
+enum AppType {
+  kUnknown = 0,
+  kArc,        // Android app.
+  kBuiltIn,    // Built-in app.
+  kCrostini,   // Linux app.
+  kExtension,  // Extension-backed app.
+  kWeb,        // Web app.
+};
+
+// Whether an app is ready to launch, i.e. installed.
+enum Readiness {
+  kUnknown = 0,
+  kReady,                // Installed and launchable.
+  kDisabledByBlacklist,  // Disabled by SafeBrowsing.
+  kDisabledByPolicy,     // Disabled by admin policy.
+  kDisabledByUser,       // Disabled by explicit user action.
+  kTerminated,           // Renderer process crashed.
+  kUninstalledByUser,
+};
+
+// Augments a bool to include an 'unknown' value.
+enum OptionalBool {
+  kUnknown = 0,
+  kFalse,
+  kTrue,
+};
+
+enum IconType {
+  kUnknown,
+  kArc,
+  kExtension,
+  kResource,
+};
+
+struct IconKey {
+  IconType icon_type;
+  // The semantics of u_key and s_key depend on the icon_type.
+  uint64 u_key;
+  string s_key;
+};
+
+enum IconCompression {
+  kUnknown,
+  kUncompressed,
+  kCompressed,
+};
+
+struct IconValue {
+  IconCompression icon_compression;
+  gfx.mojom.ImageSkia? uncompressed;
+  array<uint8>? compressed;
+};
+
+enum LaunchSource {
+  kUnknown,
+  kFromAppListGrid,              // Grid of apps, not the search box.
+  kFromAppListGridContextMenu,   // Grid of apps; context menu.
+  kFromAppListQuery,             // Query-dependent results (larger icons).
+  kFromAppListQueryContextMenu,  // Query-dependent results; context menu.
+  kFromAppListRecommendation,    // Query-less recommendations (smaller icons).
+};
+
+enum TriState {
+  kAllow,
+  kBlock,
+  kAsk,
+};
+
+enum PermissionValueType {
+  kBool,                       // Permission.value is a Bool (either 0 or 1).
+  kTriState,                   // Permission.value is a TriState.
+};

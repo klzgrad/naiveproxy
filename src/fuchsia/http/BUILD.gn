@@ -1,0 +1,63 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+assert(is_fuchsia)
+
+import("//build/config/fuchsia/fidl_library.gni")
+import("//build/config/fuchsia/rules.gni")
+import("//build/util/process_version.gni")
+import("//testing/test.gni")
+import("//tools/grit/repack.gni")
+
+source_set("common") {
+  sources = [
+    "http_service_impl.cc",
+    "http_service_impl.h",
+    "url_loader_impl.cc",
+    "url_loader_impl.h",
+  ]
+  public_deps = [
+    "//base:base",
+    "//net:net",
+    "//third_party/fuchsia-sdk/sdk:net_oldhttp",
+    "//third_party/fuchsia-sdk/sdk:sys",
+  ]
+  visibility = [ ":*" ]
+}
+
+executable("http_exe") {
+  sources = [
+    "http_service_main.cc",
+  ]
+  deps = [
+    ":common",
+  ]
+  visibility = [ ":*" ]
+}
+
+fuchsia_package("http_pkg") {
+  binary = ":http_exe"
+  package_name_override = "http"
+  sandbox_policy = "sandbox_policy"
+}
+
+fuchsia_package_runner("http_pkg_runner") {
+  package = ":http_pkg"
+  package_name_override = "http"
+}
+
+test("http_service_tests") {
+  sources = [
+    "http_service_unittest.cc",
+  ]
+  deps = [
+    ":common",
+    "//base/test:run_all_unittests",
+    "//net:test_support",
+    "//testing/gtest",
+  ]
+  data = [
+    "testdata/",
+  ]
+}

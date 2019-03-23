@@ -1,0 +1,306 @@
+# Copyright (C) 2017 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("gn/perfetto.gni")
+import("gn/test.gni")
+
+if (perfetto_build_standalone || perfetto_build_with_android) {
+  import("//gn/standalone/android.gni")
+} else {
+  import("//build/config/android/config.gni")
+}
+
+# For use_libfuzzer.
+if (perfetto_build_standalone || perfetto_build_with_android) {
+  import("//gn/standalone/sanitizers/vars.gni")
+} else {
+  import("//build/config/sanitizers/sanitizers.gni")
+}
+
+declare_args() {
+  # Only for local development. When true the binaries (perfetto, traced, ...)
+  # are monolithic and don't use a common shared library. This is mainly to
+  # avoid LD_LIBRARY_PATH dances when testing locally.
+  monolithic_binaries = false
+
+  # libunwindstack requires API level 26 or newer.
+  should_build_heapprofd =
+      (perfetto_build_standalone || perfetto_build_with_android) && is_clang &&
+      (is_linux || is_android) &&
+      (!is_android || android_api_level >= 26 || perfetto_build_with_android)
+}
+assert(!monolithic_binaries || !perfetto_build_with_android)
+
+group("all") {
+  testonly = true  # allow to build also test targets
+  deps = [
+    ":perfetto_unittests",
+    "src/protozero/protoc_plugin($host_toolchain)",
+  ]
+  if (perfetto_build_standalone || perfetto_build_with_android) {
+    deps += [
+      ":perfetto",
+      ":perfetto_integrationtests",
+      ":traced",
+      ":traced_probes",
+      "protos/perfetto/config:merged_config",  # For syntax-checking the proto.
+      "protos/perfetto/trace:merged_trace",  # For syntax-checking the proto.
+      "src/ipc/protoc_plugin:ipc_plugin($host_toolchain)",
+      "tools:protoc_helper",
+    ]
+    if (perfetto_build_standalone) {
+      deps += [
+        ":perfetto_benchmarks",
+        ":trace_processor",
+        "src/tracing:consumer_api_test",
+        "test/configs",
+        "tools/ftrace_proto_gen:ftrace_proto_gen",
+        "tools/proto_to_cpp",
+        "tools/trace_to_text",
+        "tools/trace_to_text:trace_to_text_lite_host($host_toolchain)",
+      ]
+      if (is_linux || is_android) {
+        deps += [ "tools/skippy" ]
+      }
+      if (is_fuzzer) {
+        deps += [ ":fuzzers" ]
+      }
+    }
+  }
+}
+
+# TODO(primiano): temporary workaround to:
+# 1) Prevent that the UI gets build automatically when doing ninja -C out/xx .
+# 2) Avoid breaking the chrome build, that right now depends on "all".
+group("default") {
+  testonly = true  # allow to build also test targets
+  deps = [
+    ":all",
+  ]
+}
+
+if (perfetto_build_standalone) {
+  group("ui") {
+    deps = [
+      "ui",
+    ]
+  }
+
+  # The trace processor shell executable. An interactive shell that allows to
+  # make queries on the trace using the terminal.
+  group("trace_processor") {
+    deps = [
+      "src/trace_processor:trace_processor_shell",
+    ]
+  }
+}
+
+test("perfetto_unittests") {
+  deps = [
+    "gn:default_deps",
+    "gn:gtest_main",
+    "src/base:unittests",
+    "src/protozero:unittests",
+    "src/tracing:unittests",
+  ]
+
+  if (perfetto_build_standalone || perfetto_build_with_android) {
+    deps += [
+      "src/ipc:unittests",
+      "src/perfetto_cmd:unittests",
+      "src/traced/probes:unittests",
+      "src/traced/probes/filesystem:unittests",
+      "src/traced/probes/ftrace:unittests",
+      "tools/ftrace_proto_gen:unittests",
+      "tools/sanitizers_unittests",
+    ]
+  }
+  if (should_build_heapprofd) {
+    # Restrict to clang, as libunwindstack and its dependencies is never
+    # built using GCC in the Android tree.
+    deps += [ "src/profiling/memory:unittests" ]
+  }
+  if (perfetto_build_standalone && !is_android) {
+    deps += [ "src/trace_processor:unittests" ]
+  }
+}
+
+if (perfetto_build_standalone || perfetto_build_with_android) {
+  test("perfetto_integrationtests") {
+    deps = [
+      "gn:default_deps",
+      "gn:gtest_main",
+      "src/traced/probes/ftrace:integrationtests",
+      "test:end_to_end_integrationtests",
+    ]
+    if (perfetto_build_standalone && !is_android) {
+      deps += [ "src/trace_processor:integrationtests" ]
+    }
+
+    # TODO(fmayer): Fix in process daemons.
+    if (should_build_heapprofd && is_android && !start_daemons_for_testing) {
+      deps += [ "src/profiling/memory:end_to_end_tests" ]
+    }
+  }
+
+  if (monolithic_binaries) {
+    libperfetto_target_type = "source_set"
+  } else {
+    libperfetto_target_type = "shared_library"
+  }
+
+  target(libperfetto_target_type, "libperfetto") {
+    deps = [
+      "gn:default_deps",
+      "src/traced/probes",
+      "src/traced/service",
+      "src/tracing:api",
+    ]
+  }
+
+  # The unprivileged trace daemon that listens for Producer and Consumer
+  # connections, handles the coordination of the tracing sessions and owns the
+  # log buffers.
+  executable("traced") {
+    deps = [
+      ":libperfetto",
+      "gn:default_deps",
+      "include/perfetto/traced",
+    ]
+    sources = [
+      "src/traced/service/main.cc",
+    ]
+  }
+
+  # The unprivileged daemon that is allowed to access tracefs (for ftrace).
+  # Registers as a Producer on the traced daemon.
+  executable("traced_probes") {
+    deps = [
+      ":libperfetto",
+      "gn:default_deps",
+      "include/perfetto/traced",
+    ]
+    sources = [
+      "src/traced/probes/main.cc",
+    ]
+  }
+
+  # The command line client for Perfetto. Allows to configure / start / stop
+  # tracing, acting as a Consumer.
+  executable("perfetto") {
+    deps = [
+      "gn:default_deps",
+      "src/perfetto_cmd",
+    ]
+    sources = [
+      "src/perfetto_cmd/main.cc",
+    ]
+  }
+
+  if (perfetto_build_with_android) {
+    executable("trace_to_text") {
+      testonly = true
+      deps = [
+        "gn:default_deps",
+        "tools/trace_to_text:full",
+      ]
+    }
+
+    # This target exports perfetto trace protos in the Android build system,
+    # allowing both host and device targets to implement custom parsers based on
+    # our protos.
+    static_library("perfetto_trace_protos") {
+      deps = [
+        "protos/perfetto/trace:lite",
+      ]
+    }
+
+    shared_library("libperfetto_android_internal") {
+      deps = [
+        "gn:default_deps",
+        "src/android_internal",
+      ]
+    }
+  }  # if (perfetto_build_with_android)
+}  # if (perfetto_build_standalone || perfetto_build_with_android)
+
+if (perfetto_build_with_embedder) {
+  if (build_with_chromium) {
+    libperfetto_target_type = "component"
+  } else {
+    libperfetto_target_type = "source_set"
+  }
+  target(libperfetto_target_type, "libperfetto") {
+    public_configs = [ "gn:public_config" ]
+    deps = [
+      "src/tracing",
+    ]
+    configs -= [ "//build/config/compiler:chromium_code" ]
+    configs += [ "//build/config/compiler:no_chromium_code" ]
+    public_deps = [
+      "include/perfetto/tracing/core",
+      "protos/perfetto/trace:zero",
+      "protos/perfetto/trace/chrome:zero",
+    ]
+  }
+}
+
+if (perfetto_build_standalone) {
+  executable("perfetto_benchmarks") {
+    testonly = true
+    deps = [
+      "gn:default_deps",
+      "src/traced/probes/ftrace:benchmarks",
+      "src/tracing:tracing_benchmarks",
+      "test:benchmark_main",
+      "test:end_to_end_benchmarks",
+    ]
+  }
+
+  group("fuzzers") {
+    testonly = true
+    deps = [
+      "src/ipc:buffered_frame_deserializer_fuzzer",
+      "src/profiling/memory:unwinding_fuzzer",
+      "src/traced/probes/ftrace:cpu_reader_fuzzer",
+      "test:end_to_end_shared_memory_fuzzer",
+    ]
+  }
+}
+
+if (perfetto_build_with_android) {
+  # TODO(fmayer): Investigate shared library for common pieces.
+  shared_library("heapprofd_client") {
+    deps = [
+      "src/profiling/memory:malloc_hooks",
+    ]
+  }
+}
+
+if (should_build_heapprofd) {
+  executable("heapprofd") {
+    deps = [
+      "gn:default_deps",
+      "protos/perfetto/trace:zero",
+      "src/base",
+      "src/base:unix_socket",
+      "src/profiling/memory:daemon",
+      "src/profiling/memory:wire_protocol",
+      "src/tracing:ipc",
+    ]
+    sources = [
+      "src/profiling/memory/main.cc",
+    ]
+  }
+}

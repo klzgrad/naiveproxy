@@ -1,0 +1,111 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//base/android/proguard/proguard.gni")
+import("//build/config/android/chrome_version.gni")
+import("//build/config/android/config.gni")
+import("//build/config/android/rules.gni")
+import("//chrome/android/chrome_public_apk_tmpl.gni")
+
+if (!defined(default_trichrome_certdigest)) {
+  default_trichrome_certdigest =
+      "32a2fc74d731105859e5a85df16d95f102d85b22099b8064c5d8915c61dad1e0"
+}
+
+declare_args() {
+  # The package name for the Trichrome static shared library on Android.
+  trichrome_library_package = "org.chromium.trichromelibrary"
+
+  # The SHA256 certificate digest for the Trichrome static shared library on
+  # Android. You can use "apksigner verify --print-certs" on the signed APK to
+  # calculate the correct digest.
+  trichrome_certdigest = default_trichrome_certdigest
+}
+
+trichrome_jinja_variables = [
+  "min_sdk_version=28",
+  "target_sdk_version=$android_sdk_version",
+  "trichrome_library=$trichrome_library_package",
+  "trichrome_version=$trichrome_version_code",
+  "trichrome_certdigest=$trichrome_certdigest",
+]
+
+template("trichrome_library_apk_tmpl") {
+  android_apk(target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "apk_name",
+                             "android_manifest",
+                             "android_manifest_dep",
+                           ])
+
+    # TODO(torne): this contains the list of locales amongst other things.
+    # Skip building it because the version in the library won't be used anyway;
+    # the one in the main APK will take precedence.
+    generate_buildconfig_java = false
+
+    # TODO(torne): since there's no real java code in the library right now,
+    # leave out the build hooks and let them get compiled into each APK. Later
+    # this should probably be in the library.
+    no_build_hooks = true
+
+    alternative_android_sdk_dep = webview_framework_dep
+    app_as_shared_lib = true
+    use_chromium_linker = false
+    uncompress_shared_libraries = true
+    version_name = chrome_version_name
+    version_code = trichrome_version_code
+
+    # TODO(torne): using these resources just to get a temporary icon
+    deps = [
+      "//android_webview:system_webview_resources",
+    ]
+
+    # Only try to generate the native library version in configurations that
+    # include a native library.
+    if (!android_64bit_target_cpu || build_apk_secondary_abi) {
+      _native_lib_file =
+          rebase_path("$root_gen_dir/CHROME_VERSION.json", root_out_dir)
+      native_lib_version_arg = "@FileArg($_native_lib_file:full-quoted)"
+      native_lib_version_rule = "//build/util:chrome_version_json"
+    }
+
+    if (android_64bit_target_cpu) {
+      # Include the actual browser-bitness libmonochrome library, and an
+      # opposite-bitness placeholder library to ensure that the library is
+      # treated as multiarch and gets its Java code precompiled for both
+      # architectures.
+      if (android_64bit_browser) {
+        shared_libraries = [ "//chrome/android:monochrome" ]
+        if (build_apk_secondary_abi) {
+          secondary_native_lib_placeholders = [ "libdummy.so" ]
+        }
+      } else {
+        native_lib_placeholders = [ "libdummy.so" ]
+        if (build_apk_secondary_abi) {
+          secondary_abi_shared_libraries =
+              [ "//chrome/android:monochrome_secondary_abi_lib" ]
+        }
+      }
+    } else {
+      shared_libraries = [ "//chrome/android:monochrome" ]
+    }
+
+    if (!is_java_debug) {
+      proguard_enabled = true
+      proguard_configs = [
+        "//base/android/proguard/chromium_apk.flags",
+        "//base/android/proguard/chromium_code.flags",
+        "//chrome/android/java/trichrome.flags",
+      ]
+      if (enable_proguard_obfuscation) {
+        proguard_configs +=
+            [ "//base/android/proguard/enable_obfuscation.flags" ]
+      } else {
+        proguard_configs +=
+            [ "//base/android/proguard/disable_all_obfuscation.flags" ]
+      }
+    }
+  }
+}
