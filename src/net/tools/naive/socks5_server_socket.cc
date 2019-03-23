@@ -12,6 +12,7 @@
 #include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
 #include "base/logging.h"
+#include "base/stl_util.h"
 #include "base/sys_byteorder.h"
 #include "net/base/ip_address.h"
 #include "net/base/net_errors.h"
@@ -340,7 +341,7 @@ int Socks5ServerSocket::DoGreetReadComplete(int result) {
 int Socks5ServerSocket::DoGreetWrite() {
   if (buffer_.empty()) {
     const char write_data[] = {kSOCKS5Version, auth_method_};
-    buffer_ = std::string(write_data, arraysize(write_data));
+    buffer_ = std::string(write_data, base::size(write_data));
     bytes_sent_ = 0;
   }
 
@@ -498,7 +499,7 @@ int Socks5ServerSocket::DoHandshakeWrite() {
         0x00,
         0x00,  // BND.PORT
     };
-    buffer_ = std::string(write_data, arraysize(write_data));
+    buffer_ = std::string(write_data, base::size(write_data));
     bytes_sent_ = 0;
   }
 
