@@ -6,16 +6,16 @@ mkdir -p "$TMPDIR"
 
 if [ "$1" = debug ]; then
   out=out/Debug
-  flags='
+  flags="$EXTRA_FLAGS
     is_debug=true
-    is_component_build=true'
+    is_component_build=true"
 else
   out=out/Release
-  flags='
+  flags="$EXTRA_FLAGS
     is_official_build=true
     use_jumbo_build=true
     exclude_unwind_tables=true
-    symbol_level=0'
+    symbol_level=0"
 fi
 
 if which ccache >/dev/null 2>&1; then
