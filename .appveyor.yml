@@ -2,12 +2,9 @@ branches:
   except:
     - dev
 version: '{build}'
-environment:
-  matrix:
-    - EXTRA_FLAGS: target_cpu="x64"
-      BUILD_NAME: naiveproxy-$(APPVEYOR_REPO_TAG_NAME)-win64
-    - EXTRA_FLAGS: target_cpu="x86"
-      BUILD_NAME: naiveproxy-$(APPVEYOR_REPO_TAG_NAME)-win32
+platform:
+  - x64
+  - x86
 image: Visual Studio 2017
 install:
   - cinst ninja
@@ -17,8 +14,9 @@ build_script:
   - bash ./tools/import-upstream.sh
   - bash -c 'cd src; ./get-clang.sh'
   - bash -c '~/.cargo/bin/sccache -s'
-  - bash -c 'cd src; ./build.sh'
+  - bash -c 'cd src; EXTRA_FLAGS=target_cpu=\"$PLATFORM\" ./build.sh'
   - bash -c '~/.cargo/bin/sccache -s'
+  - ps: $env:BUILD_NAME="naiveproxy-$env:APPVEYOR_REPO_TAG_NAME-win-$env:PLATFORM"
   - bash -c 'mkdir $BUILD_NAME'
   - bash -c 'cp src/out/Release/naive.exe src/config.json LICENSE USAGE.txt $BUILD_NAME'
   - bash -c '7z a $BUILD_NAME.zip $BUILD_NAME'
