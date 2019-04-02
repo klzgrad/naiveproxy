@@ -37,7 +37,7 @@ if [ "$ARCH" = Windows ]; then
     ./rustup-init.exe -y -v --no-modify-path
   fi
   if ! which sccache >/dev/null 2>&1; then
-    cargo install --git https://github.com/mozilla/sccache.git
+    cargo install --force sccache
   fi
 fi
 
