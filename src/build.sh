@@ -55,6 +55,8 @@ flags="$flags"'
   include_transport_security_state_preload_list=false
 '
 
+echo flags: "$flags"
+
 if [ "$(uname)" = Linux ]; then
   flags="$flags"'
     use_ozone=true
