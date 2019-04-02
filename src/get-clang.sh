@@ -31,14 +31,9 @@ fi
 
 # sccache (Windows)
 if [ "$ARCH" = Windows ]; then
-  export PATH="$PATH:$HOME/.cargo/bin"
-  if ! which cargo >/dev/null 2>&1; then
-    curl -OJ https://win.rustup.rs/
-    ./rustup-init.exe -y -v --no-modify-path
-  fi
-  if ! which sccache >/dev/null 2>&1; then
-    cargo install --force sccache
-  fi
+  sccache_url="https://github.com/mozilla/sccache/releases/download/0.2.8/sccache-0.2.8-x86_64-pc-windows-msvc.tar.gz"
+  mkdir -p ~/.cargo/bin
+  curl -L "$sccache_url" | tar xzf - --strip=1 -C ~/.cargo/bin
 fi
 
 # gn
