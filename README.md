@@ -2,7 +2,7 @@
 
 A secure, censorship-resistent proxy.
 
-NaïveProxy is naive as it reuses standard protocols (HTTP/2, HTTP/3) and common network stacks (Chrome, Caddy) with little variation. By being as common and boring as possible NaïveProxy is practically indistinguishable from mainstream traffic. Reusing common software stacks also ensures best practices in performance and security.
+NaïveProxy is naïve as it reuses standard protocols (HTTP/2, HTTP/3) and common network stacks (Chrome, Caddy) with little variation. By being as common and boring as possible NaïveProxy is practically indistinguishable from mainstream traffic. Reusing common software stacks also ensures best practices in performance and security.
 
 The following attacks are mitigated:
 
@@ -13,7 +13,7 @@ The following attacks are mitigated:
 
 ## Architecture
 
-[Browser → Naive (client)] ⟶ Censor ⟶ [Frontend → Naive (server)] ⟶ Internet
+[Browser → Naïve (client)] ⟶ Censor ⟶ [Frontend → Naïve (server)] ⟶ Internet
 
 NaïveProxy uses Chrome's network stack. What the censor can see is exactly regular HTTP/2 traffic between Chrome and standard Frontend (e.g. Caddy, HAProxy).
 
@@ -23,29 +23,37 @@ Probe ⟶ Frontend ⟶ index.html
 
 ## Download
 
-See [latest release](https://github.com/klzgrad/naiveproxy/releases/latest).
+Download Naïve client/server binaries from [here](https://github.com/klzgrad/naiveproxy/releases/latest).
 
 Note: On Linux libnss3 must be installed before using the prebuilt binary.
 
 ## Setup
 
-Locally run `./naive --proxy=https://user:pass@domain.example` and point the browser to a SOCKS5 proxy at port 1080.
+On the server, download Caddy (from https://caddyserver.com/download with plugin: http.forwardproxy):
+```
+curl -OJ 'https://caddyserver.com/download/linux/amd64?plugins=http.forwardproxy&license=personal'
+tar xf ./caddy_*.tar.gz
+sudo setcap cap_net_bind_service=+ep caddy
+```
 
-On the server run `./caddy` as the frontend with the following Caddyfile
+Run `./caddy` with the following Caddyfile:
 ```
 domain.example
 root /var/www/html
+tls myemail@example.com
 forwardproxy {
   basicauth user pass
   hide_ip
   hide_via
   probe_resistance secret.localhost
-  upstream http://127.0.0.1:8080
 }
 ```
-and `./naive --listen=http://127.0.0.1:8080` behind it. See [Server Setup](https://github.com/klzgrad/naiveproxy/wiki/Server-Setup) for more details on building Caddy and enabling QUIC.
 
-For more information on parameter usage and format of `config.json`, see [USAGE.txt](https://github.com/klzgrad/naiveproxy/blob/master/USAGE.txt). See also [Parameter Tuning](https://github.com/klzgrad/naiveproxy/wiki/Parameter-Tuning) to improve client-side performance.
+Locally edit `config.json` with `"proxy": "https://user:pass@domain.example"` set to the same values as above. Then run `./naive` to get a SOCKS5 proxy at local port 1080.
+
+See [USAGE.txt](https://github.com/klzgrad/naiveproxy/blob/master/USAGE.txt) on how to configure `config.json`.
+
+See also [Parameter Tuning](https://github.com/klzgrad/naiveproxy/wiki/Parameter-Tuning) to improve client-side performance.
 
 ## Build
 
@@ -55,7 +63,6 @@ Prerequisites:
 * Ubuntu (apt-get install): git, python2, ninja-build (>= 1.7), pkg-config, libnss3-dev, ccache (optional)
 * MacOS (brew install): git, ninja, ccache (optional)
 * Windows ([choco install](https://chocolatey.org/)): git, python2, ninja, visualstudio2017community. See [Chromium's page](https://chromium.googlesource.com/chromium/src/+/master/docs/windows_build_instructions.md#Visual-Studio) for detail on Visual Studio setup requirements.
-
 
 Build (output to `./out/Release/naive`):
 ```
