@@ -32,12 +32,12 @@ test_naive() {
 
 test_naive 'Default config' socks5h://127.0.0.1:1080 '--log'
 
-echo '{"listen":"socks://127.0.0.1:61080","log":""}' >config.json
-test_naive 'Default config file' socks5h://127.0.0.1:61080 ''
+echo '{"listen":"socks://127.0.0.2:61080","log":""}' >config.json
+test_naive 'Default config file' socks5h://127.0.0.2:61080 ''
 rm -f config.json
 
-echo '{"listen":"socks://127.0.0.1:61080","log":""}' >/tmp/config.json
-test_naive 'Config file' socks5h://127.0.0.1:61080 '/tmp/config.json'
+echo '{"listen":"socks://127.0.0.3:61080","log":""}' >/tmp/config.json
+test_naive 'Config file' socks5h://127.0.0.3:61080 '/tmp/config.json'
 rm -f /tmp/config.json
 
 test_naive 'Trivial - listen scheme only' socks5h://127.0.0.1:1080 \
@@ -46,49 +46,49 @@ test_naive 'Trivial - listen scheme only' socks5h://127.0.0.1:1080 \
 test_naive 'Trivial - listen no host' socks5h://127.0.0.1:61080 \
   '--log --listen=socks://:61080'
 
-test_naive 'Trivial - listen no port' socks5h://127.0.0.1:1080 \
-  '--log --listen=socks://127.0.0.1'
+test_naive 'Trivial - listen no port' socks5h://127.0.0.4:1080 \
+  '--log --listen=socks://127.0.0.4'
 
-test_naive 'SOCKS-SOCKS' socks5h://127.0.0.1:11080 \
-  '--log --listen=socks://:11080 --proxy=socks://127.0.0.1:21080' \
-  '--log --listen=socks://:21080'
+test_naive 'SOCKS-SOCKS' socks5h://127.0.0.5:11080 \
+  '--log --listen=socks://127.0.0.5:11080 --proxy=socks://127.0.0.5:21080' \
+  '--log --listen=socks://127.0.0.5:21080'
 
-test_naive 'SOCKS-SOCKS - proxy no port' socks5h://127.0.0.1:11080 \
-  '--log --listen=socks://:11080 --proxy=socks://127.0.0.1' \
-  '--log --listen=socks://:1080'
+test_naive 'SOCKS-SOCKS - proxy no port' socks5h://127.0.0.6:11080 \
+  '--log --listen=socks://127.0.0.6:11080 --proxy=socks://127.0.0.6' \
+  '--log --listen=socks://127.0.0.6:1080'
 
-test_naive 'SOCKS-HTTP' socks5h://127.0.0.1:11080 \
-  '--log --listen=socks://:11080 --proxy=http://127.0.0.1:28080' \
-  '--log --listen=http://:28080'
+test_naive 'SOCKS-HTTP' socks5h://127.0.0.7:11080 \
+  '--log --listen=socks://127.0.0.7:11080 --proxy=http://127.0.0.7:28080' \
+  '--log --listen=http://127.0.0.7:28080'
 
-test_naive 'HTTP-HTTP' http://127.0.0.1:18080 \
-  '--log --listen=http://:18080 --proxy=http://127.0.0.1:28080' \
-  '--log --listen=http://:28080'
+test_naive 'HTTP-HTTP' http://127.0.0.8:18080 \
+  '--log --listen=http://127.0.0.8:18080 --proxy=http://127.0.0.8:28080' \
+  '--log --listen=http://127.0.0.8:28080'
 
-test_naive 'HTTP-SOCKS' http://127.0.0.1:18080 \
-  '--log --listen=http://:18080 --proxy=http://127.0.0.1:21080' \
-  '--log --listen=http://:21080'
+test_naive 'HTTP-SOCKS' http://127.0.0.9:18080 \
+  '--log --listen=http://127.0.0.9:18080 --proxy=http://127.0.0.9:21080' \
+  '--log --listen=http://127.0.0.9:21080'
 
-test_naive 'SOCKS-HTTP padded' socks5h://127.0.0.1:11080 \
-  '--log --listen=socks://:11080 --proxy=http://127.0.01:28080 --padding' \
-  '--log --listen=http://:28080 --padding'
+test_naive 'SOCKS-HTTP padded' socks5h://127.0.0.10:11080 \
+  '--log --listen=socks://127.0.0.10:11080 --proxy=http://127.0.0.10:28080 --padding' \
+  '--log --listen=http://127.0.0.10:28080 --padding'
 
-test_naive 'SOCKS-SOCKS-SOCKS' socks5h://127.0.0.1:11080 \
-  '--log --listen=socks://:11080 --proxy=socks://127.0.0.1:21080' \
-  '--log --listen=socks://:21080 --proxy=socks://127.0.0.1:31080' \
-  '--log --listen=socks://:31080'
+test_naive 'SOCKS-SOCKS-SOCKS' socks5h://127.0.0.11:11080 \
+  '--log --listen=socks://127.0.0.11:11080 --proxy=socks://127.0.0.11:21080' \
+  '--log --listen=socks://127.0.0.11:21080 --proxy=socks://127.0.0.11:31080' \
+  '--log --listen=socks://127.0.0.11:31080'
 
-test_naive 'SOCKS-HTTP-SOCKS' socks5h://127.0.0.1:11080 \
-  '--log --listen=socks://:11080 --proxy=socks://127.0.0.1:28080' \
-  '--log --listen=socks://:28080 --proxy=socks://127.0.0.1:31080' \
-  '--log --listen=socks://:31080'
+test_naive 'SOCKS-HTTP-SOCKS' socks5h://127.0.0.12:11080 \
+  '--log --listen=socks://127.0.0.12:11080 --proxy=socks://127.0.0.12:28080' \
+  '--log --listen=socks://127.0.0.12:28080 --proxy=socks://127.0.0.12:31080' \
+  '--log --listen=socks://127.0.0.12:31080'
 
-test_naive 'HTTP-SOCKS-HTTP' socks5h://127.0.0.1:18080 \
-  '--log --listen=socks://:18080 --proxy=socks://127.0.0.1:21080' \
-  '--log --listen=socks://:21080 --proxy=socks://127.0.0.1:38080' \
-  '--log --listen=socks://:38080'
+test_naive 'HTTP-SOCKS-HTTP' socks5h://127.0.0.13:18080 \
+  '--log --listen=socks://127.0.0.13:18080 --proxy=socks://127.0.0.13:21080' \
+  '--log --listen=socks://127.0.0.13:21080 --proxy=socks://127.0.0.13:38080' \
+  '--log --listen=socks://127.0.0.13:38080'
 
-test_naive 'HTTP-HTTP-HTTP' socks5h://127.0.0.1:18080 \
-  '--log --listen=socks://:18080 --proxy=socks://127.0.0.1:28080' \
-  '--log --listen=socks://:28080 --proxy=socks://127.0.0.1:38080' \
-  '--log --listen=socks://:38080'
+test_naive 'HTTP-HTTP-HTTP' socks5h://127.0.0.14:18080 \
+  '--log --listen=socks://127.0.0.14:18080 --proxy=socks://127.0.0.14:28080' \
+  '--log --listen=socks://127.0.0.14:28080 --proxy=socks://127.0.0.14:38080' \
+  '--log --listen=socks://127.0.0.14:38080'
