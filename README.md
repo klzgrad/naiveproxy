@@ -46,14 +46,31 @@ forwardproxy {
   hide_ip
   hide_via
   probe_resistance secret.localhost
+  upstream http://127.0.0.1:8080
 }
 ```
 
-Locally edit `config.json` with `"proxy": "https://user:pass@domain.example"` set to the same values as above. Then run `./naive` to get a SOCKS5 proxy at local port 1080.
+and `./naive` with the following `config.json`:
+```json
+{
+  "listen": "http:/127.0.0.1:8080",
+  "padding": true
+}
+```
 
-See [USAGE.txt](https://github.com/klzgrad/naiveproxy/blob/master/USAGE.txt) on how to configure `config.json`.
+Locally run `./naive` with `config.json`:
+```json
+{
+  "listen": "socks://127.0.0.1:1080",
+  "proxy": "https://user:pass@domain.example",
+  "padding": true
+}
+```
+to get a SOCKS5 proxy at local port 1080.
 
-See also [Parameter Tuning](https://github.com/klzgrad/naiveproxy/wiki/Parameter-Tuning) to improve client-side performance.
+See [USAGE.txt](https://github.com/klzgrad/naiveproxy/blob/master/USAGE.txt) on how to configure `config.json`. See also [Parameter Tuning](https://github.com/klzgrad/naiveproxy/wiki/Parameter-Tuning) to improve client-side performance.
+
+It's possible to not run Naive on the server, but you need to remove `padding` from `config.json` and `upstream` from Caddyfile.
 
 ## Build
 
