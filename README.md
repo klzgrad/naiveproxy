@@ -36,7 +36,7 @@ tar xf ./caddy_*.tar.gz
 sudo setcap cap_net_bind_service=+ep caddy
 ```
 
-Run `./caddy` with the following Caddyfile:
+Run `./caddy` with the following Caddyfile (replace the example values accordingly):
 ```
 domain.example
 root /var/www/html
@@ -70,7 +70,7 @@ to get a SOCKS5 proxy at local port 1080.
 
 See [USAGE.txt](https://github.com/klzgrad/naiveproxy/blob/master/USAGE.txt) on how to configure `config.json`. See also [Parameter Tuning](https://github.com/klzgrad/naiveproxy/wiki/Parameter-Tuning) to improve client-side performance.
 
-It's possible to not run Naive on the server, but you need to remove `padding` from `config.json` and `upstream` from Caddyfile.
+It's possible to run Caddy without Naive server, but you need to remove `padding` from `config.json` and `upstream` from Caddyfile.
 
 ## Build
 
@@ -88,7 +88,7 @@ cd naiveproxy/src
 ./get-clang.sh
 ./build.sh
 ```
-The scripts download tools from Google servers with curl. If there is trouble try to set a proxy environment variable for curl, e.g. `export ALL_PROXY=socks5h://127.0.0.1:1080`.
+The scripts download tools from Google servers with curl. You may need to set a proxy environment variable for curl, e.g. `export ALL_PROXY=socks5h://127.0.0.1:1080`.
 
 ## FAQ
 
