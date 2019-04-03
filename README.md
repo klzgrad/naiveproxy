@@ -23,7 +23,7 @@ Probe ⟶ Frontend ⟶ index.html
 
 ## Download
 
-Download Naïve client/server binaries from [here](https://github.com/klzgrad/naiveproxy/releases/latest).
+See [latest release](https://github.com/klzgrad/naiveproxy/releases/latest).
 
 Note: On Linux libnss3 must be installed before using the prebuilt binary.
 
