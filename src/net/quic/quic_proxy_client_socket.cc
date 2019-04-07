@@ -316,16 +316,12 @@ int QuicProxyClientSocket::DoLoop(int last_io_result) {
         if (use_fastopen_ && read_headers_pending_) {
           read_headers_pending_ = false;
           if (rv < 0) {
-            // read_callback_ cannot be called.
-            if (!read_callback_)
-              rv = ERR_IO_PENDING;
             // read_callback_ will be called with this error and be reset.
             // Further data after that will be ignored.
             next_state_ = STATE_DISCONNECTED;
-          } else {
-            // Does not call read_callback_ from here if headers are OK.
-            rv = ERR_IO_PENDING;
           }
+          // Prevents calling connect_callback_.
+          rv = ERR_IO_PENDING;
         }
         break;
       default:
