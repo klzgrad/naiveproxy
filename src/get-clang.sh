@@ -29,6 +29,14 @@ if [ "$ARCH" = Linux -a ! -f chrome/android/profiles/afdo.prof ]; then
   curl "$afdo_url" | bzip2 -cd >chrome/android/profiles/afdo.prof
 fi
 
+# dsymutil (Mac)
+if [ "$ARCH" = Darwin ]; then
+  mkdir -p tools/clang/dsymutil
+  DSYMUTIL_PATH="dsymutil-$CLANG_REVISION-$CLANG_SUB_REVISION.tgz"
+  dsymutil_url="http://commondatastorage.googleapis.com/chromium-browser-clang-staging/Mac/$DSYMUTIL_PATH"
+  curl "$dsymutil_url" | tar xzf - -C tools/clang/dsymutil
+fi
+
 # sccache (Windows)
 if [ "$ARCH" = Windows ]; then
   sccache_url="https://github.com/mozilla/sccache/releases/download/0.2.8/sccache-0.2.8-x86_64-pc-windows-msvc.tar.gz"

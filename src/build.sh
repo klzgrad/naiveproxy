@@ -15,6 +15,7 @@ else
     is_official_build=true
     use_jumbo_build=true
     exclude_unwind_tables=true
+    enable_resource_whitelist_generation=false
     symbol_level=0"
 fi
 
