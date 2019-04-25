@@ -1,0 +1,552 @@
+name: Build
+on:
+  push:
+    branches: [master]
+    paths-ignore: [README.md]
+  release:
+    types: [published]
+defaults:
+  run:
+    shell: bash
+    working-directory: src
+env:
+  CACHE_EPOCH: 1
+  CCACHE_MAXSIZE: 200M
+  CCACHE_MAXFILES: 0
+  SCCACHE_CACHE_SIZE: 200M
+jobs:
+  cache-toolchains-posix:
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache toolchains (Linux, OpenWrt, Android)
+        uses: actions/cache@v3
+        with:
+          path: |
+            src/third_party/llvm-build/Release+Asserts/
+            src/gn/
+            src/qemu-user-static*.deb
+          key: toolchains-posix-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
+      - name: Cache PGO (Linux, OpenWrt)
+        uses: actions/cache@v3
+        with:
+          path: src/chrome/build/pgo_profiles/
+          key: pgo-linux-openwrt-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
+      - name: Cache AFDO (Android)
+        uses: actions/cache@v3
+        with:
+          path: src/chrome/android/profiles/
+          key: afdo-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
+      - name: Cache Android NDK (Android)
+        uses: actions/cache@v3
+        with:
+          path: src/third_party/android_toolchain/ndk/
+          key: android-ndk-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
+      - run: ./get-clang.sh
+      - run: EXTRA_FLAGS='target_os="android"' ./get-clang.sh
+      - run: |
+          if [ ! -f qemu-user-static*.deb ]; then
+            wget https://snapshot.debian.org/archive/debian/20230611T210420Z/pool/main/q/qemu/qemu-user-static_8.0%2Bdfsg-4_amd64.deb
+          fi
+  cache-toolchains-win:
+    runs-on: windows-2019
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache toolchains
+        uses: actions/cache@v3
+        with:
+          path: |
+            src/third_party/llvm-build/Release+Asserts/
+            src/gn/
+            ~/.cargo/bin/
+            ~/bin/ninja.exe
+          key: toolchains-win-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
+      - name: Cache PGO (win64)
+        uses: actions/cache@v3
+        with:
+          path: src/chrome/build/pgo_profiles/chrome-win64-*
+          key: pgo-win64-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
+      - name: Cache PGO (win32)
+        uses: actions/cache@v3
+        with:
+          path: src/chrome/build/pgo_profiles/chrome-win32-*
+          key: pgo-win32-arm64-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
+      - run: EXTRA_FLAGS='target_cpu="x64"' ./get-clang.sh
+      - run: EXTRA_FLAGS='target_cpu="x86"' ./get-clang.sh
+      - run: |
+          if [ ! -f ~/bin/ninja.exe ]; then
+            curl -LO https://github.com/ninja-build/ninja/releases/download/v1.10.2/ninja-win.zip
+            unzip ninja-win.zip -d ~/bin
+          fi
+  cache-toolchains-mac:
+    runs-on: macos-11
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v3
+        with:
+          path: |
+            src/third_party/llvm-build/Release+Asserts/
+            src/chrome/build/pgo_profiles/chrome-mac-*
+            src/gn/
+          key: toolchains-pgo-mac-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
+      - run: EXTRA_FLAGS='target_cpu="x64"' ./get-clang.sh
+      - run: EXTRA_FLAGS='target_cpu="arm64"' ./get-clang.sh
+  linux:
+    needs: cache-toolchains-posix
+    runs-on: ubuntu-20.04
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, x86, arm64, arm, mipsel, mips64el, riscv64]
+    env:
+      EXTRA_FLAGS: 'target_cpu="${{ matrix.arch }}"'
+      BUNDLE: naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache toolchains (Linux, OpenWrt, Android)
+        uses: actions/cache@v3
+        with:
+          path: |
+            src/third_party/llvm-build/Release+Asserts/
+            src/gn/
+            src/qemu-user-static*.deb
+          key: toolchains-posix-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
+      - name: Cache PGO (Linux, OpenWrt)
+        uses: actions/cache@v3
+        with:
+          path: src/chrome/build/pgo_profiles/
+          key: pgo-linux-openwrt-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
+      - name: Regenerate Debian keyring
+        run: |
+          rm -f ./build/linux/sysroot_scripts/keyring.gpg
+          GPG_TTY=/dev/null ./build/linux/sysroot_scripts/generate_keyring.sh
+      - name: Cache sysroot
+        uses: actions/cache@v3
+        with:
+          path: src/out/sysroot-build/bullseye/bullseye_*
+          key: sysroot-linux-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
+      - id: ccache-timestamp
+        run: echo "CCACHE_TIMESTAMP=$(date +%s)" >>$GITHUB_OUTPUT
+      - name: Cache ccache files
+        uses: actions/cache@v3
+        with:
+          path: ~/.ccache
+          key: ccache-linux-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-${{ steps.ccache-timestamp.outputs.CCACHE_TIMESTAMP }}
+          restore-keys: ccache-linux-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-
+      - name: Install APT packages
+        run: |
+          sudo apt update
+          sudo apt install ninja-build pkg-config ccache bubblewrap
+          sudo apt remove -y qemu-user-binfmt
+          sudo dpkg -i qemu-user-static*.deb
+          # libc6-i386 interferes with x86 build
+          sudo apt remove libc6-i386
+      - run: ./get-clang.sh
+      - run: ccache -z
+      - run: ./build.sh
+      - run: ccache -s
+      - run: ../tests/basic.sh out/Release/naive
+      - name: Pack naiveproxy assets
+        run: |
+          mkdir ${{ env.BUNDLE }}
+          cp out/Release/naive config.json ../LICENSE ../USAGE.txt ${{ env.BUNDLE }}
+          tar cJf ${{ env.BUNDLE }}.tar.xz ${{ env.BUNDLE }}
+          openssl sha256 out/Release/naive >sha256sum.txt
+          echo "SHA256SUM=$(cut -d' ' -f2 sha256sum.txt)" >>$GITHUB_ENV
+      - uses: actions/upload-artifact@v3
+        with:
+          name: ${{ env.BUNDLE }}.tar.xz naive executable sha256 ${{ env.SHA256SUM }}
+          path: src/sha256sum.txt
+      - name: Upload naiveproxy assets
+        if: ${{ github.event_name == 'release' }}
+        run: gh release upload "${GITHUB_REF##*/}" ${{ env.BUNDLE }}.tar.xz --clobber
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  android:
+    needs: cache-toolchains-posix
+    runs-on: ubuntu-20.04
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, x86, arm64, arm]
+    env:
+      EXTRA_FLAGS: 'target_cpu="${{ matrix.arch }}" target_os="android"'
+      BUNDLE: naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache toolchains (Linux, OpenWrt, Android)
+        uses: actions/cache@v3
+        with:
+          path: |
+            src/third_party/llvm-build/Release+Asserts/
+            src/gn/
+            src/qemu-user-static*.deb
+          key: toolchains-posix-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
+      - name: Cache AFDO (Android)
+        uses: actions/cache@v3
+        with:
+          path: src/chrome/android/profiles/
+          key: afdo-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
+      - name: Cache Android NDK (Android)
+        uses: actions/cache@v3
+        with:
+          path: src/third_party/android_toolchain/ndk/
+          key: android-ndk-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
+      - name: Cache sysroot
+        uses: actions/cache@v3
+        with:
+          path: src/out/sysroot-build/android/
+          key: sysroot-android-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
+      - id: ccache-timestamp
+        run: echo "CCACHE_TIMESTAMP=$(date +%s)" >>$GITHUB_OUTPUT
+      - name: Cache ccache files
+        uses: actions/cache@v3
+        with:
+          path: ~/.ccache
+          key: ccache-android-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-${{ steps.ccache-timestamp.outputs.CCACHE_TIMESTAMP }}
+          restore-keys: ccache-android-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-
+      - name: Install APT packages
+        run: |
+          sudo apt update
+          sudo apt install ninja-build pkg-config ccache bubblewrap
+          sudo apt remove -y qemu-user-binfmt
+          sudo dpkg -i qemu-user-static*.deb
+          # libc6-i386 interferes with x86 build
+          sudo apt remove libc6-i386
+      - run: ./get-clang.sh
+      - run: ccache -z
+      - run: ./build.sh
+      - run: ccache -s
+      - run: ./get-android-sys.sh
+      - run: ../tests/basic.sh out/Release/naive
+      - name: Pack naiveproxy assets
+        run: |
+          mkdir ${{ env.BUNDLE }}
+          cp out/Release/naive config.json ../LICENSE ../USAGE.txt ${{ env.BUNDLE }}
+          tar cJf ${{ env.BUNDLE }}.tar.xz ${{ env.BUNDLE }}
+          openssl sha256 out/Release/naive >sha256sum.txt
+          echo "SHA256SUM=$(cut -d' ' -f2 sha256sum.txt)" >>$GITHUB_ENV
+      - uses: actions/upload-artifact@v3
+        with:
+          name: ${{ env.BUNDLE }}.tar.xz naive executable sha256 ${{ env.SHA256SUM }}
+          path: src/sha256sum.txt
+      - name: Upload naiveproxy assets
+        if: ${{ github.event_name == 'release' }}
+        run: gh release upload "${GITHUB_REF##*/}" ${{ env.BUNDLE }}.tar.xz --clobber
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  win:
+    needs: cache-toolchains-win
+    runs-on: windows-2019
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, x86, arm64]
+    env:
+      EXTRA_FLAGS: 'target_cpu="${{ matrix.arch }}"'
+      BUNDLE: naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache toolchains
+        uses: actions/cache@v3
+        with:
+          path: |
+            src/third_party/llvm-build/Release+Asserts/
+            src/gn/
+            ~/.cargo/bin/
+            ~/bin/ninja.exe
+          key: toolchains-win-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
+      - name: Cache PGO (win64)
+        if: ${{ matrix.arch == 'x64' }}
+        uses: actions/cache@v3
+        with:
+          path: src/chrome/build/pgo_profiles/chrome-win64-*
+          key: pgo-win64-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
+      - name: Cache PGO (win32)
+        if: ${{ matrix.arch != 'x64' }}
+        uses: actions/cache@v3
+        with:
+          path: src/chrome/build/pgo_profiles/chrome-win32-*
+          key: pgo-win32-arm64-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
+      - id: ccache-timestamp
+        run: echo "CCACHE_TIMESTAMP=$(date +%s)" >>$GITHUB_OUTPUT
+      - name: Cache ccache files
+        uses: actions/cache@v3
+        with:
+          path: ~/AppData/Local/Mozilla/sccache
+          key: ccache-win-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-${{ steps.ccache-timestamp.outputs.CCACHE_TIMESTAMP }}
+          restore-keys: ccache-win-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-
+      - run: ./get-clang.sh
+      - run: ~/.cargo/bin/sccache -z
+      - run: ./build.sh
+      - run: ~/.cargo/bin/sccache -s
+      - run: ../tests/basic.sh out/Release/naive
+        # No real or emulated environment is available to test this.
+        if: ${{ matrix.arch != 'arm64' }}
+      - name: Pack naiveproxy assets
+        run: |
+          mkdir ${{ env.BUNDLE }}
+          cp out/Release/naive config.json ../LICENSE ../USAGE.txt ${{ env.BUNDLE }}
+          7z a ${{ env.BUNDLE }}.zip ${{ env.BUNDLE }}
+          openssl sha256 out/Release/naive.exe >sha256sum.txt
+          echo "SHA256SUM=$(cut -d' ' -f2 sha256sum.txt)" >>$GITHUB_ENV
+      - uses: actions/upload-artifact@v3
+        with:
+          name: ${{ env.BUNDLE }}.zip naive executable sha256 ${{ env.SHA256SUM }}
+          path: src/sha256sum.txt
+      - name: Upload naiveproxy assets
+        if: ${{ github.event_name == 'release' }}
+        run: gh release upload "${GITHUB_REF##*/}"  ${{ env.BUNDLE }}.zip --clobber
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  mac:
+    needs: cache-toolchains-mac
+    runs-on: macos-11
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, arm64]
+    env:
+      EXTRA_FLAGS: 'target_cpu="${{ matrix.arch }}"'
+      BUNDLE: naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache toolchains and PGO
+        uses: actions/cache@v3
+        with:
+          path: |
+            src/third_party/llvm-build/Release+Asserts/
+            src/chrome/build/pgo_profiles/chrome-mac-*
+            src/gn/
+          key: toolchains-pgo-mac-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
+      - id: ccache-timestamp
+        run: echo "CCACHE_TIMESTAMP=$(date +%s)" >>$GITHUB_OUTPUT
+      - name: Cache ccache files
+        uses: actions/cache@v3
+        with:
+          path: ~/Library/Caches/ccache
+          key: ccache-mac-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-${{ steps.ccache-timestamp.outputs.CCACHE_TIMESTAMP }}
+          restore-keys: ccache-mac-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-
+      - run: brew install ninja ccache
+      - run: pip install setuptools
+      - run: ./get-clang.sh
+      - run: ccache -z
+      - run: ./build.sh
+      - run: ccache -s
+      - run: ../tests/basic.sh out/Release/naive
+        # No real or emulated environment is available to test this.
+        if: ${{ matrix.arch != 'arm64' }}
+      - name: Pack naiveproxy assets
+        run: |
+          mkdir ${{ env.BUNDLE }}
+          cp out/Release/naive config.json ../LICENSE ../USAGE.txt ${{ env.BUNDLE }}
+          tar cJf ${{ env.BUNDLE }}.tar.xz ${{ env.BUNDLE }}
+          openssl sha256 out/Release/naive >sha256sum.txt
+          echo "SHA256SUM=$(cut -d' ' -f2 sha256sum.txt)" >>$GITHUB_ENV
+      - uses: actions/upload-artifact@v3
+        with:
+          name: ${{ env.BUNDLE }}.tar.xz naive executable sha256 ${{ env.SHA256SUM }}
+          path: src/sha256sum.txt
+      - name: Upload naiveproxy assets
+        if: ${{ github.event_name == 'release' }}
+        run: gh release upload "${GITHUB_REF##*/}" ${{ env.BUNDLE }}.tar.xz --clobber
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  ios:
+    needs: cache-toolchains-mac
+    runs-on: macos-11
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64]
+    env:
+      EXTRA_FLAGS: 'target_cpu="${{ matrix.arch }}" target_os="ios" ios_enable_code_signing=false'
+      BUNDLE: naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache toolchains and PGO
+        uses: actions/cache@v3
+        with:
+          path: |
+            src/third_party/llvm-build/Release+Asserts/
+            src/chrome/build/pgo_profiles/chrome-mac-*
+            src/gn/
+          key: toolchains-pgo-mac-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
+      - id: ccache-timestamp
+        run: echo "CCACHE_TIMESTAMP=$(date +%s)" >>$GITHUB_OUTPUT
+      - name: Cache ccache files
+        uses: actions/cache@v3
+        with:
+          path: ~/Library/Caches/ccache
+          key: ccache-ios-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-${{ steps.ccache-timestamp.outputs.CCACHE_TIMESTAMP }}
+          restore-keys: ccache-ios-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-
+      - run: brew install ninja ccache
+      - run: pip install setuptools
+      - run: ./get-clang.sh
+      - run: ccache -z
+      - run: ./build.sh
+      - run: ccache -s
+  openwrt:
+    needs: cache-toolchains-posix
+    runs-on: ubuntu-20.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            openwrt: 'target=x86 subtarget=64'
+            target_cpu: x64
+          - arch: x86
+            openwrt: 'target=x86 subtarget=generic'
+            target_cpu: x86
+          - arch: aarch64_cortex-a53
+            openwrt: 'target=sunxi subtarget=cortexa53'
+            target_cpu: arm64
+            extra: 'arm_cpu="cortex-a53"'
+          - arch: aarch64_cortex-a53-static
+            openwrt: 'target=sunxi subtarget=cortexa53'
+            target_cpu: arm64
+            extra: 'arm_cpu="cortex-a53" build_static=true no_madvise_syscall=true'
+          - arch: aarch64_cortex-a72
+            openwrt: 'target=mvebu subtarget=cortexa72'
+            target_cpu: arm64
+            extra: 'arm_cpu="cortex-a72"'
+          - arch: aarch64_generic
+            openwrt: 'target=rockchip subtarget=armv8'
+            target_cpu: arm64
+          - arch: arm_arm1176jzf-s_vfp
+            openwrt: 'target=bcm27xx subtarget=bcm2708'
+            target_cpu: arm
+            extra: 'arm_version=0 arm_cpu="arm1176jzf-s" arm_fpu="vfp" arm_float_abi="hard" arm_use_neon=false arm_use_thumb=false'
+          - arch: arm_arm926ej-s
+            openwrt: 'target=mxs subtarget=generic'
+            target_cpu: arm
+            extra: 'arm_version=0 arm_cpu="arm926ej-s" arm_float_abi="soft" arm_use_neon=false arm_use_thumb=false'
+          - arch: arm_cortex-a15_neon-vfpv4
+            openwrt: 'target=armsr subtarget=armv7'
+            target_cpu: arm
+            extra: 'arm_version=0 arm_cpu="cortex-a15" arm_fpu="neon-vfpv4" arm_float_abi="hard" arm_use_neon=true'
+          - arch: arm_cortex-a5_vfpv4
+            openwrt: 'target=at91 subtarget=sama5'
+            target_cpu: arm
+            extra: 'arm_version=0 arm_cpu="cortex-a5" arm_fpu="vfpv4" arm_float_abi="hard" arm_use_neon=false'
+          - arch: arm_cortex-a7
+            openwrt: 'target=mediatek subtarget=mt7629'
+            target_cpu: arm
+            extra: 'arm_version=0 arm_cpu="cortex-a7" arm_float_abi="soft" arm_use_neon=false'
+          - arch: arm_cortex-a7_neon-vfpv4
+            openwrt: 'target=sunxi subtarget=cortexa7'
+            target_cpu: arm
+            extra: 'arm_version=0 arm_cpu="cortex-a7" arm_fpu="neon-vfpv4" arm_float_abi="hard" arm_use_neon=true'
+          - arch: arm_cortex-a7_vfpv4
+            openwrt: 'target=at91 subtarget=sama7'
+            target_cpu: arm
+            extra: 'arm_version=0 arm_cpu="cortex-a7" arm_fpu="vfpv4" arm_float_abi="hard" arm_use_neon=false'
+          - arch: arm_cortex-a7_neon-vfpv4-static
+            openwrt: 'target=sunxi subtarget=cortexa7'
+            target_cpu: arm
+            extra: 'arm_version=0 arm_cpu="cortex-a7" arm_fpu="neon-vfpv4" arm_float_abi="hard" arm_use_neon=true build_static=true no_madvise_syscall=true'
+          - arch: arm_cortex-a8_vfpv3
+            openwrt: 'target=sunxi subtarget=cortexa8'
+            target_cpu: arm
+            extra: 'arm_version=0 arm_cpu="cortex-a8" arm_fpu="vfpv3" arm_float_abi="hard" arm_use_neon=false'
+          - arch: arm_cortex-a9
+            openwrt: 'target=bcm53xx subtarget=generic'
+            target_cpu: arm
+            extra: 'arm_version=0 arm_cpu="cortex-a9" arm_float_abi="soft" arm_use_neon=false'
+          - arch: arm_cortex-a9-static
+            openwrt: 'target=bcm53xx subtarget=generic'
+            target_cpu: arm
+            extra: 'arm_version=0 arm_cpu="cortex-a9" arm_float_abi="soft" arm_use_neon=false build_static=true no_madvise_syscall=true'
+          - arch: arm_cortex-a9_neon
+            openwrt: 'target=zynq subtarget=generic'
+            target_cpu: arm
+            extra: 'arm_version=0 arm_cpu="cortex-a9" arm_fpu="neon" arm_float_abi="hard" arm_use_neon=true'
+          - arch: arm_cortex-a9_vfpv3-d16
+            openwrt: 'target=tegra subtarget=generic'
+            target_cpu: arm
+            extra: 'arm_version=0 arm_cpu="cortex-a9" arm_fpu="vfpv3-d16" arm_float_abi="hard" arm_use_neon=false'
+          - arch: arm_mpcore
+            openwrt: 'target=oxnas subtarget=ox820'
+            target_cpu: arm
+            extra: 'arm_version=0 arm_cpu="mpcore" arm_float_abi="soft" arm_use_neon=false arm_use_thumb=false'
+          - arch: arm_xscale
+            openwrt: 'target=kirkwood subtarget=generic'
+            target_cpu: arm
+            extra: 'arm_version=0 arm_cpu="xscale" arm_float_abi="soft" arm_use_neon=false arm_use_thumb=false'
+          - arch: mipsel_24kc
+            openwrt: 'target=ramips subtarget=rt305x'
+            target_cpu: mipsel
+            extra: 'mips_arch_variant="r2" mips_float_abi="soft"'
+          - arch: mipsel_24kc-static
+            openwrt: 'target=ramips subtarget=rt305x'
+            target_cpu: mipsel
+            extra: 'mips_arch_variant="r2" mips_float_abi="soft" build_static=true no_madvise_syscall=true'
+          - arch: mipsel_mips32
+            openwrt: 'target=bcm47xx subtarget=generic'
+            target_cpu: mipsel
+            extra: 'mips_arch_variant="r1" mips_float_abi="soft"'
+          - arch: riscv64
+            openwrt: 'target=sifiveu subtarget=generic'
+            target_cpu: riscv64
+    env:
+      EXTRA_FLAGS: target_cpu="${{ matrix.target_cpu }}" target_os="openwrt" ${{ matrix.extra }}
+      OPENWRT_FLAGS: arch=${{ matrix.arch }} release=23.05.0 gcc_ver=12.3.0 ${{ matrix.openwrt }}
+      BUNDLE: naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache toolchains (Linux, OpenWrt, Android)
+        uses: actions/cache@v3
+        with:
+          path: |
+            src/third_party/llvm-build/Release+Asserts/
+            src/gn/
+            src/qemu-user-static*.deb
+          key: toolchains-posix-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
+      - name: Cache PGO (Linux, OpenWrt)
+        uses: actions/cache@v3
+        with:
+          path: src/chrome/build/pgo_profiles/
+          key: pgo-linux-openwrt-${{ hashFiles('CHROMIUM_VERSION') }}-v${{ env.CACHE_EPOCH }}
+      - name: Cache sysroot
+        uses: actions/cache@v3
+        with:
+          path: src/out/sysroot-build/openwrt
+          key: sysroot-openwrt-23.05.0-${{ matrix.arch }}-v${{ env.CACHE_EPOCH }}
+      - id: ccache-timestamp
+        run: echo "CCACHE_TIMESTAMP=$(date +%s)" >>$GITHUB_OUTPUT
+      - name: Cache ccache files
+        uses: actions/cache@v3
+        with:
+          path: ~/.ccache
+          key: ccache-openwrt-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-${{ steps.ccache-timestamp.outputs.CCACHE_TIMESTAMP }}
+          restore-keys: ccache-openwrt-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-
+      - name: Install APT packages
+        run: |
+          sudo apt update
+          sudo apt install ninja-build pkg-config ccache bubblewrap
+          sudo apt remove -y qemu-user-binfmt
+          sudo dpkg -i qemu-user-static*.deb
+          # libc6-i386 interferes with x86 build
+          sudo apt remove libc6-i386
+      - run: ./get-clang.sh
+      - run: ccache -z
+      - run: ./build.sh
+      - run: ccache -s
+      - run: ../tests/basic.sh out/Release/naive
+      - name: Pack naiveproxy assets
+        run: |
+          mkdir ${{ env.BUNDLE }}
+          cp out/Release/naive config.json ../LICENSE ../USAGE.txt ${{ env.BUNDLE }}
+          tar cJf ${{ env.BUNDLE }}.tar.xz ${{ env.BUNDLE }}
+          openssl sha256 out/Release/naive >sha256sum.txt
+          echo "SHA256SUM=$(cut -d' ' -f2 sha256sum.txt)" >>$GITHUB_ENV
+      - uses: actions/upload-artifact@v3
+        with:
+          name: ${{ env.BUNDLE }}.tar.xz naive executable sha256 ${{ env.SHA256SUM }}
+          path: src/sha256sum.txt
+      - name: Upload naiveproxy assets
+        if: ${{ github.event_name == 'release' }}
+        run: gh release upload "${GITHUB_REF##*/}" ${{ env.BUNDLE }}.tar.xz --clobber
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
