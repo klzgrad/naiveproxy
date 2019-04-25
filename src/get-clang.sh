@@ -25,7 +25,7 @@ fi
 # AFDO profile (Linux)
 if [ "$ARCH" = Linux -a ! -f chrome/android/profiles/afdo.prof ]; then
   AFDO_PATH=$(cat chrome/android/profiles/newest.txt)
-  afdo_url="https://storage.googleapis.com/chromeos-prebuilt/afdo-job/llvm/$AFDO_PATH"
+  afdo_url="https://commondatastorage.googleapis.com/${AFDO_PATH#gs://}"
   curl "$afdo_url" | bzip2 -cd >chrome/android/profiles/afdo.prof
 fi
 
