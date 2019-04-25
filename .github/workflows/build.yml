@@ -1,0 +1,264 @@
+name: Build
+on:
+  push:
+    branches: [master]
+    paths-ignore: [README.md]
+  release:
+    types: [published]
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+jobs:
+  precache-toolchains-linux:
+    runs-on: ubuntu-18.04
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/cache@v2
+        with:
+          path: |
+            src/third_party/llvm-build/Release+Asserts/
+            src/chrome/build/pgo_profiles/
+            src/gn/
+            src/chrome/android/profiles/
+          key: toolchain-linux-${{ hashFiles('CHROMIUM_VERSION') }}
+      - run: ./get-clang.sh
+        working-directory: src
+  precache-toolchains-win:
+    defaults:
+      run:
+        shell: bash
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/cache@v2
+        with:
+          path: |
+            src/third_party/llvm-build/Release+Asserts/
+            src/chrome/build/pgo_profiles/
+            src/gn/
+            ~/.cargo/bin/
+          key: toolchain-win-${{ hashFiles('CHROMIUM_VERSION') }}
+      - run: ./get-clang.sh
+        working-directory: src
+  precache-toolchains-mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/cache@v2
+        with:
+          path: |
+            src/third_party/llvm-build/Release+Asserts/
+            src/chrome/build/pgo_profiles/
+            src/gn/
+            src/tools/clang/dsymutil/
+          key: toolchain-mac-${{ hashFiles('CHROMIUM_VERSION') }}
+      - run: ./get-clang.sh
+        working-directory: src
+  linux:
+    needs: precache-toolchains-linux
+    runs-on: ubuntu-18.04
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, x86, arm64, arm]
+    env:
+      EXTRA_FLAGS: 'target_cpu="${{ matrix.arch }}"'
+      BUNDLE: 'naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}'
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/cache@v2
+        with:
+          path: ~/.ccache
+          key: ccache-${{ github.job }}-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}
+      - uses: actions/cache@v2
+        with:
+          path: src/out/sysroot-build/
+          key: sysroot-${{ github.job }}-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}
+      - uses: actions/cache@v2
+        with:
+          path: |
+            src/third_party/llvm-build/Release+Asserts/
+            src/chrome/build/pgo_profiles/
+            src/gn/
+            src/chrome/android/profiles/
+          key: toolchain-linux-${{ hashFiles('CHROMIUM_VERSION') }}
+      - run: sudo apt update
+      - run: sudo apt install ninja-build pkg-config libnss3-dev qemu-user ccache
+      # libc6-i386 interferes with x86 build
+      - run: sudo apt remove libc6-i386
+      - run: ./get-clang.sh
+        working-directory: src
+      - run: ccache -s
+      - run: ./build.sh
+        working-directory: src
+      - run: ccache -s
+      - run: ./tests/basic.sh src/out/Release/naive
+      - run: mkdir ${{ env.BUNDLE }} && cp src/out/Release/naive src/config.json LICENSE USAGE.txt ${{ env.BUNDLE }}
+      - run: tar cJf ${{ env.BUNDLE }}.tar.xz ${{ env.BUNDLE }}
+      - uses: actions/upload-release-asset@v1
+        if: ${{ github.event_name == 'release' }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ${{ env.BUNDLE }}.tar.xz
+          asset_name: ${{ env.BUNDLE }}.tar.xz
+          asset_content_type: application/octet-stream
+  win:
+    needs: precache-toolchains-win
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, x86, arm64]
+    env:
+      EXTRA_FLAGS: 'target_cpu="${{ matrix.arch }}"'
+      BUNDLE: 'naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}'
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/cache@v2
+        with:
+          path: ~/AppData/Local/Mozilla/sccache
+          key: ccache-${{ github.job }}-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}
+      - uses: actions/cache@v2
+        with:
+          path: |
+            src/third_party/llvm-build/Release+Asserts/
+            src/chrome/build/pgo_profiles/
+            src/gn/
+            ~/.cargo/bin/
+          key: toolchain-win-${{ hashFiles('CHROMIUM_VERSION') }}
+      - run: cinst ninja
+      - run: ./get-clang.sh
+        working-directory: src
+      - run: ~/.cargo/bin/sccache -s
+      - run: ./build.sh
+        working-directory: src
+      - run: ~/.cargo/bin/sccache -s
+      - run: ./tests/basic.sh src/out/Release/naive
+        if: ${{ matrix.arch != 'arm64' }}
+      - run: mkdir ${{ env.BUNDLE }} && cp src/out/Release/naive.exe src/config.json LICENSE USAGE.txt ${{ env.BUNDLE }}
+      - run: 7z a ${{ env.BUNDLE }}.zip ${{ env.BUNDLE }}
+      - uses: actions/upload-release-asset@v1
+        if: ${{ github.event_name == 'release' }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ${{ env.BUNDLE }}.zip
+          asset_name: ${{ env.BUNDLE }}.zip
+          asset_content_type: application/octet-stream
+  mac:
+    needs: precache-toolchains-mac
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, arm64]
+    env:
+      EXTRA_FLAGS: 'target_cpu="${{ matrix.arch }}"'
+      BUNDLE: 'naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}'
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/cache@v2
+        with:
+          path: ~/Library/Caches/ccache
+          key: ccache-${{ github.job }}-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}
+      - uses: actions/cache@v2
+        with:
+          path: |
+            src/third_party/llvm-build/Release+Asserts/
+            src/chrome/build/pgo_profiles/
+            src/gn/
+            src/tools/clang/dsymutil/
+          key: toolchain-mac-${{ hashFiles('CHROMIUM_VERSION') }}
+      - run: brew install ninja ccache
+      - run: ./get-clang.sh
+        working-directory: src
+      - run: ccache -s
+      - run: ./build.sh
+        working-directory: src
+      - run: ccache -s
+      - run: ./tests/basic.sh src/out/Release/naive
+        if: ${{ matrix.arch != 'arm64' }}
+      - run: mkdir ${{ env.BUNDLE }} && cp src/out/Release/naive src/config.json LICENSE USAGE.txt ${{ env.BUNDLE }}
+      - run: tar cJf ${{ env.BUNDLE }}.tar.xz ${{ env.BUNDLE }}
+      - uses: actions/upload-release-asset@v1
+        if: ${{ github.event_name == 'release' }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ${{ env.BUNDLE }}.tar.xz
+          asset_name: ${{ env.BUNDLE }}.tar.xz
+          asset_content_type: application/octet-stream
+  openwrt:
+    needs: precache-toolchains-linux
+    runs-on: ubuntu-18.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: mipsel_24kc
+            target_cpu: mipsel
+            extra: 'mips_arch_variant="r2" mips_float_abi="soft" mips_tune="24kc" use_lld=false use_gold=false'
+            openwrt: 'target=ramips subtarget=rt305x abi=musl'
+          - arch: x86_64
+            target_cpu: x64
+            openwrt: 'target=x86 subtarget=64 abi=musl'
+          - arch: x86
+            target_cpu: x86
+            openwrt: 'target=x86 subtarget=generic abi=musl'
+          - arch: aarch64
+            target_cpu: arm64
+            openwrt: 'target=armvirt subtarget=64 abi=musl'
+          - arch: arm_cortex-a15_neon-vfpv4
+            target_cpu: arm
+            extra: 'arm_version=0 arm_cpu="cortex-a15" arm_fpu="neon-vfpv4" arm_float_abi="hard"'
+            openwrt: 'target=ipq806x subtarget=generic abi=musl_eabi'
+          - arch: arm_cortex-a9
+            target_cpu: arm
+            extra: 'arm_version=0 arm_cpu="cortex-a9" arm_float_abi="soft" arm_use_neon=false'
+            openwrt: 'target=bcm53xx subtarget=generic abi=musl_eabi'
+    env:
+      EXTRA_FLAGS: |
+        target_cpu="${{ matrix.target_cpu }}"
+        ${{ matrix.extra }}
+        use_allocator="none" use_allocator_shim=false
+        custom_toolchain="//build/toolchain/linux:clang_${{ matrix.target_cpu }}_openwrt"
+      OPENWRT_FLAGS: 'arch=${{ matrix.arch }} release=19.07.7 gcc_ver=7.5.0 ${{ matrix.openwrt }}'
+      BUNDLE: 'naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}'
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/cache@v2
+        with:
+          path: ~/.ccache
+          key: ccache-${{ github.job }}-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}
+      - uses: actions/cache@v2
+        with:
+          path: src/out/sysroot-build/
+          key: openwrt-${{ github.job }}-${{ matrix.arch }}-19.07.7
+      - uses: actions/cache@v2
+        with:
+          path: |
+            src/third_party/llvm-build/Release+Asserts/
+            src/chrome/build/pgo_profiles/
+            src/gn/
+            src/chrome/android/profiles/
+          key: toolchain-linux-${{ hashFiles('CHROMIUM_VERSION') }}
+      - run: sudo apt update
+      - run: sudo apt install ninja-build pkg-config libnss3-dev qemu-user ccache
+      # libc6-i386 interferes with x86 build
+      - run: sudo apt remove libc6-i386
+      - run: ./get-clang.sh
+        working-directory: src
+      - run: ccache -s
+      - run: ./build.sh
+        working-directory: src
+      - run: ccache -s
+      - run: ./tests/basic.sh src/out/Release/naive
+      - run: mkdir ${{ env.BUNDLE }} && cp src/out/Release/naive src/config.json LICENSE USAGE.txt ${{ env.BUNDLE }}
+      - run: tar cJf ${{ env.BUNDLE }}.tar.xz ${{ env.BUNDLE }}
+      - uses: actions/upload-release-asset@v1
+        if: ${{ github.event_name == 'release' }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ${{ env.BUNDLE }}.tar.xz
+          asset_name: ${{ env.BUNDLE }}.tar.xz
+          asset_content_type: application/octet-stream
