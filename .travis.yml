@@ -1,0 +1,45 @@
+branches:
+  except:
+    - dev
+language: cpp
+matrix:
+  include:
+    - os: linux
+      dist: xenial
+    - os: osx
+      osx_image: xcode10.2
+addons:
+  apt:
+    sources:
+      - sourceline: 'deb http://archive.ubuntu.com/ubuntu/ xenial-backports universe'
+    packages:
+      - ninja-build=1.7.1-1~ubuntu16.04.1
+      - pkg-config
+      - libnss3-dev
+  homebrew:
+    packages:
+      - ninja
+      - ccache
+cache: ccache
+script:
+  - ./tools/import-upstream.sh
+  - ( cd src; ./get-clang.sh )
+  - ccache -s
+  - ( cd src; ./build.sh )
+  - ccache -s
+  - ./tests/basic.sh src/out/Release/naive
+  - export BUILD_NAME="naiveproxy-$TRAVIS_BRANCH-$TRAVIS_OS_NAME"
+  - mkdir $BUILD_NAME
+  - cp src/out/Release/naive src/config.json LICENSE USAGE.txt $BUILD_NAME
+  - tar cJf $BUILD_NAME.tar.xz $BUILD_NAME
+deploy:
+  provider: releases
+  api_key:
+    secure: hZ+M3GvNpPPMri0u7HkeDM8qCNSzCP2kBxL/68XgF3uvMDkJRX5/gyq27EoQMHyRxni759LlwHttRn6nHSg/CwNgK4fD4WPZWU99XIWKdlI+P1AQkHThjNtABv3P7JOq1HxyuwrcaBPybnDjsQTFE6HG5zsIhXZlUTCHbndCBpYPuDnaqKJJUv4/WzoEjXAlBSkAsBGhEQv+HZhaupw5vSkDkulNgXZrXOoO6uzAtAiR5St38dV7cWXgk6UwoyrVaV8cO0cltveyEPkGYMXJh6YkopJjSVrkYlI8vWsA8CgwdhXwAkYoG1uaIDUdNdlrBXNuA0BOFcU3iEo3D9H/z1/WQUnCuAOVCkYC/QhkTCsioQ5vaNA56+3uY8KOSDNo8XxxBzRIUSwul2lwHCNl6+cf1EhO9brI3Q8q/ZPZLmNIqYDXAI29/MMC13g/ql8UUcy2TwGrx2OE73SIzVBm2hVYI6FFs2hjJzMkknV83K0kr515gXrI+p7ANqnA9vdRBx7zMdOT1etFeuD06wjbLGLmHTS4ykhDYl6wn26fJHm3/OkqNyWllghc8DZnpAHh5AAYrrTIQPlSgtyqGL2qCoCPHbb2WgWewSVhqY+p7JMPchAc6myW3H2c7yL+TDMdRcr9I7DDOpvvfMoGx527Lji54mxGdZmdEpSGxi9Rx3g=
+  file: $BUILD_NAME.tar.xz
+  skip_cleanup: true
+  name: $TRAVIS_BRANCH
+  prerelease: true
+  on:
+    tags: true
+    all_branches: true
