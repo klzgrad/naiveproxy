@@ -1,0 +1,35 @@
+branches:
+  except:
+    - dev
+version: '{build}'
+platform:
+  - x64
+  - x86
+image: Visual Studio 2017
+install:
+  - cinst ninja
+cache:
+  - '%LOCALAPPDATA%\Mozilla\sccache'
+build_script:
+  - bash ./tools/import-upstream.sh
+  - bash -c 'cd src; ./get-clang.sh'
+  - bash -c '~/.cargo/bin/sccache -s'
+  - bash -c 'cd src; EXTRA_FLAGS=target_cpu=\"$Platform\" ./build.sh'
+  - bash -c '~/.cargo/bin/sccache -s'
+  - ps: $env:BUILD_NAME="naiveproxy-$env:APPVEYOR_REPO_TAG_NAME-win-$env:PLATFORM"
+  - bash -c 'mkdir $BUILD_NAME'
+  - bash -c 'cp src/out/Release/naive.exe src/config.json LICENSE USAGE.txt $BUILD_NAME'
+  - bash -c '7z a $BUILD_NAME.zip $BUILD_NAME'
+test_script:
+  - bash -c './tests/basic.sh src/out/Release/naive'
+artifacts:
+  - path: $(BUILD_NAME).zip
+deploy:
+  - provider: GitHub
+    auth_token:
+      secure: h+qwIoof/3ET7LOldWwlb6XQLmpxYPuaZL4YcFQ8QyclfBrnywzwzDaSqdE2unPg
+    artifact: $(BUILD_NAME).zip
+    prerelease: true
+    force_update: true
+    on:
+      APPVEYOR_REPO_TAG: true
