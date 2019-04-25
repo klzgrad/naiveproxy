@@ -1,0 +1,62 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build_overrides/build.gni")
+
+source_set("platform") {
+  defines = []
+
+  sources = [
+    "api/event_waiter.cc",
+    "api/event_waiter.h",
+    "api/logging.cc",
+    "api/logging.h",
+    "api/network_interface.cc",
+    "api/network_interface.h",
+    "api/socket.h.",
+    "api/time.h",
+    "base/event_loop.cc",  # TODO: separate API from impl.
+    "base/event_loop.h",  # TODO: separate API from impl.
+  ]
+
+  public_deps = [
+    "//base",
+    "//third_party/abseil",
+  ]
+
+  if (build_with_chromium) {
+    sources += [
+      "chromium/event_waiter.cc",
+      "chromium/logging.cc",
+      "chromium/network_interface.cc",
+      "chromium/socket.cc",
+      "chromium/socket.h",
+      "chromium/time.cc",
+    ]
+  } else {  # !build_with_chromium
+    sources += [
+      "base/logging.cc",
+      "base/time.cc",
+    ]
+
+    if (is_linux) {
+      sources += [ "linux/network_interface.cc" ]
+    } else if (is_mac) {
+      defines += [
+        # Required, to use the new IPv6 Sockets options introduced by RFC 3542.
+        "__APPLE_USE_RFC_3542",
+      ]
+      sources += [ "mac/network_interface.cc" ]
+    }
+
+    if (is_posix) {
+      sources += [
+        "posix/event_waiter.cc",
+        "posix/logging.cc",
+        "posix/socket.cc",
+        "posix/socket.h",
+      ]
+    }
+  }
+}

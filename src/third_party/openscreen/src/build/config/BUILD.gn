@@ -1,0 +1,125 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+declare_args() {
+  # Enable OSP_DCHECKs to be compiled in, even if it's not a debug build.
+  dcheck_always_on = false
+
+  # Enable address sanitizer.
+  is_asan = false
+}
+
+config("compiler_defaults") {
+  cflags = []
+  if (is_posix && !is_mac) {
+    cflags += [ "-fPIC" ]
+  }
+
+  ldflags = []
+  if (is_linux) {
+    ldflags += [ "-pthread" ]
+  }
+  if (is_posix && !is_mac) {
+    ldflags += [ "-Wl,--fatal-warnings" ]
+
+    if (is_clang) {
+      ldflags += [
+        "-stdlib=libstdc++",
+        "-latomic",
+      ]
+    }
+  }
+}
+
+config("no_exceptions") {
+  cflags_cc = [ "-fno-exceptions" ]
+  cflags_objcc = [ "-fno-exceptions" ]
+}
+
+config("no_rtti") {
+  cflags_cc = [ "-fno-rtti" ]
+  cflags_objcc = [ "-fno-rtti" ]
+}
+
+config("openscreen_code") {
+  cflags = [
+    "-Wall",
+    "-Werror",
+    "-fno-strict-aliasing",  # See http://crbug.com/32204
+  ]
+
+  cflags_cc = [ "-std=c++14" ]
+  cflags_objcc = [ "-std=c++14" ]
+
+  ldflags = [ "-Werror" ]
+
+  if (is_gcc) {
+    cflags += [ "-Wno-maybe-uninitialized" ]
+  }
+
+  if (is_clang) {
+    cflags += [
+      "-Wextra",
+      "-fcolor-diagnostics",
+
+      # Warn on missing break statements at the end of switch cases.
+      "-Wimplicit-fallthrough",
+
+      # Unused function parameters are okay (e.g., empty virtual method
+      # overrides).
+      "-Wno-unused-parameter",
+
+      # Permit code like "struct foo f = {0};"
+      "-Wno-missing-field-initializers",
+    ]
+
+    # Generate warning if code generates exit-time destructors, since such
+    # things are in violation of Chromium C++ Don'ts.
+    cflags_cc += [ "-Wexit-time-destructors" ]
+    cflags_objcc += [ "-Wexit-time-destructors" ]
+
+    ldflags += [ "-fcolor-diagnostics" ]
+  }
+
+  defines = []
+  if (dcheck_always_on) {
+    defines += [ "DCHECK_ALWAYS_ON" ]
+  }
+}
+
+config("default_optimization") {
+  cflags = []
+  defines = []
+  if (is_debug) {
+    cflags += [
+      "-O0",
+      "-g3",  # Include extra debugging information.
+      "-fstack-protector-strong",
+    ]
+    defines += [ "_DEBUG" ]
+  } else {
+    cflags += [
+      "-O2",
+      "-g1",  # Minimal symbols (enough for stack traces).
+      "-fstack-protector",
+    ]
+  }
+}
+
+config("symbol_visibility_hidden") {
+  cflags = [ "-fvisibility=hidden" ]
+}
+
+config("symbol_visibility_default") {
+  cflags = [ "-fvisibility=default" ]
+}
+
+config("default_sanitizers") {
+  cflags = []
+  ldflags = []
+  if (is_asan) {
+    cflags += [ "-fsanitize=address" ]
+    ldflags += [ "-fsanitize=address" ]
+  }
+}

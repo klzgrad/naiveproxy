@@ -1,0 +1,62 @@
+// Copyright 2019 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module blink.mojom;
+
+import "services/viz/public/interfaces/compositing/surface_id.mojom";
+import "ui/gfx/geometry/mojo/geometry.mojom";
+
+// PictureInPictureDelegate is associated to a PictureInPictureService. It will
+// be notified by running its callbacks when a change happened to the running
+// Picture-in-Picture session.
+interface PictureInPictureDelegate {
+  PictureInPictureWindowSizeChanged(gfx.mojom.Size size);
+};
+
+// PictureInPictureService is a Document-associated interface that lives in
+// the browser process. It is responsible for implementing the browser-side
+// support for https://wicg.github.io/picture-in-picture and manages all
+// picture-in-picture interactions for Document. Picture-in-picture allows
+// a Document to display a video in an always-on-top floating window with
+// basic playback functionality (e.g. play and pause).
+interface PictureInPictureService {
+  // Notify the service that it should start a Picture-in-Picture session.
+  // player_id: WebMediaPlayer id used to control playback via the
+  //            Picture-in-Picture window.
+  // surface_id: SurfaceId to be shown in the Picture-in-Picture window.
+  // natural_size: Size of the video frames.
+  // show_play_pause_button: Whether a play/pause control should be offered in
+  //                         the Picture-in-Picture window.
+  // show_mute_button: Whether a mute control should be offered in the
+  //                   Picture-in-Picture window.
+  // NOTE: this method shouldn't be called twice in a raw. An interleaved call
+  // to EndSession() would be expected. In case of some parameters have changed,
+  // UpdateSession() should be called.
+  StartSession(
+      uint32 player_id,
+      viz.mojom.SurfaceId? surface_id,
+      gfx.mojom.Size natural_size,
+      bool show_play_pause_button,
+      bool show_mute_button) => (gfx.mojom.Size size);
+
+  // Notify the service to end the Picture-in-Picture session. It will close
+  // the Picture-in-Picture window.
+  EndSession() => ();
+
+  // Notify the service that some information about the client have change. All
+  // information associated with the Picture-in-Picture session are sent again.
+  // A Picture-in-Picture session must already be active from a previous call to
+  // StartSession().
+  UpdateSession(
+      uint32 player_id,
+      viz.mojom.SurfaceId? surface_id,
+      gfx.mojom.Size natural_size,
+      bool show_play_pause_button,
+      bool show_mute_button);
+
+  // Associate a PictureInPictureDelegate with the service. All changes in
+  // Picture-in-Picture states will be sent to the delegate. Only one delegate
+  // can be set at a time.
+  SetDelegate(PictureInPictureDelegate delegate);
+};

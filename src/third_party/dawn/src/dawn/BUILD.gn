@@ -1,0 +1,74 @@
+# Copyright 2019 The Dawn Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../scripts/dawn_overrides_with_defaults.gni")
+
+import("${dawn_root}/scripts/dawn_component.gni")
+import("${dawn_root}/generator/dawn_generator.gni")
+
+###############################################################################
+# Dawn headers
+###############################################################################
+
+dawn_generator("dawn_headers_gen") {
+  target = "dawn_headers"
+
+  # Generate as if we were in the main BUILD.gn because that was historically
+  # the case and we can't move generated files without clobbering the build.
+  custom_gen_dir = "${target_gen_dir}/../.."
+  outputs = [
+    "dawn/dawncpp.h",
+    "dawn/dawn.h",
+    "dawn/dawncpp_traits.h",
+  ]
+}
+
+source_set("dawn_headers") {
+  public_configs = [ "${dawn_root}/src/common:dawn_public" ]
+  deps = [
+    ":dawn_headers_gen",
+  ]
+
+  sources = get_target_outputs(":dawn_headers_gen")
+  sources += [
+    "${dawn_root}/src/include/dawn/EnumClassBitmasks.h",
+    "${dawn_root}/src/include/dawn/dawn_export.h",
+    "${dawn_root}/src/include/dawn/dawn_wsi.h",
+  ]
+}
+
+###############################################################################
+# libdawn
+###############################################################################
+
+dawn_generator("libdawn_gen") {
+  target = "libdawn"
+  outputs = [
+    "dawn/dawncpp.cpp",
+    "dawn/dawn.c",
+  ]
+}
+
+dawn_component("libdawn") {
+  DEFINE_PREFIX = "DAWN"
+
+  public_deps = [
+    ":dawn_headers",
+  ]
+
+  deps = [
+    ":libdawn_gen",
+  ]
+  sources = get_target_outputs(":libdawn_gen")
+}

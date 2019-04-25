@@ -1,0 +1,71 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//chrome/process_version_rc_template.gni")
+import("//testing/test.gni")
+
+group("win") {
+  deps = [
+    ":updater",
+  ]
+}
+
+executable("updater") {
+  sources = [
+    "main.cc",
+    "updater.rc",
+  ]
+
+  configs += [ "//build/config/win:windowed" ]
+
+  libs = [ "winhttp.lib" ]
+  deps = [
+    ":code",
+    ":version_resources",
+    "//build/win:default_exe_manifest",
+    "//chrome/updater:common",
+  ]
+}
+
+process_version_rc_template("version_resources") {
+  sources = [
+    "updater.ver",
+  ]
+  output = "$target_gen_dir/updater_exe.rc"
+}
+
+source_set("code") {
+  sources = [
+    "net/net_util.cc",
+    "net/net_util.h",
+    "net/network.h",
+    "net/network_fetcher.cc",
+    "net/network_fetcher.h",
+    "net/network_winhttp.cc",
+    "net/network_winhttp.h",
+    "net/scoped_hinternet.h",
+    "util.cc",
+    "util.h",
+  ]
+
+  deps = [
+    "//base",
+    "//components/update_client",
+  ]
+}
+
+source_set("unittest") {
+  testonly = true
+
+  sources = [
+    "net/network_unittest.cc",
+    "util_unittest.cc",
+  ]
+
+  deps = [
+    ":code",
+    "//base/test:test_support",
+    "//testing/gtest",
+  ]
+}

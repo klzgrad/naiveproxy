@@ -1,0 +1,96 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/buildflag_header.gni")
+import("//build/config/dcheck_always_on.gni")
+import("//build/config/jumbo.gni")
+import("//build/config/ui.gni")
+import("//testing/test.gni")
+import("features.gni")
+
+# Generate a buildflag header for compile-time checking of Vulkan support.
+buildflag_header("buildflags") {
+  header = "buildflags.h"
+  flags = [ "ENABLE_VULKAN=$enable_vulkan" ]
+}
+
+if (enable_vulkan) {
+  jumbo_component("vulkan") {
+    output_name = "vulkan_wrapper"
+
+    sources = [
+      "vulkan_command_buffer.cc",
+      "vulkan_command_buffer.h",
+      "vulkan_command_pool.cc",
+      "vulkan_command_pool.h",
+      "vulkan_device_queue.cc",
+      "vulkan_device_queue.h",
+      "vulkan_export.h",
+      "vulkan_function_pointers.cc",
+      "vulkan_function_pointers.h",
+      "vulkan_implementation.cc",
+      "vulkan_implementation.h",
+      "vulkan_instance.cc",
+      "vulkan_surface.cc",
+      "vulkan_surface.h",
+      "vulkan_swap_chain.cc",
+      "vulkan_swap_chain.h",
+    ]
+
+    configs += [ "//build/config:precompiled_headers" ]
+
+    defines = [ "VULKAN_IMPLEMENTATION" ]
+    if (is_android) {
+      defines += [ "VK_USE_PLATFORM_ANDROID_KHR" ]
+    }
+
+    all_dependent_configs = [ "//third_party/vulkan:vulkan_config" ]
+
+    deps = [
+      "//base",
+      "//ui/gfx",
+    ]
+
+    data_deps = []
+    if (is_fuchsia) {
+      data_deps += [ "//third_party/fuchsia-sdk:vulkan_base" ]
+
+      # VulkanInstance enables validation layer in Debug builds and when DCHECKs
+      # are enabled in Release builds. In these cases the validation layer
+      # libraries and configs need to be included in the generated Fuchsia
+      # package.
+      if (is_debug || dcheck_always_on) {
+        data_deps += [ "//third_party/fuchsia-sdk:vulkan_validation" ]
+      }
+    }
+  }
+
+  # TODO(cblume): These tests should run on each platform -- crbug.com/858614
+  if (use_x11) {
+    test("vulkan_tests") {
+      sources = [
+        "tests/basic_vulkan_test.cc",
+        "tests/basic_vulkan_test.h",
+        "tests/native_window.h",
+        "tests/vulkan_test.cc",
+        "tests/vulkan_tests_main.cc",
+      ]
+
+      deps = [
+        "//base/test:test_support",
+        "//gpu/vulkan/init",
+        "//testing/gmock",
+        "//testing/gtest",
+        "//ui/gfx:native_widget_types",
+        "//ui/gfx/geometry",
+      ]
+
+      if (use_x11) {
+        sources += [ "tests/native_window_x11.cc" ]
+        deps += [ "//ui/gfx/x" ]
+        configs += [ "//build/config/linux:x11" ]
+      }
+    }
+  }
+}

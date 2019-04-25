@@ -1,0 +1,134 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//third_party/grpc/grpc_library.gni")
+
+static_library("signaling") {
+  sources = [
+    "delegating_signal_strategy.cc",
+    "delegating_signal_strategy.h",
+    "ftl_client.cc",
+    "ftl_client.h",
+    "grpc_async_call_data.cc",
+    "grpc_async_call_data.h",
+    "grpc_async_dispatcher.cc",
+    "grpc_async_dispatcher.h",
+    "iq_sender.cc",
+    "iq_sender.h",
+    "jid_util.cc",
+    "jid_util.h",
+    "log_to_server.cc",
+    "log_to_server.h",
+    "push_notification_subscriber.cc",
+    "push_notification_subscriber.h",
+    "server_log_entry.cc",
+    "server_log_entry.h",
+    "signal_strategy.h",
+    "signaling_address.cc",
+    "signaling_address.h",
+    "xmpp_login_handler.cc",
+    "xmpp_login_handler.h",
+    "xmpp_signal_strategy.cc",
+    "xmpp_signal_strategy.h",
+    "xmpp_stream_parser.cc",
+    "xmpp_stream_parser.h",
+  ]
+
+  configs += [
+    "//build/config/compiler:no_size_t_to_int_warning",
+    "//build/config/compiler:wexit_time_destructors",
+    "//remoting/build/config:version",
+  ]
+
+  public_deps = [
+    ":ftl_grpc_library",
+    "//remoting/proto",
+    "//third_party/libjingle_xmpp",
+    "//third_party/webrtc_overrides",
+  ]
+
+  deps = [
+    "//base",
+    "//crypto",
+    "//google_apis",
+    "//jingle:jingle_glue",
+    "//net",
+    "//remoting/base",
+    "//third_party/grpc:grpcpp",
+  ]
+
+  if (is_nacl) {
+    sources -= [
+      "ftl_client.cc",
+      "ftl_client.h",
+      "grpc_async_call_data.cc",
+      "grpc_async_call_data.h",
+      "grpc_async_dispatcher.cc",
+      "grpc_async_dispatcher.h",
+      "log_to_server.cc",
+      "server_log_entry.cc",
+      "xmpp_signal_strategy.cc",
+    ]
+    deps -= [
+      "//google_apis",
+      "//third_party/grpc:grpcpp",
+    ]
+    public_deps -= [ ":ftl_grpc_library" ]
+  }
+}
+
+cc_grpc_library("ftl_grpc_library") {
+  sources = [
+    "ftl.proto",
+    "ftl_services.proto",
+  ]
+}
+
+static_library("test_support") {
+  testonly = true
+
+  sources = [
+    "fake_signal_strategy.cc",
+    "fake_signal_strategy.h",
+    "mock_signal_strategy.cc",
+    "mock_signal_strategy.h",
+  ]
+
+  public_deps = [
+    ":signaling",
+    "//testing/gmock",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+
+  sources = [
+    "grpc_async_dispatcher_unittest.cc",
+    "iq_sender_unittest.cc",
+    "jid_util_unittest.cc",
+    "log_to_server_unittest.cc",
+    "push_notification_subscriber_unittest.cc",
+    "server_log_entry_unittest.cc",
+    "server_log_entry_unittest.h",
+    "signaling_address_unittest.cc",
+    "xmpp_login_handler_unittest.cc",
+    "xmpp_signal_strategy_unittest.cc",
+    "xmpp_stream_parser_unittest.cc",
+  ]
+
+  deps = [
+    ":test_support",
+    ":unit_tests_grpc_library",
+    "//net:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+}
+
+cc_grpc_library("unit_tests_grpc_library") {
+  sources = [
+    "grpc_async_dispatcher_test_services.proto",
+  ]
+}

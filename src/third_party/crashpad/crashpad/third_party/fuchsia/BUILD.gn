@@ -1,0 +1,138 @@
+# Copyright 2018 The Crashpad Authors. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../build/crashpad_buildconfig.gni")
+
+if (crashpad_is_in_fuchsia) {
+  group("zx") {
+    public_deps = [
+      "//zircon/public/fidl/fuchsia-sysinfo:fuchsia-sysinfo_c",
+      "//zircon/public/lib/fdio",
+      "//zircon/public/lib/zx",
+    ]
+  }
+} else if (crashpad_is_in_chromium) {
+  group("zx") {
+    public_deps = [
+      "//third_party/fuchsia-sdk/sdk:fdio",
+      "//third_party/fuchsia-sdk/sdk:zx",
+      "//third_party/fuchsia-sdk/sdk:sysinfo",
+    ]
+  }
+} else {
+  sdk_path = "sdk/linux-amd64"
+  sdk_pkg_path = "$sdk_path/pkg"
+  sdk_fidl_path = "$sdk_path/fidl"
+
+  config("zx_config") {
+    visibility = [ ":zx" ]
+    include_dirs = [
+      "$root_gen_dir/fidl/include",
+      "$sdk_pkg_path/fidl/include",
+      "$sdk_pkg_path/zx/include",
+    ]
+  }
+
+  fidl_sources = [
+    {
+      fidl = "$sdk_fidl_path/fuchsia.sysinfo/sysinfo.fidl"
+      header_stem = "fuchsia/sysinfo"
+      library_name = "fuchsia.sysinfo"
+    },
+  ]
+
+  fidl_gen_sources = []
+  foreach(fidl_source, fidl_sources) {
+    fidl_stem = "$target_gen_dir/fidl/${fidl_source.library_name}"
+    c_header = "$root_gen_dir/fidl/include/${fidl_source.header_stem}/c/fidl.h"
+    c_client = "$fidl_stem/client.cc"
+    coding_tables = "$fidl_stem/tables.cc"
+
+    fidl_gen_sources += [
+      c_client,
+      coding_tables,
+    ]
+
+    action(fidl_source.library_name) {
+      visibility = [ ":*" ]
+
+      script = "runner.py"
+
+      args = [
+        rebase_path("$sdk_path/tools/fidlc", root_build_dir),
+        "--c-header",
+        rebase_path(c_header, root_build_dir),
+        "--c-client",
+        rebase_path(c_client, root_build_dir),
+        "--tables",
+        rebase_path(coding_tables, root_build_dir),
+        "--files",
+      ] + [ rebase_path(fidl_source.fidl, root_build_dir) ]
+
+      inputs = [ fidl_source.fidl, "$sdk_path/tools/fidlc" ]
+
+      outputs = [
+        c_client,
+        c_header,
+        coding_tables,
+      ]
+    }
+  }
+
+  static_library("zx") {
+    sources = [
+      "$sdk_pkg_path/zx/channel.cpp",
+      "$sdk_pkg_path/zx/event.cpp",
+      "$sdk_pkg_path/zx/eventpair.cpp",
+      "$sdk_pkg_path/zx/fifo.cpp",
+      "$sdk_pkg_path/zx/guest.cpp",
+      "$sdk_pkg_path/zx/include/lib/zx/bti.h",
+      "$sdk_pkg_path/zx/include/lib/zx/channel.h",
+      "$sdk_pkg_path/zx/include/lib/zx/event.h",
+      "$sdk_pkg_path/zx/include/lib/zx/eventpair.h",
+      "$sdk_pkg_path/zx/include/lib/zx/fifo.h",
+      "$sdk_pkg_path/zx/include/lib/zx/guest.h",
+      "$sdk_pkg_path/zx/include/lib/zx/handle.h",
+      "$sdk_pkg_path/zx/include/lib/zx/interrupt.h",
+      "$sdk_pkg_path/zx/include/lib/zx/job.h",
+      "$sdk_pkg_path/zx/include/lib/zx/object.h",
+      "$sdk_pkg_path/zx/include/lib/zx/object_traits.h",
+      "$sdk_pkg_path/zx/include/lib/zx/pmt.h",
+      "$sdk_pkg_path/zx/include/lib/zx/port.h",
+      "$sdk_pkg_path/zx/include/lib/zx/process.h",
+      "$sdk_pkg_path/zx/include/lib/zx/resource.h",
+      "$sdk_pkg_path/zx/include/lib/zx/socket.h",
+      "$sdk_pkg_path/zx/include/lib/zx/task.h",
+      "$sdk_pkg_path/zx/include/lib/zx/thread.h",
+      "$sdk_pkg_path/zx/include/lib/zx/time.h",
+      "$sdk_pkg_path/zx/include/lib/zx/timer.h",
+      "$sdk_pkg_path/zx/include/lib/zx/vmar.h",
+      "$sdk_pkg_path/zx/include/lib/zx/vmo.h",
+      "$sdk_pkg_path/zx/interrupt.cpp",
+      "$sdk_pkg_path/zx/job.cpp",
+      "$sdk_pkg_path/zx/port.cpp",
+      "$sdk_pkg_path/zx/process.cpp",
+      "$sdk_pkg_path/zx/resource.cpp",
+      "$sdk_pkg_path/zx/socket.cpp",
+      "$sdk_pkg_path/zx/thread.cpp",
+      "$sdk_pkg_path/zx/timer.cpp",
+      "$sdk_pkg_path/zx/vmar.cpp",
+      "$sdk_pkg_path/zx/vmo.cpp",
+    ] + fidl_gen_sources
+
+    deps = [ ":fuchsia.sysinfo" ]
+
+    public_configs = [ ":zx_config" ]
+  }
+}

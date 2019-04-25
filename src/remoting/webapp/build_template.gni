@@ -1,0 +1,305 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# Keep in sync with 'remoting_webapp' target in remoting/remoting_client.gypi.
+
+import("//build/config/chrome_build.gni")
+import("//build/config/features.gni")
+import("//build/util/version.gni")
+import("//components/nacl/features.gni")
+import("//remoting/remoting_enable.gni")
+import("//remoting/remoting_locales.gni")
+import("//remoting/remoting_options.gni")
+import("//remoting/remoting_version.gni")
+import("//remoting/webapp/files.gni")
+import("//third_party/closure_compiler/closure_args.gni")
+
+# The base remoting directory that is used as the root directory for file
+# references. Many of the scripts rely on the files being specified relative
+# to this directory.
+remoting_dir = "//remoting"
+
+buildtype = "Dev"
+if (!is_debug) {
+  if (is_official_build) {
+    buildtype = "Official"
+  } else {
+    buildtype = "Release"
+  }
+}
+
+template("build_locales_listfile") {
+  action(target_name) {
+    locales_listfile_output = invoker.locales_listfile_output
+
+    script = "../tools/build/remoting_localize.py"
+
+    inputs = []
+    outputs = [
+      locales_listfile_output,
+    ]
+
+    args = [
+      "--locale_output",
+      rebase_path(webapp_locale_dir, root_build_dir) +
+          "/@{json_suffix}/messages.json",
+      "--locales_listfile",
+      rebase_path(locales_listfile_output, root_build_dir),
+    ]
+    args += remoting_locales
+  }
+}
+
+template("build_webapp_html") {
+  target_jscompile = ""
+
+  # Do not enable JSCompile on instrumented builds.
+  if (enable_remoting_jscompile && invoker.instrument_js == []) {
+    target_jscompile = "${target_name}_jscompile"
+    target_jscompile_stamp = "$target_gen_dir/${target_jscompile}.stamp"
+    action(target_jscompile) {
+      js_files = remoting_webapp_js_proto_files + invoker.js_files
+      externs =
+          remoting_webapp_js_externs_files + [
+            "../../third_party/closure_compiler/externs/chrome_extensions.js",
+            "../../third_party/closure_compiler/externs/metrics_private.js",
+          ]
+
+      script = "../../third_party/closure_compiler/compile.py"
+      inputs = js_files
+      outputs = [
+        target_jscompile_stamp,
+      ]
+
+      extra_closure_args = [
+        "jscomp_error=reportUnknownTypes",
+        "jscomp_error=duplicate",
+        "jscomp_error=misplacedTypeAnnotation",
+      ]
+
+      args = rebase_path(js_files, root_build_dir)
+      args += [
+                "--no_single_file",
+                "--out_file",
+                rebase_path(target_jscompile_stamp, root_build_dir),
+                "--closure_args",
+              ] + default_closure_args + extra_closure_args
+      args += [ "--externs" ] + rebase_path(externs, root_build_dir)
+    }
+  }
+
+  action(target_name) {
+    html_template_file = invoker.html_template_file
+    html_template_include_files = invoker.html_template_include_files
+    js_files = invoker.js_files
+    html_output = invoker.html_output
+    exclude_js = invoker.exclude_js
+    instrument_js = invoker.instrument_js
+
+    script = "//remoting/webapp/build-html.py"
+
+    # Create a file that contains a list of all the JavaScript files needed
+    # to build the unit test page. This is needed to avoid problems on platforms
+    # that limit the size of a command line.
+    file_list = "$target_gen_dir/${target_name}_files.txt"
+    files = rebase_path(js_files, root_build_dir)
+    write_file(file_list, files)
+
+    inputs = [ html_template_file ] + html_template_include_files + js_files
+
+    outputs = [
+      html_output,
+    ]
+
+    if (target_jscompile != "") {
+      deps = [
+        ":$target_jscompile",
+      ]
+    }
+
+    args = [
+      rebase_path(html_output, root_build_dir),
+      rebase_path(html_template_file, root_build_dir),
+    ]
+    args += [
+      "--template-dir",
+      rebase_path(remoting_dir, root_build_dir),
+    ]
+    args += [ "--templates" ] + html_template_include_files
+    args += [
+      "--js-list-file",
+      rebase_path(file_list, root_build_dir),
+    ]
+    args += [ "--templates" ] + html_template_include_files
+    args += [
+      "--js-list-file",
+      rebase_path(file_list, root_build_dir),
+    ]
+    args += [ "--exclude-js" ] + rebase_path(exclude_js, root_build_dir)
+    args += [ "--instrument-js" ] + rebase_path(instrument_js, root_build_dir)
+  }
+}
+
+template("desktop_remoting_webapp") {
+  locales_listfile = target_name + "_locales"
+  locales_listfile_output = "$target_gen_dir/${target_name}_locales.txt"
+
+  build_locales_listfile(locales_listfile) {
+    # Template uses locales_listfile_output from outer scope.
+  }
+
+  background_html = target_name + "_background_html"
+  background_html_output = "$target_gen_dir/html/$target_name/background.html"
+
+  build_webapp_html(background_html) {
+    html_template_file = remoting_webapp_template_background
+    html_template_include_files = []
+    js_files = remoting_webapp_background_html_all_js_files
+    html_output = background_html_output
+    exclude_js = []
+    instrument_js = []
+  }
+
+  message_window_html = target_name + "_message_window_html"
+  message_window_html_output =
+      "$target_gen_dir/html/$target_name/message_window.html"
+
+  build_webapp_html(message_window_html) {
+    html_template_file = remoting_webapp_template_message_window
+    html_template_include_files = []
+    js_files = remoting_webapp_message_window_html_all_js_files
+    html_output = message_window_html_output
+    exclude_js = []
+    instrument_js = []
+  }
+
+  wcs_sandbox_html = target_name + "_wcs_sandbox_html"
+  wcs_sandbox_html_output = "$target_gen_dir/html/$target_name/wcs_sandbox.html"
+
+  build_webapp_html(wcs_sandbox_html) {
+    html_template_file = remoting_webapp_template_wcs_sandbox
+    html_template_include_files = []
+    js_files = remoting_webapp_wcs_sandbox_html_all_js_files
+    html_output = wcs_sandbox_html_output
+    exclude_js = []
+    instrument_js = []
+  }
+
+  main_html = target_name + "_main_html"
+  main_html_output = "$target_gen_dir/html/$target_name/main.html"
+
+  build_webapp_html(main_html) {
+    html_template_file = remoting_webapp_template_main
+    html_template_include_files = remoting_webapp_template_files
+    js_files = remoting_webapp_crd_main_html_all_js_files
+    html_output = main_html_output
+    exclude_js = []
+    instrument_js = []
+  }
+
+  public_session_html = target_name + "_public_session_html"
+  public_session_html_output =
+      "$target_gen_dir/html/$target_name/public_session.html"
+
+  build_webapp_html(public_session_html) {
+    html_template_file = remoting_webapp_template_public_session
+    html_template_include_files = remoting_webapp_public_session_template_files
+    js_files = remoting_webapp_public_session_html_all_js_files
+    html_output = public_session_html_output
+    exclude_js = []
+    instrument_js = []
+  }
+
+  action(target_name) {
+    script = "//remoting/webapp/build-webapp.py"
+
+    sources = [
+      "//build/android/gyp/util/build_utils.py",
+    ]
+
+    output_dir = invoker.output_dir
+    zip_path = invoker.zip_path
+    extra_files = invoker.extra_files
+
+    dr_generated_html_files = [
+      background_html_output,
+      message_window_html_output,
+      wcs_sandbox_html_output,
+      main_html_output,
+      public_session_html_output,
+      "$target_gen_dir/credits.html",
+    ]
+
+    # Windows debug builds of remoting_client_plugin_newlib.pexe trigger OOM in
+    # arm-nacl-ld.gold.exe - enable for release builds only on Windows.
+    if (enable_nacl && (!is_win || !is_debug)) {
+      pnacl_tc = "//build/toolchain/nacl:newlib_pnacl"
+      pexe_label = "//remoting/client/plugin:remoting_client_plugin_newlib"
+      pexe_dir = get_label_info("${pexe_label}($pnacl_tc)", "root_out_dir")
+
+      extra_files += [ "$pexe_dir/remoting_client_plugin_newlib.pexe" ]
+      if (is_debug) {
+        extra_files += [ "$pexe_dir/remoting_client_plugin_newlib.pexe.debug" ]
+      }
+    }
+
+    inputs = [ rebase_path("crd/manifest.json.jinja2") ] +
+             remoting_version_files + rebase_path(remoting_webapp_crd_files) +
+             extra_files + dr_generated_html_files
+
+    outputs = [
+      zip_path,
+    ]
+
+    deps = [
+      ":$background_html",
+      ":$locales_listfile",
+      ":$main_html",
+      ":$message_window_html",
+      ":$public_session_html",
+      ":$wcs_sandbox_html",
+      "//remoting/resources",
+      "//remoting/webapp:credits",
+    ]
+
+    # Windows debug builds of remoting_client_plugin_newlib.pexe trigger OOM in
+    # arm-nacl-ld.gold.exe - enable for release builds only on Windows.
+    if (enable_nacl && (!is_win || !is_debug)) {
+      deps += [ "${pexe_label}($pnacl_tc)" ]
+      if (is_debug) {
+        deps += [ "${pexe_label}_debug($pnacl_tc)" ]
+      }
+    }
+
+    # Create a file that contains a list of all the resource files needed
+    # to build the webapp. This is needed to avoid problems on platforms that
+    # limit the size of a command line.
+    file_list = "$target_gen_dir/${target_name}_files.txt"
+    files = []
+    files += rebase_path(dr_generated_html_files, root_build_dir)
+    files += rebase_path(remoting_webapp_crd_files, root_build_dir)
+    files += rebase_path(extra_files, root_build_dir)
+    write_file(file_list, files)
+
+    args = [
+      buildtype,
+      chrome_version_full,
+      rebase_path(output_dir, root_build_dir),
+      rebase_path(zip_path, root_build_dir),
+      rebase_path("crd/manifest.json.jinja2", root_build_dir),
+    ]
+    args += [
+      "--files_listfile",
+      rebase_path(file_list, root_build_dir),
+    ]
+    args += [
+      "--locales_listfile",
+      rebase_path(locales_listfile_output, root_build_dir),
+    ]
+    args += [
+      "--use_gcd",
+      "$remoting_use_gcd",
+    ]
+  }
+}

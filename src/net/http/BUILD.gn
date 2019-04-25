@@ -1,0 +1,62 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/compiled_action.gni")
+
+# Generates a header file based on the real preload list.
+compiled_action("generate_transport_security_state") {
+  tool = "//net/tools/transport_security_state_generator"
+
+  # Inputs in order expected by the command line of the tool.
+  inputs = [
+    "transport_security_state_static.json",
+    "transport_security_state_static.pins",
+    "transport_security_state_static.template",
+  ]
+  outputs = [
+    "$target_gen_dir/transport_security_state_static.h",
+  ]
+  args =
+      rebase_path(inputs, root_build_dir) + rebase_path(outputs, root_build_dir)
+}
+
+# Generates a header file for use in unittests.
+compiled_action("transport_security_state_unittest_data_default") {
+  tool = "//net/tools/transport_security_state_generator"
+
+  # Inputs in order expected by the command line of the tool.
+  inputs = [
+    "transport_security_state_static_unittest_default.json",
+    "transport_security_state_static_unittest_default.pins",
+    "transport_security_state_static_unittest.template",
+  ]
+  outputs = [
+    "$target_gen_dir/transport_security_state_static_unittest_default.h",
+  ]
+  args =
+      rebase_path(inputs, root_build_dir) + rebase_path(outputs, root_build_dir)
+}
+
+# Generates a number of header files that are used by integration tests for the
+# generation process and preload format.
+compiled_action_foreach("transport_security_state_unittest_data") {
+  tool = "//net/tools/transport_security_state_generator"
+  sources = [
+    "transport_security_state_static_unittest1.json",
+    "transport_security_state_static_unittest2.json",
+    "transport_security_state_static_unittest3.json",
+  ]
+
+  # Inputs in order expected by the command line of the tool.
+  inputs = [
+    "transport_security_state_static_unittest.pins",
+    "transport_security_state_static_unittest.template",
+  ]
+  outputs = [
+    "$target_gen_dir/{{source_name_part}}.h",
+  ]
+  args =
+      [ rebase_path("{{source_name_part}}.json", root_build_dir) ] +
+      rebase_path(inputs, root_build_dir) + rebase_path(outputs, root_build_dir)
+}

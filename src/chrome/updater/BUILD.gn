@@ -1,0 +1,68 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/chrome_build.gni")
+import("//build/config/sanitizers/sanitizers.gni")
+import("//testing/test.gni")
+
+group("updater") {
+  if (is_win) {
+    deps = [
+      "//chrome/updater/win",
+    ]
+  }
+  if (is_mac) {
+    deps = [
+      "//chrome/updater/mac",
+    ]
+  }
+}
+
+source_set("common") {
+  sources = [
+    "configurator.cc",
+    "configurator.h",
+    "updater.cc",
+    "updater.h",
+  ]
+
+  deps = [
+    "//base",
+    "//components/services/patch/public/cpp:manifest",
+    "//components/services/unzip/public/cpp:manifest",
+    "//components/update_client",
+    "//components/version_info",
+    "//mojo/core/embedder",
+    "//services/service_manager",
+    "//url",
+  ]
+}
+
+source_set("updater_tests") {
+  testonly = true
+
+  sources = [
+    "updater_unittest.cc",
+  ]
+
+  deps = [
+    ":updater",
+    "//base/test:test_support",
+    "//testing/gtest",
+  ]
+
+  if (is_win) {
+    deps += [ "//chrome/updater/win:unittest" ]
+
+    data_deps = [
+      "//chrome/updater/win:updater",
+    ]
+  }
+
+  if (is_mac) {
+    data_deps = [
+      "//chrome/updater/mac:updater",
+    ]
+  }
+}
