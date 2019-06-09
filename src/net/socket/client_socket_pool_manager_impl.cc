@@ -85,7 +85,7 @@ ClientSocketPool* ClientSocketPoolManagerImpl::GetSocketPool(
     new_pool = std::make_unique<TransportClientSocketPool>(
         sockets_per_proxy_server, sockets_per_group,
         unused_idle_socket_timeout(pool_type_), proxy_server,
-        pool_type_ == HttpNetworkSession::WEBSOCKET_SOCKET_POOL,
+        true /* force_tunnel */,
         &common_connect_job_params_, ssl_config_service_);
   }
 
