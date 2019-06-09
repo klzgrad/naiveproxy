@@ -90,8 +90,8 @@ ClientSocketPool* ClientSocketPoolManagerImpl::GetSocketPool(
     new_pool = std::make_unique<TransportClientSocketPool>(
         sockets_per_proxy_chain, sockets_per_group, additional_capacity,
         unused_idle_socket_timeout(pool_type_), proxy_chain,
-        pool_type_ == HttpNetworkSession::WEBSOCKET_SOCKET_POOL,
-        &common_connect_job_params_, cleanup_on_ip_address_change_);
+        /*force_tunnel=*/true, &common_connect_job_params_,
+        cleanup_on_ip_address_change_);
   }
 
   std::pair<SocketPoolMap::iterator, bool> ret =
