@@ -1,0 +1,275 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/android/rules.gni")
+import("//chrome/common/features.gni")
+import("//device/vr/buildflags/buildflags.gni")
+import("//testing/test.gni")
+
+assert(enable_vr)
+
+static_library("vr_android") {
+  defines = []
+
+  sources = [
+    "android_ui_gesture_target.cc",
+    "android_ui_gesture_target.h",
+    "android_vsync_helper.cc",
+    "android_vsync_helper.h",
+    "autocomplete_controller.cc",
+    "autocomplete_controller.h",
+    "browser_renderer_factory.cc",
+    "browser_renderer_factory.h",
+    "cardboard_input_delegate.cc",
+    "cardboard_input_delegate.h",
+    "gl_browser_interface.h",
+    "gvr_consent_helper_impl.cc",
+    "gvr_consent_helper_impl.h",
+    "gvr_graphics_delegate.cc",
+    "gvr_graphics_delegate.h",
+    "gvr_input_delegate.cc",
+    "gvr_input_delegate.h",
+    "gvr_keyboard_delegate.cc",
+    "gvr_keyboard_delegate.h",
+    "gvr_keyboard_shim.cc",
+    "gvr_scheduler_delegate.cc",
+    "gvr_scheduler_delegate.h",
+    "gvr_util.cc",
+    "gvr_util.h",
+    "mailbox_to_surface_bridge.cc",
+    "mailbox_to_surface_bridge.h",
+    "metrics_util_android.cc",
+    "metrics_util_android.h",
+    "register_gvr_jni.cc",
+    "register_gvr_jni.h",
+    "register_jni.h",
+    "scoped_gpu_trace.cc",
+    "scoped_gpu_trace.h",
+    "vr_controller.cc",
+    "vr_controller.h",
+    "vr_core_info.cc",
+    "vr_core_info.h",
+    "vr_gl_thread.cc",
+    "vr_gl_thread.h",
+    "vr_input_connection.cc",
+    "vr_input_connection.h",
+    "vr_module_provider.cc",
+    "vr_module_provider.h",
+    "vr_shell.cc",
+    "vr_shell.h",
+    "vr_shell_delegate.cc",
+    "vr_shell_delegate.h",
+    "web_xr_presentation_state.cc",
+    "web_xr_presentation_state.h",
+  ]
+
+  if (enable_arcore) {
+    sources += [
+      "arcore_device/ar_image_transport.cc",
+      "arcore_device/ar_image_transport.h",
+      "arcore_device/ar_renderer.cc",
+      "arcore_device/ar_renderer.h",
+      "arcore_device/arcore.h",
+      "arcore_device/arcore_device.cc",
+      "arcore_device/arcore_device.h",
+      "arcore_device/arcore_device_provider.cc",
+      "arcore_device/arcore_device_provider.h",
+      "arcore_device/arcore_gl.cc",
+      "arcore_device/arcore_gl.h",
+      "arcore_device/arcore_gl_thread.cc",
+      "arcore_device/arcore_gl_thread.h",
+      "arcore_device/arcore_impl.cc",
+      "arcore_device/arcore_impl.h",
+      "arcore_device/arcore_install_utils.h",
+      "arcore_device/arcore_java_utils.cc",
+      "arcore_device/arcore_java_utils.h",
+      "arcore_device/arcore_shim.cc",
+      "arcore_device/arcore_shim.h",
+      "arcore_device/type_converters.cc",
+      "arcore_device/type_converters.h",
+    ]
+  }
+
+  deps = [
+    ":ui_factory",
+    "//base",
+    "//cc",
+    "//chrome/android/features/vr:jni_headers",
+    "//chrome/browser/ui",
+    "//chrome/browser/vr:vr_common",
+    "//chrome/common",
+    "//chrome/common:constants",
+    "//components/language/core/browser",
+    "//components/omnibox/browser",
+    "//components/rappor",
+    "//components/search_engines:search_engines",
+    "//content/public/browser",
+    "//content/public/common",
+    "//device/gamepad",
+    "//device/vr",
+    "//device/vr/buildflags:buildflags",
+    "//services/device/public/mojom",
+    "//services/metrics/public/cpp:ukm_builders",
+    "//services/ws/public/cpp/gpu",
+    "//third_party/gvr-android-sdk:gvr_shim",
+    "//ui/android",
+    "//ui/base",
+    "//ui/display",
+    "//ui/gl",
+    "//ui/gl/init",
+  ]
+
+  if (enable_arcore) {
+    deps += [ ":ar_jni_headers" ]
+  }
+
+  public_deps = [
+    "//device/vr/public/mojom",
+  ]
+
+  libs = [ "android" ]
+
+  configs += [
+    "//third_party/gvr-android-keyboard:kb_config",
+    "//third_party/gvr-android-sdk:libgvr_config",
+  ]
+
+  if (enable_arcore) {
+    configs += [ "//third_party/arcore-android-sdk:libarcore_config" ]
+  }
+}
+
+# The VR UI module factory interface.
+source_set("ui_factory") {
+  sources = [
+    "ui_factory.h",
+  ]
+  deps = [
+    "//chrome/browser/vr:vr_base",
+  ]
+}
+
+# The default UI factory implementation, which simply instantiates an object.
+source_set("ui_default_factory") {
+  sources = [
+    "ui_default_factory.cc",
+    "ui_default_factory.h",
+  ]
+  deps = [
+    ":ui_factory",
+    "//chrome/browser/vr:vr_base",
+    "//chrome/browser/vr:vr_ui",
+  ]
+}
+
+# The DFM version of the factory, which opens the DFM shared library and uses
+# it to create a UI.
+source_set("ui_module_factory") {
+  sources = [
+    "ui_module_factory.cc",
+    "ui_module_factory.h",
+  ]
+  deps = [
+    ":ui_factory",
+    "//chrome/browser/vr:vr_base",
+  ]
+}
+
+# Similar to the ui_default_factory but also tries to open a dummy lib for the
+# purpose of exercising the library loading mechanism.
+source_set("ui_module_dummy_factory") {
+  sources = [
+    "ui_module_dummy_factory.cc",
+    "ui_module_dummy_factory.h",
+  ]
+  deps = [
+    ":ui_factory",
+    "//chrome/browser/vr:vr_base",
+    "//chrome/browser/vr:vr_ui",
+  ]
+}
+
+# A dummy lib used to test the library loading mechanism.
+loadable_module("vr_ui_dummy_lib") {
+  sources = [
+    "ui_dummy.cc",
+    "ui_dummy.h",
+  ]
+  no_default_deps = true
+}
+
+android_library("ar_java") {
+  deps = [
+    "//third_party/android_deps:com_google_ar_core_java",
+  ]
+
+  java_files = [ "//chrome/android/java/src/org/chromium/chrome/browser/vr/ArCoreShimImpl.java" ]
+
+  classpath_deps = [
+    "//base:base_java",
+    "//chrome/android:chrome_java",
+  ]
+
+  # TODO(crbug.com/938909): chromium_code.flags is not used as a proguard
+  # config when proguarding asynchronously. This results in AR crashing
+  # chrome when AR is an async DFM. Should implement a more scalable
+  # solution to including chromium_code.flags with all async DFMs.
+  if (async_ar) {
+    proguard_configs = [ "//base/android/proguard/chromium_code.flags" ]
+  }
+}
+
+if (enable_arcore) {
+  generate_jni("ar_jni_headers") {
+    sources = [
+      "//chrome/android/java/src/org/chromium/chrome/browser/vr/ArCoreJavaUtils.java",
+    ]
+    jni_package = "vr"
+  }
+}
+
+if (current_toolchain == default_toolchain) {
+  generate_jni_registration("jni_registration") {
+    target = "//chrome/android/features/vr:java"
+    header_output = "$target_gen_dir/${target_name}.h"
+    namespace = "vr"
+  }
+}
+
+group("test_support") {
+  public_deps = [
+    ":ui_default_factory",
+  ]
+}
+
+test("vr_android_unittests") {
+  sources = [
+    "arcore_device/arcore_device_unittest.cc",
+    "arcore_device/fake_arcore.cc",
+    "arcore_device/fake_arcore.h",
+    "register_jni.cc",
+    "test/ar_test_suite.cc",
+    "test/ar_test_suite.h",
+    "test/run_all_unittests.cc",
+  ]
+
+  libs = [ "android" ]
+
+  deps = [
+    ":jni_registration",
+    ":test_support",
+    ":vr_android",
+    "//base/test:test_support",
+    "//chrome/browser",
+    "//components/translate/core/language_detection:language_detection",
+    "//device/vr:fakes",
+    "//device/vr/public/mojom",
+    "//mojo/core/embedder",
+    "//mojo/public/cpp/bindings",
+    "//services/network:test_support",
+    "//testing/android/native_test:native_test_native_code",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+}

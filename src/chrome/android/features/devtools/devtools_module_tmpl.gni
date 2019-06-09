@@ -1,0 +1,40 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/android/rules.gni")
+import("//build/config/locales.gni")
+import("//chrome/android/features/dynamic_feature_modules.gni")
+
+template("devtools_module_tmpl") {
+  _manifest = "$target_gen_dir/$target_name/AndroidManifest.xml"
+  _manifest_target = "${target_name}__manifest"
+  jinja_template(_manifest_target) {
+    input = "//chrome/android/features/devtools/java/AndroidManifest.xml"
+    output = _manifest
+    variables = [
+      "target_sdk_version=$android_sdk_version",
+      "manifest_package=${invoker.manifest_package}",
+    ]
+  }
+
+  android_app_bundle_module(target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "base_module_target",
+                             "module_name",
+                             "uncompress_shared_libraries",
+                             "version_code",
+                             "version_name",
+                           ])
+    android_manifest = _manifest
+    android_manifest_dep = ":${_manifest_target}"
+    deps = [
+      "//chrome/android/features/devtools:java",
+    ]
+    proguard_enabled = !is_java_debug
+    aapt_locale_whitelist = locales
+    package_name = "devtools"
+    package_name_to_id_mapping = resource_packages_id_mapping
+  }
+}

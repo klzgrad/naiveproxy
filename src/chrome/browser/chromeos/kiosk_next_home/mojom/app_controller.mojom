@@ -1,0 +1,62 @@
+// Copyright 2019 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module chromeos.kiosk_next_home.mojom;
+
+import "chrome/services/app_service/public/mojom/types.mojom";
+
+// Represents an app on Chrome OS. This struct has all the information
+// necessary to display the app in the Kiosk Next Home app list/grid, including
+// readiness, thumbnail image, display name, etc.
+struct App {
+  // Stable and unique identifier for this app.
+  string app_id;
+
+  // The type of this app (e.g. ARC, Crostini, extension, etc).
+  apps.mojom.AppType type;
+
+  // Name used when displaying the app in an app list or grid.
+  string display_name;
+
+  // Android package name for this app.
+  // This field will only be present if this is an ARC app.
+  string android_package_name;
+
+  // The current state of readiness for this app.
+  // It can tell if the app is suspended, uninstalled, etc.
+  apps.mojom.Readiness readiness;
+};
+
+// Interface used by AppController clients to receive app related events.
+interface AppControllerClient {
+  // Called when any field from the given app changes.
+  OnAppChanged(App app);
+};
+
+// Interface for managing Chrome OS apps from the Kiosk Next Home.
+interface AppController {
+  // Returns all the local apps installed on this Chrome OS device.
+  // It reads from all the app sources, including ARC++ (Android),
+  // Crostini (Linux), extensions and PWAs.
+  // Note that as soon as this method returns, some of the apps might have
+  // changed. To always get the most updated information, attach an app
+  // observer through the AddObserver method.
+  GetApps() => (array<App> apps);
+
+  // Sets the client that will be notified when an app changes.
+  SetClient(AppControllerClient client);
+
+  // Launches the app with the given app_id.
+  LaunchApp(string app_id);
+
+  // Shows a prompt to uninstall the app with the given app_id.
+  UninstallApp(string app_id);
+
+  // Gets the Android ID for the ARC container.
+  GetArcAndroidId() => (bool success, string android_id);
+
+  // Launches allowed ARC intents.
+  // Intents are checked via chromeos::kiosk_next_home::IntentConfigHelper.
+  LaunchIntent(string intent) => (bool launched, string? error_message);
+};

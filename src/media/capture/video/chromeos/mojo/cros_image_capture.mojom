@@ -1,0 +1,35 @@
+// Copyright 2019 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module cros.mojom;
+
+import "media/capture/mojom/image_capture.mojom";
+import "media/capture/video/chromeos/mojo/camera_common.mojom";
+
+// Effect that recognized by Chrome OS.
+enum Effect {
+  NO_EFFECT = 0,
+  PORTRAIT_MODE = 1,
+};
+
+// Interface for Chrome OS specific Image Capture API which supports reprocess
+// mechanism. The |source_id| parameter in following methods might not be the
+// actual device id if it is called by renderer. It needs to be
+// translated to the actual video device id to be used in CrosImageCapture
+// implementation.
+interface CrosImageCapture {
+  // Gets camera information |camera_info| which includes camera facing,
+  // characteristics, orientation, etc. The |source_id| might need translation
+  // to be actual video device id.
+  GetCameraInfo(string source_id) => (CameraInfo camera_info);
+
+  // Sets reprocess option to bind with the coming take photo request. When this
+  // method is called, the reprocess option will be queued. All reprocess
+  // options in the queue will be consumed when TakePhoto() method in Image
+  // Capture API is triggered and all the queued reprocess options will be bound
+  // to that take photo request. The |source_id| might need translation to be
+  // actual video device id.
+  SetReprocessOption(string source_id, Effect effect)
+      => (int32 status, media.mojom.Blob blob);
+};

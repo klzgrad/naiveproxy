@@ -1,0 +1,244 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+assert(is_fuchsia)
+
+import("//build/config/fuchsia/rules.gni")
+import("//build/config/fuchsia/symbol_archive.gni")
+import("//testing/test.gni")
+
+# Files common to both cast_runner and web_runner targets.
+source_set("common") {
+  sources = [
+    "common/web_component.cc",
+    "common/web_component.h",
+    "common/web_content_runner.cc",
+    "common/web_content_runner.h",
+  ]
+  deps = [
+    "//base",
+    "//fuchsia/base",
+    "//fuchsia/base:modular",
+    "//third_party/fuchsia-sdk/sdk:ui_app",
+    "//url",
+  ]
+  public_deps = [
+    "//third_party/fuchsia-sdk/sdk:sys",
+    "//third_party/fuchsia-sdk/sdk:web",
+  ]
+  visibility = [ ":*" ]
+}
+
+source_set("cast_runner_core") {
+  sources = [
+    "cast/api_bindings_client.cc",
+    "cast/api_bindings_client.h",
+    "cast/cast_channel_bindings.cc",
+    "cast/cast_channel_bindings.h",
+    "cast/cast_component.cc",
+    "cast/cast_component.h",
+    "cast/cast_platform_bindings_ids.h",
+    "cast/cast_runner.cc",
+    "cast/cast_runner.h",
+    "cast/named_message_port_connector.cc",
+    "cast/named_message_port_connector.h",
+    "cast/queryable_data_bindings.cc",
+    "cast/queryable_data_bindings.h",
+    "cast/touch_input_bindings.cc",
+    "cast/touch_input_bindings.h",
+  ]
+  data = [
+    "cast/cast_channel_bindings.js",
+    "cast/not_implemented_api_bindings.js",
+    "cast/queryable_data_bindings.js",
+    "cast/touch_input_bindings.js",
+  ]
+  data_deps = [
+    "//chromecast/bindings:named_message_port_connector_resources",
+  ]
+  deps = [
+    "//base",
+    "//fuchsia/base",
+    "//fuchsia/base:modular",
+    "//third_party/fuchsia-sdk/sdk:modular",
+    "//url",
+  ]
+  public_deps = [
+    ":common",
+    "//fuchsia:cast_fidl",
+    "//third_party/fuchsia-sdk/sdk:web",
+  ]
+  visibility = [ ":*" ]
+}
+
+executable("cast_runner_exe") {
+  sources = [
+    "cast/main.cc",
+  ]
+  deps = [
+    ":cast_runner_core",
+    ":common",
+    "//base",
+  ]
+  visibility = [ ":*" ]
+}
+
+fuchsia_package("cast_runner_pkg") {
+  binary = ":cast_runner_exe"
+  package_name_override = "cast_runner"
+  sandbox_policy = "cast/sandbox_policy"
+}
+
+fuchsia_package_runner("cast_runner") {
+  package = ":cast_runner_pkg"
+  package_name_override = "cast_runner"
+  install_only = true
+  package_deps = [ [
+        "//fuchsia/engine:web_engine",
+        "chromium",
+      ] ]
+}
+
+source_set("cast_runner_test_core") {
+  testonly = true
+  sources = [
+    "cast/fake_application_config_manager.cc",
+    "cast/fake_application_config_manager.h",
+    "cast/fake_queryable_data.cc",
+    "cast/fake_queryable_data.h",
+    "cast/test_api_bindings.cc",
+    "cast/test_api_bindings.h",
+  ]
+  deps = [
+    ":cast_runner_core",
+  ]
+  public_deps = [
+    "//base",
+    "//fuchsia:cast_fidl",
+    "//third_party/fuchsia-sdk/sdk:sys",
+    "//url",
+  ]
+  visibility = [ ":*" ]
+}
+
+test("cast_runner_integration_tests") {
+  sources = [
+    "cast/cast_runner_integration_test.cc",
+  ]
+  data = [
+    "cast/testdata",
+  ]
+  deps = [
+    ":cast_runner_core",
+    ":cast_runner_test_core",
+    "//base/test:run_all_unittests",
+    "//base/test:test_support",
+    "//fuchsia/base:test_support",
+    "//net:test_support",
+    "//testing/gtest",
+  ]
+  package_deps = [ [
+        "//fuchsia/engine:web_engine",
+        "chromium",
+      ] ]
+}
+
+test("cast_runner_browsertests") {
+  sources = [
+    "cast/api_bindings_client_browsertest.cc",
+    "cast/cast_channel_bindings_browsertest.cc",
+    "cast/named_message_port_connector_browsertest.cc",
+    "cast/not_implemented_api_bindings_browsertest.cc",
+    "cast/queryable_data_bindings_browsertest.cc",
+  ]
+  defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+  data = [
+    "cast/testdata",
+  ]
+  deps = [
+    ":cast_runner_core",
+    ":cast_runner_test_core",
+    "//base/test:test_support",
+    "//content/public/browser",
+    "//fuchsia/base",
+    "//fuchsia/base:test_support",
+    "//fuchsia/engine:browsertest_core",
+    "//fuchsia/engine:web_engine_core",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//ui/ozone",
+  ]
+}
+
+executable("web_runner_exe") {
+  sources = [
+    "web/main.cc",
+  ]
+  deps = [
+    ":common",
+    "//base",
+  ]
+  visibility = [ ":*" ]
+}
+
+fuchsia_package("web_runner_pkg") {
+  binary = ":web_runner_exe"
+  package_name_override = "web_runner"
+  sandbox_policy = "web/sandbox_policy"
+}
+
+fuchsia_package_runner("web_runner") {
+  package = ":web_runner_pkg"
+  package_name_override = "web_runner"
+  install_only = true
+  package_deps = [ [
+        "//fuchsia/engine:web_engine",
+        "chromium",
+      ] ]
+}
+
+test("web_runner_integration_tests") {
+  sources = [
+    "web/web_runner_smoke_test.cc",
+  ]
+  deps = [
+    "//base",
+    "//base/test:run_all_unittests",
+    "//base/test:test_support",
+    "//fuchsia/base:modular",
+    "//net:test_support",
+    "//testing/gtest",
+    "//third_party/fuchsia-sdk/sdk:sys",
+  ]
+  package_deps = [
+    [
+      "//fuchsia/engine:web_engine",
+      "chromium",
+    ],
+    [
+      ":web_runner_pkg",
+      "web_runner",
+    ],
+  ]
+}
+
+if (is_official_build) {
+  symbol_archive("cast_runner_symbol_archive") {
+    deps = [
+      ":cast_runner_pkg",
+    ]
+    ids_txt = "$root_gen_dir/fuchsia/runners/cast_runner/ids.txt"
+    archive_name =
+        "$root_gen_dir/fuchsia/runners/cast_runner/cast_runner.symbols.tar.bz2"
+  }
+
+  symbol_archive("web_runner_symbol_archive") {
+    deps = [
+      ":web_runner_pkg",
+    ]
+    ids_txt = "$root_gen_dir/fuchsia/runners/web_runner/ids.txt"
+    archive_name =
+        "$root_gen_dir/fuchsia/runners/web_runner/web_runner.symbols.tar.bz2"
+  }
+}  # is_official_build

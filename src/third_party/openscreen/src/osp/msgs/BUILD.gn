@@ -1,0 +1,72 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+source_set("msgs") {
+  sources = [
+    target_gen_dir + "/osp_messages.cc",
+    target_gen_dir + "/osp_messages.h",
+    "request_response_handler.h",
+  ]
+
+  public_deps = [
+    ":cddl_gen",
+  ]
+  deps = [
+    "../../third_party/abseil",
+    "../../third_party/tinycbor",
+  ]
+
+  public_configs = [ ":cddl_gen_config" ]
+  configs += [ "../../build:allow_build_from_embedder" ]
+}
+
+config("cddl_gen_config") {
+  include_dirs = [ "$root_gen_dir" + "/" + rebase_path("../..", "//") ]
+}
+
+action("cddl_gen") {
+  script = "../../tools/cddl/cddl.py"
+  sources = [
+    "osp_messages.cddl",
+  ]
+  outputs_src = rebase_path([
+                              "osp_messages.h",
+                              "osp_messages.cc",
+                            ],
+                            "//")
+  outputs = []
+  foreach(o, outputs_src) {
+    outputs += [ root_gen_dir + "/" + o ]
+  }
+
+  args = [
+           "--header",
+           outputs_src[0],
+           "--cc",
+           outputs_src[1],
+           "--gen-dir",
+           rebase_path(root_gen_dir, root_build_dir),
+           "--log",
+           rebase_path("cddl.log", "//"),
+         ] + rebase_path(sources, root_build_dir)
+
+  deps = [
+    "../../tools/cddl",
+  ]
+}
+
+source_set("unittests") {
+  testonly = true
+
+  sources = [
+    "messages_unittest.cc",
+  ]
+
+  deps = [
+    ":msgs",
+    "../../third_party/googletest:gtest",
+  ]
+
+  configs += [ "../../build:allow_build_from_embedder" ]
+}

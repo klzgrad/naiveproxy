@@ -1,0 +1,73 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//media/media_options.gni")
+import("//media/webrtc/audio_processing.gni")
+import("//third_party/webrtc/webrtc.gni")
+
+config("audio_processing_build_flag") {
+  if (audio_processing_in_audio_service_supported) {
+    defines = [ "AUDIO_PROCESSING_IN_AUDIO_SERVICE" ]
+  }
+}
+
+component("webrtc") {
+  output_name = "media_webrtc"
+
+  sources = [
+    "audio_delay_stats_reporter.cc",
+    "audio_delay_stats_reporter.h",
+    "webrtc_switches.cc",
+    "webrtc_switches.h",
+  ]
+
+  defines = [ "IS_MEDIA_WEBRTC_IMPL" ]
+
+  deps = [
+    "//base",
+    "//third_party/webrtc/modules/audio_processing",
+    "//third_party/webrtc/modules/audio_processing:api",
+    "//third_party/webrtc/modules/audio_processing:audio_processing_statistics",
+    "//third_party/webrtc_overrides:init_webrtc",
+  ]
+
+  if (audio_processing_in_audio_service_supported) {
+    # Only build this on platforms where it's supported and used.
+    sources += [
+      "audio_processor.cc",
+      "audio_processor.h",
+      "audio_processor_controls.h",
+    ]
+
+    deps += [
+      "//media",
+      "//third_party/webrtc/api:libjingle_peerconnection_api",
+      "//third_party/webrtc/api/audio:aec3_factory",
+      "//third_party/webrtc/modules/audio_processing/aec_dump:aec_dump",
+      "//third_party/webrtc/rtc_base:rtc_task_queue",
+      "//third_party/webrtc_overrides:task_queue_factory",
+    ]
+
+    public_configs = [ ":audio_processing_build_flag" ]
+  }
+}
+
+source_set("unit_tests") {
+  testonly = true
+  if (audio_processing_in_audio_service_supported) {
+    deps = [
+      "//base",
+      "//base/test:test_support",
+      "//media:test_support",
+      "//media/webrtc",
+      "//testing/gmock",
+      "//testing/gtest",
+      "//third_party/webrtc/modules/audio_processing",
+      "//third_party/webrtc_overrides:init_webrtc",
+    ]
+    sources = [
+      "audio_processor_unittest.cc",
+    ]
+  }
+}

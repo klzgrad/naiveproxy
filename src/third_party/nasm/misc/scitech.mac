@@ -1,0 +1,1223 @@
+;****************************************************************************
+;*
+;*  ========================================================================
+;*
+;*    The contents of this file are subject to the SciTech MGL Public
+;*    License Version 1.0 (the "License"); you may not use this file
+;*    except in compliance with the License. You may obtain a copy of
+;*    the License at http://www.scitechsoft.com/mgl-license.txt
+;*
+;*    Software distributed under the License is distributed on an
+;*    "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or
+;*    implied. See the License for the specific language governing
+;*    rights and limitations under the License.
+;*
+;*    The Original Code is Copyright (C) 1991-1998 SciTech Software, Inc.
+;*
+;*    The Initial Developer of the Original Code is SciTech Software, Inc.
+;*    All Rights Reserved.
+;*
+;*  ========================================================================
+;*
+;* Language:    NetWide Assembler (NASM) or Turbo Assembler (TASM)
+;* Environment: Any Intel Environment
+;*
+;* Description: Macros to provide memory model independant assembly language
+;*              module for C programming. Supports the large and flat memory
+;*				models.
+;*
+;*          	The defines that you should use when assembling modules that
+;*				use this macro package are:
+;*
+;*					__LARGE__	Assemble for 16-bit large model
+;*                  __FLAT__    Assemble for 32-bit FLAT memory model
+;*                  __NOU__		No underscore for all external C labels
+;*					__NOU_VAR__	No underscore for global variables only
+;*
+;*				The default settings are for 16-bit large memory model with
+;*				leading underscores for symbol names.
+;*
+;*				The main intent of the macro file is to enable programmers
+;*				to write _one_ set of source that can be assembled to run
+;*				in either 16 bit real and protected modes or 32 bit
+;*				protected mode without the need to riddle the code with
+;*				'if flatmodel' style conditional assembly (it is still there
+;*				but nicely hidden by a macro layer that enhances the
+;*				readability and understandability of the resulting code).
+;*
+;****************************************************************************
+
+; Include the appropriate version in here depending on the assembler. NASM
+; appears to always try and parse code, even if it is in a non-compiling
+; block of a ifdef expression, and hence crashes if we include the TASM
+; macro package in the same header file. Hence we split the macros up into
+; two separate header files.
+
+ifdef __NASM_MAJOR__
+
+;============================================================================
+; Macro package when compiling with NASM.
+;============================================================================
+
+; Turn off underscores for globals if disabled for all externals
+
+%ifdef	__NOU__
+%define	__NOU_VAR__
+%endif
+
+; Define the __WINDOWS__ symbol if we are compiling for any Windows
+; environment
+
+%ifdef	__WINDOWS16__
+%define	__WINDOWS__			1
+%endif
+%ifdef	__WINDOWS32__
+%define __WINDOWS__			1
+%define __WINDOWS32_386__	1
+%endif
+
+; Macros for accessing 'generic' registers
+
+%ifdef	__FLAT__
+%idefine _ax	eax
+%idefine _bx	ebx
+%idefine _cx	ecx
+%idefine _dx	edx
+%idefine _si	esi
+%idefine _di	edi
+%idefine _bp	ebp
+%idefine _sp	esp
+%idefine _es
+%idefine UCHAR 	BYTE		; Size of a character
+%idefine USHORT WORD		; Size of a short
+%idefine UINT 	DWORD		; Size of an integer
+%idefine ULONG 	DWORD		; Size of a long
+%idefine BOOL 	DWORD      	; Size of a boolean
+%idefine DPTR 	DWORD		; Size of a data pointer
+%idefine FDPTR 	FWORD		; Size of a far data pointer
+%idefine NDPTR 	DWORD		; Size of a near data pointer
+%idefine CPTR 	DWORD		; Size of a code pointer
+%idefine FCPTR 	FWORD		; Size of a far code pointer
+%idefine NCPTR 	DWORD		; Size of a near code pointer
+%idefine FPTR 	NEAR		; Distance for function pointers
+%idefine DUINT	dd			; Declare a integer variable
+%idefine intsize 4
+%idefine flatmodel 1
+%else
+%idefine _ax	ax
+%idefine _bx	bx
+%idefine _cx	cx
+%idefine _dx	dx
+%idefine _si	si
+%idefine _di	di
+%idefine _bp	bp
+%idefine _sp	sp
+%idefine _es	es:
+%idefine UCHAR 	BYTE      	; Size of a character
+%idefine USHORT WORD		; Size of a short
+%idefine UINT 	WORD		; Size of an integer
+%idefine ULONG 	DWORD		; Size of a long
+%idefine BOOL 	WORD		; Size of a boolean
+%idefine DPTR 	DWORD		; Size of a data pointer
+%idefine FDPTR 	DWORD		; Size of a far data pointer
+%idefine NDPTR 	WORD		; Size of a near data pointer
+%idefine CPTR 	DWORD		; Size of a code pointer
+%idefine FCPTR 	DWORD		; Size of a far code pointer
+%idefine NCPTR 	WORD		; Size of a near code pointer
+%idefine FPTR   FAR			; Distance for function pointers
+%idefine DUINT	dw			; Declare a integer variable
+%idefine intsize 2
+%endif
+%idefine invert ~
+%idefine offset
+%idefine use_nasm
+
+; Convert all jumps to near jumps, since NASM does not so this automatically
+
+%idefine jo		jo near
+%idefine jno	jno near
+%idefine jz		jz near
+%idefine jnz	jnz near
+%idefine je		je near
+%idefine jne	jne near
+%idefine jb		jb	near
+%idefine jbe	jbe	near
+%idefine ja		ja	near
+%idefine jae	jae	near
+%idefine jl		jl	near
+%idefine jle	jle	near
+%idefine jg		jg	near
+%idefine jge	jge	near
+%idefine jc		jc	near
+%idefine jnc	jnc	near
+%idefine js		js	near
+%idefine jns	jns	near
+
+%ifdef	DOUBLE
+%idefine	REAL	QWORD
+%idefine	DREAL	dq
+%else
+%idefine	REAL	DWORD
+%idefine	DREAL	dd
+%endif
+
+; Boolean truth values (same as those in debug.h)
+
+%idefine False		0
+%idefine True		1
+%idefine No			0
+%idefine Yes		1
+%idefine Yes		1
+
+; Macro to be invoked at the start of all modules to set up segments for
+; later use. Does nothing for NASM.
+
+%imacro header 1
+%endmacro
+
+; Macro to begin a data segment
+
+%imacro begdataseg 1
+%ifdef __GNUC__
+segment .data public class=DATA use32 flat
+%else
+%ifdef flatmodel
+segment _DATA public align=4 class=DATA use32 flat
+%else
+segment _DATA public align=4 class=DATA use16
+%endif
+%endif
+%endmacro
+
+; Macro to end a data segment
+
+%imacro enddataseg 1
+%endmacro
+
+; Macro to begin a code segment
+
+%imacro begcodeseg 1
+%ifdef __GNUC__
+segment .text public class=CODE use32 flat
+%else
+%ifdef flatmodel
+segment _TEXT public align=16 class=CODE use32 flat
+%else
+segment %1_TEXT public align=16 class=CODE use16
+%endif
+%endif
+%endmacro
+
+; Macro to begin a near code segment
+
+%imacro begcodeseg_near 0
+%ifdef __GNUC__
+segment .text public class=CODE use32 flat
+%else
+%ifdef flatmodel
+segment _TEXT public align=16 class=CODE use32 flat
+%else
+segment _TEXT public align=16 class=CODE use16
+%endif
+%endif
+%endmacro
+
+; Macro to end a code segment
+
+%imacro endcodeseg 1
+%endmacro
+
+; Macro to end a near code segment
+
+%imacro endcodeseg_near 0
+%endmacro
+
+; Macro for an extern C symbol. If the C compiler requires leading
+; underscores, then the underscores are added to the symbol names, otherwise
+; they are left off. The symbol name is referenced in the assembler code
+; using the non-underscored symbol name.
+
+%imacro cextern 2
+%ifdef	__NOU_VAR__
+extern %1
+%else
+extern _%1
+%define	%1 _%1
+%endif
+%endmacro
+
+%imacro cexternfunc 2
+%ifdef	__NOU__
+extern %1
+%else
+extern _%1
+%define	%1 _%1
+%endif
+%endmacro
+
+; Macro for a public C symbol. If the C compiler requires leading
+; underscores, then the underscores are added to the symbol names, otherwise
+; they are left off. The symbol name is referenced in the assembler code
+; using the non-underscored symbol name.
+
+%imacro cpublic 1
+%ifdef	__NOU_VAR__
+global %1
+%1:
+%else
+global _%1
+_%1:
+%define	%1 _%1
+%endif
+%endmacro
+
+; Macro for an global C symbol. If the C compiler requires leading
+; underscores, then the underscores are added to the symbol names, otherwise
+; they are left off. The symbol name is referenced in the assembler code
+; using the non-underscored symbol name.
+
+%imacro cglobal 1
+%ifdef	__NOU_VAR__
+global %1
+%else
+global _%1
+%define	%1 _%1
+%endif
+%endmacro
+
+; Macro for an global C function symbol. If the C compiler requires leading
+; underscores, then the underscores are added to the symbol names, otherwise
+; they are left off. The symbol name is referenced in the assembler code
+; using the non-underscored symbol name.
+
+%imacro cglobalfunc 1
+%ifdef	__NOU__
+global %1
+%else
+global _%1
+%define	%1 _%1
+%endif
+%endmacro
+
+; Macro to start a C callable function. This will be a far function for
+; 16-bit code, and a near function for 32-bit code.
+
+%imacro cprocstatic 1
+%push cproc
+%1:
+%ifdef flatmodel
+%stacksize flat
+%define ret	retn
+%else
+%stacksize large
+%define ret	retf
+%endif
+%assign %$localsize 0
+%endmacro
+
+%imacro cprocstart 1
+%push cproc
+	cglobalfunc %1
+%1:
+%ifdef flatmodel
+%stacksize flat
+%define ret	retn
+%else
+%stacksize large
+%define ret	retf
+%endif
+%assign %$localsize 0
+%endmacro
+
+; This macro sets up a procedure to be exported from a 16 bit DLL. Since the
+; calling conventions are always _far _pascal for 16 bit DLL's, we actually
+; rename this routine with an extra underscore with 'C' calling conventions
+; and a small DLL stub will be provided by the high level code to call the
+; assembler routine.
+
+%imacro	cprocstartdll16 1
+%ifdef	__WINDOWS16__
+cprocstart	_%1
+%else
+cprocstart	%1
+%endif
+%endmacro
+
+; Macro to start a C callable near function.
+
+%imacro cprocnear 1
+%push cproc
+	cglobalfunc %1
+%1:
+%define ret	retn
+%ifdef flatmodel
+%stacksize flat
+%else
+%stacksize small
+%endif
+%assign %$localsize 0
+%endmacro
+
+; Macro to start a C callable far function.
+
+%imacro cprocfar 1
+%push cproc
+	cglobalfunc %1
+%1:
+%define ret	retf
+%ifdef flatmodel
+%stacksize flat
+%else
+%stacksize large
+%endif
+%assign %$localsize 0
+%endmacro
+
+; Macro to end a C function
+
+%imacro cprocend 0
+%pop
+%endmacro
+
+; Macros for entering and exiting C callable functions. Note that we must
+; always save and restore the SI and DI registers for C functions, and for
+; 32 bit C functions we also need to save and restore EBX and clear the
+; direction flag.
+
+%imacro enter_c 0
+		push    _bp
+		mov     _bp,_sp
+%ifnidn	%$localsize,0
+		sub		_sp,%$localsize
+%endif
+%ifdef	flatmodel
+		push	ebx
+%endif
+		push	_si
+		push	_di
+%endmacro
+
+%imacro leave_c 0
+		pop		_di
+		pop		_si
+%ifdef	flatmodel
+		pop		ebx
+		cld
+%endif
+%ifnidn %$localsize,0
+		mov     _sp,_bp
+%endif
+		pop     _bp
+%endmacro
+
+%imacro   use_ebx 0
+%ifdef flatmodel
+		push    ebx
+%endif
+%endmacro
+
+%imacro   unuse_ebx 0
+%ifdef flatmodel
+		pop     ebx
+%endif
+%endmacro
+
+; Macros for saving and restoring the value of DS,ES,FS,GS when it is to
+; be used in assembly routines. This evaluates to nothing in the flat memory
+; model, but is saves and restores DS in the large memory model.
+
+%imacro	use_ds 0
+%ifndef flatmodel
+		push	ds
+%endif
+%endmacro
+
+%imacro	unuse_ds 0
+%ifndef flatmodel
+		pop		ds
+%endif
+%endmacro
+
+%imacro	use_es 0
+%ifndef flatmodel
+		push	es
+%endif
+%endmacro
+
+%imacro	unuse_es 0
+%ifndef flatmodel
+		pop		es
+%endif
+%endmacro
+
+; Macros for loading the address of a data pointer into a segment and
+; index register pair. The %imacro explicitly loads DS or ES in the 16 bit
+; memory model, or it simply loads the offset into the register in the flat
+; memory model since DS and ES always point to all addressable memory. You
+; must use the correct _REG (ie: _BX) %imacros for documentation purposes.
+
+%imacro	_lds	2
+%ifdef flatmodel
+		mov     %1,%2
+%else
+		lds		%1,%2
+%endif
+%endmacro
+
+%imacro   _les	2
+%ifdef flatmodel
+		mov     %1,%2
+%else
+		les		%1,%2
+%endif
+%endmacro
+
+; Macros for adding and subtracting a value from registers. Two value are
+; provided, one for 16 bit modes and another for 32 bit modes (the extended
+; register is used in 32 bit modes).
+
+%imacro   _add	3
+%ifdef flatmodel
+		add		e%1, %3
+%else
+		add		%1, %2
+%endif
+%endmacro
+
+%imacro	_sub	3
+%ifdef flatmodel
+		sub		e%1, %3
+%else
+		sub		%1, %2
+%endif
+%endmacro
+
+; Macro to clear the high order word for the 32 bit extended registers.
+; This is used to convert an unsigned 16 bit value to an unsigned 32 bit
+; value, and will evaluate to nothing in 16 bit modes.
+
+%imacro	clrhi	1
+%ifdef	flatmodel
+		movzx	e%1,%1
+%endif
+%endmacro
+
+%imacro	sgnhi	1
+%ifdef	flatmodel
+		movsx	e%1,%1
+%endif
+%endmacro
+
+; Macro to load an extended register with an integer value in either mode
+
+%imacro	loadint	2
+%ifdef flatmodel
+		mov		e%1,%2
+%else
+		xor		e%1,e%1
+		mov     %1,%2
+%endif
+%endmacro
+
+; Macros to load and store integer values with string instructions
+
+%imacro	LODSINT 0
+%ifdef flatmodel
+		lodsd
+%else
+		lodsw
+%endif
+%endmacro
+
+%imacro	STOSINT	0
+%ifdef flatmodel
+		stosd
+%else
+		stosw
+%endif
+%endmacro
+
+; Macros to provide resb, resw, resd compatibility with NASM
+
+%imacro	dclb 1
+times %1 db 0
+%endmacro
+
+%imacro	dclw 1
+times %1 dw 0
+%endmacro
+
+%imacro	dcld 1
+times %1 dd 0
+%endmacro
+
+; macros to declare assembler function stubs for function structures
+
+%imacro	BEGIN_STUBS_DEF	2
+begdataseg  _STUBS
+%ifdef	__NOU_VAR__
+extern %1
+%define	STUBS_START	%1
+%else
+extern _%1
+%define	STUBS_START	_%1
+%endif
+enddataseg  _STUBS
+begcodeseg  _STUBS
+%assign off %2
+%endmacro
+
+%imacro   DECLARE_STUB	1
+%ifdef	__NOU__
+		global %1
+%1:
+%else
+		global _%1
+_%1:
+%endif
+		jmp     [DWORD STUBS_START+off]
+%assign off off+4
+%endmacro
+
+%imacro DECLARE_STDCALL 2
+%ifdef	STDCALL_MANGLE
+		global _%1@%2
+_%1@%2:
+%else
+%ifdef __GNUC__
+		global _%1
+_%1:
+%else
+		global %1
+%1:
+%endif
+%endif
+		jmp     [DWORD STUBS_START+off]
+%assign off off+4
+%endmacro
+
+%imacro   END_STUBS_DEF 0
+endcodeseg  _STUBS
+%endmacro
+
+; macros to declare assembler import stubs for binary loadable drivers
+
+%imacro	BEGIN_IMPORTS_DEF	1
+BEGIN_STUBS_DEF	%1,4
+%endmacro
+
+%imacro   DECLARE_IMP	1
+DECLARE_STUB	%1
+%endmacro
+
+%imacro   END_IMPORTS_DEF 0
+END_STUBS_DEF
+%endmacro
+
+else	; __NASM_MAJOR__
+
+;============================================================================
+; Macro package when compiling with TASM.
+;============================================================================
+
+; Turn off underscores for globals if disabled for all externals
+
+ifdef	__NOU__
+__NOU_VAR__			= 1
+endif
+
+; Define the __WINDOWS__ symbol if we are compiling for any Windows
+; environment
+
+ifdef	__WINDOWS16__
+__WINDOWS__ 		= 1
+endif
+ifdef	__WINDOWS32__
+__WINDOWS__ 		= 1
+__WINDOWS32_386__ 	= 1
+endif
+ifdef	__WIN386__
+__WINDOWS__ 		= 1
+__WINDOWS32_386__ 	= 1
+endif
+ifdef	__VXD__
+__WINDOWS__ 		= 1
+__WINDOWS32_386__ 	= 1
+		MASM
+		.386
+		NO_SEGMENTS	= 1
+		include	vmm.inc			; IGNORE DEPEND
+		include vsegment.inc    ; IGNORE DEPEND
+		IDEAL
+endif
+
+; Macros for accessing 'generic' registers
+
+ifdef   __FLAT__
+		_ax			EQU	eax		; EAX is used for accumulator
+		_bx			EQU	ebx		; EBX is used for accumulator
+		_cx        	EQU ecx     ; ECX is used for looping
+		_dx			EQU	edx		; EDX is used for data register
+		_si			EQU	esi		; ESI is the source index register
+		_di			EQU	edi		; EDI is the destination index register
+		_bp			EQU	ebp		; EBP is used for base pointer register
+		_sp			EQU	esp		; ESP is used for stack pointer register
+		_es			EQU			; ES and DS are the same in 32 bit PM
+		typedef UCHAR BYTE		; Size of a character
+		typedef USHORT WORD		; Size of a short
+		typedef UINT DWORD		; Size of an integer
+		typedef ULONG DWORD		; Size of a long
+		typedef BOOL DWORD      ; Size of a boolean
+		typedef DPTR DWORD		; Size of a data pointer
+		typedef FDPTR FWORD		; Size of a far data pointer
+		typedef	NDPTR DWORD		; Size of a near data pointer
+		typedef CPTR DWORD		; Size of a code pointer
+		typedef FCPTR FWORD		; Size of a far code pointer
+		typedef NCPTR DWORD		; Size of a near code pointer
+		typedef	DUINT DWORD		; Declare a integer variable
+		FPTR        EQU NEAR	; Distance for function pointers
+		intsize		=	4		; Size of an integer
+		flatmodel	=	1		; This is a flat memory model
+		P386                    ; Turn on 386 code generation
+		MODEL       FLAT        ; Set up for 32 bit simplified FLAT model
+else
+		_ax			EQU	ax		; AX is used for accumulator
+		_bx			EQU	bx		; BX is used for accumulator
+		_cx        	EQU cx     	; CX is used for looping
+		_dx			EQU	dx		; DX is used for data register
+		_si			EQU	si		; SI is the source index register
+		_di			EQU	di		; DI is the destination index register
+		_bp			EQU	bp		; BP is used for base pointer register
+		_sp			EQU	sp		; SP is used for stack pointer register
+		_es			EQU es:		; ES is used for segment override
+		typedef UCHAR BYTE      ; Size of a character
+		typedef USHORT WORD		; Size of a short
+		typedef UINT WORD		; Size of an integer
+		typedef ULONG DWORD		; Size of a long
+		typedef BOOL WORD		; Size of a boolean
+		typedef DPTR DWORD		; Size of a data pointer
+		typedef FDPTR DWORD		; Size of a far data pointer
+		typedef	NDPTR WORD		; Size of a near data pointer
+		typedef CPTR DWORD		; Size of a code pointer
+		typedef FCPTR DWORD		; Size of a far code pointer
+		typedef NCPTR WORD		; Size of a near code pointer
+		typedef	DUINT WORD		; Declare a integer variable
+		FPTR        EQU FAR		; Distance for function pointers
+		intsize		=	2		; Size of an integer
+		P386					; Turn on 386 code generation
+endif
+        invert      EQU not
+
+; Provide a typedef for real floating point numbers
+
+ifdef	DOUBLE
+typedef	REAL	QWORD
+typedef	DREAL	QWORD
+else
+typedef	REAL	DWORD
+typedef	DREAL	DWORD
+endif
+
+; Macros to access the floating point stack registers to convert them
+; from NASM style to TASM style
+
+st0			EQU		st(0)
+st1			EQU		st(1)
+st2			EQU		st(2)
+st3			EQU		st(3)
+st4			EQU		st(4)
+st5			EQU		st(5)
+st6			EQU		st(6)
+st7			EQU		st(7)
+st8			EQU		st(8)
+
+; Boolean truth values (same as those in debug.h)
+
+ifndef	__VXD__
+False		=		0
+True		=		1
+No			=		0
+Yes			=		1
+Yes			=		1
+endif
+
+; Macros for the _DATA data segment. This segment contains initialised data.
+
+MACRO   begdataseg name
+ifdef	__VXD__
+		MASM
+VXD_LOCKED_DATA_SEG
+		IDEAL
+else
+ifdef   flatmodel
+		DATASEG
+else
+SEGMENT _DATA DWORD PUBLIC USE16 'DATA'
+endif
+endif
+ENDM
+
+MACRO   enddataseg name
+ifdef	__VXD__
+		MASM
+VXD_LOCKED_DATA_ENDS
+		IDEAL
+else
+ifndef  flatmodel
+ENDS    _DATA
+endif
+endif
+ENDM
+
+; Macro for the main code segment.
+
+MACRO   begcodeseg name
+ifdef	__VXD__
+		MASM
+VXD_LOCKED_CODE_SEG
+		IDEAL
+else
+ifdef   flatmodel
+		CODESEG
+		ASSUME  CS:FLAT,DS:FLAT,SS:FLAT
+else
+SEGMENT &name&_TEXT PARA PUBLIC USE16 'CODE'
+		ASSUME CS:&name&_TEXT,DS:_DATA
+endif
+endif
+ENDM
+
+; Macro for a near code segment
+
+MACRO   begcodeseg_near
+ifdef   flatmodel
+		CODESEG
+		ASSUME  CS:FLAT,DS:FLAT,SS:FLAT
+else
+SEGMENT _TEXT PARA PUBLIC USE16 'CODE'
+		ASSUME CS:_TEXT,DS:_DATA
+endif
+ENDM
+
+MACRO   endcodeseg name
+ifdef	__VXD__
+		MASM
+VXD_LOCKED_CODE_ENDS
+		IDEAL
+else
+ifndef  flatmodel
+ENDS    &name&_TEXT
+endif
+endif
+ENDM
+
+MACRO   endcodeseg_near
+ifndef  flatmodel
+ENDS    _TEXT
+endif
+ENDM
+
+; Macro to be invoked at the start of all modules to set up segments for
+; later use.
+
+MACRO   header name
+begdataseg name
+enddataseg name
+ENDM
+
+; Macro for an extern C symbol. If the C compiler requires leading
+; underscores, then the underscores are added to the symbol names, otherwise
+; they are left off. The symbol name is referenced in the assembler code
+; using the non-underscored symbol name.
+
+MACRO   cextern	name,size
+ifdef	__NOU_VAR__
+		EXTRN	name:size
+else
+		EXTRN	_&name&:size
+name	EQU		_&name&
+endif
+ENDM
+
+MACRO   cexternfunc	name,size
+ifdef	__NOU__
+		EXTRN	name:size
+else
+		EXTRN	_&name&:size
+name	EQU		_&name&
+endif
+ENDM
+
+MACRO   stdexternfunc	name,args,size
+ifdef	STDCALL_MANGLE
+		EXTRN	_&name&@&num_args&:size
+name	EQU		_&name&@&num_args
+else
+		EXTRN	name:size
+endif
+ENDM
+
+; Macro for a public C symbol. If the C compiler requires leading
+; underscores, then the underscores are added to the symbol names, otherwise
+; they are left off. The symbol name is referenced in the assembler code
+; using the non-underscored symbol name.
+
+MACRO	cpublic name
+ifdef	__NOU_VAR__
+name:
+		PUBLIC	name
+else
+_&name&:
+		PUBLIC	_&name&
+name	EQU		_&name&
+endif
+ENDM
+
+; Macro for an global C symbol. If the C compiler requires leading
+; underscores, then the underscores are added to the symbol names, otherwise
+; they are left off. The symbol name is referenced in the assembler code
+; using the non-underscored symbol name.
+
+MACRO	cglobal name
+ifdef	__NOU_VAR__
+		PUBLIC	name
+else
+		PUBLIC	_&name&
+name	EQU		_&name&
+endif
+ENDM
+
+; Macro for an global C function symbol. If the C compiler requires leading
+; underscores, then the underscores are added to the symbol names, otherwise
+; they are left off. The symbol name is referenced in the assembler code
+; using the non-underscored symbol name.
+
+MACRO	cglobalfunc name
+ifdef	__NOU__
+		PUBLIC	name
+else
+		PUBLIC	_&name&
+name	EQU		_&name&
+endif
+ENDM
+
+; Macro to start a C callable function. This will be a far function for
+; 16-bit code, and a near function for 32-bit code.
+
+MACRO   cprocstatic name       	; Set up model independant private proc
+ifdef flatmodel
+PROC   	name NEAR
+else
+PROC    name FAR
+endif
+LocalSize	= 0
+ENDM
+
+MACRO   cprocstart name        	; Set up model independant proc
+ifdef flatmodel
+ifdef	__NOU__
+PROC   	name NEAR
+else
+PROC   	_&name& NEAR
+endif
+else
+ifdef	__NOU__
+PROC    name FAR
+else
+PROC    _&name& FAR
+endif
+endif
+LocalSize	= 0
+		cglobalfunc	name
+ENDM
+
+MACRO   cprocnear name         	; Set up near proc
+ifdef	__NOU__
+PROC    name NEAR
+else
+PROC    _&name& NEAR
+endif
+LocalSize	= 0
+		cglobalfunc	name
+ENDM
+
+MACRO   cprocfar name           ; Set up far proc
+ifdef	__NOU__
+PROC    name FAR
+else
+PROC    _&name& FAR
+endif
+LocalSize	= 0
+		cglobalfunc	name
+ENDM
+
+MACRO   cprocend	           ; End procedure macro
+ENDP
+ENDM
+
+; This macro sets up a procedure to be exported from a 16 bit DLL. Since the
+; calling conventions are always _far _pascal for 16 bit DLL's, we actually
+; rename this routine with an extra underscore with 'C' calling conventions
+; and a small DLL stub will be provided by the high level code to call the
+; assembler routine.
+
+MACRO   cprocstartdll16 name
+ifdef	__WINDOWS16__
+cprocstart	_&name&
+else
+cprocstart	name
+endif
+ENDM
+
+; Macros for entering and exiting C callable functions. Note that we must
+; always save and restore the SI and DI registers for C functions, and for
+; 32 bit C functions we also need to save and restore EBX and clear the
+; direction flag.
+
+MACRO	save_c_regs
+ifdef	flatmodel
+		push	ebx
+endif
+		push	_si
+		push	_di
+ENDM
+
+MACRO	enter_c
+		push    _bp
+		mov     _bp,_sp
+	IFDIFI	<LocalSize>,<0>
+		sub		_sp,LocalSize
+	ENDIF
+		save_c_regs
+ENDM
+
+MACRO	restore_c_regs
+		pop		_di
+		pop		_si
+ifdef	flatmodel
+		pop		ebx
+endif
+ENDM
+
+MACRO	leave_c
+		restore_c_regs
+		cld
+	IFDIFI	<LocalSize>,<0>
+		mov     _sp,_bp
+	ENDIF
+		pop     _bp
+ENDM
+
+MACRO   use_ebx
+ifdef flatmodel
+		push    ebx
+endif
+ENDM
+
+MACRO   unuse_ebx
+ifdef flatmodel
+		pop     ebx
+endif
+ENDM
+
+; Macros for saving and restoring the value of DS,ES,FS,GS when it is to
+; be used in assembly routines. This evaluates to nothing in the flat memory
+; model, but is saves and restores DS in the large memory model.
+
+MACRO	use_ds
+ifndef flatmodel
+		push	ds
+endif
+ENDM
+
+MACRO	unuse_ds
+ifndef flatmodel
+		pop		ds
+endif
+ENDM
+
+MACRO	use_es
+ifndef flatmodel
+		push	es
+endif
+ENDM
+
+MACRO	unuse_es
+ifndef flatmodel
+		pop		es
+endif
+ENDM
+
+; Macros for loading the address of a data pointer into a segment and
+; index register pair. The macro explicitly loads DS or ES in the 16 bit
+; memory model, or it simply loads the offset into the register in the flat
+; memory model since DS and ES always point to all addressable memory. You
+; must use the correct _REG (ie: _BX) macros for documentation purposes.
+
+MACRO	_lds	reg, addr
+ifdef flatmodel
+		mov     reg,addr
+else
+		lds		reg,addr
+endif
+ENDM
+
+MACRO   _les	reg, addr
+ifdef flatmodel
+		mov     reg,addr
+else
+		les		reg,addr
+endif
+ENDM
+
+; Macros for adding and subtracting a value from registers. Two value are
+; provided, one for 16 bit modes and another for 32 bit modes (the extended
+; register is used in 32 bit modes).
+
+MACRO   _add	reg, val16, val32
+ifdef flatmodel
+		add		e&reg&, val32
+else
+		add		reg, val16
+endif
+ENDM
+
+MACRO	_sub	reg, val16, val32
+ifdef flatmodel
+		sub		e&reg&, val32
+else
+		sub		reg, val16
+endif
+ENDM
+
+; Macro to clear the high order word for the 32 bit extended registers.
+; This is used to convert an unsigned 16 bit value to an unsigned 32 bit
+; value, and will evaluate to nothing in 16 bit modes.
+
+MACRO	clrhi	reg
+ifdef	flatmodel
+		movzx	e&reg&,reg
+endif
+ENDM
+
+MACRO	sgnhi	reg
+ifdef	flatmodel
+		movsx	e&reg&,reg
+endif
+ENDM
+
+; Macro to load an extended register with an integer value in either mode
+
+MACRO	loadint	reg,val
+ifdef flatmodel
+		mov		e&reg&,val
+else
+		xor		e&reg&,e&reg&
+		mov     reg,val
+endif
+ENDM
+
+; Macros to load and store integer values with string instructions
+
+MACRO	LODSINT
+ifdef flatmodel
+		lodsd
+else
+		lodsw
+endif
+ENDM
+
+MACRO	STOSINT
+ifdef flatmodel
+		stosd
+else
+		stosw
+endif
+ENDM
+
+; Macros to provide resb, resw, resd compatibility with NASM
+
+MACRO	dclb	count
+db	count dup (0)
+ENDM
+
+MACRO	dclw	count
+dw	count dup (0)
+ENDM
+
+MACRO	dcld	count
+dd	count dup (0)
+ENDM
+
+; Macros to provide resb, resw, resd compatibility with NASM
+
+MACRO	resb	count
+db	count dup (?)
+ENDM
+
+MACRO	resw	count
+dw	count dup (?)
+ENDM
+
+MACRO	resd	count
+dd	count dup (?)
+ENDM
+
+; Macros to declare assembler stubs for function structures
+
+MACRO	BEGIN_STUBS_DEF	name, firstOffset
+begdataseg  _STUBS
+ifdef	__NOU_VAR__
+		EXTRN	name:DWORD
+STUBS_START	=   name
+else
+		EXTRN	_&name&:DWORD
+name	EQU		_&name&
+STUBS_START	=   _&name
+endif
+enddataseg  _STUBS
+begcodeseg  _STUBS
+off = firstOffset
+ENDM
+
+MACRO   DECLARE_STUB	name
+ifdef	__NOU__
+name:
+		PUBLIC  name
+else
+_&name:
+		PUBLIC  _&name
+endif
+		jmp     [DWORD STUBS_START+off]
+off = off + 4
+ENDM
+
+MACRO   DECLARE_STDCALL	name,num_args
+ifdef	STDCALL_MANGLE
+_&name&@&num_args&:
+		PUBLIC  _&name&@&num_args&
+else
+name:
+		PUBLIC  name
+endif
+		jmp     [DWORD STUBS_START+off]
+off = off + 4
+ENDM
+
+MACRO   END_STUBS_DEF
+endcodeseg  _STUBS
+ENDM
+
+MACRO	BEGIN_IMPORTS_DEF	name
+BEGIN_STUBS_DEF	name,4
+ENDM
+
+MACRO   DECLARE_IMP	name
+DECLARE_STUB	name
+ENDM
+
+MACRO   END_IMPORTS_DEF
+END_STUBS_DEF
+ENDM
+
+endif

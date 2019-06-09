@@ -1,0 +1,175 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//third_party/protobuf/proto_library.gni")
+
+if (is_win) {
+  proto_library("stability_report_proto") {
+    sources = [
+      "stability_report.proto",
+    ]
+  }
+
+  static_library("browser_watcher") {
+    # This is a separate lib to minimize the dependencies for its
+    # hosting binary "chrome_watcher.dll".
+    sources = [
+      "endsession_watcher_window_win.cc",
+      "endsession_watcher_window_win.h",
+      "exit_code_watcher_win.cc",
+      "exit_code_watcher_win.h",
+      "window_hang_monitor_win.cc",
+      "window_hang_monitor_win.h",
+    ]
+    deps = [
+      "//base",
+    ]
+  }
+
+  static_library("browser_watcher_client") {
+    sources = [
+      "watcher_client_win.cc",
+      "watcher_client_win.h",
+      "watcher_metrics_provider_win.cc",
+      "watcher_metrics_provider_win.h",
+    ]
+    deps = [
+      ":postmortem_stability",
+      ":stability_client",
+      "//base",
+      "//components/metrics",
+      "//third_party/crashpad/crashpad/client",
+    ]
+  }
+
+  static_library("postmortem_stability") {
+    sources = [
+      "postmortem_minidump_writer.h",
+      "postmortem_minidump_writer_win.cc",
+      "postmortem_report_collector.cc",
+      "postmortem_report_collector.h",
+    ]
+    deps = [
+      ":stability_client",
+      ":stability_common",
+      ":stability_report_proto",
+      "//base",
+      "//components/metrics:metrics",
+      "//components/variations",
+      "//third_party/crashpad/crashpad/client",
+      "//third_party/crashpad/crashpad/minidump",
+      "//third_party/crashpad/crashpad/util",
+    ]
+    ldflags = [ "/DELAYLOAD:wevtapi.dll" ]  # Only used after unclean shutdowns.
+  }
+
+  static_library("crash_stability") {
+    sources = [
+      "stability_report_user_stream_data_source.cc",
+      "stability_report_user_stream_data_source.h",
+    ]
+    deps = [
+      ":stability_client",
+      ":stability_common",
+      ":stability_report_proto",
+      "//base",
+      "//third_party/crashpad/crashpad/client",
+      "//third_party/crashpad/crashpad/compat",
+      "//third_party/crashpad/crashpad/handler",
+      "//third_party/crashpad/crashpad/minidump",
+      "//third_party/crashpad/crashpad/snapshot",
+    ]
+  }
+
+  static_library("stability_common") {
+    sources = [
+      "minidump_user_streams.h",
+      "stability_report_extractor.cc",
+      "stability_report_extractor.h",
+    ]
+    deps = [
+      ":stability_client",
+      ":stability_report_proto",
+      "//base",
+      "//components/variations",
+      "//third_party/crashpad/crashpad/util",
+    ]
+  }
+
+  static_library("stability_client") {
+    sources = [
+      "features.cc",
+      "features.h",
+      "stability_data_names.cc",
+      "stability_data_names.h",
+      "stability_debugging.cc",
+      "stability_debugging.h",
+      "stability_metrics.cc",
+      "stability_metrics.h",
+      "stability_paths.cc",
+      "stability_paths.h",
+    ]
+    deps = [
+      "//base",
+      "//third_party/crashpad/crashpad/util",
+    ]
+  }
+
+  source_set("unit_tests") {
+    testonly = true
+    sources = [
+      "endsession_watcher_window_win_unittest.cc",
+      "exit_code_watcher_win_unittest.cc",
+      "postmortem_minidump_writer_win_unittest.cc",
+      "postmortem_report_collector_unittest.cc",
+      "stability_debugging_win_unittest.cc",
+      "stability_paths_unittest.cc",
+      "stability_report_extractor_unittest.cc",
+      "watcher_client_win_unittest.cc",
+      "watcher_metrics_provider_win_unittest.cc",
+      "window_hang_monitor_win_unittest.cc",
+    ]
+    configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+    deps = [
+      ":browser_watcher",
+      ":browser_watcher_client",
+      ":postmortem_stability",
+      ":stability_client",
+      ":stability_common",
+      ":stability_report_proto",
+      "//base",
+      "//base/test:test_support",
+      "//components/metrics:metrics",
+      "//testing/gmock",
+      "//testing/gtest",
+      "//third_party/crashpad/crashpad/client",
+
+      # TODO(manzagop): remove this lib once Crashpad writes the minidumps.
+      "//third_party/crashpad/crashpad/minidump",
+      "//third_party/crashpad/crashpad/snapshot",
+      "//third_party/crashpad/crashpad/util",
+    ]
+  }
+
+  executable("dump_stability") {
+    sources = [
+      "dump_stability_report_main_win.cc",
+    ]
+    deps = [
+      ":stability_report_proto",
+      "//base",
+    ]
+  }
+
+  executable("fetch_system_session_events") {
+    sources = [
+      "fetch_system_session_events_main_win.cc",
+    ]
+    deps = [
+      ":postmortem_stability",
+      "//base",
+      "//components/metrics:metrics",
+    ]
+  }
+}

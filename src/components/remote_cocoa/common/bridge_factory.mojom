@@ -1,0 +1,52 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module remote_cocoa.mojom;
+
+import "components/remote_cocoa/common/alert.mojom";
+import "components/remote_cocoa/common/bridged_native_widget.mojom";
+import "components/remote_cocoa/common/bridged_native_widget_host.mojom";
+import "components/remote_cocoa/common/text_input_host.mojom";
+
+// Empty interface that is used by BridgeFactory in place of
+// RenderWidgetHostNSViewBridge, RenderWidgetHostNSViewClient,
+// WebContentsNSViewBridge, and WebContentsNSViewClient (which are the real
+// interfaces that should be used). The reason that the correct interfaces
+// cannot be used directly is that they have dependencies on types that are in
+// content.
+// TODO(ccameron): Migrate the interfaces from content types to remote_cocoa
+// types, and then move the interfaces to this component.
+// https://crbug.com/888290
+interface StubInterface {};
+
+// The interface through which a bridge is created and connected to its host.
+interface BridgeFactory {
+  // Create a bridge for an NSAlert. The resulting object owns its own lifetime.
+  CreateAlert(AlertBridge& alert_bridge_request);
+
+  // Create a bridge for a native widget. The resulting object will be owned by
+  // the connection for |host|. Closing that connection will result in deleting
+  // the bridge.
+  CreateBridgedNativeWidget(
+      uint64 bridge_id,
+      associated BridgedNativeWidget& bridge_request,
+      associated BridgedNativeWidgetHost host,
+      associated TextInputHost text_input_host);
+
+  // Create and take ownership of the NSView for a RenderWidgetHostView. The
+  // resulting object will be destroyed when the connection is closed.
+  CreateRenderWidgetHostNSView(
+      associated StubInterface host,
+      associated StubInterface& view_request);
+
+  // Create and take ownership of the NSView for a WebContentsView. The
+  // resulting object will be destroyed when the connection is closed.
+  // The value of |view_id| may be used to look up the NSView (e.g, to add
+  // child NSViews.
+  CreateWebContentsNSView(
+      uint64 view_id,
+      associated StubInterface host,
+      associated StubInterface& view_request);
+};
+

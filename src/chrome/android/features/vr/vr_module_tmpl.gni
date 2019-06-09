@@ -1,0 +1,122 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//base/android/linker/config.gni")
+import("//build/config/android/rules.gni")
+import("//build/config/locales.gni")
+import("//chrome/android/features/dynamic_feature_modules.gni")
+import("//device/vr/buildflags/buildflags.gni")
+
+assert(enable_vr)
+
+template("vr_module_tmpl") {
+  assert(defined(invoker.version_code))
+  assert(defined(invoker.version_name))
+  assert(defined(invoker.manifest_package))
+  assert(defined(invoker.module_name))
+  assert(defined(invoker.base_module_target))
+
+  _manifest = "$target_gen_dir/$target_name/AndroidManifest.xml"
+  _manifest_target = "${target_name}__manifest"
+  jinja_template(_manifest_target) {
+    input = "//chrome/android/features/vr/java/AndroidManifest.xml"
+    output = _manifest
+    variables = [
+      "target_sdk_version=$android_sdk_version",
+      "manifest_package=${invoker.manifest_package}",
+    ]
+  }
+
+  android_app_bundle_module(target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "base_module_target",
+                             "module_name",
+                             "native_switches",
+                             "uncompress_shared_libraries",
+                             "version_code",
+                             "version_name",
+                           ])
+    android_manifest = _manifest
+    android_manifest_dep = ":${_manifest_target}"
+    deps = [
+      "//chrome/android/features/vr:java",
+      "//chrome/browser/android/vr:vr_ui_dummy_lib",
+    ]
+
+    if (defined(invoker.is_monochrome_or_trichrome)) {
+      not_needed(invoker, [ "is_monochrome_or_trichrome" ])
+    }
+    if (use_native_modules && modularize_vr_native) {
+      # Include the VR native library. In relation to http://crbug.com/950056,
+      # this logic could be moved into a location common to all feature modules.
+      # This could be android_app_bundle_module(), or a Chrome-specific
+      # extension of it. In that case, this scope would potentially pass "vr"
+      # as a required native library, and the lower-level template would derive
+      # and include the correct library.
+      _is_monochrome_or_trichrome =
+          defined(invoker.is_monochrome_or_trichrome) &&
+          invoker.is_monochrome_or_trichrome
+      _arch = ""
+      _toolchain = ""
+      _root_out_dir = root_out_dir
+      if (android_64bit_target_cpu) {
+        if (defined(invoker.is_64_bit_browser) && invoker.is_64_bit_browser) {
+          _arch = "_64"
+        } else {
+          _toolchain = "($android_secondary_abi_toolchain)"
+          _root_out_dir =
+              get_label_info(":foo($android_secondary_abi_toolchain)",
+                             "root_out_dir")
+        }
+      }
+      if (_is_monochrome_or_trichrome) {
+        _base_target_name = "monochrome${_arch}_base"
+      } else {
+        _base_target_name = "libchrome${_arch}_base"
+      }
+      _module = "vr"
+      deps +=
+          [ "//chrome/android:${_base_target_name}_${_module}${_toolchain}" ]
+      _module_file =
+          "${_root_out_dir}/${_base_target_name}_partitions/lib${_module}.so"
+
+      # Pass the correct library as both the 32 and 64-bit options. Underlying
+      # logic will choose from the correct variable, and supply a dummy library
+      # for the other architecture if required.
+      loadable_modules_if_32_bit = [ _module_file ]
+      loadable_modules_if_64_bit = [ _module_file ]
+    } else {
+      if (android_64bit_target_cpu) {
+        _32_bit_toolchain_root_dir =
+            get_label_info(":foo($android_secondary_abi_toolchain)",
+                           "root_out_dir")
+        loadable_modules_if_64_bit = [ "$root_out_dir/libvr_ui_dummy_lib.so" ]
+        loadable_modules_if_32_bit =
+            [ "$_32_bit_toolchain_root_dir/libvr_ui_dummy_lib.so" ]
+        deps += [ "//chrome/browser/android/vr:vr_ui_dummy_lib" +
+                  "($android_secondary_abi_toolchain)" ]
+      } else {
+        loadable_modules_if_32_bit = [ "$root_out_dir/libvr_ui_dummy_lib.so" ]
+      }
+    }
+
+    proguard_enabled = !is_java_debug
+    if (!defined(invoker.uncompress_shared_libraries)) {
+      uncompress_shared_libraries = chromium_linker_supported
+    }
+
+    # Don't embed more localized strings than required (http://crbug.com/932017)
+    aapt_locale_whitelist = locales
+
+    package_name = "vr"
+    package_name_to_id_mapping = resource_packages_id_mapping
+
+    # If VR is set as async DFM, generate list of dependencies on base for keep
+    # rule generation.
+    if (async_vr) {
+      enable_class_deps_output = "vrConstantPoolDeps.txt"
+    }
+  }
+}

@@ -1,0 +1,38 @@
+// Copyright 2019 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// These interfaces support a trial comparing two different implementations of
+// certificate verification, where the certificate verification may occur in
+// one process and the configuration and reporting in another. They will be
+// removed when the trial is completed.
+// See https://crbug.com/649026
+
+module network.mojom;
+
+import "services/network/public/mojom/network_param.mojom";
+
+// Receives cert verifier trial configuration updates.
+interface TrialComparisonCertVerifierConfigClient {
+  OnTrialConfigUpdated(bool allowed);
+};
+
+// Sends reports of differences found in the cert verifier trial.
+interface TrialComparisonCertVerifierReportClient {
+  SendTrialReport(
+      string hostname, X509Certificate cert, bool enable_rev_checking,
+      bool require_rev_checking_local_anchors, bool enable_sha1_local_anchors,
+      bool disable_symantec_enforcement, CertVerifyResult primary_result,
+      CertVerifyResult trial_result);
+};
+
+// Parameters for initializing the cert verification trial.
+// |initial_allowed| is the initial setting for whether the trial is allowed.
+// |config_client_request| is the Mojo pipe over which trial configuration
+// updates are received.
+// |report_client| is the Mojo pipe used to send trial reports.
+struct TrialComparisonCertVerifierParams {
+  bool initial_allowed = false;
+  TrialComparisonCertVerifierConfigClient&? config_client_request;
+  TrialComparisonCertVerifierReportClient? report_client;
+};

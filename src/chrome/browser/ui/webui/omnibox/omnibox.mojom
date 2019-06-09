@@ -1,0 +1,84 @@
+// Copyright 2014 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module mojom;
+
+// The structures here roughly mirror those from autocomplete.
+
+struct ACMatchClassification {
+  int32 offset;
+  int32 style;
+};
+
+struct AutocompleteAdditionalInfo {
+  string key;
+  string value;
+};
+
+struct AutocompleteMatch {
+  string? provider_name;
+  // Only meaningful if |provider_name| is valid.
+  bool provider_done;
+  int32 relevance;
+  bool deletable;
+  string fill_into_edit;
+  string inline_autocompletion;
+  string destination_url;
+  string stripped_destination_url;
+  string image;
+  string contents;
+  array<ACMatchClassification> contents_class;
+  string description;
+  array<ACMatchClassification> description_class;
+  string answer;
+  string transition;
+  bool allowed_to_be_default_match;
+  string type;
+  bool is_search_type;
+  bool has_tab_match;
+  string? associated_keyword;
+  string keyword;
+  bool starred;
+  int32 duplicates;
+  bool from_previous;
+  array<AutocompleteAdditionalInfo> additional_info;
+  string document_type;
+};
+
+struct AutocompleteResultsForProvider {
+  string provider_name;
+  array<AutocompleteMatch> results;
+};
+
+struct OmniboxResponse {
+  bool done;
+  // Time delta since the request was started, in milliseconds.
+  int32 time_since_omnibox_started_ms;
+  // The inferred metrics::OmniboxInputType of the request represented as a
+  // string.
+  string type;
+  string host;
+  bool is_typed_host;
+  array<AutocompleteMatch> combined_results;
+  array<AutocompleteResultsForProvider> results_by_provider;
+};
+
+interface OmniboxPageHandler {
+  SetClientPage(OmniboxPage page);
+  StartOmniboxQuery(string input_string,
+                    bool reset_autocomplete_controller,
+                    int32 cursor_position,
+                    bool zero_suggest,
+                    bool prevent_inline_autocomplete,
+                    bool prefer_keyword,
+                    string current_url,
+                    int32 page_classification);
+};
+
+interface OmniboxPage {
+  handleNewAutocompleteResponse(OmniboxResponse response,
+                                bool isPageController);
+  HandleNewAutocompleteQuery(bool isPageController, string input_text);
+  HandleAnswerImageData(string image_url, string image_data);
+};

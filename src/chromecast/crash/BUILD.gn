@@ -1,0 +1,103 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//chromecast/chromecast.gni")
+import("//testing/test.gni")
+
+# Crash reporting is not support on Fuchsia yet
+# TODO(crbug.com/753619): Enable crash reporting on Fuchsia.
+assert(!is_fuchsia)
+
+cast_source_set("crash") {
+  sources = [
+    "app_state_tracker.cc",
+    "app_state_tracker.h",
+    "cast_crash_keys.cc",
+    "cast_crash_keys.h",
+    "cast_crashdump_uploader.cc",
+    "cast_crashdump_uploader.h",
+    "linux/crash_util.cc",
+    "linux/crash_util.h",
+    "linux/dummy_minidump_generator.cc",
+    "linux/dummy_minidump_generator.h",
+    "linux/dump_info.cc",
+    "linux/dump_info.h",
+    "linux/minidump_generator.h",
+    "linux/minidump_params.cc",
+    "linux/minidump_params.h",
+    "linux/minidump_uploader.cc",
+    "linux/minidump_uploader.h",
+    "linux/minidump_writer.cc",
+    "linux/minidump_writer.h",
+    "linux/synchronized_minidump_manager.cc",
+    "linux/synchronized_minidump_manager.h",
+  ]
+
+  deps = [
+    "//base",
+    "//chromecast/base",
+    "//chromecast/base:cast_sys_info_util",
+    "//chromecast/base:cast_version",
+    "//components/crash/core/common",
+    "//components/metrics",
+    "//components/prefs",
+    "//third_party/breakpad:client",
+  ]
+}
+
+cast_executable("crash_uploader") {
+  sources = [
+    "linux/crash_uploader.cc",
+  ]
+
+  deps = [
+    ":crash",
+    "//base",
+    "//chromecast/base",
+    "//chromecast/base:default_create_sys_info",
+    "//chromecast/public",
+    "//chromecast/system/reboot:reboot_util",
+  ]
+}
+
+cast_source_set("test_support") {
+  sources = [
+    "linux/crash_testing_utils.cc",
+    "linux/crash_testing_utils.h",
+  ]
+
+  deps = [
+    ":crash",
+    "//base",
+    "//chromecast/base",
+  ]
+}
+
+if (is_linux) {
+  test("cast_crash_unittests") {
+    sources = [
+      "cast_crashdump_uploader_unittest.cc",
+      "linux/dummy_minidump_generator_unittest.cc",
+      "linux/dump_info_unittest.cc",
+      "linux/minidump_uploader_unittest.cc",
+      "linux/minidump_writer_unittest.cc",
+      "linux/synchronized_minidump_manager_unittest.cc",
+    ]
+
+    deps = [
+      ":crash",
+      ":test_support",
+      "//base",
+      "//base/test:run_all_unittests",
+      "//base/test:test_support",
+      "//chromecast/base:dummy_cast_sys_info",
+      "//chromecast/base:test_support",
+      "//components/metrics",
+      "//components/prefs:test_support",
+      "//testing/gmock",
+      "//testing/gtest",
+      "//third_party/breakpad:client",
+    ]
+  }
+}

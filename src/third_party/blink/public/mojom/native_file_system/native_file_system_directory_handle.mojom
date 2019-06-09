@@ -1,0 +1,76 @@
+// Copyright 2019 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module blink.mojom;
+
+import "third_party/blink/public/mojom/native_file_system/native_file_system_file_handle.mojom";
+import "third_party/blink/public/mojom/native_file_system/native_file_system_error.mojom";
+import "third_party/blink/public/mojom/native_file_system/native_file_system_transfer_token.mojom";
+
+// Union representing either a file or a directory handle. Used in APIs that
+// can return arbitrary handles.
+union NativeFileSystemHandle {
+  NativeFileSystemFileHandle file;
+  NativeFileSystemDirectoryHandle directory;
+};
+
+struct NativeFileSystemEntry {
+  NativeFileSystemHandle entry_handle;
+  string name;
+};
+
+// This interface represents a handle to a directory in the Native File System
+// API.
+//
+// TODO(mek): Using something similar to (but probably not the same as)
+// mojo_base.mojom.Basename (https://crbug.com/779196) to represent names of
+// children could help us defend against directory traversal bugs at the IPC
+// layer (not the same type though because of https://crbug.com/956231 and the
+// fact that our paths really aren't base::FilePath, but instead are virtual
+// paths).
+interface NativeFileSystemDirectoryHandle {
+  // Returns a file with the given |name| that is a child of this directory. If
+  // no such file exists, and |create| is true, the file is first created.
+  // Returns an error if the operation fails, or a handle to the newly created
+  // file if the operation succeeds.
+  GetFile(string name, bool create) =>
+      (NativeFileSystemError result, NativeFileSystemFileHandle? file);
+
+  // Returns a directory with the given |name| that is a child of this
+  // directory. If no such directory exists, and |create| is true, the directory
+  // is first created.
+  // Returns an error if the operation fails, or a handle to the newly created
+  // directory if the operation succeeds.
+  GetDirectory(string name, bool create) =>
+      (NativeFileSystemError result, NativeFileSystemDirectoryHandle? directory);
+
+  // Returns all the direct children of this directory.
+  // TODO(mek): Change this API to stream results in chunks rather than block
+  // until all entries have been retrieved.
+  GetEntries() => (NativeFileSystemError result, array<NativeFileSystemEntry> entries);
+
+  // Creates a new file or directory, or overwrites an existing one in this
+  // directory by moving the file or directory represented by |source|. The
+  // new file or directory will be named |name|.
+  // Returns an error if the operation fails, or a handle to the newly created
+  // file or directory if the operation succeeds.
+  MoveFrom(NativeFileSystemTransferToken source, string name) =>
+      (NativeFileSystemError result, NativeFileSystemEntry? entry);
+
+  // Creates a new file or directory, or overwrites an existing one in this
+  // directory by copying the file or directory represented by |source|. The
+  // new file or directory will be named |name|.
+  // Returns an error if the operation fails, or a handle to the newly created
+  // file or directory if the operation succeeds.
+  CopyFrom(NativeFileSystemTransferToken source, string name) =>
+      (NativeFileSystemError result, NativeFileSystemEntry? entry);
+
+  // Deletes this directory. To delete recursively, set |recursive| to true.
+  Remove(bool recurse) => (NativeFileSystemError result);
+
+  // Create a TransferToken for this directory. This token can be used to pass
+  // a reference to this directory to other methods, for example to copy or move
+  // the directory, or when transferring the handle over postMessage.
+  Transfer(NativeFileSystemTransferToken& token);
+};

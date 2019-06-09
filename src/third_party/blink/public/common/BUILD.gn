@@ -1,0 +1,160 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/buildflag_header.gni")
+import("//build/config/compiler/compiler.gni")
+import("//build/config/features.gni")
+import("//testing/test.gni")
+import("//third_party/protobuf/proto_library.gni")
+
+# Public common API headers, mojom and libraries that can be linked and
+# referenced both by browser-side and renderer-side components.
+component("common") {
+  output_name = "blink_common"
+
+  public_deps = [
+    "//third_party/blink/public/common:headers",
+    "//third_party/blink/public/mojom:mojom_modules",
+  ]
+  deps = [
+    "//third_party/blink/common",
+  ]
+}
+
+source_set("headers") {
+  visibility = [
+    "//chrome/*",
+    "//content/*",
+    "//third_party/blink/*",
+    "//components/*",
+    "//services/*",
+    "//storage/*",
+    ":*",
+  ]
+
+  sources = [
+    "associated_interfaces/associated_interface_provider.h",
+    "associated_interfaces/associated_interface_registry.h",
+    "blob/blob_utils.h",
+    "cache_storage/cache_storage_utils.h",
+    "client_hints/client_hints.h",
+    "common_export.h",
+    "css/preferred_color_scheme.h",
+    "device_memory/approximated_device_memory.h",
+    "dom_storage/session_storage_namespace_id.h",
+    "experiments/memory_ablation_experiment.h",
+    "feature_policy/feature_policy.h",
+    "feature_policy/policy_value.h",
+    "features.h",
+    "fetch/fetch_api_request_headers_map.h",
+    "fetch/fetch_api_request_headers_mojom_traits.h",
+    "frame/frame_owner_element_type.h",
+    "frame/frame_policy.h",
+    "frame/from_ad_state.h",
+    "frame/occlusion_state.h",
+    "frame/sandbox_flags.h",
+    "frame/user_activation_state.h",
+    "frame/user_activation_update_source.h",
+    "frame/user_activation_update_type.h",
+    "indexeddb/indexed_db_default_mojom_traits.h",
+    "indexeddb/indexeddb_key.h",
+    "indexeddb/indexeddb_key_path.h",
+    "indexeddb/indexeddb_key_range.h",
+    "indexeddb/indexeddb_metadata.h",
+    "indexeddb/web_idb_types.h",
+    "loader/url_loader_factory_bundle.h",
+    "loader/url_loader_factory_bundle_mojom_traits.h",
+    "logging/logging_utils.h",
+    "manifest/manifest.h",
+    "manifest/manifest_icon_selector.h",
+    "manifest/manifest_util.h",
+    "manifest/web_display_mode.h",
+    "media/video_capture.h",
+    "mediastream/media_devices.h",
+    "mediastream/media_devices_mojom_traits.h",
+    "mediastream/media_stream_controls.h",
+    "mediastream/media_stream_mojom_traits.h",
+    "mediastream/media_stream_request.h",
+    "messaging/cloneable_message.h",
+    "messaging/cloneable_message_struct_traits.h",
+    "messaging/message_port_channel.h",
+    "messaging/string_message_codec.h",
+    "messaging/transferable_message.h",
+    "messaging/transferable_message_struct_traits.h",
+    "mime_util/mime_util.h",
+    "notifications/notification_constants.h",
+    "notifications/notification_resources.h",
+    "notifications/notification_struct_traits.h",
+    "notifications/platform_notification_data.h",
+    "oom_intervention/oom_intervention_types.h",
+    "origin_policy/origin_policy.h",
+    "origin_trials/origin_trial_policy.h",
+    "origin_trials/trial_token.h",
+    "origin_trials/trial_token_validator.h",
+    "page/launching_process_state.h",
+    "prerender/prerender_rel_type.h",
+    "privacy_preferences.h",
+    "push_messaging/web_push_subscription_options.h",
+    "scheduler/web_scheduler_tracked_feature.h",
+    "screen_orientation/web_screen_orientation_lock_type.h",
+    "screen_orientation/web_screen_orientation_type.h",
+    "service_worker/service_worker_status_code.h",
+    "service_worker/service_worker_type_converters.h",
+    "service_worker/service_worker_types.h",
+    "service_worker/service_worker_utils.h",
+    "user_agent/user_agent_metadata.h",
+    "web_package/signed_exchange_consts.h",
+  ]
+
+  public_deps = [
+    "//services/network/public/cpp:cpp",
+    "//skia",
+    "//third_party/blink/public/mojom:mojom_modules_headers",
+  ]
+
+  deps = [
+    "//base",
+    "//mojo/public/cpp/bindings",
+    "//mojo/public/cpp/system",
+    "//mojo/public/mojom/base",
+    "//net",
+  ]
+
+  # iOS doesn't use and must not depend on //media
+  if (!is_ios) {
+    deps += [
+      "//media",
+      "//media/capture:capture_base",
+      "//media/capture:capture_lib",
+    ]
+  }
+
+  if (is_android || is_win) {
+    sources += [
+      "font_unique_name_lookup/font_table_matcher.h",
+      "font_unique_name_lookup/icu_fold_case_util.h",
+    ]
+    deps += [ ":font_unique_name_table_proto" ]
+  }
+
+  if (is_mac) {
+    sources += [ "sandbox_support/sandbox_support_mac.h" ]
+  }
+
+  if (is_win) {
+    sources += [ "dwrite_rasterizer_support/dwrite_rasterizer_support.h" ]
+  }
+
+  # common_export.h is an implementation detail of component builds,
+  # not part of the public API.
+  public = sources - [ "common_export.h" ]
+}
+
+if (is_android || is_win) {
+  proto_library("font_unique_name_table_proto") {
+    sources = [
+      "font_unique_name_lookup/font_unique_name_table.proto",
+    ]
+  }
+}

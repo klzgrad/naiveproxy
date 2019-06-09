@@ -1,0 +1,83 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//testing/libfuzzer/fuzzer_test.gni")
+
+source_set("lib") {
+  sources = [
+    "data_decoder_service.cc",
+    "data_decoder_service.h",
+    "image_decoder_impl.cc",
+    "image_decoder_impl.h",
+    "json_parser_impl.cc",
+    "json_parser_impl.h",
+    "xml_parser.cc",
+    "xml_parser.h",
+  ]
+
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
+
+  deps = [
+    "//base",
+    "//mojo/public/cpp/bindings",
+    "//skia",
+    "//third_party/blink/public:blink",
+    "//third_party/libxml",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+  ]
+
+  public_deps = [
+    "//services/data_decoder/public/mojom",
+    "//services/service_manager/public/cpp",
+  ]
+}
+
+source_set("tests") {
+  testonly = true
+
+  sources = [
+    "image_decoder_impl_unittest.cc",
+    "public/cpp/json_sanitizer_unittest.cc",
+    "public/cpp/safe_xml_parser_unittest.cc",
+    "public/cpp/testing_json_parser_unittest.cc",
+    "xml_parser_unittest.cc",
+  ]
+
+  deps = [
+    ":lib",
+    "//base",
+    "//base/test:test_support",
+    "//gin",
+    "//gin:gin_test",
+    "//services/data_decoder/public/cpp",
+    "//services/data_decoder/public/cpp:test_support",
+    "//skia",
+    "//testing/gtest",
+    "//third_party/blink/public:blink",
+    "//ui/gfx",
+  ]
+
+  data_deps = [
+    "//tools/v8_context_snapshot",
+  ]
+
+  configs += [
+    "//tools/v8_context_snapshot:use_v8_context_snapshot",
+    "//v8:external_startup_data",
+  ]
+}
+
+fuzzer_test("xml_parser_fuzzer") {
+  sources = [
+    "xml_parser_fuzzer.cc",
+  ]
+  deps = [
+    ":lib",
+    "//base",
+    "//third_party/libxml:libxml",
+  ]
+  dict = "//third_party/libxml/fuzz/xml.dict"
+  seed_corpus = "//third_party/libxml/fuzz/seed_corpus"
+}

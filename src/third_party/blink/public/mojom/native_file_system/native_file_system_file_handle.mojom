@@ -1,0 +1,46 @@
+// Copyright 2019 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module blink.mojom;
+
+import "third_party/blink/public/mojom/blob/blob.mojom";
+import "third_party/blink/public/mojom/blob/serialized_blob.mojom";
+import "third_party/blink/public/mojom/native_file_system/native_file_system_error.mojom";
+import "third_party/blink/public/mojom/native_file_system/native_file_system_transfer_token.mojom";
+
+// This interface represents a handle to a directory in the Native File System
+// API.
+interface NativeFileSystemFileHandle {
+  // Returns a blob representing the current state of this file.
+  AsBlob() => (NativeFileSystemError result, SerializedBlob? blob);
+
+  // Deletes this file.
+  Remove() => (NativeFileSystemError result);
+
+  // Write data from |data| to the given |position| in the file being written
+  // to. Returns whether the operation succeeded and if so how many bytes were
+  // written.
+  // TODO(mek): This might need some way of reporting progress events back to
+  // the renderer.
+  Write(uint64 offset, Blob data) => (NativeFileSystemError result,
+                                      uint64 bytes_written);
+
+  // Write data from |stream| to the given |position| in the file being written
+  // to. Returns whether the operation succeeded and if so how many bytes were
+  // written.
+  // TODO(mek): This might need some way of reporting progress events back to
+  // the renderer.
+  WriteStream(uint64 offset, handle<data_pipe_consumer> stream) =>
+      (NativeFileSystemError result, uint64 bytes_written);
+
+  // Changes the length of the file to be |length|. If |length| is larger than
+  // the current size of the file, the file will be extended, and the extended
+  // part is filled with null bytes.
+  Truncate(uint64 length) => (NativeFileSystemError result);
+
+  // Create a TransferToken for this directory. This token can be used to pass
+  // a reference to this directory to other methods, for example to copy or move
+  // the file, or when transferring the handle over postMessage.
+  Transfer(NativeFileSystemTransferToken& token);
+};
