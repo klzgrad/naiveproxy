@@ -34,6 +34,7 @@ class NaiveConnection {
   enum Protocol {
     kSocks5,
     kHttp,
+    kRedir,
   };
 
   // From this direction.
