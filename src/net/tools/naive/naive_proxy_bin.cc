@@ -170,6 +170,7 @@ void GetCommandLine(const base::CommandLine& proc, CommandLine* cmdline) {
                  "--version                  Print version\n"
                  "--listen=<proto>://[addr][:port]\n"
                  "                           proto: socks, http\n"
+                 "                                  redir (Linux only)\n"
                  "--proxy=<proto>://[<user>:<pass>@]<hostname>[:<port>]\n"
                  "                           proto: https, quic\n"
                  "--padding                  Use padding\n"
@@ -255,6 +256,7 @@ bool ParseCommandLine(const CommandLine& cmdline, Params* params) {
   params->listen_addr = "0.0.0.0";
   params->listen_port = 1080;
   url::AddStandardScheme("socks", url::SCHEME_WITH_HOST_AND_PORT);
+  url::AddStandardScheme("redir", url::SCHEME_WITH_HOST_AND_PORT);
   if (!cmdline.listen.empty()) {
     GURL url(cmdline.listen);
     if (url.scheme() == "socks") {
@@ -263,6 +265,9 @@ bool ParseCommandLine(const CommandLine& cmdline, Params* params) {
     } else if (url.scheme() == "http") {
       params->protocol = net::NaiveConnection::kHttp;
       params->listen_port = 8080;
+    } else if (url.scheme() == "redir") {
+      params->protocol = net::NaiveConnection::kRedir;
+      params->listen_port = 1080;
     } else {
       std::cerr << "Invalid scheme in --listen" << std::endl;
       return false;
