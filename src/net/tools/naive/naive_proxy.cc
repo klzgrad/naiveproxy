@@ -98,6 +98,9 @@ void NaiveProxy::DoConnect() {
     socket = std::make_unique<HttpProxySocket>(std::move(accepted_socket_),
                                                traffic_annotation_);
     pad_direction = NaiveConnection::kServer;
+  } else if (protocol_ == NaiveConnection::kRedir) {
+    socket = std::move(accepted_socket_);
+    pad_direction = NaiveConnection::kClient;
   } else {
     return;
   }

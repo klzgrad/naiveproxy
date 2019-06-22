@@ -25,6 +25,16 @@
 #include "net/tools/naive/http_proxy_socket.h"
 #include "net/tools/naive/socks5_server_socket.h"
 
+#if defined(OS_LINUX)
+#include <linux/netfilter_ipv4.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+
+#include "net/base/ip_endpoint.h"
+#include "net/base/sockaddr_storage.h"
+#include "net/socket/tcp_client_socket.h"
+#endif
+
 namespace net {
 
 namespace {
@@ -187,6 +197,21 @@ int NaiveConnection::DoConnectServer() {
     const auto* socket =
         static_cast<const HttpProxySocket*>(client_socket_.get());
     origin = socket->request_endpoint();
+  } else if (protocol_ == kRedir) {
+#if defined(OS_LINUX)
+    const auto* socket =
+        static_cast<const TCPClientSocket*>(client_socket_.get());
+    int sd = socket->SocketDescriptorForTesting();
+    SockaddrStorage dst;
+    int rv;
+    rv = getsockopt(sd, SOL_IP, SO_ORIGINAL_DST, dst.addr, &dst.addr_len);
+    if (rv == 0) {
+      IPEndPoint ipe;
+      if (ipe.FromSockAddr(dst.addr, dst.addr_len)) {
+        origin = HostPortPair::FromIPEndPoint(ipe);
+      }
+    }
+#endif
   }
 
   if (origin.IsEmpty()) {
