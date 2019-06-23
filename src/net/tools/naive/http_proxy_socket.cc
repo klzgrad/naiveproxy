@@ -241,7 +241,7 @@ int HttpProxySocket::DoLoop(int last_io_result) {
 int HttpProxySocket::DoHeaderRead() {
   next_state_ = STATE_HEADER_READ_COMPLETE;
 
-  handshake_buf_ = new IOBuffer(kBufferSize);
+  handshake_buf_ = base::MakeRefCounted<IOBuffer>(kBufferSize);
   return transport_->Read(handshake_buf_.get(), kBufferSize, io_callback_);
 }
 
@@ -293,7 +293,7 @@ int HttpProxySocket::DoHeaderWrite() {
   // Adds padding.
   int padding_size = base::RandInt(kMinPaddingSize, kMaxPaddingSize);
   header_write_size_ = kResponseHeaderSize + padding_size + 4;
-  handshake_buf_ = new IOBuffer(header_write_size_);
+  handshake_buf_ = base::MakeRefCounted<IOBuffer>(header_write_size_);
   char* p = handshake_buf_->data();
   std::memcpy(p, kResponseHeader, kResponseHeaderSize);
   std::memset(p + kResponseHeaderSize, '.', padding_size);
