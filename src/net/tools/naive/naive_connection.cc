@@ -279,13 +279,13 @@ void NaiveConnection::Pull(Direction from, Direction to) {
 
   int read_size = kBufferSize;
   if (from == pad_direction_ && num_paddings_[from] < kFirstPaddings) {
-    auto* buffer = new GrowableIOBuffer;
+    auto buffer = base::MakeRefCounted<GrowableIOBuffer>();
     buffer->SetCapacity(kBufferSize);
     buffer->set_offset(kPaddingHeaderSize);
     read_buffers_[from] = buffer;
     read_size = kBufferSize - kPaddingHeaderSize - kMaxPaddingSize;
   } else {
-    read_buffers_[from] = new IOBuffer(kBufferSize);
+    read_buffers_[from] = base::MakeRefCounted<IOBuffer>(kBufferSize);
   }
 
   DCHECK(sockets_[from]);
@@ -333,7 +333,7 @@ void NaiveConnection::Push(Direction from, Direction to, int size) {
       }
     }
     if (!trivial_padding) {
-      auto* unpadded_buffer = new IOBuffer(kBufferSize);
+      auto unpadded_buffer = base::MakeRefCounted<IOBuffer>(kBufferSize);
       char* unpadded_ptr = unpadded_buffer->data();
       for (int i = 0; i < size;) {
         if (num_paddings_[from] >= kFirstPaddings &&
@@ -394,8 +394,8 @@ void NaiveConnection::Push(Direction from, Direction to, int size) {
     }
   }
 
-  write_buffers_[to] = new DrainableIOBuffer(read_buffers_[from].get(),
-                                             write_offset + write_size);
+  write_buffers_[to] = base::MakeRefCounted<DrainableIOBuffer>(
+      std::move(read_buffers_[from]), write_offset + write_size);
   if (write_offset) {
     write_buffers_[to]->DidConsume(write_offset);
   }
@@ -486,7 +486,13 @@ void NaiveConnection::OnPushComplete(Direction from, Direction to, int result) {
     write_buffers_[to]->DidConsume(result);
     int size = write_buffers_[to]->BytesRemaining();
     if (size > 0) {
-      Push(from, to, size);
+      int rv = sockets_[to]->Write(
+          write_buffers_[to].get(), size,
+          base::BindRepeating(&NaiveConnection::OnPushComplete,
+                              weak_ptr_factory_.GetWeakPtr(), from, to),
+          traffic_annotation_);
+      if (rv != ERR_IO_PENDING)
+        OnPushComplete(from, to, rv);
       return;
     }
   }
