@@ -285,7 +285,7 @@ int Socks5ServerSocket::DoGreetRead() {
 
   int handshake_buf_len = greet_read_header_size_ - bytes_received_;
   DCHECK_LT(0, handshake_buf_len);
-  handshake_buf_ = new IOBuffer(handshake_buf_len);
+  handshake_buf_ = base::MakeRefCounted<IOBuffer>(handshake_buf_len);
   return transport_->Read(handshake_buf_.get(), handshake_buf_len,
                           io_callback_);
 }
@@ -348,7 +348,7 @@ int Socks5ServerSocket::DoGreetWrite() {
   next_state_ = STATE_GREET_WRITE_COMPLETE;
   int handshake_buf_len = buffer_.size() - bytes_sent_;
   DCHECK_LT(0, handshake_buf_len);
-  handshake_buf_ = new IOBuffer(handshake_buf_len);
+  handshake_buf_ = base::MakeRefCounted<IOBuffer>(handshake_buf_len);
   std::memcpy(handshake_buf_->data(), &buffer_.data()[bytes_sent_],
               handshake_buf_len);
   return transport_->Write(handshake_buf_.get(), handshake_buf_len,
@@ -385,7 +385,7 @@ int Socks5ServerSocket::DoHandshakeRead() {
 
   int handshake_buf_len = read_header_size_ - bytes_received_;
   DCHECK_LT(0, handshake_buf_len);
-  handshake_buf_ = new IOBuffer(handshake_buf_len);
+  handshake_buf_ = base::MakeRefCounted<IOBuffer>(handshake_buf_len);
   return transport_->Read(handshake_buf_.get(), handshake_buf_len,
                           io_callback_);
 }
@@ -505,7 +505,7 @@ int Socks5ServerSocket::DoHandshakeWrite() {
 
   int handshake_buf_len = buffer_.size() - bytes_sent_;
   DCHECK_LT(0, handshake_buf_len);
-  handshake_buf_ = new IOBuffer(handshake_buf_len);
+  handshake_buf_ = base::MakeRefCounted<IOBuffer>(handshake_buf_len);
   std::memcpy(handshake_buf_->data(), &buffer_[bytes_sent_], handshake_buf_len);
   return transport_->Write(handshake_buf_.get(), handshake_buf_len,
                            io_callback_, traffic_annotation_);
