@@ -1,0 +1,126 @@
+import("//build/config/c++/c++.gni")
+import("//build/config/chrome_build.gni")
+import("//buildtools/deps_revisions.gni")
+
+assert(use_custom_libcxx, "should only be used if use_custom_libcxx is set")
+
+declare_args() {
+  # lldb pretty printing only works when libc++ is built in the __1 (or __ndk1)
+  # namespaces.  For pretty printing to work out-of-the-box on Mac (where lldb
+  # is primarily used), this flag is set to false to build with the __1
+  # namespace (to maintain ABI compatibility, this implies building without
+  # _LIBCPP_ABI_UNSTABLE).  This is not necessary on non-component builds
+  # because we leave the ABI version set to __1 in that case because libc++
+  # symbols are not exported.
+  # TODO(thomasanderson): Set this to true by default once rL352899 is available
+  # in MacOS's lldb.
+  libcxx_abi_unstable = !((is_mac || is_ios) && is_debug && is_component_build)
+
+  # Builds libcxx Natvis into the symbols for type visualization.
+  # Set to false to workaround http://crbug.com/966676 and
+  # http://crbug.com/966687.
+  libcxx_natvis_include = true
+}
+
+# TODO(xiaohuic): https://crbug/917533 Crashes on internal ChromeOS build.
+# Do unconditionally once the underlying problem is fixed.
+if (is_chromeos && is_chrome_branded) {
+  libcxx_abi_unstable = false
+}
+
+# This is included by reference in the //build/config/compiler:runtime_library
+# config that is applied to all targets. It is here to separate out the logic
+# that is specific to libc++. Please see that target for advice on what should
+# go in :runtime_library vs. :compiler.
+config("runtime_library") {
+  cflags = []
+  cflags_cc = []
+  defines = []
+  ldflags = []
+  libs = []
+
+  if (libcxx_abi_unstable) {
+    defines += [ "_LIBCPP_ABI_UNSTABLE" ]
+  }
+
+  if (is_component_build) {
+    # In component builds, symbols from libc++.so are exported for all DSOs to
+    # use.  If the system libc++ gets loaded (indirectly through a system
+    # library), then it will conflict with our libc++.so.  Add a custom ABI
+    # version if we're building with _LIBCPP_ABI_UNSTABLE to avoid conflicts.
+    #
+    # Windows doesn't need to set _LIBCPP_ABI_VERSION since there's no system
+    # C++ library we could conflict with.
+    if (libcxx_abi_unstable && !is_win) {
+      defines += [ "_LIBCPP_ABI_VERSION=Cr" ]
+    }
+  } else {
+    # Don't leak any symbols on a static build.
+    defines += [ "_LIBCPP_DISABLE_VISIBILITY_ANNOTATIONS" ]
+    if (!export_libcxxabi_from_executables && !is_win) {
+      defines += [ "_LIBCXXABI_DISABLE_VISIBILITY_ANNOTATIONS" ]
+    }
+  }
+
+  defines += [ "_LIBCPP_ENABLE_NODISCARD" ]
+
+  if (is_win) {
+    # Intentionally not using libc++abi on Windows because libc++abi only
+    # implements the Itanium C++ ABI, and not the Microsoft ABI which we use on
+    # Windows (and we need to use in order to interoperate correctly with COM
+    # among other things).
+    assert(!export_libcxxabi_from_executables,
+           "Don't use libcxxabi on Windows.")
+
+    cflags_cc +=
+        [ "-I" + rebase_path("$libcxx_prefix/include", root_build_dir) ]
+
+    # Prevent libc++ from embedding linker flags to try to automatically link
+    # against its runtime library. This is unnecessary with our build system,
+    # and can also result in build failures if libc++'s name for a library
+    # does not match ours.
+    defines += [ "_LIBCPP_NO_AUTO_LINK" ]
+
+    # Add a debug visualizer for Microsoft's debuggers so that they can display
+    # libc++ types well.
+    if (libcxx_natvis_include) {
+      ldflags += [ "/NATVIS:" + rebase_path("libc++.natvis", root_build_dir) ]
+    }
+  } else {
+    cflags_cc += [
+      "-nostdinc++",
+      "-isystem" + rebase_path("$libcxx_prefix/include", root_build_dir),
+      "-isystem" + rebase_path("$libcxxabi_prefix/include", root_build_dir),
+    ]
+
+    defines += [ "CR_LIBCXX_REVISION=$libcxx_svn_revision" ]
+
+    # Make sure we don't link against the system libstdc++ or libc++.
+    if (is_clang) {
+      # //build/config/android:runtime_library adds -nostdlib, which suppresses
+      # linking against all system libraries.  -nostdlib++ would be redundant,
+      # and would generate an unused warning in this case.
+      if (!is_android) {
+        ldflags += [ "-nostdlib++" ]
+      }
+    } else {
+      # Gcc has a built-in abs() definition with default visibility.
+      # If it was not disabled, it would conflict with libc++'s abs()
+      # with hidden visibility.
+      cflags += [ "-fno-builtin-abs" ]
+
+      ldflags += [ "-nodefaultlibs" ]
+
+      # Unfortunately, there's no way to disable linking against just libc++
+      # (gcc doesn't have -notstdlib++:
+      # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=83931); -nodefaultlibs
+      # removes all of the default libraries, so add back the ones that we need.
+      libs += [
+        "c",
+        "gcc_s",
+        "m",
+        "rt",
+      ]
+    }
+  }
+}

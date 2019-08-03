@@ -1,0 +1,68 @@
+// Copyright 2019 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module chromeos.supervision.mojom;
+
+import "url/mojom/url.mojom";
+
+// Represents user actions that the OnboardingController can handle.
+enum OnboardingAction {
+  // The user has expressed intent to skip the remaining screens of the flow.
+  // When receiving this we will most likely perform cleanup functions and
+  // order the WebviewHost to exit the flow.
+  kSkipFlow,
+
+  // The user wants to go back/forward in the flow.
+  kShowNextPage,
+  kShowPreviousPage,
+};
+
+struct OnboardingPage {
+  // Url for the page that needs to be loaded by the webview host.
+  url.mojom.Url url;
+
+  // Only requests to URLs that pass this pattern should be authenticated
+  // or have their custom headers extracted.
+  // Documentation on how to write these patterns can be found in:
+  // https://developer.chrome.com/extensions/match_patterns
+  string url_filter_pattern;
+
+  // Access token used to authenticate the flow page requests. Note that this
+  // should only be used in requests to URLs that match |url_filter_pattern|.
+  string access_token;
+
+  // Some flow pages are expected to return a custom header in their HTTP
+  // responses. If this field is set, we will extract the given header from
+  // responses and return its value when the page fully loads.
+  // Note that this should only be used in requests to URLs that match
+  // |url_filter_pattern|.
+  string? custom_header_name;
+};
+
+// Represents a webview host, responsible for displaying supervision
+// onboarding pages. This will usually be a WebUI page that contains a
+// webview tag and manages its properties.
+// TODO(958995): Complete this interface.
+interface OnboardingWebviewHost {
+  // Requests the host to load the given page.
+  LoadPage(OnboardingPage page) => (string? custom_header_value);
+
+  // Requests that the host exit the flow immediately. This might mean
+  // different things depending on the type of host. If we are running in OOBE
+  // we will exit the supervision screen and move to the next OOBE step, if we
+  // are running in a custom WebUI, we should close it.
+  ExitFlow();
+};
+
+// Interface responsible for managing the whole onboarding flow.
+// TODO(958995): Complete this interface.
+interface OnboardingController {
+  // Binds the given webview host to this controller. The host will start
+  // receiving commands as soon as this is called.
+  BindWebviewHost(OnboardingWebviewHost webview_host);
+
+  // Requests the controller to handle the given action.
+  // The controller will decide the next step to continue/end the flow.
+  HandleAction(OnboardingAction action);
+};

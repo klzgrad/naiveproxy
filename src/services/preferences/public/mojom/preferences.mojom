@@ -1,0 +1,218 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module prefs.mojom;
+
+import "mojo/public/mojom/base/file_path.mojom";
+import "mojo/public/mojom/base/string16.mojom";
+import "mojo/public/mojom/base/values.mojom";
+import "services/preferences/public/mojom/tracked_preference_validation_delegate.mojom";
+
+const string kServiceName = "preferences";
+const string kLocalStateServiceName = "local_state";
+
+// The know pref store types.
+//
+// Should be kept in sync with PrefValueStore::PrefStoreType.
+enum PrefStoreType {
+  MANAGED,
+  SUPERVISED_USER,
+  EXTENSION,
+  COMMAND_LINE,
+  USER,
+  RECOMMENDED,
+  DEFAULT,
+};
+
+// Allows observing changes to prefs stored in a |PrefStore|.
+interface PrefStoreObserver {
+  // Preferences have been changed.
+  OnPrefsChanged(array<PrefUpdate> updates);
+
+  // The PrefStore has been initialized (asynchronously).
+  OnInitializationCompleted(bool succeeded);
+
+  // A preference write by this client has been applied. If this
+  // PrefStoreObserver is associated with a PersistentPrefStore, one
+  // OnPrefChangeAck() message is sent in response to each SetValues() message.
+  // This exists to ensure acks are ordered with respect to OnPrefsChanged
+  // messages.
+  OnPrefChangeAck();
+};
+
+// Captures the connections to a PrefStore by supplying the initial state of the
+// store and a handle to receive notifications on.
+struct PrefStoreConnection {
+  // Handle to receive updates on.
+  PrefStoreObserver& observer;
+
+  // Initial values of the PrefStore. These will not be communicated through
+  // OnPrefChanged.
+  mojo_base.mojom.DictionaryValue initial_prefs;
+
+  // Is the PrefStore initialized? If not it should not be used before
+  // OnInitializationCompleted has been called.
+  bool is_initialized;
+};
+
+struct PersistentPrefStoreConnection {
+  enum ReadError {
+    NONE = 0,
+    JSON_PARSE = 1,
+    JSON_TYPE = 2,
+    ACCESS_DENIED = 3,
+    FILE_OTHER = 4,
+    FILE_LOCKED = 5,
+    NO_FILE = 6,
+    JSON_REPEAT = 7,
+    // OTHER = 8,  // Deprecated.
+    FILE_NOT_SPECIFIED = 9,
+    ASYNCHRONOUS_TASK_INCOMPLETE = 10,
+  };
+
+  PrefStoreConnection? pref_store_connection;
+  PersistentPrefStore? pref_store;
+  ReadError read_error;
+  bool read_only;
+};
+
+struct IncognitoPersistentPrefStoreConnection {
+  PersistentPrefStoreConnection pref_store_connection;
+  array<string> persistent_pref_names;
+};
+
+// Allows connections to pref stores registered with |PrefStoreRegistry|.
+interface PrefStoreConnector {
+  // Connect to all registered pref stores, retrieving the current values of all
+  // prefs in each store and an |observer| interfaces through which updates can
+  // be received.
+  //
+  // The returned |connection| is the connection to the main writable user pref
+  // store.
+  //
+  // Calls to |Connect| before |Init| are allowed and will cause the calls to
+  // queue and connect once |Init| has been called.
+  Connect(PrefRegistry pref_registry) =>
+      (PersistentPrefStoreConnection connection,
+       IncognitoPersistentPrefStoreConnection? underlay,
+       array<PrefRegistration> remote_defaults,
+       map<PrefStoreType, PrefStoreConnection> connections);
+};
+
+// An update to a subcomponent of a pref.
+struct SubPrefUpdate {
+  // The path to the changed value within the pref.
+  array<string> path;
+  // The new value; a null |value| indicates a delete.
+  mojo_base.mojom.Value? value;
+};
+
+union PrefUpdateValue {
+  // Updates to several values within a pref (e.g. inside a dictionary stored
+  // under the pref key).
+  array<SubPrefUpdate> split_updates;
+  // An atomic update to the pref. A null |atomic_update| indicates a delete.
+  mojo_base.mojom.Value? atomic_update;
+};
+
+// An update to a pref.
+struct PrefUpdate {
+  // The key of the pref being updated.
+  string key;
+  // The value update.
+  PrefUpdateValue value;
+  // |flags| is a bitmask of WritablePrefStore::PrefWriteFlags.
+  uint32 flags;
+};
+
+// An interface providing mutation access to a PersistentPrefStore.
+interface PersistentPrefStore {
+  // Sets the values for prefs.
+  SetValues(array<PrefUpdate> updates);
+
+  // Requests that the pref service transmits its value for a pref (or sub-pref
+  // if |sub_pref_path| is non-empty). The value will be transmitted over the
+  // corresponding PrefStoreObserver interface previous returned by
+  // PrefStoreConnector.Connect().
+  RequestValue(string key, array<string> sub_pref_path);
+
+  // These mirror the C++ PersistentPrefStore methods.
+  CommitPendingWrite() => ();
+  SchedulePendingLossyWrites();
+  ClearMutableValues();
+  OnStoreDeletionFromDisk();
+};
+
+// A registry of all prefs registered by a single client.
+struct PrefRegistry {
+  // A list of pref keys that are private to this client. This client claims
+  // exclusive access to these prefs.
+  array<string> private_registrations;
+
+  // A list of pref keys that are public, but owned by another client.
+  array<string> foreign_registrations;
+
+  // A list of prefs that are publicly owned by this client. Each registration
+  // contains the key, the default value and flags. These are shared with
+  // clients that list the same pref in |foreign_registrations|.
+  array<PrefRegistration> public_registrations;
+};
+
+struct PrefRegistration {
+  string key;
+
+  mojo_base.mojom.Value default_value;
+
+  // A bitfield of flags. Flag values are defined in
+  // PrefRegistry::PrefRegistrationFlags and
+  // PrefRegistrySyncable::PrefRegistrationFlags.
+  uint32 flags;
+};
+
+// ---------------------------------------------------------------------
+// Service Configuration
+
+// These parameters are passed to prefs::CreateTrackedPersistentPrefStore() in
+// services/preferences/persistent_pref_store_factory.cc.
+struct TrackedPersistentPrefStoreConfiguration {
+  mojo_base.mojom.FilePath unprotected_pref_filename;
+  mojo_base.mojom.FilePath protected_pref_filename;
+  array<TrackedPreferenceMetadata> tracking_configuration;
+  uint64 reporting_ids_count;
+  string seed;
+  string legacy_device_id;
+  string registry_seed;
+  mojo_base.mojom.String16 registry_path;
+  TrackedPreferenceValidationDelegate? validation_delegate;
+  ResetOnLoadObserver? reset_on_load_observer;
+};
+
+struct TrackedPreferenceMetadata {
+  enum EnforcementLevel { NO_ENFORCEMENT, ENFORCE_ON_LOAD };
+
+  enum PrefTrackingStrategy {
+    // Atomic preferences are tracked as a whole.
+    ATOMIC,
+    // Split preferences are dictionaries for which each top-level entry is
+    // tracked independently. Note: preferences using this strategy must be kept
+    // in sync with TrackedSplitPreferences in histograms.xml.
+    SPLIT,
+  };
+
+  enum ValueType {
+    IMPERSONAL,
+    // The preference value may contain personal information.
+    PERSONAL,
+  };
+
+  uint64 reporting_id;
+  string name;
+  EnforcementLevel enforcement_level;
+  PrefTrackingStrategy strategy;
+  ValueType value_type;
+};
+
+interface ResetOnLoadObserver {
+  OnResetOnLoad();
+};

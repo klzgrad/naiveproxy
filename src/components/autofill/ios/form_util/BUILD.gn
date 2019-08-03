@@ -1,0 +1,77 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//ios/web/js_compile.gni")
+import("//testing/test.gni")
+
+source_set("form_util") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "form_activity_observer.h",
+    "form_activity_observer_bridge.h",
+    "form_activity_observer_bridge.mm",
+    "form_activity_params.cc",
+    "form_activity_params.h",
+    "form_activity_tab_helper.h",
+    "form_activity_tab_helper.mm",
+  ]
+  deps = [
+    "//base",
+    "//ios/web/public",
+    "//ios/web/public/js_messaging",
+  ]
+}
+
+source_set("test_support") {
+  testonly = true
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "test_form_activity_observer.h",
+    "test_form_activity_observer.mm",
+    "test_form_activity_tab_helper.h",
+    "test_form_activity_tab_helper.mm",
+  ]
+  deps = [
+    ":form_util",
+    "//base",
+    "//ios/web/public",
+    "//testing/gtest",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "fill_js_unittest.mm",
+    "form_activity_observer_bridge_unittest.mm",
+    "form_activity_tab_helper_unittest.mm",
+    "form_unittest.mm",
+  ]
+  deps = [
+    ":form_util",
+    ":form_util_js",
+    ":test_support",
+    "//base",
+    "//base/test:test_support",
+    "//ios/web/public/js_messaging",
+    "//ios/web/public/test",
+    "//ios/web/public/test/fakes",
+    "//ios/web/web_state/js",
+    "//testing/gtest",
+  ]
+}
+
+js_compile_bundle("form_util_js") {
+  visibility = [ ":unit_tests" ]
+  testonly = true
+
+  # Form_handlers depends on form and fill.
+  closure_entry_point = "__crWeb.formHandlers"
+  sources = [
+    "resources/fill.js",
+    "resources/form.js",
+    "resources/form_handlers.js",
+  ]
+}

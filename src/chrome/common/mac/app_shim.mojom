@@ -1,0 +1,76 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module chrome.mojom;
+
+import "components/remote_cocoa/common/bridge_factory.mojom";
+import "mojo/public/mojom/base/file_path.mojom";
+
+[Native]
+enum AppShimLaunchType;
+
+[Native]
+enum AppShimLaunchResult;
+
+[Native]
+enum AppShimFocusType;
+
+[Native]
+enum AppShimAttentionType;
+
+// Interface through which the browser communicates to a shim process.
+interface AppShim {
+  // Create the interface through which NSViews and NSWindows may be created.
+  CreateViewsBridgeFactory(
+      associated remote_cocoa.mojom.BridgeFactory& views_bridge_factory);
+
+  // Initialize the command handler for the specified BridgedNativeWidget. This
+  // method exists at this scope (as opposed to in remote_cocoa) because it
+  // creates chrome-scoped objects that implement remote_cocoa interfaces.
+  CreateCommandDispatcherForWidget(uint64 widget_id);
+
+  // Instructs the shim to hide the app.
+  Hide();
+
+  // Instructs the shim to show the app.
+  UnhideWithoutActivation();
+
+  // Instructs the shim to request or cancel user attention.
+  SetUserAttention(AppShimAttentionType attention_type);
+
+  // Instructs the shim to set its badge label.
+  SetBadgeLabel(string badge_label);
+};
+
+// Interface through which the a process communicates to the browser process.
+interface AppShimHost {
+  // Sent when the user has indicated a desire to focus the app, either by
+  // clicking on the app's icon in the dock or by selecting it with Cmd+Tab. In
+  // response, Chrome brings the app's windows to the foreground, or relaunches
+  // if the focus type indicates a reopen and there are no open windows.
+  FocusApp(AppShimFocusType focus_type,
+           array<mojo_base.mojom.FilePath> files);
+
+  // Sent when the app shim is hidden or unhidden.
+  SetAppHidden(bool hidden);
+
+  // Called when the app shim process notifies that the app should quit.
+  QuitApp();
+};
+
+// The initial interface provided by the browser process. Used to bootstrap to
+// the AppShim and AppShimHost interfaces.
+interface AppShimHostBootstrap {
+  // Signals to the main Chrome process that a shim has started. The app shim
+  // process is requesting to be associated with the given profile and app_id.
+  // Once the profile and app_id are stored, and all future messages from the
+  // app shim relate to this app.
+  LaunchApp(AppShimHost& host_request,
+            mojo_base.mojom.FilePath profile_dir,
+            string app_mode_id,
+            AppShimLaunchType launch_type,
+            array<mojo_base.mojom.FilePath> files) =>
+                (AppShimLaunchResult launch_result, AppShim& app_shim_request);
+};
+

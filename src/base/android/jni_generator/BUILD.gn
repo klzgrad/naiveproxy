@@ -1,0 +1,109 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/android/rules.gni")
+import("//testing/test.gni")
+
+_registration_header = "$target_gen_dir/sample_jni_registration.h"
+
+generate_jni("jni_sample_header") {
+  sources = [
+    "java/src/org/chromium/example/jni_generator/SampleForAnnotationProcessor.java",
+    "java/src/org/chromium/example/jni_generator/SampleForTests.java",
+  ]
+  jni_package = "example"
+}
+
+android_library("jni_sample_java") {
+  java_files = [
+    "java/src/org/chromium/example/jni_generator/SampleForTests.java",
+    "java/src/org/chromium/example/jni_generator/SampleForAnnotationProcessor.java",
+  ]
+
+  deps = [
+    "//base:base_java",
+    "//base:jni_java",
+  ]
+
+  annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
+}
+
+android_library("jni_annotation_sample_java") {
+  java_files = [ "java/src/org/chromium/example/jni_generator/SampleForAnnotationProcessor.java" ]
+  deps = [
+    "//base:base_java",
+    "//base:jni_java",
+  ]
+  annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
+}
+
+source_set("jni_sample_native_side") {
+  deps = [
+    ":jni_sample_header",
+    "//base",
+  ]
+  sources = [
+    "sample_for_tests.cc",
+    "sample_for_tests.h",
+  ]
+}
+
+shared_library("jni_sample_lib") {
+  sources = [
+    "sample_entry_point.cc",
+    _registration_header,
+  ]
+
+  deps = [
+    ":jni_sample_native_side",
+    ":sample_jni_apk__final_jni",  # For registration_header
+    "//base",
+  ]
+}
+
+android_apk("sample_jni_apk") {
+  apk_name = "SampleJni"
+  android_manifest = "AndroidManifest.xml"
+  deps = [
+    ":jni_sample_java",
+    "//base:base_java",
+    "//base:jni_java",
+  ]
+  shared_libraries = [ ":jni_sample_lib" ]
+  jni_registration_header = _registration_header
+}
+
+# Serves to test that generated bindings compile properly.
+group("jni_generator_tests") {
+  deps = [
+    ":jni_annotation_sample_java",
+    ":sample_jni_apk",
+  ]
+}
+
+java_cpp_template("processor_args_java") {
+  package_path = "org/chromium/jni_generator"
+  sources = [
+    "ProcessorArgs.template",
+  ]
+  defines = [ "HASH_JNI_NAMES_VALUE=$use_hashed_jni_names" ]
+}
+
+java_annotation_processor("jni_processor") {
+  java_files = [ "java/src/org/chromium/jni_generator/JniProcessor.java" ]
+
+  main_class = "org.chromium.jni_generator.JniProcessor"
+
+  annotation_processor_deps = [ "//third_party/auto:auto_service_processor" ]
+
+  deps = [
+    "//base:jni_java",
+    "//third_party/android_deps:com_squareup_javapoet_java",
+    "//third_party/auto:auto_service_java",
+    "//third_party/guava:guava_java",
+  ]
+
+  srcjar_deps = [ ":processor_args_java" ]
+  jacoco_never_instrument = true
+}

@@ -1,0 +1,65 @@
+// Copyright 2019 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+[JavaPackage="org.chromium.payments.mojom"]
+module payments.mojom;
+
+import "components/payments/mojom/payment_request_data.mojom";
+
+struct PaymentHandlerMethodData {
+  // Either a short string (e.g., "basic-string") or URL (e.g.,
+  // "https://google.com/pay") payment method name.
+  string method_name;
+
+  // A JSON string built by the renderer from a JavaScript object that the
+  // website provides. The renderer uses blink::JSONObject::toJSONString() to
+  // generate this string. The browser does not parse the string and passes it
+  // as-is directly to the payment handler. There's no one format for this
+  // object, so more specific types cannot be used. A simple example:
+  //
+  // {"supportedNetworks": ["visa"]}
+  string stringified_data;
+};
+
+struct PaymentHandlerModifier {
+  PaymentCurrencyAmount? total;
+  PaymentHandlerMethodData method_data;
+};
+
+// Constructed by the browser based on PaymentDetails from the Merchant
+// renderer. The browser sends this to the Payment Handler renderer.
+struct PaymentMethodChangeResponse {
+  PaymentCurrencyAmount? total;
+  array<PaymentHandlerModifier>? modifiers;
+  string error = "";
+  string? stringified_payment_method_errors;
+};
+
+// The interface for a PaymentRequest object in the browser, so a PaymentHandler
+// renderer can talk to it.
+//
+// Implemented in the browser process. Not sandboxed.
+// Desktop (Windows, ChromeOS, Linux, MacOS) implementation:
+//   components/payments/content/payment_request.h
+interface PaymentHandlerHost {
+  // Called by the Payment Handler renderer to let the browser know that the
+  // user has selected a different payment instrument.
+  //
+  // The browser validates the |method_data| and passes it on to the Merchant
+  // renderer via
+  // PaymentRequestClient.OnPaymentMethodChange(method_name,stringified_data),
+  // defined in third_party/blink/public/mojom/payments/payment_request.mojom.
+  //
+  // The Merchant renderer than responds to the browser via
+  // PaymentRequest.UpdateWith(details) to update the total based on the
+  // selected instrument or PaymentRequest.NoUpdatedPaymentDetails() if the
+  // total is unchanged. The total can change, for example, based on the
+  // billing address of the selected instrument.
+  //
+  // The browser validates the |details| from the Merchant renderer and sends
+  // their subset to the Payment Handler renderer as
+  // |PaymentMethodChangeResponse|, so it can show the updated total.
+  ChangePaymentMethod(PaymentHandlerMethodData method_data) =>
+      (PaymentMethodChangeResponse response_data);
+};

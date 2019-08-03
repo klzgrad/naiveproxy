@@ -1,0 +1,50 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module ash.mojom;
+
+import "ui/gfx/geometry/mojo/geometry.mojom";
+
+enum FocusRingBehavior { FADE_OUT_FOCUS_RING, PERSIST_FOCUS_RING };
+
+enum FocusRingType { GLOW, SOLID, DASHED };
+
+// Defines a specific focus ring by specifying:
+// - |rects_in_screen| the regions around which to draw the focus ring (in
+//       screen coordinates).
+// - |focus_ring_behavior| whether it should persist or fade.
+// - |focus_ring_type| the visual style of the focus ring.
+// - |color| the color of the focus ring.
+// - |secondary_color| a secondary color, used by some visual styles. The
+//       default value is SK_ColorTRANSPARENT.
+struct FocusRing {
+  array<gfx.mojom.Rect> rects_in_screen;
+  FocusRingBehavior behavior;
+  FocusRingType type;
+  uint32 color;
+  uint32 secondary_color = 0; // SK_ColorTRANSPARENT
+};
+
+
+// Interface for ash client (e.g. Chrome) to control and query accessibility
+// focus ring features.
+interface AccessibilityFocusRingController {
+  // Sets the focus ring with the given ID to the specifications of focus_ring.
+  SetFocusRing(string focus_ring_id, FocusRing focus_ring);
+
+  // Hides focus ring on screen with the given ID.
+  HideFocusRing(string focus_ring_id);
+
+  // Draws a highlight at the given rects in screen coordinates. Rects may be
+  // overlapping and will be merged into one layer. This looks similar to
+  // selecting a region with the cursor, except it is drawn in the foreground
+  // rather than behind a text layer.
+  // TODO(katie): Add |caller_id| to highlights as well if other Accessibility
+  // tools or extensions want to use this API.
+  SetHighlights(array<gfx.mojom.Rect> rects_in_screen, uint32 skcolor);
+
+  // Hides highlight on screen.
+  // TODO(katie): Add |caller_id| to highlights as well.
+  HideHighlights();
+};

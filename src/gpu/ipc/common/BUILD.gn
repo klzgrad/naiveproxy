@@ -1,0 +1,256 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ui.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
+
+group("common") {
+  if (is_component_build) {
+    public_deps = [
+      "//gpu",
+    ]
+  } else {
+    public_deps = [
+      ":ipc_common_sources",
+    ]
+  }
+}
+
+group("command_buffer_traits") {
+  if (is_component_build) {
+    public_deps = [
+      "//gpu",
+    ]
+  } else {
+    public_deps = [
+      ":command_buffer_traits_sources",
+    ]
+  }
+}
+
+source_set("command_buffer_traits_sources") {
+  # External code should depend on this via
+  # //gpu/ipc/common:command_buffer_traits above rather than depending on this
+  # directly or the component build will break.
+  visibility = [ "//gpu/*" ]
+
+  sources = [
+    "gpu_command_buffer_traits.cc",
+    "gpu_command_buffer_traits.h",
+    "gpu_command_buffer_traits_multi.h",
+  ]
+
+  configs += [
+    "//gpu:gpu_implementation",
+    "//third_party/khronos:khronos_headers",
+  ]
+
+  public_deps = [
+    "//gpu/command_buffer/common:common_sources",
+    "//ipc",
+    "//ui/gfx/ipc",
+  ]
+
+  deps = [
+    "//base",
+    "//ui/gfx/ipc/buffer_types",
+    "//ui/gfx/ipc/geometry",
+  ]
+}
+
+source_set("ipc_common_sources") {
+  # External code should depend on this via //gpu/ipc/common above rather than
+  # depending on this directly or the component build will break.
+  visibility = [ "//gpu/*" ]
+
+  sources = [
+    "command_buffer_id.h",
+    "gpu_client_ids.h",
+    "gpu_memory_buffer_impl.cc",
+    "gpu_memory_buffer_impl.h",
+    "gpu_memory_buffer_impl_shared_memory.cc",
+    "gpu_memory_buffer_impl_shared_memory.h",
+    "gpu_memory_buffer_support.cc",
+    "gpu_memory_buffer_support.h",
+    "gpu_message_generator.cc",
+    "gpu_message_generator.h",
+    "gpu_messages.h",
+    "gpu_param_traits.cc",
+    "gpu_param_traits.h",
+    "gpu_param_traits_macros.h",
+    "memory_stats.cc",
+    "memory_stats.h",
+    "vulkan_ycbcr_info.cc",
+    "vulkan_ycbcr_info.h",
+  ]
+
+  if (is_mac) {
+    sources += [
+      "gpu_memory_buffer_impl_io_surface.cc",
+      "gpu_memory_buffer_impl_io_surface.h",
+    ]
+    libs = [ "IOSurface.framework" ]
+  }
+  if (is_win) {
+    sources += [
+      "gpu_memory_buffer_impl_dxgi.cc",
+      "gpu_memory_buffer_impl_dxgi.h",
+    ]
+  }
+  if (is_linux || use_ozone) {
+    sources += [
+      "gpu_memory_buffer_impl_native_pixmap.cc",
+      "gpu_memory_buffer_impl_native_pixmap.h",
+    ]
+  }
+  if (is_android) {
+    sources += [
+      "gpu_memory_buffer_impl_android_hardware_buffer.cc",
+      "gpu_memory_buffer_impl_android_hardware_buffer.h",
+    ]
+    visibility += [ "//media/gpu:gpu" ]
+  }
+
+  configs += [
+    "//gpu:gpu_implementation",
+    "//third_party/khronos:khronos_headers",
+  ]
+
+  public_deps = [
+    ":command_buffer_traits_sources",
+    ":surface_handle_type",
+    "//ipc",
+    "//url/ipc:url_ipc",
+  ]
+
+  deps = [
+    "//base",
+    "//components/viz/common:resource_format",
+    "//gpu/command_buffer/common:common_sources",
+    "//gpu/config:config_sources",
+    "//ui/base",
+    "//ui/gfx:color_space",
+    "//ui/gfx/geometry",
+    "//ui/gfx/ipc",
+    "//ui/gfx/ipc/buffer_types",
+    "//ui/gfx/ipc/color",
+    "//ui/gfx/ipc/geometry",
+    "//ui/gl",
+  ]
+
+  if (is_android) {
+    sources += [
+      "android/scoped_surface_request_conduit.cc",
+      "android/scoped_surface_request_conduit.h",
+      "android/surface_owner_android.cc",
+      "android/surface_owner_android.h",
+      "gpu_surface_lookup.cc",
+      "gpu_surface_lookup.h",
+      "gpu_surface_tracker.cc",
+      "gpu_surface_tracker.h",
+    ]
+    libs = [ "android" ]
+    deps += [ ":android_image_reader_utils" ]
+  }
+
+  if (use_ozone) {
+    deps += [ "//ui/ozone" ]
+  }
+}
+
+if (is_android) {
+  source_set("android_image_reader_utils") {
+    sources = [
+      "android/android_image_reader_utils.cc",
+      "android/android_image_reader_utils.h",
+    ]
+    configs += [ "//gpu:gpu_implementation" ]
+    deps = [
+      "//base",
+      "//ui/gl",
+    ]
+    visibility = [
+      "//gpu/*",
+      "//media/gpu:gpu",
+    ]
+  }
+}
+
+# Depend on this to use surface_handle.h without pulling in all of gpu ipc.
+source_set("surface_handle_type") {
+  public = [
+    "surface_handle.h",
+  ]
+
+  public_deps = [
+    "//ui/gfx:native_widget_types",
+  ]
+}
+
+mojom("interfaces") {
+  sources = [
+    "capabilities.mojom",
+    "context_result.mojom",
+    "dx_diag_node.mojom",
+    "gpu_feature_info.mojom",
+    "gpu_info.mojom",
+    "mailbox.mojom",
+    "mailbox_holder.mojom",
+    "memory_stats.mojom",
+    "surface_handle.mojom",
+    "sync_token.mojom",
+    "vulkan_ycbcr_info.mojom",
+  ]
+
+  public_deps = [
+    ":gpu_preferences_interface",
+    "//mojo/public/mojom/base",
+    "//ui/gfx/geometry/mojo",
+    "//ui/gfx/mojo",
+  ]
+}
+
+mojom("gpu_preferences_interface") {
+  sources = [
+    "gpu_preferences.mojom",
+  ]
+
+  public_deps = [
+    "//mojo/public/mojom/base",
+    "//ui/gfx/mojo",
+  ]
+}
+
+mojom("test_interfaces") {
+  testonly = true
+  sources = [
+    "traits_test_service.mojom",
+  ]
+
+  public_deps = [
+    ":gpu_preferences_interface",
+    ":interfaces",
+  ]
+}
+
+source_set("struct_traits") {
+  sources = [
+    "context_result_struct_traits.h",
+    "mailbox_holder_struct_traits.h",
+    "mailbox_struct_traits.h",
+    "memory_stats_struct_traits.h",
+    "surface_handle_struct_traits.h",
+    "sync_token_struct_traits.h",
+  ]
+  deps = [
+    ":interfaces_shared_cpp_sources",
+    ":surface_handle_type",
+    "//gpu/command_buffer/common",
+    "//gpu/ipc/common",
+    "//mojo/public/cpp/bindings:bindings",
+  ]
+  if (is_android) {
+    sources += [ "vulkan_ycbcr_info_mojom_traits.h" ]
+  }
+}

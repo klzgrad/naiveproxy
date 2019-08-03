@@ -1,0 +1,62 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+config("media_player_weak_link") {
+  ldflags = [
+    "-weak_framework",
+    "MediaPlayer",
+  ]
+
+  visibility = [ ":now_playing" ]
+}
+
+component("now_playing") {
+  sources = [
+    "now_playing_info_center_delegate.cc",
+    "now_playing_info_center_delegate.h",
+    "now_playing_info_center_delegate_cocoa.h",
+    "now_playing_info_center_delegate_cocoa.mm",
+    "now_playing_info_center_delegate_impl.h",
+    "now_playing_info_center_delegate_impl.mm",
+    "remote_command_center_delegate.cc",
+    "remote_command_center_delegate.h",
+    "remote_command_center_delegate_impl.h",
+    "remote_command_center_delegate_impl.mm",
+    "remote_command_center_delegate_ns.h",
+    "remote_command_center_delegate_ns.mm",
+    "remote_command_center_delegate_observer.cc",
+    "remote_command_center_delegate_observer.h",
+  ]
+
+  defines = [ "IS_NOW_PLAYING_IMPL" ]
+
+  deps = [
+    "//base",
+  ]
+
+  libs = [ "Foundation.framework" ]
+
+  # MediaPlayer.framework is only available on macOS 10.12 and higher. In a
+  # release build, component() is a static_library, which does not transitively
+  # carry weak_link information. Ensure that all targets that directly or
+  # indirectly carry the weak_link on the framework.
+  all_dependent_configs = [ ":media_player_weak_link" ]
+}
+
+static_library("test_support") {
+  testonly = true
+
+  sources = [
+    "mock_now_playing_info_center_delegate.cc",
+    "mock_now_playing_info_center_delegate.h",
+    "mock_remote_command_center_delegate.cc",
+    "mock_remote_command_center_delegate.h",
+  ]
+
+  deps = [
+    ":now_playing",
+    "//base",
+    "//testing/gmock",
+  ]
+}

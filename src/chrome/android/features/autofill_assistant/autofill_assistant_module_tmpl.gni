@@ -1,0 +1,47 @@
+import("//build/config/android/rules.gni")
+import("//build/config/locales.gni")
+import("//chrome/android/features/dynamic_feature_modules.gni")
+
+declare_args() {
+  # This is a developer flag to be able to use the incremental build/install workflow for autofill
+  # assistant. When set to true, autofill_assistant is built as part of the base apk and not a
+  # separate feature module which currently doesn't support incremental builds.
+  #
+  # TODO(http://crbug/864142): Remove once incremental bundle install is available.
+  # TODO(http://crbug/971244): Set default back to false.
+  disable_autofill_assistant_dfm = true
+}
+
+template("autofill_assistant_module_tmpl") {
+  _manifest = "$target_gen_dir/$target_name/AndroidManifest.xml"
+  _manifest_target = "${target_name}__manifest"
+  jinja_template(_manifest_target) {
+    input =
+        "//chrome/android/features/autofill_assistant/java/AndroidManifest.xml"
+    output = _manifest
+    variables = [
+      "target_sdk_version=$android_sdk_version",
+      "manifest_package=${invoker.manifest_package}",
+    ]
+  }
+
+  android_app_bundle_module(target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "base_module_target",
+                             "module_name",
+                             "uncompress_shared_libraries",
+                             "version_code",
+                             "version_name",
+                           ])
+    android_manifest = _manifest
+    android_manifest_dep = ":${_manifest_target}"
+    proguard_enabled = !is_java_debug
+    aapt_locale_whitelist = locales
+    package_name = "autofill_assistant"
+    package_name_to_id_mapping = resource_packages_id_mapping
+    deps = [
+      "//chrome/android/features/autofill_assistant:java",
+    ]
+  }
+}

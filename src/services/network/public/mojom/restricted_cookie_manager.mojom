@@ -1,0 +1,56 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module network.mojom;
+
+import "services/network/public/mojom/cookie_manager.mojom";
+import "mojo/public/mojom/base/time.mojom";
+import "url/mojom/url.mojom";
+
+enum CookieMatchType {
+  EQUALS,
+  STARTS_WITH,
+};
+
+struct CookieManagerGetOptions {
+  string name;
+  CookieMatchType match_type;
+};
+
+// Capability to access the cookie store on behalf of a single origin.
+//
+// Instances of this interface are restricted to a single origin, and will
+// fail operations on cookies that aren't visible within that origin. Untrusted
+// processes, like renderer processes, should only receive
+// RestrictedCookieManager instances for the origins that they are allowed to
+// represent.
+//
+// Implementations of this interface must assume all inputs are untrusted, and
+// must ensure that a potentially compromised caller process is not able to
+// access more than the cookies visible to the RestrictedCookieManager's origin.
+//
+// TODO(pwnall): Make this a strict subset of CookieManager. At the moment (Q2
+// 2018) the interface is diverged from CookieManager to allow its primary user
+// (the Web Platform's Async Cookies API) to iterate quickly.
+interface RestrictedCookieManager {
+  // Returns some of the cookies that would be sent in a request to |url|.
+  //
+  // |url| is an URL capable of receiving HTTP requests. |site_for_cookies| is
+  // the "site for cookies" values defined in RFC 6265bis, and roughly maps to
+  // the URL of the top-level frame in Document contexts, and to the script URL
+  // in service workers. |options| filters the returned list of cookies.
+  GetAllForUrl(
+      url.mojom.Url url, url.mojom.Url site_for_cookies,
+      CookieManagerGetOptions options) => (array<CanonicalCookie> cookies);
+
+  SetCanonicalCookie(CanonicalCookie cookie,
+                     url.mojom.Url url,
+                     url.mojom.Url site_for_cookies) => (bool success);
+
+  // Subscribes to changes in the cookies transmitted in a request to an URL.
+  //
+  // The subscription is canceled by closing the pipe.
+  AddChangeListener(url.mojom.Url url, url.mojom.Url site_for_cookies,
+                    CookieChangeListener listener) => ();
+};

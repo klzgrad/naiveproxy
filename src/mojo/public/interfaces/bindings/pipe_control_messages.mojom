@@ -1,0 +1,46 @@
+// Copyright 2015 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+[JavaPackage="org.chromium.mojo.bindings.pipecontrol"]
+module mojo.pipe_control;
+
+// For each message pipe running user-defined interfaces, some control
+// functions are provided and used by the routers at both ends of the pipe, so
+// that they can coordinate to manage interface endpoints.
+// All these control messages will have the interface ID field in the message
+// header set to invalid.
+
+////////////////////////////////////////////////////////////////////////////////
+// RunOrClosePipe@0xFFFFFFFE(RunOrClosePipeInput input);
+//
+// This control function runs the input command. If the operation fails or the
+// command is not supported, the message pipe is closed.
+
+const uint32 kRunOrClosePipeMessageId = 0xFFFFFFFE;
+
+struct RunOrClosePipeMessageParams {
+  RunOrClosePipeInput input;
+};
+
+union RunOrClosePipeInput {
+  PeerAssociatedEndpointClosedEvent peer_associated_endpoint_closed_event;
+};
+
+// A user-defined reason about why the interface is disconnected.
+struct DisconnectReason {
+  uint32 custom_reason;
+  string description;
+};
+
+// An event to notify that an interface endpoint set up at the message sender
+// side has been closed.
+//
+// This event is omitted if the endpoint belongs to the master interface and
+// there is no disconnect reason specified.
+struct PeerAssociatedEndpointClosedEvent {
+  // The interface ID.
+  uint32 id;
+  DisconnectReason? disconnect_reason;
+};
+

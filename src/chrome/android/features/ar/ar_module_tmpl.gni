@@ -1,0 +1,59 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/android/rules.gni")
+import("//build/config/locales.gni")
+import("//chrome/android/features/dynamic_feature_modules.gni")
+import("//device/vr/buildflags/buildflags.gni")
+
+assert(enable_arcore)
+
+template("ar_module_tmpl") {
+  assert(defined(invoker.version_code))
+  assert(defined(invoker.version_name))
+  assert(defined(invoker.manifest_package))
+  assert(defined(invoker.module_name))
+  assert(defined(invoker.base_module_target))
+
+  _manifest = "$target_gen_dir/$target_name/AndroidManifest.xml"
+  _manifest_target = "${target_name}__manifest"
+  jinja_template(_manifest_target) {
+    input = "//chrome/android/features/ar/AndroidManifest.xml"
+    output = _manifest
+    variables = [
+      "target_sdk_version=$android_sdk_version",
+      "manifest_package=${invoker.manifest_package}",
+    ]
+  }
+
+  android_app_bundle_module(target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "base_module_target",
+                             "module_name",
+                             "native_switches",
+                             "version_code",
+                             "version_name",
+                           ])
+    android_manifest = _manifest
+    android_manifest_dep = ":$_manifest_target"
+    deps = [
+      "//chrome/browser/android/vr:ar_java",
+      "//third_party/android_deps:com_google_ar_core_java",
+    ]
+
+    loadable_modules_if_32_bit = [ "$root_gen_dir/third_party/android_deps/com_google_ar_core_java/jni/armeabi-v7a/libarcore_sdk_c.so" ]
+    loadable_modules_if_64_bit = [ "$root_gen_dir/third_party/android_deps/com_google_ar_core_java/jni/arm64-v8a/libarcore_sdk_c.so" ]
+
+    uncompress_shared_libraries = true
+
+    # Don't embed more localized strings than required (http://crbug.com/932017)
+    aapt_locale_whitelist = locales
+
+    proguard_enabled = !is_java_debug
+
+    package_name = "ar"
+    package_name_to_id_mapping = resource_packages_id_mapping
+  }
+}

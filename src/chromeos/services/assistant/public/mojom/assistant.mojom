@@ -1,0 +1,334 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module chromeos.assistant.mojom;
+
+import "ui/accessibility/mojom/ax_assistant_structure.mojom";
+import "ui/gfx/geometry/mojo/geometry.mojom";
+import "url/mojom/url.mojom";
+import "mojo/public/mojom/base/string16.mojom";
+import "mojo/public/mojom/base/time.mojom";
+
+// Interface to communicate with assistant backend.
+interface Assistant {
+  // Starts a cached screen context interaction. Results related to the screen
+  // context will be returned through the |AssistantInteractionSubscriber|
+  // interface to registered subscribers. It is illegal to call this method
+  // without having first cached screen context (see CacheScreenContext()).
+  StartCachedScreenContextInteraction();
+
+  // Starts an interaction to edit the reminder uniquely identified by
+  // |client_id|. In response to the request, LibAssistant will initiate
+  // a user facing interaction with the context pre-populated with details
+  // to edit the specified reminder.
+  StartEditReminderInteraction(string client_id);
+
+  // Starts a metalayer interaction for the selected screen |region|. Results
+  // related to the selected region will be returned through the
+  // |AssistantInteractionSubscriber| interface to registered subscribers.
+  StartMetalayerInteraction(gfx.mojom.Rect region);
+
+  // Starts a new Assistant text interaction. If |allow_tts| is true, the
+  // result will contain TTS. Otherwise TTS will not be present in the
+  // generated server response. Results will be returned through registered
+  // |AssistantInteractionSubscriber|.
+  StartTextInteraction(string query, bool allow_tts);
+
+  // Starts a new Assistant voice interaction.
+  StartVoiceInteraction();
+
+  // Starts a warmer welcome interaction for Assistant launch.
+  // |num_warmer_welcome_triggered| is the count of warmer welcomes
+  // already triggered. If |allow_tts| is true, the result may contain TTS.
+  // Otherwise TTS will not be present in the generated server response.
+  StartWarmerWelcomeInteraction(int32 num_warmer_welcome_triggered,
+      bool allow_tts);
+
+  // Stops the active Assistant interaction and cancel the conversation if
+  // |cancel_conversation|. If there is no active interaction, this method
+  // is a no-op.
+  StopActiveInteraction(bool cancel_conversation);
+
+  // Registers assistant interaction event subscriber. Subscribers'
+  // implementation is responsible for selecting events of interest.
+  AddAssistantInteractionSubscriber(AssistantInteractionSubscriber subscriber);
+
+  // Retrieves a notification. A voiceless interaction will be sent to server to
+  // retrieve the notification of |action_index|, which can trigger other
+  // Assistant events such as OnTextResponse to show the result in the UI. The
+  // retrieved notification will be removed from the UI.
+  // |action_index| is the index of the tapped action. The main UI in the
+  // notification contains the top level action, which index is 0. The buttons
+  // have the additional actions, which are indexed starting from 1.
+  RetrieveNotification(AssistantNotification notification, int32 action_index);
+
+  // Dismisses a notification.
+  DismissNotification(AssistantNotification notification);
+
+  // Caches screen context, made up of view hierarchy and screenshot data.
+  // Screen context is used to provide additional context alongside text and
+  // voice queries, and may also be used in standalone screen context
+  // interactions (see StartCachedScreenContextInteraction()).
+  CacheScreenContext() => ();
+
+  // Clears the screen context cached by calling CacheScreenContext().
+  ClearScreenContextCache();
+
+  // Invoked when accessibility status is changed. Note that though
+  // accessibility status has changed, |spoken_feedback_enabled| may not have.
+  OnAccessibilityStatusChanged(bool spoken_feedback_enabled);
+
+  // Send Assistant feedback to Assistant server.
+  SendAssistantFeedback(AssistantFeedback feedback);
+
+  // ===== Alarm/Timer management methods =====
+  // Stops timer or alarm ringing.
+  StopAlarmTimerRinging();
+
+  // Create timer with |duration|.
+  CreateTimer(mojo_base.mojom.TimeDelta duration);
+};
+
+// Subscribes to Assistant's interaction event. These events are server driven
+// in response to the user's direct interaction with the assistant. Responses
+// from the assistant may contain untrusted third-party content. Subscriber
+// implementations must be sure to handle the response data appropriately.
+interface AssistantInteractionSubscriber {
+  // Assistant interaction has started. In the event of a voice interaction,
+  // |is_voice_interaction| will be true. This implies that the mic is open.
+  OnInteractionStarted(bool is_voice_interaction);
+
+  // Assistant interaction has ended with the specified |resolution|.
+  OnInteractionFinished(AssistantInteractionResolution resolution);
+
+  // Assistant got Html response with fallback text from server.
+  OnHtmlResponse(string response, string fallback);
+
+  // Assistant got suggestions response from server.
+  OnSuggestionsResponse(array<AssistantSuggestion> response);
+
+  // Assistant got text response from server.
+  OnTextResponse(string response);
+
+  // Assistant got open URL response from server.
+  OnOpenUrlResponse(url.mojom.Url url);
+
+  // Assistant speech recognition has started.
+  OnSpeechRecognitionStarted();
+
+  // Assistant speech recognition intermediate result is available.
+  OnSpeechRecognitionIntermediateResult(string high_confidence_text,
+                                        string low_confidence_text);
+
+  // Assistant speech recognition detected end of utterance.
+  OnSpeechRecognitionEndOfUtterance();
+
+  // Assistant speech recognition final result is available.
+  OnSpeechRecognitionFinalResult(string final_result);
+
+  // Assistant got an instantaneous speech level update in dB.
+  OnSpeechLevelUpdated(float speech_level);
+
+  // Assistant has started speaking. When TTS is started due to an error that
+  // occurred during the interaction, |due_to_error| is true.
+  OnTtsStarted(bool due_to_error);
+
+  // Assistant has started waiting. This occur during execution of a routine to
+  // give the user time to digest a response before continuing execution.
+  OnWaitStarted();
+};
+
+// Interface for browser to bind and start assistant.
+interface AssistantPlatform {
+  // Initiates assistant and provides interfaces for assistant to call into the
+  // browser.
+  Init(Client assistant_client_interface,
+       DeviceActions device_actions_interface);
+};
+
+// Interface for assistant to call into client.
+interface Client {
+  // Notifies assistant client that assistant running status has changed.
+  OnAssistantStatusChanged(bool running);
+
+  // Request context of current window from browser.
+  RequestAssistantStructure() => (
+    ax.mojom.AssistantExtra? extra,
+    ax.mojom.AssistantTree? structure);
+};
+
+// Interface for assistant to call into browser to perform device actions.
+interface DeviceActions {
+  // Enables or disables WiFi.
+  SetWifiEnabled(bool enabled);
+
+  // Enables or disables Bluetooth.
+  SetBluetoothEnabled(bool enabled);
+
+  // Gets the current screen brightness level (0-1.0).
+  // The level is set to 0 in the event of an error.
+  GetScreenBrightnessLevel() => (bool success, double level);
+
+  // Sets the screen brightness level (0-1.0).  If |gradual| is true, the
+  // transition will be animated.
+  SetScreenBrightnessLevel(double level, bool gradual);
+
+  // Enables or disables Night Light.
+  SetNightLightEnabled(bool enabled);
+
+  // Open the Android app if the app is available.
+  OpenAndroidApp(AndroidAppInfo app_info) => (bool app_opened);
+
+  // Verify the status of the Android apps.
+  VerifyAndroidApp(array<AndroidAppInfo> apps_info) => (array<AndroidAppInfo>
+                                                        apps_info);
+
+  // Launch Android intent. The intent is encoded as a URI string.
+  // See Intent.toUri().
+  LaunchAndroidIntent(string intent);
+
+  // Register App list event subscriber.
+  AddAppListEventSubscriber(AppListEventSubscriber subscriber);
+};
+
+// Subscribes to App list events.
+interface AppListEventSubscriber {
+  // Called when the android app list changed.
+  OnAndroidAppListRefreshed(array<AndroidAppInfo> apps_info);
+};
+
+// Enumeration of possible completions for an Assistant interaction.
+enum AssistantInteractionResolution {
+  // Assistant interaction completed normally.
+  kNormal,
+  // Assistant interaction completed due to barge in or cancellation.
+  kInterruption,
+  // Assistant interaction completed due to error.
+  kError,
+  // Assistant interaction completed due to mic timeout.
+  kMicTimeout,
+  // Assistant interaction completed due to multi-device hotword loss.
+  kMultiDeviceHotwordLoss,
+};
+
+// Models an Assistant suggestion.
+struct AssistantSuggestion {
+  // Display text. e.g. "Cancel".
+  string text;
+  // Optional URL for icon. e.g. "https://www.gstatic.com/icon.png".
+  url.mojom.Url icon_url;
+  // Optional URL for action. e.g.
+  // "https://www.google.com/search?query=action".
+  url.mojom.Url action_url;
+};
+
+// Enumeration of notification types.
+enum AssistantNotificationType {
+  // A notification of type |kInAssistant| will only be displayed within
+  // Assistant UI. If Assistant UI is not visible at the time of notification
+  // creation, the notification will be queued up until Assistant UI becomes
+  // visible. When Assistant UI dismisses, notifications of this type are
+  // dismissed.
+  kInAssistant,
+
+  // A notification of type |kPreferInAssistant| may be shown in either
+  // Assistant UI or the Message Center, depending on Assistant visibility
+  // state. If Assistant UI is not visible, notifications of this type will
+  // show immediately in the Message Center unless the user has opted out of
+  // seeing system notifications. Once Assistant UI becomes visible, or if it
+  // is already visible at the time of notification creation, notifications of
+  // this type are converted to notifications of type |kInAssistant| and they
+  // will finish out their lifetimes as in-Assistant notifications.
+  kPreferInAssistant,
+
+  // A notification of type |kSystem| will only be displayed within the Message
+  // Center. It is immediately added to the Message Center regardless of
+  // Assistant UI visibility state, although it may not be added if the user has
+  // opted out of seeing system notifications.
+  kSystem,
+};
+
+// Models a notification button.
+struct AssistantNotificationButton {
+  // Display text of the button.
+  string label;
+
+  // Optional URL to open when the tap action is invoked on the button.
+  url.mojom.Url action_url;
+};
+
+// Models an Assistant notification.
+struct AssistantNotification {
+  // Type of the notification.
+  AssistantNotificationType type = AssistantNotificationType.kSystem;
+
+  // Title of the notification.
+  string title;
+
+  // Body text of the notification.
+  string message;
+
+  // Optional URL to open when the tap action is invoked on the notification
+  // main UI.
+  url.mojom.Url action_url;
+
+  // List of buttons in the notification.
+  array<AssistantNotificationButton> buttons;
+
+  // An id that uniquely identifies a notification on the client.
+  string client_id;
+
+  // An id that uniquely identifies a notification on the server.
+  string server_id;
+
+  // Used to fetch notification contents.
+  string consistency_token;
+  string opaque_token;
+
+  // Key that can be used to group multiple notifications together.
+  string grouping_key;
+
+  // Obfuscated Gaia id of the intended recipient of the user.
+  string obfuscated_gaia_id;
+
+  // Whether this notification can turn on the display if it was off.
+  bool is_high_priority = false;
+};
+
+// Models status of an app.
+enum AppStatus { UNKNOWN, AVAILABLE, UNAVAILABLE, VERSION_MISMATCH, DISABLED };
+
+// Models an Android app.
+struct AndroidAppInfo {
+  // Unique name to identify a specific app.
+  string package_name;
+
+  // Version number of the app.
+  int32 version;
+
+  // Localized app name.
+  string localized_app_name;
+
+  // Intent data to operate on.
+  string intent;
+
+  // Status of the app.
+  AppStatus status;
+
+  // The general action to be performed, such as ACTION_VIEW, ACTION_MAIN, etc.
+  string action;
+};
+
+//  Details for Assistant feedback.
+struct AssistantFeedback {
+  // User input to be sent with the feedback report.
+  string description;
+
+  // Whether user consent to send debug info.
+  bool assistant_debug_info_allowed;
+
+  // Screenshot if allowed by user.
+  // Raw data (non-encoded binary octets)
+  string screenshot_png;
+};

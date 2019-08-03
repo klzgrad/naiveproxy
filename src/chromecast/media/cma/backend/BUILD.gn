@@ -1,0 +1,338 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/buildflag_header.gni")
+import("//build/config/chromecast_build.gni")
+import("//chromecast/chromecast.gni")
+import("//media/media_options.gni")
+
+declare_args() {
+  system_owns_volume =
+      use_alsa && !enable_assistant && chromecast_branding != "google"
+
+  mixer_output = ""
+}
+
+cast_source_set("backend") {
+  sources = [
+    "audio_decoder_software_wrapper.cc",
+    "audio_decoder_software_wrapper.h",
+    "audio_decoder_wrapper.cc",
+    "audio_decoder_wrapper.h",
+    "cma_backend.h",
+    "cma_backend_factory.h",
+    "cma_backend_factory_impl.cc",
+    "cma_backend_factory_impl.h",
+    "media_pipeline_backend_manager.cc",
+    "media_pipeline_backend_manager.h",
+    "media_pipeline_backend_wrapper.cc",
+    "media_pipeline_backend_wrapper.h",
+    "video_decoder_wrapper.cc",
+    "video_decoder_wrapper.h",
+  ]
+
+  public_deps = [
+    "//chromecast/public",
+    "//chromecast/public/media",
+  ]
+
+  deps = [
+    "//base",
+    "//chromecast:chromecast_buildflags",
+    "//chromecast/base/metrics:metrics",
+    "//chromecast/media:libcast_media",
+    "//chromecast/media/cma/base",
+    "//chromecast/media/cma/decoder",
+  ]
+}
+
+cast_source_set("cast_media_android_dummy") {
+  sources = [
+    "cast_media_android_dummy.cc",
+  ]
+  deps = [
+    "//base",
+    "//chromecast:chromecast_buildflags",
+    "//chromecast/public",
+    "//chromecast/public/media",
+  ]
+}
+
+# Target for OEM partners to override media shared library, i.e.
+# libcast_media_1.0.so. This target is only used to build executables
+# with correct linkage information.
+cast_shared_library("libcast_media_1.0") {
+  if (is_cast_desktop_build) {
+    deps = [
+      "//chromecast/media/cma/backend/desktop",
+    ]
+  } else {
+    deps = [
+      ":dummy",
+    ]
+  }
+}
+
+# Dummy implementation of media backend used on chromecast devices.
+# Must not depend on anything outside //chromecast/public.
+cast_source_set("dummy") {
+  sources = [
+    "cast_media_dummy.cc",
+  ]
+
+  deps = [
+    ":audio_buildflags",
+    "//chromecast/public",
+  ]
+}
+
+volume_control_in_media_shlib = !cast_volume_control_in_avsettings
+
+buildflag_header("audio_buildflags") {
+  header = "audio_buildflags.h"
+
+  flags = [
+    "MEDIA_CLOCK_MONOTONIC_RAW=$media_clock_monotonic_raw",
+    "SYSTEM_OWNS_VOLUME=$system_owns_volume",
+    "VOLUME_CONTROL_IN_MEDIA_SHLIB=$volume_control_in_media_shlib",
+  ]
+}
+
+# Implementation of video decoder that discards decoder buffers.
+# Used on audio platforms for media streams containing video.
+cast_source_set("null_video") {
+  sources = [
+    "video_decoder_null.cc",
+    "video_decoder_null.h",
+  ]
+
+  deps = [
+    "//base",
+    "//chromecast/public/media",
+  ]
+}
+
+cast_source_set("public") {
+  sources = [
+    "system_volume_control.h",
+  ]
+
+  deps = [
+    "//base",
+    "//chromecast/public/media",
+  ]
+}
+
+cast_source_set("audio_helpers") {
+  sources = [
+    "audio_fader.cc",
+    "audio_fader.h",
+  ]
+
+  deps = [
+    "//base",
+    "//media",
+  ]
+}
+
+cast_source_set("av_sync_dummy") {
+  sources = [
+    "av_sync_dummy.cc",
+  ]
+
+  deps = [
+    "//base",
+    "//chromecast/public",
+  ]
+}
+
+cast_source_set("audio_codec_support") {
+  sources = [
+    "media_codec_support_cast_audio.cc",
+  ]
+  deps = [
+    "//base",
+    "//chromecast/public",
+    "//chromecast/public/media:media",
+  ]
+}
+
+cast_source_set("cast_audio_json") {
+  sources = [
+    "cast_audio_json.cc",
+    "cast_audio_json.h",
+  ]
+
+  deps = [
+    "//base",
+  ]
+}
+
+cast_source_set("post_processor_factory") {
+  sources = [
+    "post_processor_factory.cc",
+    "post_processor_factory.h",
+  ]
+
+  deps = [
+    "//base",
+    "//chromecast/media/cma/backend/post_processors:post_processor_wrapper",
+    "//chromecast/public/media",
+  ]
+}
+
+cast_source_set("audio_resampler") {
+  sources = [
+    "audio_resampler.cc",
+    "audio_resampler.h",
+  ]
+
+  deps = [
+    "//base",
+    "//chromecast/media/cma/base",
+    "//media",
+  ]
+}
+
+cast_source_set("mixer_pipeline") {
+  sources = [
+    "audio_output_redirector_input.h",
+    "filter_group.cc",
+    "filter_group.h",
+    "mixer_input.cc",
+    "mixer_input.h",
+    "mixer_pipeline.cc",
+    "mixer_pipeline.h",
+    "post_processing_pipeline.h",
+    "post_processing_pipeline_impl.cc",
+    "post_processing_pipeline_impl.h",
+    "post_processing_pipeline_parser.cc",
+    "post_processing_pipeline_parser.h",
+  ]
+  deps = [
+    ":audio_buildflags",
+    ":audio_helpers",
+    ":audio_resampler",
+    ":cast_audio_json",
+    ":post_processor_factory",
+    ":public",
+    "//base",
+    "//chromecast/base",
+    "//chromecast/media/base",
+    "//chromecast/media/cma/base",
+    "//chromecast/media/cma/decoder",
+    "//chromecast/public",
+    "//chromecast/public/media",
+    "//media",
+    "//media:shared_memory_support",
+  ]
+}
+
+cast_source_set("volume_map") {
+  sources = [
+    "volume_map.cc",
+    "volume_map.h",
+  ]
+  deps = [
+    ":cast_audio_json",
+    "//base",
+  ]
+}
+
+cast_source_set("for_mixer_audio") {
+  sources = [
+    "audio_decoder_for_mixer.cc",
+    "audio_decoder_for_mixer.h",
+    "audio_output_redirector.cc",
+    "audio_output_redirector.h",
+    "buffering_mixer_source.cc",
+    "buffering_mixer_source.h",
+    "cast_media_shlib_mixer_audio.cc",
+    "direct_mixer_source.cc",
+    "direct_mixer_source.h",
+    "media_pipeline_backend_for_mixer.cc",
+    "media_pipeline_backend_for_mixer.h",
+    "stream_mixer.cc",
+    "stream_mixer.h",
+    "volume_control.cc",
+  ]
+
+  deps = [
+    ":audio_buildflags",
+    ":audio_helpers",
+    ":audio_resampler",
+    ":cast_audio_json",
+    ":mixer_pipeline",
+    ":post_processor_factory",
+    ":public",
+    ":volume_map",
+    "//base",
+    "//chromecast/base",
+    "//chromecast/media/audio:libcast_external_audio_pipeline_1.0",
+    "//chromecast/media/base",
+    "//chromecast/media/cma/base",
+    "//chromecast/media/cma/decoder",
+    "//chromecast/public",
+    "//chromecast/public/media",
+    "//media",
+    "//media:shared_memory_support",
+  ]
+
+  if (use_alsa) {
+    deps += [ "alsa:cma_backend_support" ]
+  } else if (is_fuchsia) {
+    deps += [ "fuchsia:cma_backend_support" ]
+  } else {
+    # If enable_video_with_mixed_audio && !use_alsa, the platform needs to
+    # provide its own mixer output.
+    if (!enable_video_with_mixed_audio) {
+      sources += [ "mixer_output_stream_dummy.cc" ]
+    } else {
+      assert("$mixer_output" != "")
+      deps += [ "$mixer_output" ]
+    }
+  }
+}
+
+test("cast_audio_backend_unittests") {
+  testonly = true
+  sources = [
+    "audio_fader_unittest.cc",
+    "filter_group_unittest.cc",
+    "mock_mixer_source.cc",
+    "mock_mixer_source.h",
+    "mock_post_processor_factory.cc",
+    "mock_post_processor_factory.h",
+    "mock_redirected_audio_output.cc",
+    "mock_redirected_audio_output.h",
+    "stream_mixer_external_audio_pipeline_unittest.cc",
+    "stream_mixer_unittest.cc",
+    "volume_map_unittest.cc",
+  ]
+
+  deps = [
+    ":audio_helpers",
+    ":av_sync_dummy",
+    ":cast_audio_json",
+    ":for_mixer_audio",
+    ":mixer_pipeline",
+    ":null_video",
+    ":public",
+    ":volume_map",
+    "//base",
+    "//base/test:run_all_unittests",
+    "//chromecast/media/audio:fake_external_audio_pipeline",
+    "//chromecast/media/cma/backend/post_processors:unittests",
+    "//chromecast/public",
+    "//chromecast/public/media",
+    "//media",
+    "//media:shared_memory_support",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+
+  if (is_fuchsia) {
+    deps += [ "fuchsia:unit_tests" ]
+  }
+}

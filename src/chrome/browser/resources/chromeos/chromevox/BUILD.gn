@@ -1,0 +1,689 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/features.gni")
+import("//chrome/common/features.gni")
+import("//chrome/test/base/js2gtest.gni")
+import("//chromecast/chromecast.gni")
+import("//testing/test.gni")
+import("//third_party/closure_compiler/compile_js.gni")
+import("run_jsbundler.gni")
+
+assert(is_chromeos || is_chromecast)
+
+declare_args() {
+  # Whether to compress the main Chromevox javascript files or load the
+  # modules individually from source files.
+  chromevox_compress_js = true
+}
+
+closure_library_dir =
+    "//third_party/chromevox/third_party/closure-library/closure/goog"
+
+# List of all modules that are included in one or more of the production
+# chromevox scripts.
+chromevox_modules = [
+  "braille/braille_display_manager.js",
+  "braille/braille_input_handler.js",
+  "braille/braille_key_event_rewriter.js",
+  "braille/braille_key_types.js",
+  "braille/braille_table.js",
+  "braille/braille_translator_manager.js",
+  "braille/bluetooth_braille_display_manager.js",
+  "braille/bluetooth_braille_display_ui.js",
+  "braille/expanding_braille_translator.js",
+  "braille/liblouis.js",
+  "braille/nav_braille.js",
+  "braille/pan_strategy.js",
+  "braille/spans.js",
+  "chromevox/background/background.js",
+  "chromevox/background/braille_captions_background.js",
+  "chromevox/background/injected_script_loader.js",
+  "chromevox/background/kbexplorer.js",
+  "chromevox/background/keymaps/key_map.js",
+  "chromevox/background/options.js",
+  "chromevox/background/prefs.js",
+  "chromevox/background/tabs_api_handler.js",
+  "chromevox/injected/active_indicator.js",
+  "chromevox/injected/api_implementation.js",
+  "chromevox/injected/event_suspender.js",
+  "chromevox/injected/event_watcher.js",
+  "chromevox/injected/history.js",
+  "chromevox/injected/init_document.js",
+  "chromevox/injected/init_globals.js",
+  "chromevox/injected/initial_speech.js",
+  "chromevox/injected/keyboard_handler.js",
+  "chromevox/injected/live_regions.js",
+  "chromevox/injected/navigation_history.js",
+  "chromevox/injected/navigation_manager.js",
+  "chromevox/injected/navigation_shifter.js",
+  "chromevox/injected/navigation_speaker.js",
+  "chromevox/injected/node_breadcrumb.js",
+  "chromevox/injected/script_installer.js",
+  "chromevox/injected/serializer.js",
+  "chromevox/injected/ui/braille_overlay_widget.js",
+  "chromevox/injected/ui/context_menu_widget.js",
+  "chromevox/injected/ui/keyboard_help_widget.js",
+  "chromevox/injected/ui/node_search_widget.js",
+  "chromevox/injected/ui/overlay_widget.js",
+  "chromevox/injected/ui/search_widget.js",
+  "chromevox/injected/ui/select_widget.js",
+  "chromevox/injected/ui/spoken_messages.js",
+  "chromevox/injected/ui/widget.js",
+  "chromevox/injected/user_commands.js",
+  "chromevox/injected/user_event_detail.js",
+  "common/aria_util.js",
+  "common/aural_style_util.js",
+  "common/braille_text_handler.js",
+  "common/braille_util.js",
+  "common/buildinfo.js",
+  "common/chromevox.js",
+  "common/chromevox_json.js",
+  "common/command_store.js",
+  "common/composite_tts.js",
+  "common/content_editable_extractor.js",
+  "common/cursor.js",
+  "common/cursor_selection.js",
+  "common/date_widget.js",
+  "common/description_util.js",
+  "common/dom_predicates.js",
+  "common/dom_util.js",
+  "common/earcon_util.js",
+  "common/editable_text.js",
+  "common/editable_text_area_shadow.js",
+  "common/editable_text_base.js",
+  "common/find_util.js",
+  "common/focus_util.js",
+  "common/focuser.js",
+  "common/group_util.js",
+  "common/interframe.js",
+  "common/key_sequence.js",
+  "common/key_util.js",
+  "common/media_widget.js",
+  "common/memoize.js",
+  "common/msgs.js",
+  "common/nav_description.js",
+  "common/nav_math_description.js",
+  "common/node_state.js",
+  "common/page_selection.js",
+  "common/platform_util.js",
+  "common/selection_util.js",
+  "common/spannable.js",
+  "common/string_util.js",
+  "common/table_util.js",
+  "common/time_widget.js",
+  "common/traverse_content.js",
+  "common/traverse_table.js",
+  "common/traverse_util.js",
+  "common/xpath_util.js",
+  "cvox2/background/automation_object_constructor_installer.js",
+  "cvox2/background/automation_predicate.js",
+  "cvox2/background/automation_util.js",
+  "cvox2/background/background.js",
+  "cvox2/background/base_automation_handler.js",
+  "cvox2/background/braille_command_data.js",
+  "cvox2/background/braille_command_handler.js",
+  "cvox2/background/color.js",
+  "cvox2/background/chromevox_state.js",
+  "cvox2/background/command_handler.js",
+  "cvox2/background/console_tts.js",
+  "cvox2/background/constants.js",
+  "cvox2/background/cursors.js",
+  "cvox2/background/custom_automation_event.js",
+  "cvox2/background/desktop_automation_handler.js",
+  "cvox2/background/download_handler.js",
+  "cvox2/background/earcon_engine.js",
+  "cvox2/background/editing.js",
+  "cvox2/background/event_source.js",
+  "cvox2/background/event_stream_logger.js",
+  "cvox2/background/find_handler.js",
+  "cvox2/background/gesture_command_data.js",
+  "cvox2/background/gesture_command_handler.js",
+  "cvox2/background/i_search.js",
+  "cvox2/background/keyboard_handler.js",
+  "cvox2/background/language_switching.js",
+  "cvox2/background/live_regions.js",
+  "cvox2/background/log.js",
+  "cvox2/background/log_store.js",
+  "cvox2/background/math_handler.js",
+  "cvox2/background/media_automation_handler.js",
+  "cvox2/background/mouse_handler.js",
+  "cvox2/background/next_earcons.js",
+  "cvox2/background/notifications.js",
+  "cvox2/background/output.js",
+  "cvox2/background/output_logger.js",
+  "cvox2/background/panel.js",
+  "cvox2/background/panel_command.js",
+  "cvox2/background/panel_menu.js",
+  "cvox2/background/panel_menu_item.js",
+  "cvox2/background/recovery_strategy.js",
+  "cvox2/background/tree_dumper.js",
+  "cvox2/background/tree_walker.js",
+  "cvox2/background/tutorial.js",
+  "cvox2/injected/keyboard_handler.js",
+  "cvox2/injected/loader.js",
+  "extensions/searchvox/abstract_result.js",
+  "extensions/searchvox/constants.js",
+  "extensions/searchvox/context_menu.js",
+  "extensions/searchvox/loader.js",
+  "extensions/searchvox/results.js",
+  "extensions/searchvox/search.js",
+  "extensions/searchvox/search_tools.js",
+  "extensions/searchvox/util.js",
+  "host/chrome/braille.js",
+  "host/chrome/braille_background.js",
+  "host/chrome/classic_earcons.js",
+  "host/chrome/earcons.js",
+  "host/chrome/extension_bridge.js",
+  "host/chrome/host.js",
+  "host/chrome/tts.js",
+  "host/chrome/tts_background.js",
+  "host/chrome/tts_base.js",
+  "host/interface/abstract_earcons.js",
+  "host/interface/abstract_host.js",
+  "host/interface/abstract_tts.js",
+  "host/interface/braille_interface.js",
+  "host/interface/host_factory.js",
+  "host/interface/tts_interface.js",
+  "walkers/abstract_node_walker.js",
+  "walkers/abstract_selection_walker.js",
+  "walkers/abstract_shifter.js",
+  "walkers/abstract_walker.js",
+  "walkers/bare_object_walker.js",
+  "walkers/character_walker.js",
+  "walkers/column_walker.js",
+  "walkers/group_walker.js",
+  "walkers/layout_line_walker.js",
+  "walkers/object_walker.js",
+  "walkers/row_walker.js",
+  "walkers/sentence_walker.js",
+  "walkers/structural_line_walker.js",
+  "walkers/table_shifter.js",
+  "walkers/table_walker.js",
+  "walkers/word_walker.js",
+]
+
+# Closure library modules neede by chromevox.
+relative_closure_library_modules = [
+  "i18n/pluralrules.js",
+  "i18n/ordinalrules.js",
+  "i18n/messageformat.js",
+  "string/string.js",
+  "dom/nodetype.js",
+  "base.js",
+  "asserts/asserts.js",
+  "debug/error.js",
+  "object/object.js",
+]
+
+closure_library_modules =
+    rebase_path(relative_closure_library_modules, ".", closure_library_dir)
+
+chromevox_out_dir = "$root_out_dir/resources/chromeos/chromevox"
+
+group("chromevox") {
+  deps = [
+    ":chromevox_copied_files",
+    ":chromevox_guest_manifest",
+    ":chromevox_manifest",
+    "//chrome/browser/resources/chromeos/braille_ime:braille_ime_manifest",
+    "//chrome/browser/resources/chromeos/chromevox/strings:chromevox_strings",
+    "//third_party/chromevox:chromevox_third_party_resources",
+    "//third_party/liblouis",
+  ]
+  if (chromevox_compress_js) {
+    deps += [
+      ":chromevox_background_script",
+      ":chromevox_content_script",
+      ":chromevox_kbexplorer_script",
+      ":chromevox_log_script",
+      ":chromevox_min_content_script",
+      ":chromevox_options_script",
+      ":chromevox_panel_script",
+    ]
+  } else {
+    deps += [ ":chromevox_deps_js" ]
+  }
+}
+
+chromevox_background_script_loader_file = "cvox2/background/loader.js"
+chromevox_content_script_loader_file = "chromevox/injected/loader.js"
+chromevox_kbexplorer_loader_file = "chromevox/background/kbexplorer_loader.js"
+chromevox_log_loader_file = "cvox2/background/log_loader.js"
+chromevox_min_content_script_loader_file = "cvox2/injected/loader.js"
+chromevox_options_script_loader_file = "chromevox/background/options_loader.js"
+chromevox_panel_script_loader_file = "cvox2/background/panel_loader.js"
+
+# Instead of setting up one copy target for each subdirectory, use a script
+# to copy all files.
+run_jsbundler("chromevox_copied_files") {
+  mode = "copy"
+  dest_dir = chromevox_out_dir
+  sources = [
+    "chromevox/background/background.html",
+    "chromevox/background/checked.png",
+    "chromevox/background/earcons/alert_modal.ogg",
+    "chromevox/background/earcons/alert_nonmodal.ogg",
+    "chromevox/background/earcons/button.ogg",
+    "chromevox/background/earcons/check_off.ogg",
+    "chromevox/background/earcons/check_on.ogg",
+    "chromevox/background/earcons/editable_text.ogg",
+    "chromevox/background/earcons/invalid_keypress.ogg",
+    "chromevox/background/earcons/link.ogg",
+    "chromevox/background/earcons/list_item.ogg",
+    "chromevox/background/earcons/listbox.ogg",
+    "chromevox/background/earcons/long_desc.ogg",
+    "chromevox/background/earcons/math.ogg",
+    "chromevox/background/earcons/object_close.ogg",
+    "chromevox/background/earcons/object_enter.ogg",
+    "chromevox/background/earcons/object_exit.ogg",
+    "chromevox/background/earcons/object_open.ogg",
+    "chromevox/background/earcons/object_select.ogg",
+    "chromevox/background/earcons/page_finish_loading.ogg",
+    "chromevox/background/earcons/page_start_loading.ogg",
+    "chromevox/background/earcons/recover_focus.ogg",
+    "chromevox/background/earcons/selection.ogg",
+    "chromevox/background/earcons/selection_reverse.ogg",
+    "chromevox/background/earcons/skip.ogg",
+    "chromevox/background/earcons/wrap.ogg",
+    "chromevox/background/earcons/wrap_edge.ogg",
+    "chromevox/background/kbexplorer.html",
+    "chromevox/background/keymaps/classic_keymap.json",
+    "chromevox/background/keymaps/experimental.json",
+    "chromevox/background/keymaps/flat_keymap.json",
+    "chromevox/background/keymaps/next_keymap.json",
+    "chromevox/background/options.css",
+    "chromevox/background/options.html",
+    "chromevox/background/unchecked.png",
+    "chromevox/injected/api.js",
+    "cvox2/background/background.html",
+    "cvox2/background/earcons/control.wav",
+    "cvox2/background/earcons/selection.wav",
+    "cvox2/background/earcons/selection_reverse.wav",
+    "cvox2/background/earcons/skim.wav",
+    "cvox2/background/earcons/small_room_2.wav",
+    "cvox2/background/earcons/static.wav",
+    "cvox2/background/log.css",
+    "cvox2/background/log.html",
+    "cvox2/background/panel.css",
+    "cvox2/background/panel.html",
+    "images/chromevox-128.png",
+    "images/chromevox-16.png",
+    "images/chromevox-19.png",
+    "images/chromevox-48.png",
+    "images/chromevox.svg",
+    "images/close-19.png",
+    "images/close-hover-19.png",
+    "images/options-19.png",
+    "images/options-hover-19.png",
+    "images/triangle-6.png",
+  ]
+  if (!chromevox_compress_js) {
+    sources += chromevox_modules
+    sources += [
+      "closure/closure_preinit.js",
+      chromevox_background_script_loader_file,
+      chromevox_content_script_loader_file,
+      chromevox_kbexplorer_loader_file,
+      chromevox_log_loader_file,
+      chromevox_min_content_script_loader_file,
+      chromevox_options_script_loader_file,
+      chromevox_panel_script_loader_file,
+    ]
+  }
+  if (!chromevox_compress_js) {
+    sources += closure_library_modules
+  }
+  rewrite_rules = [
+    rebase_path(".", root_build_dir) + ":",
+    rebase_path(closure_library_dir, root_build_dir) + ":closure",
+  ]
+}
+
+# TODO: refactor this into another file like generate_manifest.gni
+# to share with other extensions.
+template("manifest") {
+  version_file = "//chrome/VERSION"
+  version_script = "//build/util/version.py"
+  template_file = "manifest.json.jinja2"
+  output_file = invoker.output_file
+  key = "MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDltVl1k15pjRzuZfMc3B69inxwm2bZeZ2O8/zFO+NluHnBm3GJ3fzdOoFGJd+M16I8p7zxxQyHeDMfWYASyCeB8XnUEDKjqNLQfCnncsANzHsYoEbYj2nEUML2P13b9q+AAvpCBpAJ4cZp81e9n1y/vbSXHE4385cgkKueItzikQIDAQAB"
+  action(target_name) {
+    script = "tools/generate_manifest.py"
+    inputs = [
+      version_file,
+      version_script,
+    ]
+    sources = [
+      template_file,
+    ]
+    outputs = [
+      output_file,
+    ]
+    args = [
+      "--key=$key",
+      "--version_file=" + rebase_path(version_file, root_build_dir),
+      "--output_manifest=" + rebase_path(output_file, root_build_dir),
+    ]
+    if (defined(invoker.is_guest_manifest) && invoker.is_guest_manifest) {
+      args += [ "--is_guest_manifest=1" ]
+    }
+    if (!chromevox_compress_js) {
+      args += [ "--is_js_compressed=0" ]
+    }
+    args += rebase_path(sources, root_build_dir)
+  }
+}
+
+manifest("chromevox_manifest") {
+  output_file = "$chromevox_out_dir/manifest.json"
+}
+
+manifest("chromevox_guest_manifest") {
+  output_file = "$chromevox_out_dir/manifest_guest.json"
+  is_guest_manifest = true
+}
+
+template("generate_deps_js") {
+  if (defined(invoker.rewrite_rules)) {
+    rewrite_rules = invoker.rewrite_rules
+  } else {
+    rewrite_rules = []
+  }
+  action(target_name) {
+    if (defined(invoker.testonly)) {
+      testonly = invoker.testonly
+    }
+    script = "tools/generate_deps.py"
+    inputs = jsbundler_modules
+    sources = invoker.sources
+    outputs = [
+      invoker.output_file,
+    ]
+    args = [
+      "-o",
+      rebase_path(invoker.output_file, root_build_dir),
+    ]
+    foreach(rule, rewrite_rules) {
+      args += [
+        "-w",
+        rule,
+      ]
+    }
+    args += rebase_path(sources, root_build_dir)
+    if (defined(invoker.deps)) {
+      deps = invoker.deps
+    }
+  }
+}
+
+if (chromevox_compress_js) {
+  template("compress_js") {
+    run_jsbundler(target_name) {
+      assert(defined(invoker.output_file))
+      mode = "compressed_bundle"
+      modules = chromevox_modules + closure_library_modules
+      sources = invoker.sources
+      output_file = invoker.output_file
+    }
+  }
+
+  compress_js("chromevox_content_script") {
+    sources = [
+      chromevox_content_script_loader_file,
+    ]
+    output_file = "$chromevox_out_dir/chromeVoxChromePageScript.js"
+  }
+
+  compress_js("chromevox_kbexplorer_script") {
+    sources = [
+      chromevox_kbexplorer_loader_file,
+    ]
+    output_file = "$chromevox_out_dir/chromeVoxKbExplorerScript.js"
+  }
+
+  compress_js("chromevox_log_script") {
+    sources = [
+      chromevox_log_loader_file,
+    ]
+    output_file = "$chromevox_out_dir/chromeVoxLogScript.js"
+  }
+
+  compress_js("chromevox_options_script") {
+    sources = [
+      chromevox_options_script_loader_file,
+    ]
+    output_file = "$chromevox_out_dir/chromeVoxChromeOptionsScript.js"
+  }
+
+  compress_js("chromevox_background_script") {
+    sources = [
+      chromevox_background_script_loader_file,
+    ]
+    output_file = "$chromevox_out_dir/chromeVox2ChromeBackgroundScript.js"
+  }
+
+  compress_js("chromevox_min_content_script") {
+    sources = [
+      chromevox_min_content_script_loader_file,
+    ]
+    output_file = "$chromevox_out_dir/chromeVox2ChromePageScript.js"
+  }
+
+  compress_js("chromevox_panel_script") {
+    sources = [
+      chromevox_panel_script_loader_file,
+    ]
+    output_file = "$chromevox_out_dir/chromeVoxPanelScript.js"
+  }
+} else {
+  generate_deps_js("chromevox_deps_js") {
+    sources = chromevox_modules + closure_library_modules
+    output_file = "$chromevox_out_dir/deps.js"
+    rewrite_rules = [
+      rebase_path(".", root_build_dir) + ":..",
+      rebase_path(closure_library_dir, root_build_dir) + ":../closure",
+    ]
+  }
+}
+
+if (is_chromeos) {
+  source_set("browser_tests") {
+    testonly = true
+    assert(enable_extensions)
+
+    deps = [
+      ":chromevox_extjs_tests",
+      ":chromevox_unitjs_tests",
+    ]
+
+    # TODO(jamescook): Figure out which of these are really necessary.
+    data = [
+      "$root_out_dir/chrome_100_percent.pak",
+      "$root_out_dir/chrome_200_percent.pak",
+      "$root_out_dir/locales/en-US.pak",
+      "$root_out_dir/locales/fr.pak",
+      "$root_out_dir/resources.pak",
+      "$root_out_dir/resources/chromeos/chromevox/",
+      "$root_out_dir/test_data/chrome/browser/resources/chromeos/chromevox/",
+
+      # Surprisingly, the test uses data from the original location, not the
+      # copied one.
+      "//chrome/browser/resources/chromeos/chromevox/",
+      "//chrome/test/data/webui/test_api.js",
+      "//third_party/chromevox/",
+      "//chrome/third_party/mock4js/",
+      "//third_party/accessibility-audit/axs_testing.js",
+      "//third_party/chaijs/chai.js",
+    ]
+  }
+}
+
+action("chromevox_test_messages_js") {
+  script = "tools/generate_test_messages.py"
+  sources = [
+    "$chromevox_out_dir/_locales/en/messages.json",
+  ]
+  output_file = "$root_out_dir/test_data/chrome/browser/resources/chromeos/chromevox/host/testing/test_messages.js"
+  outputs = [
+    output_file,
+  ]
+  deps = [
+    "strings:chromevox_strings",
+  ]
+  args = [
+           "-o",
+           rebase_path(output_file, root_build_dir),
+         ] + rebase_path(sources, root_build_dir)
+}
+
+chromevox_test_modules = [
+                           "host/testing/earcons.js",
+                           "host/testing/host.js",
+                           "host/testing/tts.js",
+                           "testing/spoken_list_builder.js",
+                           "testing/test_msgs.js",
+                           "testing/tester.js",
+                         ] + get_target_outputs(":chromevox_test_messages_js")
+
+generate_deps_js("chromevox_test_deps_js") {
+  sources = closure_library_modules + chromevox_modules + chromevox_test_modules
+  output_file = "$target_gen_dir/test_deps.js"
+  rewrite_rules = [
+    rebase_path("//", root_build_dir) + ":",
+    rebase_path("$root_out_dir/test_data", root_build_dir) + ":",
+  ]
+  deps = [
+    ":chromevox_test_messages_js",
+  ]
+}
+
+js2gtest("chromevox_unitjs_tests") {
+  test_type = "webui"
+  sources = [
+    "braille/bluetooth_braille_display_manager_test.unitjs",
+    "braille/bluetooth_braille_display_ui_test.unitjs",
+    "braille/braille_display_manager_test.unitjs",
+    "braille/braille_input_handler_test.unitjs",
+    "braille/expanding_braille_translator_test.unitjs",
+    "braille/pan_strategy_test.unitjs",
+    "chromevox/injected/event_watcher_test.unitjs",
+    "chromevox/injected/live_regions_test.unitjs",
+    "chromevox/injected/navigation_manager_test.unitjs",
+    "chromevox/injected/user_commands_test.unitjs",
+    "common/aria_util_test.unitjs",
+    "common/braille_text_handler_test.unitjs",
+    "common/braille_util_test.unitjs",
+    "common/command_store_test.unitjs",
+    "common/content_editable_extractor_test.unitjs",
+    "common/cursor_selection_test.unitjs",
+    "common/dom_util_test.unitjs",
+    "common/editable_text_area_shadow_test.unitjs",
+    "common/editable_text_test.unitjs",
+    "common/find_util_test.unitjs",
+    "common/key_sequence_test.unitjs",
+    "common/page_selection_test.unitjs",
+    "common/selection_util_test.unitjs",
+    "common/spannable_test.unitjs",
+    "common/string_util_test.unitjs",
+    "host/chrome/braille_integration_test.unitjs",
+    "testing/mock_feedback_test.unitjs",
+    "walkers/character_walker_test.unitjs",
+    "walkers/group_walker_test.unitjs",
+    "walkers/layout_line_walker_test.unitjs",
+    "walkers/object_walker_test.unitjs",
+    "walkers/sentence_walker_test.unitjs",
+    "walkers/structural_line_walker_test.unitjs",
+    "walkers/table_walker_test.unitjs",
+    "walkers/word_walker_test.unitjs",
+  ]
+  gen_include_files = [
+    "testing/assert_additions.js",
+    "testing/callback_helper.js",
+    "testing/chromevox_unittest_base.js",
+    "testing/mock_feedback.js",
+  ]
+  test_deps_js_outputs = get_target_outputs(":chromevox_test_deps_js")
+  deps_js = test_deps_js_outputs[0]
+  deps = [
+    ":chromevox_test_deps_js",
+  ]
+  defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+}
+
+if (is_chromeos) {
+  js2gtest("chromevox_extjs_tests") {
+    test_type = "extension"
+    sources = [
+      "braille/braille_table_test.extjs",
+      "braille/braille_translator_manager_test.extjs",
+      "braille/liblouis_test.extjs",
+      "cvox2/background/automation_util_test.extjs",
+      "cvox2/background/background_test.extjs",
+      "cvox2/background/braille_command_data_test.extjs",
+      "cvox2/background/color_test.extjs",
+      "cvox2/background/cursors_test.extjs",
+      "cvox2/background/download_handler_test.extjs",
+      "cvox2/background/editing_test.extjs",
+      "cvox2/background/i_search_test.extjs",
+      "cvox2/background/language_switching_test.extjs",
+      "cvox2/background/live_regions_test.extjs",
+      "cvox2/background/log_store_test.extjs",
+      "cvox2/background/output_test.extjs",
+      "cvox2/background/panel_test.extjs",
+      "cvox2/background/recovery_strategy_test.extjs",
+      "cvox2/background/tree_walker_test.extjs",
+      "host/chrome/tts_background_test.extjs",
+    ]
+    gen_include_files = [
+      "testing/assert_additions.js",
+      "testing/callback_helper.js",
+      "testing/chromevox_e2e_test_base.js",
+      "testing/chromevox_next_e2e_test_base.js",
+      "testing/mock_feedback.js",
+    ]
+
+    # The test base classes generate C++ code with these deps.
+    deps = [
+      "//ash",
+      "//base",
+      "//chrome/browser/chromeos",
+      "//chrome/common",
+    ]
+    defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+  }
+}
+
+js_library("tree_walker") {
+  sources = [
+    "cvox2/background/tree_walker.js",
+  ]
+  deps = [
+    ":automation_predicate",
+    ":constants",
+  ]
+  externs_list = [
+    "$externs_path/automation.js",
+    "$externs_path/chrome_extensions.js",
+  ]
+}
+
+js_library("automation_predicate") {
+  sources = [
+    "cvox2/background/automation_predicate.js",
+  ]
+  deps = [
+    ":constants",
+  ]
+  externs_list = [
+    "$externs_path/automation.js",
+    "$externs_path/chrome_extensions.js",
+  ]
+}
+
+js_library("constants") {
+  sources = [
+    "cvox2/background/constants.js",
+  ]
+}

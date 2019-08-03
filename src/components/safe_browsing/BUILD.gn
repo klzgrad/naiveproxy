@@ -1,0 +1,115 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//third_party/protobuf/proto_library.gni")
+
+proto_library("csd_proto") {
+  sources = [
+    "proto/csd.proto",
+  ]
+}
+
+proto_library("webui_proto") {
+  sources = [
+    "proto/webui.proto",
+  ]
+}
+
+proto_library("realtimeapi_proto") {
+  sources = [
+    "proto/realtimeapi.proto",
+  ]
+
+  deps = [
+    ":csd_proto",
+  ]
+}
+
+source_set("safe_browsing") {
+  sources = [
+    "base_blocking_page.cc",
+    "base_blocking_page.h",
+    "base_ui_manager.cc",
+    "base_ui_manager.h",
+  ]
+  public_deps = [
+    "//components/security_interstitials/content:security_interstitial_page",
+  ]
+  deps = [
+    ":features",
+    ":ping_manager",
+
+    # TODO(vakh): This is here temporarily until we start actually using the
+    # proto. If it isn't a DEP, it isn't built.
+    ":realtimeapi_proto",
+    "//base:base",
+    "//base:i18n",
+    "//components/safe_browsing/common:common",
+    "//components/safe_browsing/common:safe_browsing_prefs",
+    "//components/safe_browsing/db:database_manager",
+    "//components/safe_browsing/web_ui:constants",
+    "//components/security_interstitials/core:core",
+    "//content/public/browser:browser",
+    "//content/public/common:common",
+    "//net:net",
+  ]
+}
+
+static_library("ping_manager") {
+  sources = [
+    "ping_manager.cc",
+    "ping_manager.h",
+  ]
+
+  public_deps = [
+    "//google_apis:google_apis",
+  ]
+
+  deps = [
+    "//base:base",
+    "//components/safe_browsing/db:hit_report",
+    "//components/safe_browsing/db:util",
+    "//content/public/browser:browser",
+    "//net:net",
+  ]
+}
+
+source_set("ping_manager_unittest") {
+  testonly = true
+  sources = [
+    "ping_manager_unittest.cc",
+  ]
+
+  deps = [
+    ":ping_manager",
+    "//base:base",
+    "//components/safe_browsing/db:v4_test_util",
+    "//net:net",
+    "//net:test_support",
+    "//testing/gtest",
+  ]
+}
+
+static_library("features") {
+  sources = [
+    "features.cc",
+    "features.h",
+  ]
+
+  deps = [
+    "//base:base",
+  ]
+}
+
+source_set("public") {
+  sources = [
+    "safe_browsing_service_interface.cc",
+    "safe_browsing_service_interface.h",
+  ]
+
+  deps = [
+    "//base:base",
+    "//content/public/browser",
+  ]
+}

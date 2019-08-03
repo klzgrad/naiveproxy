@@ -1,0 +1,291 @@
+// Copyright 2019 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// This API is used for configuring network connections (Cellular, Ethernet,
+// VPN, WiFi, WiMAX, or Tether). See the Open Network Configuration
+// (ONC) documentation for detailed descriptions of properties:
+// components/onc/docs/onc_spec.md.
+
+module chromeos.network_config.mojom;
+
+// Activation state for Cellular networks.
+enum ActivationStateType {
+  kUnknown,
+  kNotActivated,
+  kActivating,
+  kPartiallyActivated,
+  kActivated,
+  // A cellular modem exists, but no network service is available.
+  kNoService,
+};
+
+// The authentication type for Ethernet networks.
+enum AuthenticationType {
+  kNone,
+  k8021x,
+};
+
+// Connection state of visible networks.
+enum ConnectionStateType {
+  kOnline,
+  kConnected,
+  kPortal,
+  kConnecting,
+  kNotConnected,
+};
+
+// Device / Technology state for devices.
+enum DeviceStateType {
+  kUninitialized,
+  kDisabled,
+  kEnabling,
+  kEnabled,
+  kProhibited,
+  // Not used in DeviceStateProperties, but useful when querying by type.
+  kUnavailable,
+};
+
+// The network technology type. NOTE: 'All' and 'Wireless' are only used by
+// FilterType for requesting groups of networks.
+enum NetworkType {
+  kAll,
+  kCellular,
+  kEthernet,
+  // Mobile includes Cellular, Tether, and WiMAX.
+  kMobile,
+  kTether,
+  kVPN,
+  // Wireles includes Cellular, Tether, WiFi, and WiMAX.
+  kWireless,
+  kWiFi,
+  kWiMAX,
+};
+
+// The ONC source for policy or imported networks.
+enum ONCSource {
+  kUnknown,
+  kNone,
+  kUserImport,
+  kDevicePolicy,
+  kUserPolicy,
+};
+
+enum ProxyMode {
+  // Direct connection to the network.
+  kDirect,
+  // Try to retrieve a PAC script from http://wpad/wpad.dat.
+  kAutoDetect,
+  // Try to retrieve a PAC script from kProxyPacURL.
+  kPacScript,
+  // Use a specified list of servers.
+  kFixedServers,
+  // Use the system's proxy settings.
+  kSystem,
+};
+
+// The security type for WiFi Ethernet networks.
+enum SecurityType {
+  kNone,
+  kWep8021x,
+  kWepPsk,
+  kWpaEap,
+  kWpaPsk,
+};
+
+// The configuration type for virtual networks.
+enum VPNType {
+  kL2TPIPsec,
+  kOpenVPN,
+  kThirdPartyVPN,
+  kArcVPN,
+};
+
+// Filter used for requesting lists of network states.
+enum FilterType {
+  // Return active (Connected or Connecting) networks.
+  kActive,
+  // Return visible (active, physically connected or in-range) networks.
+  // Active networks will be listed first.
+  kVisible,
+  // Only include configured (saved) networks.
+  kConfigured,
+  // Include all networks.
+  kAll,
+};
+
+struct CaptivePortalProvider {
+  // Id used to identify the captive portal provider (i.e. an extension id).
+  string id;
+  // Display name for the captive portal provider (i.e. extension name).
+  string name;
+};
+
+// The SIM card lock status for Cellular networks.
+struct SIMLockStatus {
+  // True when a SIM is required and not present.
+  bool sim_absent = false;
+  // The status of SIM lock. Possible values are 'sim-pin', 'sim-puk' or empty.
+  string lock_type;
+  // Whether SIM lock is enabled.
+  bool lock_enabled;
+  // Number of PIN lock tries allowed before PUK is required to unlock the SIM.
+  int32 retries_left;
+};
+
+struct CellularStateProperties {
+  // Enumerated ONC activation state.
+  ActivationStateType activation_state;
+  // ONC NetworkTechnology value.
+  string network_technology;
+  // True when in a roaming state and the provider is not always roaming.
+  bool roaming = false;
+  // The signal strength of the cellular connection.
+  int32 signal_strength;
+};
+
+struct EthernetStateProperties {
+  AuthenticationType authentication;
+};
+
+struct TetherStateProperties {
+  // The battery percentage of the tethered device.
+  int32 battery_percentage;
+  // The cellular carrier for the tethered device.
+  string carrier;
+  // Whether the tethered device has already been connected to.
+  bool has_connected_to_host;
+  // The signal strength of the tethered device's cellular connection.
+  int32 signal_strength;
+};
+
+struct VPNStateProperties {
+  VPNType type;
+  string provider_id;
+  string provider_name;
+};
+
+struct WiFiStateProperties {
+  // The id of the basic service set (access point) associated with the network.
+  string bssid;
+  // The WiFi service operating frequency in MHz. For connected networks, the
+  // current frequency, otherwise, the frequency of the best available BSS.
+  int32 frequency;
+  // The hex encoded SSID (name) of the network.
+  string hex_ssid;
+  SecurityType security;
+  // The signal strength for visible networks.
+  int32 signal_strength;
+  // The network SSID.
+  string ssid;
+};
+
+struct WiMAXStateProperties {
+  int32 signal_strength;
+};
+
+struct NetworkStateProperties {
+  CaptivePortalProvider? captive_portal_provider;
+  CellularStateProperties? cellular;
+  // True if the network is configured and may be connectable.
+  bool connectable = false;
+  // True if an explicit connect was requested. The network state may not be
+  // Connecting yet.
+  bool connect_requested = false;
+  ConnectionStateType connection_state;
+  EthernetStateProperties? ethernet;
+  // A string describing the network error state. TODO(stevenjb): Use an enum.
+  string? error_state;
+  // The unique identifier for the network.
+  string guid;
+  // The human readable name of the network, e.g. WiFi SSID or network type.
+  string name;
+  // The relative priority of the network. Larger values have higher priority.
+  int32 priority;
+  // The proxy mode affecting this network. Includes any settings that affect
+  // this network (i.e. global proxy settings are also considered).
+  ProxyMode proxy_mode;
+  // True for visible networks that are blocked / disallowed by policy.
+  bool prohibited_by_policy = false;
+  ONCSource source;
+  TetherStateProperties? tether;
+  NetworkType type;
+  VPNStateProperties? vpn;
+  WiFiStateProperties? wifi;
+  WiMAXStateProperties? wimax;
+};
+
+struct DeviceStateProperties {
+  // IP address for the primary network corresponding to the device type. If no
+  // network is in a connected state, or the address type is not available,
+  // these will be empty. When there are multiple IP addresses, only the first
+  // is provided.
+  array<uint8> ipv4_address;
+  array<uint8> ipv6_address;
+  // AA:BB formatted MAC address for the device. Use for display purposes only.
+  string mac_address;
+  // Set if the device is currently scanning.
+  bool scanning = false;
+  // The SIM lock status if Type = Cellular and a SIM is present.
+  SIMLockStatus? sim_lock_status;
+  // True when a SIM is required and not present.
+  bool sim_absent = false;
+  DeviceStateType state;
+  NetworkType type;
+  // Whether or not any managed networks are available.
+  bool managed_network_available = false;
+};
+
+const int32 kNoLimit = 0;
+
+struct NetworkFilter {
+  // Which networks to return (active, visible, etc).
+  FilterType filter;
+  // The type of networks to return.
+  NetworkType network_type;
+  // Maximum number of networks to return. 0 indicates no limit.
+  int32 limit = kNoLimit;
+};
+
+interface CrosNetworkConfig {
+  AddObserver(CrosNetworkConfigObserver observer);
+
+  // Gets the state properties of the network matching |guid|.
+  GetNetworkState(string guid) => (NetworkStateProperties result);
+
+  // Returns a list of Network properties matching |filter|. Networks are
+  // ordered by the system based on their priority, with active networks listed
+  // first.
+  GetNetworkStateList(NetworkFilter filter) =>
+    (array<NetworkStateProperties> result);
+
+  // Returns a list of Device properties.
+  GetDeviceStateList() => (array<DeviceStateProperties> result);
+
+  // Sets a single network type (e.g. WiFi) to enabled or disabled. Types
+  // describing multiple technologies (e.g. kWireless) are not supported.
+  // Returns false if the type is invalid, unavailable, or can not be disabled.
+  // CrosNetworkConfigObserver::OnDeviceStateListChanged() can be used to be
+  // notified when the enabled state changes.
+  SetNetworkTypeEnabledState(NetworkType type, bool enabled) => (bool success);
+
+  // Requests a scan for new networks. If the list updates,
+  // CrosNetworkConfigObserver::OnNetworkStateListChanged() will be signaled.
+  RequestNetworkScan(NetworkType type);
+};
+
+interface CrosNetworkConfigObserver {
+  // Fired when the properties of an active network or previously active
+  // network change.
+  OnActiveNetworksChanged(array<NetworkStateProperties> networks);
+
+  // Fired when the list of networks changes.
+  // CrosNetworkConfig::GetNetworkStateList() can be used to get the network
+  // states.
+  OnNetworkStateListChanged();
+
+  // Fired when the list of devices changes or a device property changes.
+  // CrosNetworkConfig::GetDeviceStateList() can be used to retrieve the device
+  // states.
+  OnDeviceStateListChanged();
+};
