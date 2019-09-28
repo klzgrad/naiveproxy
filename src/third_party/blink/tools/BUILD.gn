@@ -1,0 +1,64 @@
+# Copyright (c) 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# This action generates WPT metadata files for skipping web tests
+action("build_wpt_metadata") {
+  testonly = true
+  script = "//third_party/blink/tools/build_wpt_metadata.py"
+  args = [
+    "--metadata-output-dir",
+    rebase_path("$root_out_dir/wpt_expectations_metadata"),
+  ]
+  outputs = [
+    "$root_out_dir/wpt_expectations_metadata/",
+  ]
+  data = [
+    # Include the blinkpy tools to access expectations data
+    "//third_party/blink/tools/blinkpy/",
+  ]
+  inputs = [
+    # Include the various Test Expectations files
+    "//third_party/blink/web_tests/ASANExpectations",
+    "//third_party/blink/web_tests/LeakExpectations",
+    "//third_party/blink/web_tests/MSANExpectations",
+    "//third_party/blink/web_tests/NeverFixTests",
+    "//third_party/blink/web_tests/SlowTests",
+    "//third_party/blink/web_tests/StaleTestExpectations",
+    "//third_party/blink/web_tests/TestExpectations",
+    "//third_party/blink/web_tests/VirtualTestSuites",
+  ]
+}
+
+# WPT codebase for running webplatform tests
+group("wpt_tests_isolate") {
+  testonly = true
+  data_deps = [
+    ":build_wpt_metadata",
+    # Note that we also depend on Chrome and Chromedriver here but specify those
+    # via the //wpt_tests_isolate target in //src/BUILD.gn
+  ]
+  data = [
+    "//testing/scripts/common.py",
+    "//testing/scripts/run_wpt_tests.py",
+    "//testing/xvfb.py",
+
+    # Include blinkpy tools for post-processing WPT output.
+    "//third_party/blink/tools/update_wpt_output.py",
+    "//third_party/blink/tools/blinkpy/",
+
+    # The web_tests/external directory contains all WPT components including
+    # the test runner codebase, manifest file, and the tests themselves.
+    "//third_party/blink/web_tests/external/",
+
+    # Include the various Test Expectations files.
+    "//third_party/blink/web_tests/ASANExpectations",
+    "//third_party/blink/web_tests/LeakExpectations",
+    "//third_party/blink/web_tests/MSANExpectations",
+    "//third_party/blink/web_tests/NeverFixTests",
+    "//third_party/blink/web_tests/SlowTests",
+    "//third_party/blink/web_tests/StaleTestExpectations",
+    "//third_party/blink/web_tests/TestExpectations",
+    "//third_party/blink/web_tests/VirtualTestSuites",
+  ]
+}

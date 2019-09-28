@@ -1,0 +1,107 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# Keep in sync with targets in remoting/remoting_client.gypi.
+
+import("//build/config/features.gni")
+import("//remoting/webapp/build_template.gni")
+import("//remoting/webapp/files.gni")
+
+action("credits") {
+  about_credits_file = "$target_gen_dir/credits.html"
+  script = "//tools/licenses.py"
+  depfile = "$target_gen_dir/$target_name.d"
+
+  inputs = [
+    "base/html/credits.tmpl",
+    "base/html/credits_entry.tmpl",
+  ]
+
+  outputs = [
+    about_credits_file,
+  ]
+
+  args = [
+    "credits",
+    rebase_path(about_credits_file, root_build_dir),
+    "--file-template",
+    rebase_path("base/html/credits.tmpl", root_build_dir),
+    "--entry-template",
+    rebase_path("base/html/credits_entry.tmpl", root_build_dir),
+    "--depfile",
+    rebase_path(depfile, root_build_dir),
+  ]
+}
+
+desktop_remoting_webapp("webapp") {
+  output_dir = "$root_build_dir/remoting/remoting-webapp.v2"
+  zip_path = "$root_build_dir/remoting-webapp.v2.zip"
+  extra_files = []
+}
+
+copy("browser_test_resources") {
+  sources = remoting_webapp_browsertest_main_html_extra_files
+  outputs = [
+    "$root_out_dir/remoting/browser_test_resources/{{source_file_part}}",
+  ]
+}
+
+remoting_unit_test_out_dir = "$root_out_dir/remoting/unittests"
+
+group("unit_tests") {
+  data_deps = [
+    ":blanketjs",
+    ":unittest_html",
+    ":js_files",
+    ":qunit",
+    ":sinonjs",
+  ]
+}
+
+copy("js_files") {
+  sources = webapp_js_files + remoting_webapp_unittests_all_files
+  outputs = [
+    "$remoting_unit_test_out_dir/{{source_file_part}}",
+  ]
+}
+
+copy("blanketjs") {
+  sources = [
+    "//third_party/blanketjs/src/blanket.js",
+    "//third_party/blanketjs/src/qunit_adapter.js",
+  ]
+  outputs = [
+    "$remoting_unit_test_out_dir/blanketjs/{{source_file_part}}",
+  ]
+}
+
+copy("sinonjs") {
+  sources = [
+    "//third_party/sinonjs/src/sinon-qunit.js",
+    "//third_party/sinonjs/src/sinon.js",
+  ]
+  outputs = [
+    "$remoting_unit_test_out_dir/sinonjs/{{source_file_part}}",
+  ]
+}
+
+copy("qunit") {
+  sources = [
+    "//third_party/qunit/src/browser_test_harness.js",
+    "//third_party/qunit/src/qunit.css",
+    "//third_party/qunit/src/qunit.js",
+  ]
+  outputs = [
+    "$remoting_unit_test_out_dir/qunit/{{source_file_part}}",
+  ]
+}
+
+build_webapp_html("unittest_html") {
+  html_template_file = remoting_webapp_unittests_template_main
+  html_template_include_files = []
+  js_files = remoting_webapp_unittests_all_js_files
+  html_output = "$remoting_unit_test_out_dir/unittests.html"
+  exclude_js = remoting_webapp_unittests_exclude_js_files
+  instrument_js = webapp_js_files
+}

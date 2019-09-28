@@ -1,0 +1,96 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//third_party/blink/renderer/bindings/bindings.gni")
+import("//third_party/blink/renderer/bindings/scripts/scripts.gni")
+import("//third_party/blink/renderer/bindings/templates/templates.gni")
+
+visibility = [ "//third_party/blink/*" ]
+
+# This separate pre-caching step is required to use lex/parse table
+# caching in PLY, since PLY itself does not check if the cache is
+# valid, and thus may end up using a stale cache if this step hasn't
+# been run to update it.
+#
+# This action's dependencies *is* the cache validation.
+action("cached_lex_yacc_tables") {
+  script = "blink_idl_parser.py"
+
+  inputs = idl_lexer_parser_files
+  outputs = [
+    "$bindings_scripts_output_dir/lextab.py",
+    "$bindings_scripts_output_dir/parsetab.pickle",
+  ]
+
+  args = [ rebase_path(bindings_scripts_output_dir, root_build_dir) ]
+}
+
+# A separate pre-caching step is *required* to use bytecode caching in
+# Jinja (which improves speed significantly), as the bytecode cache is
+# not concurrency-safe on write; details in code_generator_v8.py.
+action("cached_jinja_templates") {
+  script = "code_generator.py"
+
+  inputs = jinja_module_files + [ "code_generator.py" ] +
+           code_generator_template_files
+
+  # Dummy file to track dependency.
+  stamp_file = "$bindings_scripts_output_dir/cached_jinja_templates.stamp"
+  outputs = [
+    stamp_file,
+  ]
+
+  args = [
+    rebase_path(bindings_scripts_output_dir, root_build_dir),
+    rebase_path(stamp_file, root_build_dir),
+  ]
+}
+
+# Python library that supports Web IDL compiler and database
+group("web_idl_pylib") {
+  data = [
+    "web_idl/argument.py",
+    "web_idl/ast_group.py",
+    "web_idl/attribute.py",
+    "web_idl/callback_function.py",
+    "web_idl/callback_interface.py",
+    "web_idl/common.py",
+    "web_idl/constant.py",
+    "web_idl/constructor.py",
+    "web_idl/database.py",
+    "web_idl/dictionary.py",
+    "web_idl/enumeration.py",
+    "web_idl/exposure.py",
+    "web_idl/extended_attribute.py",
+    "web_idl/identifier_ir_map.py",
+    "web_idl/idl_compiler.py",
+    "web_idl/idl_member.py",
+    "web_idl/idl_type.py",
+    "web_idl/includes.py",
+    "web_idl/interface.py",
+    "web_idl/ir_builder.py",
+    "web_idl/namespace.py",
+    "web_idl/operation.py",
+    "web_idl/reference.py",
+    "web_idl/typedef.py",
+    "web_idl/user_defined_type.py",
+    "web_idl/values.py",
+  ]
+  data += [  # dependencies to Python libraries
+    "//third_party/blink/renderer/build/scripts/blinkbuild/name_style_converter.py",
+
+    # PLY (Python Lex-Yacc)
+    "//third_party/ply/lex.py",
+    "//third_party/ply/yacc.py",
+
+    # Web IDL lexer/parser (base parser)
+    "//tools/idl_parser/idl_lexer.py",
+    "//tools/idl_parser/idl_node.py",
+    "//tools/idl_parser/idl_parser.py",
+
+    # Blink IDL lexer/parser/constructor
+    "blink_idl_lexer.py",
+    "blink_idl_parser.py",
+  ]
+}

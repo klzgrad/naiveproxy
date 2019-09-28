@@ -1,0 +1,140 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//chrome/common/features.gni")
+import("//third_party/closure_compiler/compile_js.gni")
+import("//tools/grit/grit_rule.gni")
+import("../optimize_webui.gni")
+
+if (optimize_webui) {
+  print_preview_pak_file = "print_preview_resources.pak"
+  unpak_folder = "print_preview_resources.unpak"
+
+  optimize_webui("build") {
+    host = "print"
+    html_in_files = [ "print_preview.html" ]
+    html_out_files = [ "vulcanized.html" ]
+    insert_in_head = "<base href=\"chrome://print\">"
+    input = rebase_path("$target_gen_dir/$unpak_folder", root_build_dir)
+    js_out_files = [ "crisper.js" ]
+    replace_for_html_imports_polyfill = "crisper.js"
+
+    excludes = [ "pdf/pdf_scripting_api.js" ]
+
+    deps = [
+      ":unpak",
+    ]
+  }
+
+  unpak("unpak") {
+    pak_file = print_preview_pak_file
+    out_folder = unpak_folder
+
+    deps = [
+      ":flattened_resources",
+    ]
+  }
+
+  grit("flattened_resources") {
+    source = "print_preview_resources.grd"
+
+    # The .grd contains references to generated files.
+    source_is_generated = true
+
+    defines = chrome_grit_defines
+    outputs = [
+      "grit/print_preview_resources.h",
+      "grit/print_preview_resources_map.cc",
+      "grit/print_preview_resources_map.h",
+      print_preview_pak_file,
+    ]
+    output_dir = "$root_gen_dir/chrome/browser/resources/print_preview"
+  }
+}
+
+group("closure_compile") {
+  deps = [
+    ":print_preview_resources",
+    "data:closure_compile",
+    "ui:closure_compile",
+  ]
+}
+
+js_type_check("print_preview_resources") {
+  deps = [
+    ":cloud_print_interface",
+    ":cloud_print_interface_js",
+    ":cloud_print_interface_manager",
+    ":cloud_print_interface_native",
+    ":dark_mode_behavior",
+    ":metrics",
+    ":native_layer",
+    ":print_preview_utils",
+  ]
+}
+
+js_library("print_preview_utils") {
+  deps = [
+    ":dark_mode_behavior",
+    "//ui/webui/resources/js:util",
+  ]
+  externs_list = [ "$externs_path/pending.js" ]
+}
+
+js_library("metrics") {
+  deps = [
+    ":native_layer",
+    "//ui/webui/resources/js:cr",
+  ]
+}
+
+js_library("cloud_print_interface") {
+  deps = [
+    "//ui/webui/resources/js:cr",
+    "//ui/webui/resources/js/cr:event_target",
+  ]
+}
+
+js_library("cloud_print_interface_manager") {
+  deps = [
+    ":cloud_print_interface",
+    ":cloud_print_interface_js",
+    ":cloud_print_interface_native",
+    ":native_layer",
+  ]
+}
+
+js_library("cloud_print_interface_js") {
+  deps = [
+    ":cloud_print_interface",
+    ":native_layer",
+    "data:cloud_parsers",
+    "data:destination",
+    "data:document_info",
+    "data:invitation",
+    "//ui/webui/resources/js:cr",
+    "//ui/webui/resources/js/cr:event_target",
+  ]
+}
+
+js_library("cloud_print_interface_native") {
+  deps = [
+    ":cloud_print_interface",
+  ]
+}
+
+js_library("native_layer") {
+  deps = [
+    "data:destination",
+    "data:measurement_system",
+    "//ui/webui/resources/js:cr",
+  ]
+}
+
+js_library("dark_mode_behavior") {
+  deps = [
+    "//ui/webui/resources/js:assert",
+    "//ui/webui/resources/js:cr",
+  ]
+}

@@ -1,0 +1,51 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// Datatypes and interfaces of models for the Machine Learning API.
+
+// NOTE: This mojom exists in two places and must be kept in sync:
+//       Chromium:  //chromeos/services/machine_learning/public/mojom/
+//       Chrome OS: src/platform2/ml/mojom/
+// Example: A backwards-compatible mojom change (and corresponding
+// implementation change) can be made in Chrome OS first, then replicated to the
+// client (Chromium) later.
+
+module chromeos.machine_learning.mojom;
+
+// NOTE: The base directory for 'import' statements is expected to differ
+//       between Chromium and Chrome OS versions of this file.
+import "chromeos/services/machine_learning/public/mojom/graph_executor.mojom";
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+// ModelIds prefixed with UNSUPPORTED_ are no longer supported. Attempts to load
+// them will produce an error.
+enum ModelId {
+  UNSUPPORTED_UNKNOWN = 0,
+  TEST_MODEL = 1,
+  SMART_DIM_20181115 = 2,
+  SMART_DIM_20190221 = 3,
+};
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum CreateGraphExecutorResult {
+  OK = 0,
+  MODEL_INTERPRETATION_ERROR = 1,
+  MEMORY_ALLOCATION_ERROR = 2,
+  // Remove kMax and use builtin kMaxValue after Mojo uprev (crbug.com/909719).
+  kMax = MEMORY_ALLOCATION_ERROR,
+};
+
+struct ModelSpec {
+  ModelId id;
+};
+
+// The lifetime of the cached model is tied to the lifetime of the Model
+// interface pipe. The Model interface pipe can be used to acquire multiple
+// separate GraphExecutor instances.
+interface Model {
+  CreateGraphExecutor(GraphExecutor& request) =>
+      (CreateGraphExecutorResult result);
+};

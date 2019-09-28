@@ -1,0 +1,99 @@
+# Copyright 2016 The SwiftShader Authors. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("//build/config/ui.gni")
+import("../../swiftshader.gni")
+
+# Need a separate config to ensure the warnings are added to the end.
+config("swiftshader_libEGL_private_config") {
+  defines = [ "EGL_EGLEXT_PROTOTYPES" ]
+
+  if (is_win) {
+    cflags = [
+      "/wd4201",  # nameless struct/union
+      "/wd4065",  # switch statement contains 'default' but no 'case' labels
+      "/wd5030",  # attribute is not recognized
+    ]
+
+    defines += [ "EGLAPI=" ]
+  } else {
+    cflags = [
+      "-Wno-sign-compare",
+      "-Wno-unused-function",
+    ]
+    if (!is_clang) {
+      cflags += [ "-Wno-unused-but-set-variable" ]
+    }
+
+    if (is_mac) {
+      cflags += [ "-fvisibility=protected" ]
+      defines += [ "EGLAPI=__attribute__((no_sanitize(\"function\")))" ]
+    } else {
+      defines += [ "EGLAPI=__attribute__((visibility(\"protected\"))) __attribute__((no_sanitize(\"function\")))" ]
+    }
+  }
+}
+
+swiftshader_shared_library("swiftshader_libEGL") {
+  if (!is_mac && !is_fuchsia) {
+    output_name = "libEGL"
+    output_dir = "$root_out_dir/swiftshader"
+  }
+
+  sources = [
+    "../../Common/SharedLibrary.cpp",
+    "../common/Object.cpp",
+    "../common/debug.cpp",
+    "Config.cpp",
+    "Display.cpp",
+    "Surface.cpp",
+    "libEGL.cpp",
+    "libEGL.def",
+    "libEGL.rc",
+    "main.cpp",
+    "resource.h",
+  ]
+
+  if (is_mac) {
+    sources += [ "OSXUtils.mm" ]
+    libs = [
+      "Quartz.framework",
+      "Cocoa.framework",
+      "CoreFoundation.framework",
+      "IOSurface.framework",
+    ]
+    ldflags = [
+      "-Wl,-install_name,@rpath/libswiftshader_libEGL.dylib",
+      "-Wl,-exported_symbols_list," +
+          rebase_path("libEGL.exports", root_build_dir),
+    ]
+  } else if (is_linux) {
+    if (use_x11) {
+      sources += [ "../../Main/libX11.cpp" ]
+    }
+    inputs = [
+      "libEGL.lds",
+    ]
+    ldflags =
+        [ "-Wl,--version-script=" + rebase_path("libEGL.lds", root_build_dir) ]
+  }
+
+  configs = [ ":swiftshader_libEGL_private_config" ]
+
+  include_dirs = [
+    "../../../include",
+    "../..",
+    "..",
+  ]
+}

@@ -1,0 +1,171 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build_overrides/build.gni")
+
+source_set("platform") {
+  sources = [
+    "api/event_waiter.cc",
+    "api/event_waiter.h",
+    "api/internal/trace_logging_internal.cc",
+    "api/internal/trace_logging_internal.h",
+    "api/internal/trace_logging_macros_internal.h",
+    "api/logging.h",
+    "api/logging_util.cc",
+    "api/network_interface.cc",
+    "api/network_interface.h",
+    "api/network_runner.h",
+    "api/network_waiter.h",
+    "api/scoped_wake_lock.cc",
+    "api/scoped_wake_lock.h",
+    "api/socket.h",
+    "api/task_runner.h",
+    "api/time.h",
+    "api/tls_socket.h",
+    "api/tls_socket_creds.h",
+    "api/trace_logging.h",
+    "api/trace_logging_platform.cc",
+    "api/trace_logging_platform.h",
+    "api/trace_logging_types.h",
+    "api/udp_packet.h",
+    "api/udp_read_callback.h",
+    "api/udp_socket.cc",
+    "api/udp_socket.h",
+    "base/error.cc",
+    "base/error.h",
+    "base/ip_address.cc",
+    "base/ip_address.h",
+    "base/location.cc",
+    "base/location.h",
+    "impl/ssl_context.cc",
+    "impl/ssl_context.h",
+  ]
+
+  public_deps = [
+    "../third_party/abseil",
+    "../third_party/boringssl",
+    "../util",
+  ]
+
+  configs += [ "../build:allow_build_from_embedder" ]
+
+  if (!build_with_chromium) {
+    sources += [
+      "impl/event_loop.cc",
+      "impl/event_loop.h",
+      "impl/network_reader.cc",
+      "impl/network_reader.h",
+      "impl/network_runner.cc",
+      "impl/network_runner.h",
+      "impl/task_runner.cc",
+      "impl/task_runner.h",
+      "impl/text_trace_logging_platform.cc",
+      "impl/text_trace_logging_platform.h",
+      "impl/time.cc",
+    ]
+
+    if (is_linux) {
+      sources += [ "impl/network_interface_linux.cc" ]
+    } else if (is_mac) {
+      defines = [
+        # Required, to use the new IPv6 Sockets options introduced by RFC 3542.
+        "__APPLE_USE_RFC_3542",
+      ]
+
+      sources += [ "impl/network_interface_mac.cc" ]
+    }
+
+    if (is_posix) {
+      sources += [
+        "impl/event_waiter_posix.cc",
+        "impl/network_waiter_posix.cc",
+        "impl/network_waiter_posix.h",
+        "impl/scoped_pipe.h",
+        "impl/scoped_wake_lock_posix.cc",
+        "impl/scoped_wake_lock_posix.h",
+        "impl/udp_socket_posix.cc",
+        "impl/udp_socket_posix.h",
+      ]
+    }
+
+    deps = [
+      ":default_logger",
+    ]
+  }
+}
+
+source_set("test") {
+  testonly = true
+  sources = [
+    "test/fake_clock.cc",
+    "test/fake_clock.h",
+    "test/fake_task_runner.cc",
+    "test/fake_task_runner.h",
+    "test/mock_udp_socket.cc",
+    "test/mock_udp_socket.h",
+  ]
+
+  configs += [ "../build:allow_build_from_embedder" ]
+
+  deps = [
+    ":platform",
+    "../third_party/googletest:gmock",
+  ]
+}
+
+source_set("default_logger") {
+  sources = [
+    "impl/logging.cc",
+  ]
+
+  if (is_posix) {
+    sources += [ "impl/log_initializer_posix.cc" ]
+  }
+
+  configs += [ "../build:allow_build_from_embedder" ]
+
+  deps = [
+    "../third_party/abseil",
+    "../util",
+  ]
+}
+
+source_set("platform_unittests") {
+  testonly = true
+
+  sources = [
+    "api/internal/trace_logging_internal_unittest.cc",
+    "api/time_unittest.cc",
+    "api/trace_logging_unittest.cc",
+    "api/udp_socket_unittest.cc",
+    "base/error_unittest.cc",
+    "base/ip_address_unittest.cc",
+    "base/location_unittest.cc",
+    "impl/ssl_context_unittest.cc",
+  ]
+
+  # The unit tests in impl/ assume the standalone implementation is being used.
+  # Exclude them if an embedder is providing the implementation.
+  if (!build_with_chromium) {
+    sources += [
+      "impl/network_reader_unittest.cc",
+      "impl/task_runner_unittest.cc",
+      "impl/time_unittest.cc",
+    ]
+    if (is_posix) {
+      sources += [
+        "impl/network_waiter_posix_unittest.cc",
+        "impl/scoped_pipe_unittest.cc",
+      ]
+    }
+  }
+
+  deps = [
+    ":platform",
+    "../third_party/googletest:gmock",
+    "../third_party/googletest:gtest",
+  ]
+
+  configs += [ "../build:allow_build_from_embedder" ]
+}

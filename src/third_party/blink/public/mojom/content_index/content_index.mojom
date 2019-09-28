@@ -1,0 +1,64 @@
+// Copyright 2019 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module blink.mojom;
+
+import "skia/public/interfaces/bitmap.mojom";
+import "url/mojom/url.mojom";
+
+// As per https://github.com/rknoll/content-index.
+
+enum ContentIndexError {
+  NONE,
+
+  // The browser process received an unexpected parameter.
+  INVALID_PARAMETER,
+
+  // An IO error occured while interacting with the database.
+  STORAGE_ERROR,
+};
+
+// These values are persisted, do not change or create gaps.
+enum ContentCategory {
+  // "homepage"
+  HOME_PAGE = 1,
+
+  // "article"
+  ARTICLE,
+
+  // "video"
+  VIDEO,
+
+  // "audio"
+  AUDIO,
+};
+
+struct ContentDescription {
+  string id;
+  string title;
+  string description;
+  ContentCategory category;
+
+  // Passed as a string so the same description can be returned when queried.
+  string icon_url;
+  string launch_url;
+};
+
+// The |service_worker_registration_id| comes from an untrusted renderer but
+// the origin it's validated against is trusted.
+// TODO(crbug.com/976962): Register interfaces that are exposed only on
+// Service Workers.
+interface ContentIndexService {
+  const int32 kMaxIconDimension = 256;
+
+  Add(int64 service_worker_registration_id,
+      ContentDescription description,
+      skia.mojom.Bitmap icon,
+      url.mojom.Url launchUrl)
+      => (ContentIndexError error);
+  Delete(int64 service_worker_registration_id, string id)
+      => (ContentIndexError error);
+  GetDescriptions(int64 service_worker_registration_id)
+      => (ContentIndexError error, array<ContentDescription> descriptions);
+};

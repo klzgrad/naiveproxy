@@ -1,0 +1,71 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/android/config.gni")
+import(
+    "//chrome/android/features/autofill_assistant/autofill_assistant_module.gni")
+import("//chrome/android/features/tab_ui/tab_ui_module.gni")
+import("//chrome/android/modules/buildflags.gni")
+import("//device/vr/buildflags/buildflags.gni")
+
+if (enable_vr) {
+  import("//chrome/android/features/vr/vr_module.gni")
+}
+if (enable_arcore) {
+  import("//chrome/android/features/ar/ar_module.gni")
+}
+if (dfmify_dev_ui) {
+  import("//chrome/android/features/dev_ui/dev_ui_module.gni")
+}
+
+# Mapping that controls package IDs assigned to modules. The package IDs have to
+# be unique and lower than 0x7f.
+# TODO(crbug.com/984158): Autogenerate instead of explicit list.
+resource_packages_id_mapping = [
+  "ar=0x7e",
+  "vr=0x7d",
+  "tab_ui=0x7c",
+  "autofill_assistant=0x7b",
+  "dev_ui=0x7a",
+]
+
+# List of feature module descs for each Chrome flavor. These lists are used to
+# autogenerate the relevant module targets and bundles. A feature module desc
+# is a GN scope with the following fields:
+#   name: Name of feature module.
+#   java_deps: Java libraries and resources going into module.
+#   android_manifest: AndroidManifest.xml of module.
+#   native_deps: (Optional) Native code going into module.
+#   native_entrypoints: (Optional) File with list of exposed symbols from native
+#     feature module library.
+#   proguard_async: (Optional) Whether to proguard the module asynchronously.
+#   loadable_modules_32_bit: (Optional) List of additional 32-bit shared
+#     library files going into module.
+#   loadable_modules_64_bit: (Optional) List of additional 64-bit shared
+#     library files going into module.
+# Each new module needs to add a desc to one of the lists below.
+
+# Modules shipped in Chrome Modern (Android L+).
+chrome_modern_module_descs = []
+if (enable_vr) {
+  chrome_modern_module_descs += [ vr_module_desc ]
+}
+if (dfmify_dev_ui) {
+  chrome_modern_module_descs += [ dev_ui_module_desc ]
+}
+
+# Modules shipped in Monochrome (Android N+).
+monochrome_module_descs = chrome_modern_module_descs
+if (enable_arcore) {
+  monochrome_module_descs += [ ar_module_desc ]
+}
+if (!disable_autofill_assistant_dfm) {
+  monochrome_module_descs += [ autofill_assistant_module_desc ]
+}
+if (!disable_tab_ui_dfm) {
+  monochrome_module_descs += [ tab_ui_module_desc ]
+}
+
+# Modules shipped in Trichrome (Android Q+).
+trichrome_module_descs = monochrome_module_descs

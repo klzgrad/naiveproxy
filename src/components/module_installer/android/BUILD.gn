@@ -1,0 +1,80 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/android/rules.gni")
+
+# Contains code necessary to compile the rest of Chrome. Doesn't contain actual
+# implementations. To get implementations either depend on
+# |module_installer_impl_java| or |module_installer_stub_java| depending on your
+# build.
+android_library("module_installer_java") {
+  java_files = [
+    "java/src-stub/org/chromium/components/module_installer/ModuleInstallerImpl.java",
+    "java/src-common/org/chromium/components/module_installer/ModuleInstaller.java",
+    "java/src-common/org/chromium/components/module_installer/OnModuleInstallFinishedListener.java",
+    "java/src-common/org/chromium/components/module_installer/Module.java",
+  ]
+  jar_excluded_patterns = [ "*/ModuleInstallerImpl.class" ]
+  deps = [
+    "//base:base_java",
+  ]
+  jacoco_never_instrument = true
+}
+
+# Contains stub implementation to be used for builds not supporting modules
+# (e.g. APKs).
+android_library("module_installer_stub_java") {
+  java_files = [ "java/src-stub/org/chromium/components/module_installer/ModuleInstallerImpl.java" ]
+  deps = [
+    ":module_installer_java",
+    "//base:base_java",
+  ]
+  jacoco_never_instrument = true
+}
+
+# Contains real implementation to be used for builds supporting modules (e.g.
+# bundles).
+android_library("module_installer_impl_java") {
+  java_files = [
+    "java/src-impl/org/chromium/components/module_installer/ModuleInstallerImpl.java",
+    "java/src-impl/org/chromium/components/module_installer/ModuleInstallerBackend.java",
+    "java/src-impl/org/chromium/components/module_installer/FakeModuleInstallerBackend.java",
+    "java/src-impl/org/chromium/components/module_installer/PlayCoreModuleInstallerBackend.java",
+  ]
+  deps = [
+    ":module_installer_java",
+    "//base:base_java",
+    "//components/crash/android:java",
+    "//third_party/google_android_play_core:com_google_android_play_core_java",
+  ]
+}
+
+android_library("module_installer_test_java") {
+  testonly = true
+  java_files = [ "javatests/src/org/chromium/components/module_installer/ModuleInstallerRule.java" ]
+  deps = [
+    ":module_installer_java",
+    "//base:base_java",
+    "//third_party/junit",
+  ]
+  jacoco_never_instrument = true
+}
+
+java_library("module_interface_java") {
+  supports_android = true
+  java_files = [ "java/src-common/org/chromium/components/module_installer/ModuleInterface.java" ]
+}
+
+java_annotation_processor("module_interface_processor") {
+  java_files = [ "java/src-common/org/chromium/components/module_installer/ModuleInterfaceProcessor.java" ]
+  main_class =
+      "org.chromium.components.module_installer.ModuleInterfaceProcessor"
+  annotation_processor_deps = [ "//third_party/auto:auto_service_processor" ]
+  deps = [
+    ":module_interface_java",
+    "//third_party/android_deps:com_squareup_javapoet_java",
+    "//third_party/auto:auto_service_java",
+  ]
+  jacoco_never_instrument = true
+}

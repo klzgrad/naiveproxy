@@ -1,0 +1,64 @@
+// Copyright 2019 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module cros.mojom;
+
+import "media/capture/mojom/image_capture.mojom";
+import "media/capture/video/chromeos/mojo/camera_common.mojom";
+
+// Effect that recognized by Chrome OS.
+enum Effect {
+  NO_EFFECT = 0,
+  PORTRAIT_MODE = 1,
+};
+
+// Interface for Chrome OS specific Image Capture API which supports reprocess
+// mechanism. The |source_id| parameter in following methods might not be the
+// actual device id if it is called by renderer. It needs to be
+// translated to the actual video device id to be used in CrosImageCapture
+// implementation.
+interface CrosImageCapture {
+  // Gets camera information |camera_info| which includes camera facing,
+  // characteristics, orientation, etc. The |source_id| might need translation
+  // to be actual video device id. For invalid |source_id|, the returned
+  // |camera_info| would be empty.
+  GetCameraInfo(string source_id) => (CameraInfo? camera_info);
+
+  // Sets reprocess option to bind with the coming take photo request. When this
+  // method is called, the reprocess option will be queued. All reprocess
+  // options in the queue will be consumed when TakePhoto() method in Image
+  // Capture API is triggered and all the queued reprocess options will be bound
+  // to that take photo request. The |source_id| might need translation to be
+  // actual video device id.
+  // The result |status| would be set to 0 for success and the corresponding
+  // result will be put in |blob|. If it fails, the |status| indicates the error
+  // type and |blob| might be empty. For invalid |source_id|, it returns
+  // -EINVAL.
+  SetReprocessOption(string source_id, Effect effect)
+      => (int32 status, media.mojom.Blob? blob);
+
+  // Sets the fps range for upcoming configured camera stream.
+  // The |source_id| might need translation to be actual video device id.
+  // The |stream_width| and |stream_height| are the target stream resolution
+  // that the caller sets the fps range for.
+  // The |min_fps| and |max_fps| represent the target fps range.
+  // If the given fps range is valid and set successfully, |is_success| returns
+  // true. If the given fps range is invalid, the fps range which is cached
+  // previously will be cleared and |is_success| will return false.
+  SetFpsRange(string source_id, uint32 stream_width, uint32 stream_height,
+              int32 min_fps, int32 max_fps)
+      => (bool is_success);
+
+  // Invoked when the intent is fulfilled or is failed. For the intent which
+  // expects to have result, it is fulfilled when the captured is done and is
+  // failed if the session ends without finishing the capture. For the intent
+  // which don't expect any result, it is fulfilled when the camera app is
+  // successfully launched and is failed when the camera fails to launch.
+  // |intent_id| should be the same id that was specified in the query when
+  // launching the camera app. |is_success| indicates the result status of the
+  // intent. The |captured_data| will be delivered to the handler as a byte
+  // array.
+  OnIntentHandled(uint32 intent_id, bool is_success,
+                  array<uint8> captured_data);
+};

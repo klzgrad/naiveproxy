@@ -1,0 +1,150 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module network.mojom;
+
+import "mojo/public/mojom/base/read_only_buffer.mojom";
+import "url/mojom/url.mojom";
+import "services/network/public/mojom/network_param.mojom";
+import "services/network/public/mojom/ip_endpoint.mojom";
+
+enum WebSocketMessageType {
+  CONTINUATION,
+  TEXT,
+  BINARY,
+  LAST = BINARY
+};
+
+// TODO(darin): Move to a more general location.
+struct HttpHeader {
+  string name;
+  string value;
+};
+
+// TODO(darin): Remove redundancy b/w |headers| and |headers_text|.
+
+struct WebSocketHandshakeRequest {
+  url.mojom.Url url;
+  array<HttpHeader> headers;
+  string headers_text;
+};
+
+struct WebSocketHandshakeResponse {
+  url.mojom.Url url;
+  HttpVersion http_version;
+  int32 status_code;
+  string status_text;
+  IPEndPoint remote_endpoint;
+  array<HttpHeader> headers;
+  string headers_text;
+};
+
+// This interface is for HTTP Authentication.
+interface AuthenticationHandler {
+  // Returns null credentials when it wants to cancel authentication, and
+  // returns a non-null credentials when it wants to use the credentials for
+  // authentication.
+  OnAuthRequired(AuthChallengeInfo info,
+                 HttpResponseHeaders headers,
+                 IPEndPoint remote_endpoint) => (AuthCredentials? credentials);
+};
+
+interface WebSocketHandshakeClient {
+  // Notify the renderer that the browser has started an opening handshake.
+  OnOpeningHandshakeStarted(WebSocketHandshakeRequest request);
+
+  // Called when the HTTP response is received. This doesn't mean the connection
+  // is (or will be) established. This message precedes OnConnectionEstablished.
+  // |response| may contain cookie-related headers when the client has
+  // an access to raw cookie information.
+  OnResponseReceived(WebSocketHandshakeResponse response);
+
+  // Called when the connection is established. |selected_protocol| is the
+  // sub-protocol the server selected, or empty if no sub-protocol was selected.
+  // |extensions| is the list of extensions negotiated for the connection.
+  // default threshold value
+  // |receive_quota_threshold| is the value that the renderer calls
+  // AddReceiveFlowControlQuota() to the browser per receiving this value
+  // so that the browser can continue sending remaining data to the renderer.
+  OnConnectionEstablished(WebSocket socket,
+                          string selected_protocol,
+                          string extensions,
+                          uint64 receive_quota_threshold);
+};
+
+interface WebSocketClient {
+  // Receive a non-control frame from the remote server.
+  // - |fin| indicates that this frame is the last in the current message.
+  // - |type| is the type of the message. On the first frame of a message, it
+  //   must be set to either WebSocketMessageType.TEXT or
+  //   WebSocketMessageType.BINARY. On subsequent frames, it must be set to
+  //   WebSocketMessageType.CONTINUATION, and the type is the same as that of
+  //   the first message. If |type| is WebSocketMessageType.TEXT, then the
+  //   concatenation of the |data| from every frame in the message must be valid
+  //   UTF-8. If |fin| is not set, |data| must be non-empty.
+  OnDataFrame(bool fin,
+              WebSocketMessageType type,
+              mojo_base.mojom.ReadOnlyBuffer data);
+
+  // Add |quota| bytes of send quota. |quota| must be positive. Initial quota
+  // is 0. The renderer will wait for an AddSendFlowControlQuota() message
+  // before forwarding any messages to the browser. Total quota must never
+  // exceed 0x7FFFFFFFFFFFFFFF bytes.
+  AddSendFlowControlQuota(int64 quota);
+
+  // Drop the channel.
+  //
+  // When sent by the renderer, this will cause a Close message will be sent and
+  // the TCP/IP connection will be closed.
+  //
+  // When sent by the browser, this indicates that a Close has been received,
+  // the connection was closed, or a network or protocol error occurred.
+  //
+  // - |code| is one of the reason codes specified in RFC6455.
+  // - |reason|, if non-empty, is a UTF-8 encoded string which may be useful
+  //   for debugging but is not necessarily human-readable, as supplied by the
+  //   server in the Close message.
+  // - If |was_clean| is false, then the WebSocket connection was not closed
+  //   cleanly.
+  OnDropChannel(bool was_clean, uint16 code, string reason);
+
+  // Notify the renderer that a closing handshake has been initiated by the
+  // server, so that it can set the Javascript readyState to CLOSING.
+  OnClosingHandshake();
+};
+
+interface WebSocket {
+  // The client side may observe the following disconnection reason from the
+  // service side:
+  const uint32 kInsufficientResources = 1;
+  const uint32 kInternalFailure = 2;
+
+  // Send a non-control frame to the remote server.
+  // - |fin| indicates that this frame is the last in the current message.
+  // - |type| is the type of the message. On the first frame of a message, it
+  //   must be set to either WebSocketMessageType.TEXT or
+  //   WebSocketMessageType.BINARY. On subsequent frames, it must be set to
+  //   WebSocketMessageType.CONTINUATION, and the type is the same as that of
+  //   the first message. If |type| is WebSocketMessageType.TEXT, then the
+  //   concatenation of the |data| from every frame in the message must be valid
+  //   UTF-8. If |fin| is not set, |data| must be non-empty.
+  SendFrame(bool fin, WebSocketMessageType type, array<uint8> data);
+
+  // Add |quota| bytes of receive quota. |quota| must be positive. Initial quota
+  // is 0. The browser will wait for an AddReceiveFlowControlQuota() message
+  // before forwarding any messages to the renderer. Total quota must never
+  // exceed 0x7FFFFFFFFFFFFFFF bytes.
+  AddReceiveFlowControlQuota(int64 quota);
+
+  // Close the channel gracefully.
+  //
+  // When sent by the renderer, this will cause a Close message will be sent and
+  // the TCP/IP connection will be closed.
+  //
+  // - |code| is one of the reason codes specified in RFC6455.
+  // - |reason|, if non-empty, is a UTF-8 encoded string which may be useful for
+  //   debugging but is not necessarily human-readable, as supplied by the
+  //   server in the Close message.
+  StartClosingHandshake(uint16 code, string reason);
+};

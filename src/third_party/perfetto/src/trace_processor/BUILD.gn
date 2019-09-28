@@ -1,0 +1,328 @@
+# Copyright (C) 2018 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../gn/fuzzer.gni")
+import("../../gn/perfetto.gni")
+import("../../gn/wasm.gni")
+
+if (perfetto_build_standalone) {
+  wasm_lib("trace_processor_wasm") {
+    name = "trace_processor"
+    sources = [
+      "wasm_bridge.cc",
+    ]
+
+    # All the deps below are implicitly xxx($wasm_toolchain) because of the
+    # outer "is_wasm" block.
+    deps = [
+      ":lib",
+      "../../gn:default_deps",
+      "../../gn:sqlite",
+      "../../include/perfetto/ext/base",
+      "../../protos/perfetto/trace_processor:lite",
+    ]
+  }
+}
+
+# The library which eases processing of Perfetto traces by exposing reading
+# friendly APIs.
+static_library("trace_processor") {
+  complete_static_lib = true
+  deps = [
+    ":lib",
+  ]
+}
+
+source_set("lib") {
+  sources = [
+    "android_logs_table.cc",
+    "android_logs_table.h",
+    "args_table.cc",
+    "args_table.h",
+    "args_tracker.cc",
+    "args_tracker.h",
+    "chunked_trace_reader.h",
+    "clock_tracker.cc",
+    "clock_tracker.h",
+    "counter_definitions_table.cc",
+    "counter_definitions_table.h",
+    "counter_values_table.cc",
+    "counter_values_table.h",
+    "event_tracker.cc",
+    "event_tracker.h",
+    "filtered_row_index.cc",
+    "filtered_row_index.h",
+    "ftrace_descriptors.cc",
+    "ftrace_descriptors.h",
+    "ftrace_utils.cc",
+    "ftrace_utils.h",
+    "fuchsia_provider_view.cc",
+    "fuchsia_provider_view.h",
+    "fuchsia_trace_parser.cc",
+    "fuchsia_trace_parser.h",
+    "fuchsia_trace_tokenizer.cc",
+    "fuchsia_trace_tokenizer.h",
+    "fuchsia_trace_utils.cc",
+    "fuchsia_trace_utils.h",
+    "gzip_trace_parser.cc",
+    "gzip_trace_parser.h",
+    "heap_profile_allocation_table.cc",
+    "heap_profile_allocation_table.h",
+    "heap_profile_callsite_table.cc",
+    "heap_profile_callsite_table.h",
+    "heap_profile_frame_table.cc",
+    "heap_profile_frame_table.h",
+    "heap_profile_mapping_table.cc",
+    "heap_profile_mapping_table.h",
+    "heap_profile_tracker.cc",
+    "heap_profile_tracker.h",
+    "instants_table.cc",
+    "instants_table.h",
+    "metadata.h",
+    "metadata_table.cc",
+    "metadata_table.h",
+    "null_term_string_view.h",
+    "process_table.cc",
+    "process_table.h",
+    "process_tracker.cc",
+    "process_tracker.h",
+    "proto_incremental_state.h",
+    "proto_trace_parser.cc",
+    "proto_trace_parser.h",
+    "proto_trace_tokenizer.cc",
+    "proto_trace_tokenizer.h",
+    "query_constraints.cc",
+    "query_constraints.h",
+    "raw_table.cc",
+    "raw_table.h",
+    "row_iterators.cc",
+    "row_iterators.h",
+    "sched_slice_table.cc",
+    "sched_slice_table.h",
+    "scoped_db.h",
+    "slice_table.cc",
+    "slice_table.h",
+    "slice_tracker.cc",
+    "slice_tracker.h",
+    "span_join_operator_table.cc",
+    "span_join_operator_table.h",
+    "sql_stats_table.cc",
+    "sql_stats_table.h",
+    "sqlite3_str_split.cc",
+    "sqlite3_str_split.h",
+    "sqlite_utils.h",
+    "stats.h",
+    "stats_table.cc",
+    "stats_table.h",
+    "storage_columns.cc",
+    "storage_columns.h",
+    "storage_schema.cc",
+    "storage_schema.h",
+    "storage_table.cc",
+    "storage_table.h",
+    "string_pool.cc",
+    "string_pool.h",
+    "syscall_tracker.cc",
+    "syscall_tracker.h",
+    "syscalls_aarch32.h",
+    "syscalls_aarch64.h",
+    "syscalls_armeabi.h",
+    "syscalls_x86_64.h",
+    "systrace_parser.cc",
+    "systrace_parser.h",
+    "systrace_trace_parser.cc",
+    "systrace_trace_parser.h",
+    "table.cc",
+    "table.h",
+    "thread_table.cc",
+    "thread_table.h",
+    "trace_blob_view.h",
+    "trace_parser.h",
+    "trace_processor.cc",
+    "trace_processor_context.cc",
+    "trace_processor_context.h",
+    "trace_processor_impl.cc",
+    "trace_processor_impl.h",
+    "trace_sorter.cc",
+    "trace_sorter.h",
+    "trace_storage.cc",
+    "trace_storage.h",
+    "variadic.h",
+    "virtual_destructors.cc",
+    "virtual_track_tracker.cc",
+    "virtual_track_tracker.h",
+    "window_operator_table.cc",
+    "window_operator_table.h",
+  ]
+
+  deps = [
+    ":sqlite",
+    "../../gn:default_deps",
+    "../../gn:zlib",
+    "../../include/perfetto/ext/traced:sys_stats_counters",
+    "../../protos/perfetto/common:zero",
+    "../../protos/perfetto/config:zero",
+    "../../protos/perfetto/metrics:zero",
+    "../../protos/perfetto/metrics/android:zero",
+    "../../protos/perfetto/trace:zero",
+    "../../protos/perfetto/trace/android:zero",
+    "../../protos/perfetto/trace/chrome:zero",
+    "../../protos/perfetto/trace/ftrace:zero",
+    "../../protos/perfetto/trace/gpu:zero",
+    "../../protos/perfetto/trace/interned_data:zero",
+    "../../protos/perfetto/trace/perfetto:zero",
+    "../../protos/perfetto/trace/power:zero",
+    "../../protos/perfetto/trace/profiling:zero",
+    "../../protos/perfetto/trace/ps:zero",
+    "../../protos/perfetto/trace/sys_stats:zero",
+    "../../protos/perfetto/trace/track_event:zero",
+    "../base",
+    "../protozero",
+    "metrics:lib",
+  ]
+  public_deps = [
+    "../../include/perfetto/trace_processor",
+  ]
+  if (perfetto_build_standalone || build_with_chromium) {
+    sources += [
+      "export_json.cc",
+      "export_json.h",
+      "json_trace_parser.cc",
+      "json_trace_parser.h",
+      "json_trace_tokenizer.cc",
+      "json_trace_tokenizer.h",
+      "json_trace_utils.cc",
+      "json_trace_utils.h",
+    ]
+    deps += [ "../../gn:jsoncpp" ]
+  }
+}
+
+source_set("trace_processor_shell") {
+  testonly = true  # We need this for proto full.
+  deps = [
+    ":lib",
+    "../../gn:default_deps",
+    "../../gn:protobuf_full",
+    "../base",
+    "metrics:lib",
+  ]
+  if (perfetto_build_standalone) {
+    deps += [
+      "../../gn:linenoise",
+      "../../gn/standalone:gen_git_revision",
+    ]
+  }
+
+  sources = [
+    "trace_processor_shell.cc",
+  ]
+}
+
+source_set("unittests") {
+  testonly = true
+  sources = [
+    "args_table_unittest.cc",
+    "clock_tracker_unittest.cc",
+    "event_tracker_unittest.cc",
+    "filtered_row_index_unittest.cc",
+    "ftrace_utils_unittest.cc",
+    "fuchsia_trace_utils_unittest.cc",
+    "heap_profile_tracker_unittest.cc",
+    "metadata_table_unittest.cc",
+    "null_term_string_view_unittest.cc",
+    "process_table_unittest.cc",
+    "process_tracker_unittest.cc",
+    "proto_trace_parser_unittest.cc",
+    "query_constraints_unittest.cc",
+    "sched_slice_table_unittest.cc",
+    "slice_tracker_unittest.cc",
+    "span_join_operator_table_unittest.cc",
+    "sqlite3_str_split_unittest.cc",
+    "string_pool_unittest.cc",
+    "syscall_tracker_unittest.cc",
+    "systrace_parser_unittest.cc",
+    "thread_table_unittest.cc",
+    "trace_processor_impl_unittest.cc",
+    "trace_sorter_unittest.cc",
+  ]
+  deps = [
+    ":lib",
+    ":sqlite",
+    "../../gn:default_deps",
+    "../../gn:gtest_and_gmock",
+    "../../protos/perfetto/common:zero",
+    "../../protos/perfetto/trace:zero",
+    "../../protos/perfetto/trace/android:zero",
+    "../../protos/perfetto/trace/chrome:zero",
+    "../../protos/perfetto/trace/ftrace:zero",
+    "../../protos/perfetto/trace/gpu:zero",
+    "../../protos/perfetto/trace/interned_data:zero",
+    "../../protos/perfetto/trace/ps:zero",
+    "../../protos/perfetto/trace/sys_stats:zero",
+    "../../protos/perfetto/trace/track_event:zero",
+    "../base",
+    "../protozero",
+  ]
+  if (perfetto_build_standalone || build_with_chromium) {
+    sources += [
+      "export_json_unittest.cc",
+      "json_trace_tokenizer_unittest.cc",
+      "json_trace_utils_unittest.cc",
+    ]
+    deps += [ "../../gn:jsoncpp" ]
+  }
+}
+
+# Indirection target to allow modifying the path to the SQLite header.
+source_set("sqlite") {
+  sources = [
+    "sqlite.h",
+  ]
+  public_deps = [
+    "../../gn:sqlite",
+  ]
+}
+
+source_set("integrationtests") {
+  testonly = true
+  sources = [
+    "trace_database_integrationtest.cc",
+  ]
+  deps = [
+    ":lib",
+    ":sqlite",
+    "../../gn:default_deps",
+    "../../gn:gtest_and_gmock",
+    "../../protos/perfetto/trace:lite",
+    "../../protos/perfetto/trace_processor:lite",
+    "../base",
+    "../base:test_support",
+  ]
+  if (perfetto_build_standalone || build_with_chromium) {
+    deps += [ "../../gn:jsoncpp" ]
+  }
+}
+
+perfetto_fuzzer_test("trace_processor_fuzzer") {
+  testonly = true
+  sources = [
+    "trace_parsing_fuzzer.cc",
+  ]
+  deps = [
+    ":lib",
+    "../../gn:default_deps",
+    "../base",
+  ]
+}

@@ -1,0 +1,215 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module device.mojom;
+
+import "device/vr/public/mojom/vr_service.mojom";
+import "mojo/public/mojom/base/time.mojom";
+import "ui/gfx/geometry/mojo/geometry.mojom";
+
+const string kVrIsolatedServiceName = "xr_device_service";
+
+// The XRSessionController lives in the xr runtime service, and corresponds to
+// a set of the XRSession bindings.  The client is the browser process, which
+// will pause or stop sessions depending events/state such as focus or other
+// tabs requesting immersive sessions.
+// Sessions are stopped by closing the mojo connection.
+interface XRSessionController {
+  // A session may be paused temporarily for example when a non-presenting
+  // tab loses focus. When paused, a session will hand out null poses.
+  // Eventually we may hand out poses at a throttled rate instead.
+  SetFrameDataRestricted(bool restricted);
+};
+
+// The XRRuntimeEventListener lives in the xr runtime service, and allows the
+// browser to listen to state changes about a device.
+interface XRRuntimeEventListener {
+  // A device has changed its display information.
+  OnDisplayInfoChanged(device.mojom.VRDisplayInfo display_info);
+
+  // A device has indicated that it is in use.
+  OnDeviceActivated(device.mojom.VRDisplayEventReason reason) =>
+      (bool will_not_present);
+
+  // A device has indicated that it is idle.
+  OnDeviceIdle(device.mojom.VRDisplayEventReason reason);
+
+  // Called when the device exits presentation.
+  OnExitPresent();
+};
+
+struct XRRuntimeSessionOptions {
+  bool immersive;
+  bool environment_integration;
+
+  // The following options are used for permission requests and showing module
+  // install UI.
+  // TODO(crbug.com/854655): Remove these fields, and do permission checks, show
+  // module install UI in the browser process before calling out to devices.
+  int32 render_process_id;
+  int32 render_frame_id;
+
+  // This flag ensures that render paths that are only supported in WebXR are
+  // not used for WebVR 1.1. It is also used for metrics to distinguish between
+  // WebVR and WebXR APIs.
+  bool is_legacy_webvr;
+};
+
+// An XRRuntime may live in the browser process or a utility process.  The
+// browser process is the client, and may in turn expose device information to
+// render processes using vr_service interfaces, such as XRDevice.
+interface XRRuntime {
+  // Attempt to start a session. Called by the browser process, but the result
+  // will probably be passed to the renderer process to allow getting data and
+  // possibly submitting graphics without going through an extra IPC hop through
+  // the browser process.
+  RequestSession(XRRuntimeSessionOptions options) => (
+                     XRSession? session,
+                     XRSessionController? controller);
+
+  // The browser may register for changes to a device. Initial VRDisplayInfo
+  // will immediately be returned to the listener to prevent races.
+  ListenToDeviceChanges(associated XRRuntimeEventListener listener) =>
+      (VRDisplayInfo? display_info);
+
+  // Ensure that the runtime has installed most prerequisites, and is ready to
+  // start. May result in updated display info being sent to registered
+  // listeners. RequestSession will fail if this hasn't been called.
+  // NOTE: When crbug.com/980000 is resolved, GvrDevice::EnsureInitialized
+  // won't install GVR runtime; it will be installed in
+  // GvrDevice::RequestSession().
+  EnsureInitialized() => ();
+
+  SetListeningForActivate(bool listen_for_activation);
+
+  SetInlinePosesEnabled(bool enable);
+};
+
+// Represents the state of a single button or trigger.
+struct XRGamepadButton {
+  bool pressed; // Is the button currently pressed from its default position?
+  bool touched; // Is the user in contact with a button (always true if pressed)
+  double value; // How far pressed is it, from 0 to 1?
+};
+
+// Represents the state of a single controller.
+struct XRGamepad {
+  bool can_provide_orientation; // Is the controller capable of orientation?
+  bool can_provide_position; // Is the controller capable of position?
+  array<double> axes;
+  array<XRGamepadButton> buttons;
+
+  // The position/orientation of a controller, and its velocity and acceleration
+  // if available.  Members inside this may be null if not available currently.
+  VRPose? pose;
+
+  // Left/Right handed controller, or none if unknown.
+  XRHandedness hand;
+
+  // A unique (per device_id) id that allows controllers to be tracked between
+  // updates.  Useful to identify controllers as they are added/removed.
+  uint32 controller_id;
+
+  // The time at which this pose was retrieved.
+  mojo_base.mojom.TimeTicks timestamp;
+};
+
+// Represents the state of a set of controllers driven by some runtime API.
+struct XRGamepadData {
+  array<XRGamepad> gamepads;
+};
+
+// OpenVR and Oculus APIs can't run in the browser process, but the gamepad
+// polling happens there.  This interface allows gamepad polling to request
+// data from out-of-process gamepad providers, at the cost of some extra IPC
+// latency.  IsolatedXRGamepadProvider is currently implemented in the XRRuntime
+// process, and consumed by the gamepad polling thread in the browser process.
+// It will move to live in a separate XRInput process in the future.
+interface IsolatedXRGamepadProvider {
+  // Consumers should not call RequestUpdate until the previous request returns
+  // to avoid queuing up extra requests if polling and rendering are happening
+  // at different rates.  If called while an outstanding request is queued, it
+  // returns immediately with null data.
+  // Returned data is null if we aren't currently getting data from the runtime.
+  RequestUpdate() => (XRGamepadData? data);
+};
+
+// Gamepad providers may come and go as pages request or stop requesting gamepad
+// data.  IsolatedXRGamepadProviderFactory allows GamepadDataFetchers to acquire
+// new IsolatedXRGamepadProviders when needed.
+// IsolatedXRGamepadProvider is consumed in the browser process.  It is
+// currently implemented in the XRRuntime process, but will move to a separate
+// XRInput process.
+interface IsolatedXRGamepadProviderFactory {
+  // Get the IsolatedXRGamepadProvider for a specific XR runtime API (Oculus, or
+  // OpenVR, which are currently the only two that are hosted outside of the
+  // browser process).
+  GetIsolatedXRGamepadProvider(IsolatedXRGamepadProvider& provider);
+};
+
+// Represents an overlay that the browser may show on top of or instead of WebXR
+// content.  Consumed in the browser process, and implemented in the XRRuntime
+// process.
+interface ImmersiveOverlay {
+  // Request a pose.  If there is WebXR and an overlay visible at the same time,
+  // the same pose will be given to both.
+  RequestNextOverlayPose() => (device.mojom.XRFrameData pose);
+
+  // Submit a frame to show in the headset.  Only can be called when an overlay
+  // is visible.  The frame will be composited on top of WebXR content.
+  SubmitOverlayTexture(int16 frame_id, handle texture,
+      gfx.mojom.RectF left_bounds, gfx.mojom.RectF right_bounds) =>
+      (bool success);
+
+  // Allows the browser to hide WebXR content or overlays temporarily.
+  SetOverlayAndWebXRVisibility(bool overlay_visible, bool webxr_visible);
+
+  // The browser may request to be notified the browser that the current page
+  // has submitted a frame.  This call returns when the current page submits a
+  // frame.
+  // If the current page's WebXR session is not visible because the browser has
+  // made its own UI visible, the page may receive one frame's worth of pose
+  // data to unblock rendering.  This allows frame-timeout UI to show while
+  // still allowing a timed-out page to recover and start submitting frames.
+  RequestNotificationOnWebXrSubmitted() => ();
+};
+
+// XRCompositorHost lives in the XRRuntime process, and allows the browser to
+// obtain an ImmersiveOverlay to show overlay UI.  The obtained overlay will
+// disconnect when presentation ends.
+interface XRCompositorHost {
+  CreateImmersiveOverlay(ImmersiveOverlay& overlay);
+};
+
+// Notify the browser process about a set of runtimes.  The browser process
+// implements this interface to be notified about runtime changes from the XR
+// device service.
+interface IsolatedXRRuntimeProviderClient {
+  // Called when runtimes are initially enumerated, or when devices are later
+  // attached and become available.
+  OnDeviceAdded(XRRuntime runtime,
+      IsolatedXRGamepadProviderFactory gamepad_factory,
+      XRCompositorHost compositor_host,
+      device.mojom.XRDeviceId device_id);
+
+  // Called when runtimes become unavailable - for example if the hardware is
+  // disconnected or the APIs notify us that they are shutting down.
+  // device_index corresponds to display_info->index for a previously added
+  // device.
+  OnDeviceRemoved(device.mojom.XRDeviceId device_index);
+
+  // Called once after all the initial OnDeviceAdded calls are completed.
+  // This is a signal to the browser that it knows what hardware is available,
+  // and can unblock any callbacks/promises that WebXR APIs are blocked.
+  OnDevicesEnumerated();
+};
+
+// Provides access to XRRuntimes.  This is implemented in the XR device service,
+// and consumed by the browser.
+interface IsolatedXRRuntimeProvider {
+  // Register a client, and triggers OnDeviceAdded for all available runtimes,
+  // followed by OnDevicesEnumerated.
+  // Should only be called once.
+  RequestDevices(IsolatedXRRuntimeProviderClient client);
+};

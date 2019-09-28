@@ -1,0 +1,94 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module apps.mojom;
+
+import "chrome/services/app_service/public/mojom/types.mojom";
+
+// An intermediary between M app consumers (e.g. app launcher UI, intent
+// pickers) and N app providers (also known as app platforms, e.g. Android
+// apps, Linux apps and Web apps). It abstracts over platform-specific
+// implementations and allow consumers to issue generic queries (e.g. for an
+// app's name and icon) that are satisfied by the appropriate provider.
+//
+// See chrome/services/app_service/README.md.
+interface AppService {
+  // App Registry methods.
+  RegisterPublisher(Publisher publisher, AppType app_type);
+  RegisterSubscriber(Subscriber subscriber, ConnectOptions? opts);
+
+  // App Icon Factory methods.
+  LoadIcon(
+      AppType app_type,
+      string app_id,
+      IconKey icon_key,
+      IconCompression icon_compression,
+      int32 size_hint_in_dip,
+      bool allow_placeholder_icon) => (IconValue icon_value);
+
+  // App Runner methods.
+  Launch(
+      AppType app_type,
+      string app_id,
+      int32 event_flags,
+      LaunchSource launch_source,
+      int64 display_id);
+
+  SetPermission(
+      AppType app_type,
+      string app_id,
+      Permission permission);
+
+  Uninstall(
+      AppType app_type,
+      string app_id);
+
+  OpenNativeSettings(
+      AppType app_type,
+      string app_id);
+};
+
+interface Publisher {
+  // App Registry methods.
+  Connect(Subscriber subscriber, ConnectOptions? opts);
+
+  // App Icon Factory methods.
+  LoadIcon(
+      string app_id,
+      IconKey icon_key,
+      IconCompression icon_compression,
+      int32 size_hint_in_dip,
+      bool allow_placeholder_icon) => (IconValue icon_value);
+
+  // App Runner methods.
+  Launch(
+      string app_id,
+      int32 event_flags,
+      LaunchSource launch_source,
+      int64 display_id);
+
+  SetPermission(
+      string app_id,
+      Permission permission);
+
+  Uninstall(
+      string app_id);
+
+  OpenNativeSettings(
+      string app_id);
+};
+
+interface Subscriber {
+  OnApps(array<App> deltas);
+
+  // Binds this to the given request (message pipe endpoint), being to Mojo
+  // interfaces what POSIX's dup is to file descriptors.
+  //
+  // See https://groups.google.com/a/chromium.org/d/msg/chromium-mojo/nFhBzGsb5Pg/V7t_8kNRAgAJ
+  Clone(Subscriber& request);
+};
+
+struct ConnectOptions {
+  // TODO: some way to represent l10n info such as the UI language.
+};

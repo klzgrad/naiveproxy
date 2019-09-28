@@ -1,0 +1,305 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//chrome/common/features.gni")
+import("//tools/grit/grit_rule.gni")
+
+assert(!is_ios, "Chromium/iOS shouldn't use anything in //chrome")
+
+if (closure_compile) {
+  group("closure_compile") {
+    deps = [
+      "engagement:closure_compile",
+      "interventions_internals:closure_compile",
+    ]
+    if (is_linux || is_win || is_mac) {
+      deps += [
+        "bluetooth_internals:closure_compile",
+        "bookmarks:closure_compile",
+        "discards:closure_compile",
+        "downloads:closure_compile",
+        "history:closure_compile",
+        "local_ntp:closure_compile",
+        "local_state:closure_compile",
+        "management:closure_compile",
+        "ntp4:closure_compile",
+        "omnibox:closure_compile",
+        "pdf:closure_compile",
+        "print_preview:closure_compile",
+        "quota_internals:closure_compile",
+        "settings:closure_compile",
+        "signin/sync_confirmation:closure_compile",
+        "user_manager:closure_compile",
+        "welcome:closure_compile",
+      ]
+    }
+    if (is_chromeos) {
+      deps += [ "chromeos:closure_compile" ]
+    }
+    if (enable_extensions) {
+      deps += [ "extensions:closure_compile" ]
+    }
+    if (is_android) {
+      deps += [
+        "explore_sites_internals:closure_compile",
+        "feed_internals:closure_compile",
+        "offline_pages:closure_compile",
+        "snippets_internals:closure_compile",
+        "webapks:closure_compile",
+      ]
+    }
+    if (!is_android) {
+      deps += [ "app_management:closure_compile" ]
+    }
+    if (is_win || is_mac || is_desktop_linux) {
+      deps += [ "browser_switch:closure_compile" ]
+    }
+  }
+}
+
+grit("invalidations_resources") {
+  source = "invalidations_resources.grd"
+  defines = chrome_grit_defines
+  outputs = [
+    "grit/invalidations_resources.h",
+    "invalidations_resources.pak",
+  ]
+  output_dir = "$root_gen_dir/chrome"
+}
+
+grit("net_internals_resources") {
+  source = "net_internals/net_internals_resources.grd"
+  defines = chrome_grit_defines
+  outputs = [
+    "grit/net_internals_resources.h",
+    "net_internals_resources.pak",
+  ]
+  output_dir = "$root_gen_dir/chrome"
+}
+
+grit("quota_internals_resources") {
+  source = "quota_internals/quota_internals_resources.grd"
+  defines = chrome_grit_defines
+  outputs = [
+    "grit/quota_internals_resources.h",
+    "quota_internals_resources.pak",
+  ]
+  output_dir = "$root_gen_dir/chrome"
+}
+
+grit("webapks_ui_resources") {
+  source = "webapks/webapks_ui_resources.grd"
+  defines = chrome_grit_defines
+  outputs = [
+    "grit/webapks_ui_resources.h",
+    "webapks_ui_resources.pak",
+  ]
+  output_dir = "$root_gen_dir/chrome"
+}
+
+if (!is_android) {
+  grit("component_extension_resources") {
+    source = "component_extension_resources.grd"
+    defines = chrome_grit_defines
+    if (enable_hangout_services_extension) {
+      defines += [ "enable_hangout_services_extension" ]
+    }
+
+    outputs = [
+      "grit/component_extension_resources.h",
+      "grit/component_extension_resources_map.cc",
+      "grit/component_extension_resources_map.h",
+      "component_extension_resources.pak",
+    ]
+    output_dir = "$root_gen_dir/chrome"
+  }
+
+  grit("local_ntp_resources") {
+    source = "local_ntp/local_ntp_resources.grd"
+    defines = chrome_grit_defines
+    outputs = [
+      "grit/local_ntp_resources.h",
+      "local_ntp_resources.pak",
+    ]
+    output_dir = "$root_gen_dir/chrome"
+  }
+
+  grit("settings_resources") {
+    if (optimize_webui) {
+      source = "settings/settings_resources_vulcanized.grd"
+
+      # The .grd contains references to generated files.
+      source_is_generated = true
+
+      deps = [
+        "//chrome/browser/resources/settings:build",
+      ]
+      grit_flags = [
+        "-E",
+        "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
+      ]
+    } else {
+      source = "settings/settings_resources.grd"
+    }
+
+    defines = chrome_grit_defines
+    outputs = [
+      "grit/settings_resources.h",
+      "grit/settings_resources_map.cc",
+      "grit/settings_resources_map.h",
+      "settings_resources.pak",
+    ]
+    output_dir = "$root_gen_dir/chrome"
+  }
+
+  grit("downloads_resources") {
+    if (optimize_webui) {
+      source = "downloads/downloads_resources_vulcanized.grd"
+
+      deps = [
+        "//chrome/browser/resources/downloads:build",
+      ]
+    } else {
+      source = "downloads/downloads_resources.grd"
+
+      deps = [
+        "//chrome/browser/ui/webui/downloads:mojo_bindings_js",
+      ]
+    }
+
+    # The .grd contains references to generated files.
+    source_is_generated = true
+
+    grit_flags = [
+      "-E",
+      "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
+    ]
+
+    defines = chrome_grit_defines
+    outputs = [
+      "grit/downloads_resources.h",
+      "grit/downloads_resources_map.cc",
+      "grit/downloads_resources_map.h",
+      "downloads_resources.pak",
+    ]
+    output_dir = "$root_gen_dir/chrome"
+  }
+}
+
+if (is_chromeos) {
+  grit("os_settings_resources") {
+    if (optimize_webui) {
+      source = "settings/os_settings_resources_vulcanized.grd"
+
+      # The .grd contains references to generated files.
+      source_is_generated = true
+
+      deps = [
+        "//chrome/browser/resources/settings/chromeos:build",
+      ]
+
+      grit_flags = [
+        "-E",
+        "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
+      ]
+    } else {
+      source = "settings/os_settings_resources.grd"
+    }
+
+    defines = chrome_grit_defines
+    outputs = [
+      "grit/os_settings_resources.h",
+      "grit/os_settings_resources_map.cc",
+      "grit/os_settings_resources_map.h",
+      "os_settings_resources.pak",
+    ]
+    output_dir = "$root_gen_dir/chrome"
+  }
+}
+
+if (!is_android && !is_chromeos) {
+  grit("onboarding_welcome_resources") {
+    source = "welcome/onboarding_welcome_resources.grd"
+
+    defines = chrome_grit_defines
+    outputs = [
+      "grit/onboarding_welcome_resources.h",
+      "grit/onboarding_welcome_resources_map.cc",
+      "grit/onboarding_welcome_resources_map.h",
+      "onboarding_welcome_resources.pak",
+    ]
+    output_dir = "$root_gen_dir/chrome"
+  }
+}
+
+if (enable_extensions) {
+  grit("extensions_resources") {
+    if (optimize_webui) {
+      source = "extensions/extensions_resources_vulcanized.grd"
+
+      # The .grd contains references to generated files.
+      source_is_generated = true
+
+      deps = [
+        "//chrome/browser/resources/extensions:build",
+      ]
+      grit_flags = [
+        "-E",
+        "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
+      ]
+    } else {
+      source = "extensions/extensions_resources.grd"
+    }
+
+    defines = chrome_grit_defines
+    outputs = [
+      "grit/extensions_resources.h",
+      "grit/extensions_resources_map.cc",
+      "grit/extensions_resources_map.h",
+      "extensions_resources.pak",
+    ]
+    output_dir = "$root_gen_dir/chrome"
+  }
+
+  grit("sync_file_system_internals_resources") {
+    source =
+        "sync_file_system_internals/sync_file_system_internals_resources.grd"
+    defines = chrome_grit_defines
+    outputs = [
+      "grit/sync_file_system_internals_resources.h",
+      "sync_file_system_internals_resources.pak",
+    ]
+    output_dir = "$root_gen_dir/chrome"
+  }
+}
+
+if (enable_print_preview) {
+  grit("print_preview_resources") {
+    if (optimize_webui) {
+      source = "print_preview/print_preview_resources_vulcanized.grd"
+
+      # The .grd contains references to generated files.
+      source_is_generated = true
+
+      deps = [
+        "//chrome/browser/resources/print_preview:build",
+      ]
+      grit_flags = [
+        "-E",
+        "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
+      ]
+    } else {
+      source = "print_preview/print_preview_resources.grd"
+    }
+
+    defines = chrome_grit_defines
+    outputs = [
+      "grit/print_preview_resources.h",
+      "grit/print_preview_resources_map.cc",
+      "grit/print_preview_resources_map.h",
+      "print_preview_resources.pak",
+    ]
+    output_dir = "$root_gen_dir/chrome"
+  }
+}

@@ -1,0 +1,289 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+assert(is_fuchsia)
+
+import("//build/config/fuchsia/rules.gni")
+import("//build/config/fuchsia/symbol_archive.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
+import("//testing/test.gni")
+import("//tools/grit/repack.gni")
+
+declare_args() {
+  # Enables Vulkan in WebEngine (has effect only for context instances that have
+  # Vulkan loader service in the service directory).
+  web_engine_enable_vulkan = false
+}
+
+config("web_engine_implementation") {
+  defines = [ "WEB_ENGINE_IMPLEMENTATION" ]
+}
+
+mojom("mojom") {
+  sources = [
+    "on_load_script_injector.mojom",
+  ]
+  public_deps = [
+    "//mojo/public/mojom/base",
+  ]
+  visibility = [ ":*" ]
+}
+
+repack("web_engine_pak") {
+  sources = [
+    "$root_gen_dir/components/components_resources.pak",
+    "$root_gen_dir/components/strings/components_strings_en-US.pak",
+    "$root_gen_dir/content/app/resources/content_resources_100_percent.pak",
+    "$root_gen_dir/content/app/strings/content_strings_en-US.pak",
+    "$root_gen_dir/content/browser/tracing/tracing_resources.pak",
+    "$root_gen_dir/content/content_resources.pak",
+    "$root_gen_dir/mojo/public/js/mojo_bindings_resources.pak",
+    "$root_gen_dir/net/net_resources.pak",
+    "$root_gen_dir/third_party/blink/public/resources/blink_resources.pak",
+    "$root_gen_dir/third_party/blink/public/resources/blink_scaled_resources_100_percent.pak",
+    "$root_gen_dir/ui/resources/ui_resources_100_percent.pak",
+    "$root_gen_dir/ui/strings/app_locale_settings_en-US.pak",
+    "$root_gen_dir/ui/strings/ui_strings_en-US.pak",
+  ]
+
+  deps = [
+    "//components/resources:components_resources",
+    "//components/strings",
+    "//content:resources",
+    "//content/app/resources",
+    "//content/app/strings",
+    "//content/browser/tracing:resources",
+    "//mojo/public/js:resources",
+    "//net:net_resources",
+    "//third_party/blink/public:resources",
+    "//third_party/blink/public:scaled_resources_100_percent",
+    "//ui/resources",
+    "//ui/strings",
+  ]
+
+  output = "$root_out_dir/web_engine.pak"
+  visibility = [ ":*" ]
+}
+
+component("web_engine_core") {
+  deps = [
+    ":mojom",
+    ":web_engine_pak",
+    "//base",
+    "//components/version_info",
+    "//content/public/app:both",
+    "//content/public/browser",
+    "//content/public/child",
+    "//content/public/common",
+    "//content/public/renderer",
+    "//fuchsia/base",
+    "//fuchsia/base:message_port",
+    "//fuchsia/base:modular",
+    "//mojo/public/cpp/bindings",
+    "//services/network/public/cpp",
+    "//services/service_manager/sandbox",
+    "//skia/public/interfaces",
+    "//third_party/blink/public/common",
+    "//third_party/fuchsia-sdk/sdk:web",
+    "//ui/aura",
+    "//ui/base/ime",
+    "//ui/display",
+    "//ui/ozone",
+    "//ui/platform_window",
+    "//ui/wm",
+    "//ui/wm/public",
+  ]
+  data_deps = [
+    ":web_engine_pak",
+  ]
+  public_deps = [
+    "//content/public/browser",
+  ]
+  data = [
+    "$root_out_dir/web_engine.pak",
+  ]
+  configs += [ ":web_engine_implementation" ]
+  sources = [
+    "browser/context_impl.cc",
+    "browser/context_impl.h",
+    "browser/discarding_event_filter.cc",
+    "browser/discarding_event_filter.h",
+    "browser/frame_impl.cc",
+    "browser/frame_impl.h",
+    "browser/navigation_controller_impl.cc",
+    "browser/navigation_controller_impl.h",
+    "browser/web_engine_browser_context.cc",
+    "browser/web_engine_browser_context.h",
+    "browser/web_engine_browser_main.cc",
+    "browser/web_engine_browser_main.h",
+    "browser/web_engine_browser_main_parts.cc",
+    "browser/web_engine_browser_main_parts.h",
+    "browser/web_engine_content_browser_client.cc",
+    "browser/web_engine_content_browser_client.h",
+    "browser/web_engine_devtools_manager_delegate.cc",
+    "browser/web_engine_devtools_manager_delegate.h",
+    "browser/web_engine_net_log.cc",
+    "browser/web_engine_net_log.h",
+    "browser/web_engine_permission_manager.cc",
+    "browser/web_engine_permission_manager.h",
+    "browser/web_engine_remote_debugging.cc",
+    "browser/web_engine_remote_debugging.h",
+    "browser/web_engine_screen.cc",
+    "browser/web_engine_screen.h",
+    "browser/web_engine_url_request_context_getter.cc",
+    "browser/web_engine_url_request_context_getter.h",
+    "common.cc",
+    "common.h",
+    "context_provider_impl.cc",
+    "context_provider_impl.h",
+    "context_provider_main.cc",
+    "context_provider_main.h",
+    "renderer/on_load_script_injector.cc",
+    "renderer/on_load_script_injector.h",
+    "renderer/web_engine_content_renderer_client.cc",
+    "renderer/web_engine_content_renderer_client.h",
+    "web_engine_content_client.cc",
+    "web_engine_content_client.h",
+    "web_engine_export.h",
+    "web_engine_main_delegate.cc",
+    "web_engine_main_delegate.h",
+  ]
+  visibility = [
+    ":*",
+    "//fuchsia/runners:cast_runner_browsertests__exec",
+  ]
+  if (web_engine_enable_vulkan) {
+    defines = [ "WEB_ENGINE_ENABLE_VULKAN" ]
+  }
+}
+
+executable("web_engine_exe") {
+  deps = [
+    ":web_engine_core",
+    "//base",
+    "//content/public/app:both",
+    "//services/service_manager/embedder:embedder_switches",
+  ]
+  sources = [
+    "web_engine_main.cc",
+  ]
+  visibility = [ ":*" ]
+}
+
+fuchsia_package("web_engine") {
+  binary = ":web_engine_exe"
+  package_name_override = "chromium"
+  manifest = "web_engine.cmx"
+  excluded_files = [
+    "lib/libswiftshader_libEGL.so",
+    "lib/libswiftshader_libGLESv2.so",
+    "lib/libEGL.so",
+    "lib/libGLESv2.so",
+    "lib/libfuchsia_egl.so",
+  ]
+}
+
+fuchsia_package_runner("web_engine_runner") {
+  package = ":web_engine"
+  package_name_override = "chromium"
+  install_only = true
+}
+
+source_set("browsertest_core") {
+  testonly = true
+  sources = [
+    "test/web_engine_browser_test.cc",
+    "test/web_engine_browser_test.h",
+    "test/web_engine_test_launcher.cc",
+  ]
+  deps = [
+    ":web_engine_core",
+    "//content/public/browser",
+    "//content/test:test_support",
+    "//net:test_support",
+    "//testing/gtest",
+    "//third_party/fuchsia-sdk/sdk:web",
+    "//ui/ozone",
+  ]
+}
+
+test("web_engine_browsertests") {
+  sources = [
+    "browser/context_impl_browsertest.cc",
+    "browser/frame_impl_browsertest.cc",
+  ]
+  defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+  data = [
+    "test/data",
+  ]
+  deps = [
+    ":browsertest_core",
+    ":web_engine_core",
+    "//base/test:test_support",
+    "//content/public/browser",
+    "//fuchsia/base",
+    "//fuchsia/base:test_support",
+    "//net:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//third_party/fuchsia-sdk/sdk:scenic_cpp",
+    "//ui/ozone",
+  ]
+}
+
+test("web_engine_unittests") {
+  sources = [
+    "browser/frame_impl_unittest.cc",
+    "context_provider_impl_unittest.cc",
+    "fake_context.cc",
+    "fake_context.h",
+  ]
+  deps = [
+    ":web_engine_core",
+    "//base/test:run_all_unittests",
+    "//base/test:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//third_party/fuchsia-sdk/sdk:web",
+  ]
+}
+
+test("web_engine_integration_tests") {
+  manifest = "web_engine_integration_tests.cmx"
+  sources = [
+    "test_debug_listener.cc",
+    "test_debug_listener.h",
+    "test_devtools_list_fetcher.cc",
+    "test_devtools_list_fetcher.h",
+    "web_engine_debug_integration_test.cc",
+    "web_engine_integration_test.cc",
+  ]
+  data = [
+    "test/data",
+  ]
+  deps = [
+    "//base",
+    "//base/test:run_all_unittests",
+    "//fuchsia/base",
+    "//fuchsia/base:test_support",
+    "//net",
+    "//net:test_support",
+    "//third_party/fuchsia-sdk/sdk:web",
+  ]
+  package_deps = [ [
+        ":web_engine",
+        "chromium",
+      ] ]
+}
+
+if (is_official_build) {
+  symbol_archive("symbol_archive") {
+    deps = [
+      ":web_engine",
+    ]
+    ids_txt = "$root_gen_dir/fuchsia/engine/chromium/ids.txt"
+    archive_name =
+        "$root_gen_dir/fuchsia/engine/chromium/chromium.symbols.tar.bz2"
+  }
+}  # is_official_build

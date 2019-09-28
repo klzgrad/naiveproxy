@@ -1,0 +1,45 @@
+// Copyright 2019 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module content.mojom;
+
+import "components/tracing/common/background_tracing_agent.mojom";
+import "mojo/public/mojom/base/generic_pending_receiver.mojom";
+import "services/service_manager/public/mojom/service.mojom";
+
+// A control interface the browser uses to drive the behavior of all types of
+// Content child processes.
+interface ChildProcess {
+  // Tells the child process that it's safe to shutdown.
+  ProcessShutdown();
+
+  // Requests the child process send its Mach task port to the caller.
+  [EnableIf=is_mac]
+  GetTaskPort() => (handle task_port);
+
+  // Tells the child process to begin or end IPC message logging.
+  [EnableIf=ipc_logging]
+  SetIPCLoggingEnabled(bool on);
+
+  // Used to configure triggering for background tracing of child processes.
+  GetBackgroundTracingAgentProvider(
+      pending_receiver<tracing.mojom.BackgroundTracingAgentProvider> receiver);
+
+  // Force the child process to crash immediately (i.e. a hard crash, no
+  // cleanup, generating a crash report).
+  CrashHungProcess();
+
+  // Tells the child process to run an instance of a service named
+  // |service_name|, binding it to |receiver|. This is used by the browser to
+  // support launching of packaged services within Utility or GPU processes.
+  //
+  // DEPRECATED: |BindServiceInterface()| should be used instead. This will be
+  // removed soon.
+  RunService(string service_name,
+             pending_receiver<service_manager.mojom.Service> receiver);
+
+  // Requests that the process bind a receiving pipe targeting the service
+  // interface named by |receiver|.
+  BindServiceInterface(mojo_base.mojom.GenericPendingReceiver receiver);
+};

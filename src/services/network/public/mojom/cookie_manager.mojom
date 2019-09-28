@@ -1,0 +1,302 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module network.mojom;
+
+import "components/content_settings/core/common/content_settings.mojom";
+import "mojo/public/mojom/base/time.mojom";
+import "url/mojom/url.mojom";
+
+// Parameters for constructing a cookie manager.
+struct CookieManagerParams {
+  // Whether or not third party cookies should be blocked.
+  bool block_third_party_cookies = false;
+
+  // Content settings for cookies.
+  array<content_settings.mojom.ContentSettingPatternSource> settings;
+
+  // Schemes that unconditionally allow cookies from secure origins.
+  array<string> secure_origin_cookies_allowed_schemes;
+
+  // Schemes that unconditionally allow cookies from the same scheme.
+  array<string> matching_scheme_cookies_allowed_schemes;
+
+  // Schemes that unconditionally allow third party cookies.
+  array<string> third_party_cookies_allowed_schemes;
+
+  // Whether or not to allow cookies for file:// URLs. Can be overridden by
+  // CookieManager.AllowFileSchemeCookies().
+  bool allow_file_scheme_cookies = false;
+};
+
+enum CookiePriority {
+  LOW,
+  MEDIUM,
+  HIGH
+};
+
+// See https://tools.ietf.org/html/draft-ietf-httpbis-cookie-same-site-00
+// and https://tools.ietf.org/html/draft-ietf-httpbis-rfc6265bis for
+// information about same site cookie restrictions.
+// Note: Don't renumber, as these values are persisted to a database.
+enum CookieSameSite {
+  UNSPECIFIED = -1,
+  NO_RESTRICTION = 0,
+  LAX_MODE = 1,
+  STRICT_MODE = 2,
+  EXTENDED_MODE = 3
+};
+
+enum CookieSameSiteContext {
+  CROSS_SITE,
+  SAME_SITE_LAX,
+  SAME_SITE_STRICT
+};
+
+// Keep defaults here in sync with net/cookies/cookie_options.cc.
+struct CookieOptions {
+  bool exclude_httponly = true;
+  CookieSameSiteContext same_site_cookie_context = CROSS_SITE;
+  bool update_access_time = true;
+  // TODO(rdsmith): Remove this element from the mojo structure?  It's only
+  // used in the underlying net:: structure in CanonicalCookie::Create().
+  mojo_base.mojom.Time? server_time;
+  bool return_excluded_cookies = false;
+};
+
+// See net/cookies/canonical_cookie.{h,cc} for documentation.
+// Keep defaults here in sync with those files.
+struct CanonicalCookie {
+  string name;
+  string value;
+  string domain;
+  string path;
+  mojo_base.mojom.Time creation;
+  mojo_base.mojom.Time expiry;
+  mojo_base.mojom.Time last_access;
+  bool secure = false;
+  bool httponly = false;
+  CookieSameSite site_restrictions = NO_RESTRICTION;
+  CookiePriority priority = MEDIUM;
+};
+
+// Keep values here in sync with net::CanonicalCookie::CookieInclusionStatus.
+enum CookieInclusionStatus {
+  INCLUDE,
+  EXCLUDE_HTTP_ONLY,
+  EXCLUDE_SECURE_ONLY,
+  EXCLUDE_DOMAIN_MISMATCH,
+  EXCLUDE_NOT_ON_PATH,
+  EXCLUDE_SAMESITE_STRICT,
+  EXCLUDE_SAMESITE_LAX,
+  EXCLUDE_SAMESITE_EXTENDED,
+  EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX,
+  EXCLUDE_SAMESITE_NONE_INSECURE,
+  EXCLUDE_USER_PREFERENCES,
+
+  // Statuses specific to setting cookies
+  EXCLUDE_FAILURE_TO_STORE,
+  EXCLUDE_NONCOOKIEABLE_SCHEME,
+  EXCLUDE_OVERWRITE_SECURE,
+  EXCLUDE_OVERWRITE_HTTP_ONLY,
+  EXCLUDE_INVALID_DOMAIN,
+  EXCLUDE_INVALID_PREFIX,
+
+  // Please keep last
+  EXCLUDE_UNKNOWN_ERROR
+};
+
+struct CookieWithStatus {
+  CanonicalCookie cookie;
+  CookieInclusionStatus status;
+};
+
+struct CookieAndLineWithStatus {
+  CanonicalCookie? cookie;
+  string cookie_string;
+  CookieInclusionStatus status;
+};
+
+// Keep values here in sync with net::CookieStore::ChangeCause.
+// (Not typemapped to avoid forcing clients to know about net::CookieStore.)
+enum CookieChangeCause {
+  // The cookie was inserted.
+  INSERTED,
+  // The cookie was changed directly by a consumer's action.
+  EXPLICIT,
+  // The cookie was deleted, but no more details are known.
+  UNKNOWN_DELETION,
+  // The cookie was automatically removed due to an insert operation that
+  // overwrote it.
+  OVERWRITE,
+  // The cookie was automatically removed as it expired.
+  EXPIRED,
+  // The cookie was automatically evicted during garbage collection.
+  EVICTED,
+  // The cookie was overwritten with an already-expired expiration date.
+  EXPIRED_OVERWRITE
+};
+
+// Session cookies are cookies that expire at the end of the browser session.
+// That is represented in canonical cookies by a null expiry time.
+enum CookieDeletionSessionControl {
+  IGNORE_CONTROL,
+  SESSION_COOKIES,
+  PERSISTENT_COOKIES,
+};
+
+// All existing filters are ANDed together.  I.e. if there is a value for
+// created_after_time and there's a value for including_domains, only cookies
+// in including_domains that have been created after the specified date would be
+// deleted.  A value for session_control of IGNORE_CONTROL is treated the same
+// as optional values not being present for the other filters.
+// If no filters are specified then all cookies will be deleted; this can be
+// thought of as there being a default "match everything" filter which is
+// ANDed in with all other filters.
+//
+// Note that whether a domain matches a cookie or not is somewhat nuanced.  For
+// the purposes of this filter:
+//      * The host/domain cookie distinction is ignored
+//      * A cookies effective domain is considered to be the top level registry
+//        (including private registries) for the domain stored in the cookie
+//        + the next entry down.  So the effective domain for x.y.google.com
+//        would be google.com, and the effective domain for x.google.co.uk would
+//        be google.co.uk.  See the function
+//        net::registry_controlled_domains::GetDomainAndRegistry for more
+//        details.
+//      * If a cookie does not have such a top level domain (e.g. IP address
+//        or private hostname), the domain specified in the cookie (the IP
+//        address or private hostname) is used.
+struct CookieDeletionFilter {
+  // Delete cookies created after a date.
+  mojo_base.mojom.Time? created_after_time;
+
+  // Delete cookies created before a date.
+  mojo_base.mojom.Time? created_before_time;
+
+  // Delete cookies whose domains are not listed.
+  array<string>? excluding_domains;
+
+  // Deletes cookies whose domains are listed.
+  array<string>? including_domains;
+
+  // Delete cookies with a particular name.
+  string? cookie_name;
+
+  // Delete cookies from a particular host.
+  string? host_name;
+
+  // Delete cookies which match the given URL.
+  // See https://tools.ietf.org/html/rfc6265, sections 5.1.{3,4} & 5.2.{5,6}
+  // for matching rules.  In general terms, secure cookies only match
+  // https URLs, the domain must match (the cookie domain must be a suffix
+  // of the URL domain), and the path must match (the cookie path must
+  // be a prefix of the URL path).  So
+  // a cookie with {domain: ".sub.example.com", path: "/path", secure}
+  // would be deleted if the URL passed was
+  // "https://www.sub.example.com/path/path2" but not if it was
+  // "http://www.example.com/x"--in fact, that cookie wouldn't be deleted
+  // if any of the secure/domain/path attributes in the URL were changed.
+  url.mojom.Url? url;
+
+  // Delete session/persistent cookies.
+  CookieDeletionSessionControl session_control = IGNORE_CONTROL;
+};
+
+interface CookieChangeListener {
+  // TODO(rdsmith): Should this be made a batch interface?
+  OnCookieChange(CanonicalCookie cookie, CookieChangeCause cause);
+};
+
+interface CookieManager {
+  // TODO(rdsmith): Worthwhile specifying a sort order for the getters?
+
+  // Get all the cookies known to the service.
+  // Returned cookie list is sorted first by path length (longest first)
+  // and second by creation time.
+  // TODO(rdsmith): There are consumers that rely on this behavior, but
+  // for this function it doesn't make a lot of sense not to also sort
+  // on origin.  Should the returned cookies also be sorted by origin?
+  GetAllCookies() => (array<CanonicalCookie> cookies);
+
+  // Get all cookies for the specified URL and cookie options.
+  // Returned cookie list is sorted first by path length (longest first)
+  // and second by creation time. If the |return_excluded_cookies| option is set
+  // in the options, |excluded_cookies| with be a list of cookies that were
+  // blocked from being sent along with the reason each cookie was blocked. By
+  // default, that option is not set and |excluded_cookies| is an empty list.
+  GetCookieList(url.mojom.Url url, CookieOptions cookie_options)
+      => (array<CanonicalCookie> cookies,
+          array<CookieWithStatus> excluded_cookies);
+
+  // Set a cookie.  |source_scheme| is used to check whether existing secure
+  // cookies can be overwritten (secure cookies may be created from a
+  // non-secure source), and whether the scheme is permitted to use cookies in
+  // the first place.  |cookie_options| indicates whether http_only
+  // or SameSite cookies may be overwritten. If a cookie is not permitted to be
+  // set, |status| will indicate why it was blocked. If the cookie is permitted,
+  // |status| will be set to INCLUDE.
+  SetCanonicalCookie(CanonicalCookie cookie, string source_scheme,
+                     CookieOptions cookie_options)
+      => (CookieInclusionStatus status);
+
+  // Delete a cookie. Returns true if a cookie was deleted.
+  DeleteCanonicalCookie(CanonicalCookie cookie) => (bool success);
+
+  // Delete a set of cookies matching the passed filter.
+  // Returns the number of cookies deleted.
+  DeleteCookies(CookieDeletionFilter filter) => (uint32 num_deleted);
+
+  // Subscribes the given listener to changes to a cookie.
+  //
+  // The subscription is canceled by closing the CookieChangeListener's pipe.
+  //
+  // Note that if the caller may be racing with other uses of the cookie store,
+  // it should follow the subscription request with a probe of the relevant
+  // information about the tracked cookie, to make sure that a change to the
+  // cookie did not happen right before the listener was registered.
+  //
+  // TODO(rdsmith): Should this have a filter to register for a lot of
+  // notifications at once?  Maybe combine with the deletion filter?
+  // TODO(rdsmith): Describe the performance implications of using this meethod.
+  // The comments in CookieMonster::AddCallbackForCookie look pretty scary.
+  AddCookieChangeListener(
+      url.mojom.Url url,
+      string name,
+      CookieChangeListener listener);
+
+  // Subscribes the given listener to changes to this CookieManager's cookies.
+  //
+  // The subscription is canceled by closing the CookieChangeListener's pipe.
+  //
+  // TODO(rdsmith): Should this have a filter to register for a lot of
+  // notifications at once?  Maybe combine with the deletion filter?
+  AddGlobalChangeListener(CookieChangeListener notification_pointer);
+
+  // Clone the interface for use somewhere else.  After this call,
+  // requests to the same implementation may be posted to the other side
+  // of the pipe new_interface was configured on.
+  CloneInterface(CookieManager& new_interface);
+
+  // Flush the backing store (if any) to disk.
+  FlushCookieStore() => ();
+
+  // Configure this CookieManager to allow/disallow setting cookies for file://
+  // URLs. If this is not called, the CookieManager follows
+  // CookieManagerParams.allow_file_scheme_cookies. This should be called before
+  // the first use of the backing store, otherwise this will have no effect on
+  // the CookieManager, returning false to indicate so.
+  AllowFileSchemeCookies(bool allow) => (bool success);
+
+  // Sets content settings for cookies. These are used to determine cookie
+  // access and cookie deletion behavior.
+  SetContentSettings(
+      array<content_settings.mojom.ContentSettingPatternSource> settings);
+
+  // Instructs the cookie store to not discard session only cookies on shutdown.
+  SetForceKeepSessionState();
+
+  // Enables/Disables blocking of third-party cookies.
+  BlockThirdPartyCookies(bool block);
+};

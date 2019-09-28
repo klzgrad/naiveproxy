@@ -1,0 +1,519 @@
+// Copyright 2015 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module device.mojom;
+
+import "device/gamepad/public/mojom/gamepad.mojom";
+import "mojo/public/mojom/base/time.mojom";
+import "gpu/ipc/common/mailbox_holder.mojom";
+import "gpu/ipc/common/sync_token.mojom";
+import "ui/display/mojom/display.mojom";
+import "ui/gfx/geometry/mojo/geometry.mojom";
+import "ui/gfx/mojo/gpu_fence_handle.mojom";
+import "ui/gfx/mojo/transform.mojom";
+
+//
+// WebXR interfaces
+//
+
+// TODO(https://crbug.com/966099): Use EnableIf to only define values on
+// platforms that have implementations.
+// XRDeviceId is used in metrics, so don't reorder.
+enum XRDeviceId {
+  WEB_TEST_DEVICE_ID = 0, // Fake device used by web_tests.
+  FAKE_DEVICE_ID = 1, // Fake device used in unit tests.
+  ORIENTATION_DEVICE_ID = 2,
+  GVR_DEVICE_ID = 3,
+  [EnableIf=enable_openvr] OPENVR_DEVICE_ID = 4,
+  [EnableIf=enable_oculus_vr] OCULUS_DEVICE_ID = 5,
+  [EnableIf=enable_windows_mr] WINDOWS_MIXED_REALITY_ID = 6,
+  ARCORE_DEVICE_ID = 7,
+  [EnableIf=enable_openxr] OPENXR_DEVICE_ID = 8,
+};
+
+enum XRHandedness {
+  NONE = 0,
+  LEFT = 1,
+  RIGHT = 2
+};
+
+enum XRTargetRayMode {
+  GAZING = 1,
+  POINTING = 2,
+  TAPPING = 3
+};
+
+struct XRSessionOptions {
+  bool immersive;
+  bool environment_integration;
+
+  // This flag ensures that render paths that are only supported in WebXR are
+  // not used for WebVR 1.1. It is also used for metrics to distinguish between
+  // WebVR and WebXR APIs.
+  bool is_legacy_webvr;
+};
+
+// This structure contains all the mojo interfaces for different kinds of
+// XRSession. The only interface required by all sessions is the
+// XRFrameDataProvider. It must always be present. Other interfaces are set as
+// apropriate based on the session creation options. (for example, an immersive
+// session ought to have a XRPresentationConnection to submit the frames to the
+// immersive environment).
+// The XRSessionClient request must be fulfilled for the session to get
+// information about the device it is connected to, such as focus and blur
+// events, changes to view or stage parameters, or exit present calls initiated
+// by the device.
+struct XRSession {
+  XRFrameDataProvider data_provider;
+  // TODO(http://crbug.com/842025) Move where the client_request gets set to the
+  // device process then mark this as non-optional.
+  XRSessionClient&? client_request;
+  // TODO(http://crbug.com/842025) Move the information that is sent in display
+  // info to more sensible places so that this doesn't need to be sent here.
+  VRDisplayInfo display_info;
+  XRPresentationConnection? submit_frame_sink;
+
+  // Indicates whether the device backing this session sends input events solely
+  // via eventing (as opposed to polling).
+  bool uses_input_eventing;
+};
+
+// This structure contains the infomation and interfaces needed to create a two
+// way connection between the renderer and a device to synchronize and submit
+// frames to a sink outside of Chrome.
+struct XRPresentationConnection {
+  XRPresentationProvider provider;
+  XRPresentationClient& client_request;
+  XRPresentationTransportOptions transport_options;
+};
+
+struct XRInputSourceDescription {
+  XRTargetRayMode target_ray_mode;
+  XRHandedness handedness;
+  bool emulated_position;
+
+  // Transform from the grip matrix to the pointer's origin and orientation.
+  gfx.mojom.Transform? pointer_offset;
+};
+
+struct XRInputSourceState {
+  uint32 source_id;
+
+  // Description of this input source's behavior. Should be mostly static, only
+  // need periodic updates.
+  XRInputSourceDescription? description;
+
+  // Transform to the controllers grip (users palm) from start space origin.
+  gfx.mojom.Transform? grip;
+
+  // Describes the current state of the primary input.
+  bool primary_input_pressed;
+
+  // Indicates if the input's primary input has been released (clicked) since
+  // the last report. May indicate that the button was pressed and released in
+  // the space of a single frame, so it may not have been preceeded by a
+  // primary_input_pressed = true;
+  bool primary_input_clicked;
+
+  // Contains information about advanced input state such as additional buttons,
+  // triggers, touch sensors, joysticks, touchpads, and vibration actuators. If
+  // the controller has none of these capabilities, then this field will be
+  // null. The information is a snapshot of the controller state that was taken
+  // at the time corresponding to the timestamp field's value.
+  Gamepad? gamepad;
+};
+
+//
+// WebVR/WebXR shared interfaces
+//
+
+// A field of view, given by 4 degrees describing the view from a center point.
+// For a typical field of view that contains the center point, all angles are
+// positive.
+struct VRFieldOfView {
+  float up_degrees;
+  float down_degrees;
+  float left_degrees;
+  float right_degrees;
+};
+
+// A display's position, orientation, velocity, and acceleration state at the
+// given timestamp.
+struct VRPose {
+  gfx.mojom.Quaternion? orientation;
+  gfx.mojom.Point3F? position;
+
+  // Velocity/Acceleration is in global coordinates, as rad/s.
+  gfx.mojom.Vector3dF? angular_velocity;
+  gfx.mojom.Vector3dF? linear_velocity;
+  gfx.mojom.Vector3dF? angular_acceleration;
+  gfx.mojom.Vector3dF? linear_acceleration;
+
+  // For WebXR sessions only, reports the state of all active input devices
+  // synced with the head pose.
+  array<XRInputSourceState>? input_state;
+
+  // Indicates that a reset pose event was triggered, either by device specific
+  // UI or by some other method, and handled on the browser side, and the
+  // renderer should now bubble up an event to the WebXR Device API.
+  bool pose_reset;
+};
+
+struct XRRay {
+  gfx.mojom.Point3F origin;
+  gfx.mojom.Vector3dF direction;
+};
+
+struct XRHitResult {
+  gfx.mojom.Transform hit_matrix;
+};
+
+struct VRDisplayCapabilities {
+  bool has_position;
+  bool has_external_display;
+
+  // Indicates whether the display can actively show imagery on a headset.
+  bool can_present;
+
+  // Whether the display gathers data about the environment (for AR like
+  // planes, point clouds, meshes, etc.). The backend will decide whether
+  // it needs to provide camera frames or not based on whether it is a
+  // see-through HMD or camera-based AR system.
+  bool can_provide_environment_integration;
+};
+
+// Information about the optical properties for an eye in a VRDisplay.
+struct VREyeParameters {
+  VRFieldOfView field_of_view;
+  gfx.mojom.Vector3dF offset;
+  uint32 render_width;
+  uint32 render_height;
+};
+
+struct VRStageParameters {
+  gfx.mojom.Transform standing_transform;
+  float size_x;
+  float size_z;
+
+  // If present, indicates that the device supports a bounded reference space.
+  // The points are expected to be in the "standing" space (i.e. there should be
+  // no need to transform them by the accompanying standing transform) and
+  // in a clockwise winding order.
+  // This should supersede size_x/size_z if they are set.
+  array<gfx.mojom.Point3F>? bounds;
+};
+
+struct VRDisplayInfo {
+  XRDeviceId id;
+  string display_name;
+  VRDisplayCapabilities capabilities;
+  VRStageParameters? stage_parameters;
+  // Parameters required to distort a scene for viewing in a VR headset. Only
+  // required for devices which have the can_present capability.
+  VREyeParameters? left_eye;
+  VREyeParameters? right_eye;
+  float webvr_default_framebuffer_scale = 1.0;
+  float webxr_default_framebuffer_scale = 1.0;
+};
+
+// Frame transport method from the Renderer's point of view.
+enum XRPresentationTransportMethod {
+  NONE = 0,
+
+  // Renderer should create a new texture handle (Windows) or
+  // texture mailbox (Android Surface path) containing the
+  // frame's image and supply that as a submitFrame argument.
+  SUBMIT_AS_TEXTURE_HANDLE = 1,
+  SUBMIT_AS_MAILBOX_HOLDER = 2,
+
+  // Renderer should draw directly into a texture mailbox
+  // provided for each frame in OnVSync.
+  DRAW_INTO_TEXTURE_MAILBOX = 3,
+};
+
+struct XRPresentationTransportOptions {
+  XRPresentationTransportMethod transport_method;
+
+  // Booleans indicating which of the XRPresentationClient callbacks
+  // are in use. Default is false, the device implementation should set
+  // the ones to true that it needs and can ignore the rest.
+  bool wait_for_transfer_notification;
+  bool wait_for_render_notification;
+  bool wait_for_gpu_fence;
+};
+
+enum XRPlaneOrientation {
+  UNKNOWN = 0,
+  HORIZONTAL = 1,
+  VERTICAL = 2
+};
+
+struct XRPlanePointData {
+  float x;
+  float z;
+};
+
+struct XRPlaneData {
+  // Unique (per session) identifier of the plane.
+  int32 id;
+
+  // Plane orientation relative to gravity.
+  XRPlaneOrientation orientation;
+
+  // Pose of the plane's center. Defines new coordinate space.
+  // Y axis of the coordinate space describes plane's normal, the rotation of
+  // X and Z around the Y axis is arbitrary.
+  VRPose pose;
+
+  // Vertices of 2D convex polygon approximating the plane.
+  array<XRPlanePointData> polygon;
+};
+
+// Struct containing information about existing & updated planes in frame N.
+// If the plane was removed between frame N-1 and N, its ID will not be present
+// in all_plane_ids.
+struct XRPlaneDetectionData {
+  // Array with ids of all planes.
+  array<int32> all_planes_ids;
+
+  // Array with plane data for updated planes.
+  array<XRPlaneData> updated_planes_data;
+};
+
+// The data needed for each animation frame of an XRSession.
+struct XRFrameData {
+  // General XRSession value
+
+  // The pose may be null if the device lost tracking. The XRFrameData can still
+  // have other data, such as pass through camera image.
+  VRPose? pose;
+  // TODO(https://crbug.com/838515): Is this delta since the last
+  // frame? OR an unspecified origin? Something else?
+  mojo_base.mojom.TimeDelta time_delta;
+  // The buffer_holder is used for sending data imagery back and forth across
+  // the process boundary. For application with pass through camera, it holds
+  // the camera image to be passed to the renderer. For immersive sessions, it
+  // is the place for the renderer to draw into to pass imagery to the device
+  // for rendering.
+  gpu.mojom.MailboxHolder? buffer_holder;
+
+  // Exclusive session values
+
+  // The frame_id maps frame data to a frame arriving from the compositor. IDs
+  // will be reused after the frame arrives from the compositor. Negative IDs
+  // imply no mapping.
+  int16 frame_id;
+
+  // Eye parameters may be provided per-frame for some runtimes.  If both of
+  // these are null, it indicates that there was no change since the previous
+  // frame.  If either are non-null, it indicates that data has changed. If only
+  // one is null, it indicates that the data has changed and the display is
+  // mono. Some hardware have sliders to adjust the displays for the eyes, so
+  // Oculus, Vive, and Samsung headsets may have differen't eye offsets for each
+  // frame. These need to be synchronized with a frame because the runtimes
+  // distort textures assuming the view matrix they handed out was used for
+  // rendering.
+  VREyeParameters? left_eye;
+  VREyeParameters? right_eye;
+
+  // Stage parameters may be provided per-frame, or only re-computed
+  // periodically.  However, setting the stage parameters to null is perfectly
+  // valid in some cases (e.g. we've lost tracking), so we can't just use
+  // whether they are present or not to indicate that they have been updated
+  // so we have an extra flag to indicate to us that they have been updated.
+  bool stage_parameters_updated;
+  VRStageParameters? stage_parameters;
+
+  // Detected plane information. Only present if plane detection is enabled.
+  XRPlaneDetectionData? detected_planes_data;
+};
+
+enum VRDisplayEventReason {
+  NONE = 0,
+  NAVIGATION = 1,
+  MOUNTED = 2,
+  UNMOUNTED = 3
+};
+
+// Interface for requesting XRDevice interfaces and registering for
+// notifications that the XRDevice has changed
+interface VRService {
+  // Returns the XRDevice interface which is used for creating XRSessions. This
+  // is not expected to be called once per renderer, unless the returned
+  // XRDevice is destroyed, then it might be called again to get another one.
+  RequestDevice() => (XRDevice? device);
+  // Optionally supply a VRServiceClient to listen for changes to the XRDevice.
+  // The last provided listener will have events called on it.
+  SetClient(VRServiceClient client);
+
+  // WebVR 1.1 functionality compatibility method. To stop listening pass a null
+  // client.
+  SetListeningForActivate(VRDisplayClient? client);
+};
+
+// The interface for the renderer to listen to top level XR events, events that
+// can be listened to and triggered without the renderer calling requestDevice.
+interface VRServiceClient {
+  // Signals changes to the available physical device runtimes.
+  OnDeviceChanged();
+};
+
+enum RequestSessionError {
+  ORIGIN_NOT_SECURE = 1,
+  IMMERSIVE_SESSION_REQUEST_FROM_OFF_FOCUS_PAGE = 2,
+  EXISTING_IMMERSIVE_SESSION = 3,
+  INVALID_CLIENT = 4,
+  USER_DENIED_CONSENT = 5,
+  NO_RUNTIME_FOUND = 6,
+  UNKNOWN_RUNTIME_ERROR = 7
+};
+
+union RequestSessionResult {
+  XRSession session;
+  RequestSessionError failure_reason;
+};
+
+// Supplies XRSessions and session support information. Implemented in the
+// browser process, consumed in the renderer process.
+interface XRDevice {
+  // Request to initialize a session in the browser process. If successful, the
+  // XRSession struct with the requisite interfaces will be returned.
+  RequestSession(XRSessionOptions options) => (RequestSessionResult result);
+  SupportsSession(XRSessionOptions options) => (bool supports_session);
+
+  // WebVR 1.1 functionality compatibility method. Returns VRDisplayInfo for an
+  // immersive session if immersive is supported. If (and only if) immersive is
+  // not supported, will return a nullptr. This call might cause device specific
+  // UI to appear.
+  GetImmersiveVRDisplayInfo() => (VRDisplayInfo? info);
+
+  ExitPresent();
+};
+
+// Provides functionality for integrating environment information into an
+// XRSession. For example, some AR sessions would implement hit test to allow
+// developers to get the information about the world that its sensors supply.
+interface XREnvironmentIntegrationProvider {
+  // Performs a raycast into the scene and returns a list of XRHitResults sorted
+  // from closest to furthest hit from the ray. Each hit result contains a
+  // hit_matrix containing the transform of the hit where the rotation
+  // represents the normal of the surface hit.
+  // An empty result list means there were no hits. If a nullopt is returned,
+  // there was an error.
+  RequestHitTest(XRRay ray) => (array<XRHitResult>? results);
+};
+
+// Provides a mechanism for a channel to plumb up any button click events
+// separately from polling, to provide better latency/position tracking for
+// those events.
+interface XRInputSourceButtonListener {
+  OnButtonEvent(XRInputSourceState input_source);
+};
+
+struct XRFrameDataRequestOptions {
+  // Controls whether XRFrameData.detected_planes should be populated by the
+  // request to XRFrameDataProvider.GetFrameData().
+  bool include_plane_data;
+};
+
+// Provides the necessary functionality for a WebXR session to get data for
+// drawing frames. The kind of data it gets depends on what kind of session was
+// requested.
+// This interface is hosted in the Browser process, but will move to a sandboxed
+// utility process on Windows.  The render process communicates with it.
+interface XRFrameDataProvider {
+  // frame_data is optional and will not be set if and only if the call fails
+  // for some reason, such as device disconnection.
+  GetFrameData(XRFrameDataRequestOptions? options) => (XRFrameData? frame_data);
+  GetEnvironmentIntegrationProvider(
+      associated XREnvironmentIntegrationProvider& environment_provider);
+  SetInputSourceButtonListener(
+      associated XRInputSourceButtonListener? event_listener);
+};
+
+// Provides the necessary functionality for sending frames to a headset.
+// This interface is hosted in the Browser process, but will move to a sandboxed
+// utility process on Windows.  The render process communicates with it.
+interface XRPresentationProvider {
+  // This function tells the device which parts of the canvas should be rendered
+  // to which view.
+  UpdateLayerBounds(int16 frame_id, gfx.mojom.RectF left_bounds,
+                    gfx.mojom.RectF right_bounds, gfx.mojom.Size source_size);
+
+  // Call this if the animation loop exited without submitting a frame to
+  // ensure that every GetFrameData has a matching Submit call. This happens for
+  // WebXR if there were no drawing operations to the opaque framebuffer, and
+  // for WebVR 1.1 if the application didn't call SubmitFrame. Usable with any
+  // XRPresentationTransportMethod. This path does *not* call the
+  // SubmitFrameClient methods such as OnSubmitFrameTransferred. This is
+  // intended to help separate frames while presenting, it may or may not
+  // be called for the last animating frame when presentation ends.
+  SubmitFrameMissing(int16 frame_id, gpu.mojom.SyncToken sync_token);
+
+  // XRPresentationTransportMethod SUBMIT_AS_MAILBOX_HOLDER
+  SubmitFrame(int16 frame_id, gpu.mojom.MailboxHolder mailbox_holder,
+              mojo_base.mojom.TimeDelta time_waited);
+
+  // XRPresentationTransportMethod SUBMIT_AS_TEXTURE_HANDLE
+  // TODO(https://crbug.com/676224): Support preprocessing of mojom files, since
+  // this is Windows only.
+  SubmitFrameWithTextureHandle(int16 frameId, handle texture);
+
+  // XRPresentationTransportMethod DRAW_INTO_TEXTURE_MAILBOX
+  SubmitFrameDrawnIntoTexture(int16 frameId, gpu.mojom.SyncToken sync_token,
+                              mojo_base.mojom.TimeDelta time_waited);
+};
+
+// After submitting a frame, the XRPresentationProvider will notify the client
+// about several stages of the render pipeline.  This allows pipelining
+// efficiency.  Following XRPresentationProvider::Submit*, the submitted frame
+// will be transferred (read from, perhaps copied to another texture), and then
+// rendered (submitted to the underlying VR API).
+// The client lives in the render process.
+//
+// See XRPresentationTransportOptions which configures which of these
+// callbacks are in use.
+interface XRPresentationClient {
+  // The XRPresentationProvider calls this to indicate that the submitted frame
+  // has been transferred, so the backing data (mailbox or GpuMemoryBuffer) can
+  // be reused or discarded.  Note that this is a convenience/optimization
+  // feature, not a security feature - if a site discards the data early we may
+  // drop a frame, but nothing will otherwise misbehave.
+  // When the frame wasn't successfully transferred, the client should create a
+  // new mailbox/GpuMemoryBuffer rather than reusing an existing one to recover
+  // for subsequent frames.
+  OnSubmitFrameTransferred(bool success);
+
+  // The XRPresentationProvider calls this after the frame was handed off to the
+  // underlying VR API. This allows some pipelining of CPU/GPU work, while
+  // delaying expensive tasks for a subsequent frame until the current frame has
+  // completed.
+  OnSubmitFrameRendered();
+
+  // This callback provides a GpuFence corresponding to the previous frame's
+  // rendering completion, intended for use with a server wait issued before
+  // the following wait to prevent its rendering work from competing with
+  // the previous frame.
+  OnSubmitFrameGpuFence(gfx.mojom.GpuFenceHandle gpu_fence_handle);
+};
+
+// Functions for pushing device information to the sessions.
+interface XRSessionClient {
+  OnChanged(VRDisplayInfo display);
+  OnExitPresent();
+  OnBlur();
+  OnFocus();
+};
+
+// Backwards compatibility events for WebVR 1.1. These are expected to not be
+// used for WebXR.
+interface VRDisplayClient {
+  // Inform the renderer that a headset has sent a signal indicating that the
+  // user has put it on. Returns an indicator of whether or not the page
+  // actually started a WebVR 1.1 presentation.
+  OnActivate(VRDisplayEventReason reason) => (bool will_not_present);
+  // Inform the renderer that a headset has sent a signal indicating that the
+  // user stopped using a headset.
+  OnDeactivate(VRDisplayEventReason reason);
+};

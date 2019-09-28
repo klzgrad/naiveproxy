@@ -1,0 +1,284 @@
+# Copyright (C) 2017 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("perfetto.gni")
+import("proto_library.gni")
+if (perfetto_build_standalone || perfetto_build_with_android) {
+  import("//gn/standalone/sanitizers/vars.gni")
+} else {
+  import("//build/config/sanitizers/sanitizers.gni")
+}
+
+# All targets should depend on this target to inherit the right flags and
+# include directories.
+group("default_deps") {
+  public_configs = [ ":default_config" ]
+  if (perfetto_build_standalone || perfetto_build_with_android) {
+    public_deps = [
+      "//gn/standalone/libc++:deps",
+      "//gn/standalone/sanitizers:deps",
+    ]
+  }
+}
+
+# The config that all targets in the perfetto codebase inherit by virtue of
+# having explicit deps on //gn:default_deps. This config is NOT propagated up to
+# embedders that depend on perfetto (e.g. chrome). :public_config (see below) is
+# used for that.
+config("default_config") {
+  configs = [ ":public_config" ]
+  defines = [ "PERFETTO_IMPLEMENTATION" ]
+  include_dirs = [ ".." ]
+
+  if (build_with_chromium && is_android) {
+    # Included for __android_log_print
+    libs = [ "log" ]
+  }
+}
+
+# This config is propagated to embedders via libperfetto. It's also included in
+# the default_config above.
+config("public_config") {
+  include_dirs = [
+    "../include",
+
+    # The below are needed due to generated protobuf headers including other
+    # headers with a path relative to the perfetto root.
+    "${root_gen_dir}/${perfetto_root_path}/protos",
+  ]
+
+  defines = []
+
+  if (perfetto_build_with_android) {
+    defines += [ "PERFETTO_BUILD_WITH_ANDROID" ]
+  } else if (perfetto_build_with_embedder) {
+    defines += [ "PERFETTO_BUILD_WITH_EMBEDDER" ]
+
+    if (build_with_chromium) {
+      defines += [ "PERFETTO_BUILD_WITH_CHROMIUM" ]
+    }  # if (build_with_chromium)
+
+    if (is_component_build) {
+      defines += [ "PERFETTO_SHARED_LIBRARY" ]
+    }  # if (is_component_build)
+  }  # if (build_with_embedder)
+
+  if (perfetto_force_dlog == "on") {
+    defines += [ "PERFETTO_FORCE_DLOG=1" ]
+  } else if (perfetto_force_dlog == "off") {
+    defines += [ "PERFETTO_FORCE_DLOG=0" ]
+  }
+}
+
+config("asan_instrumentation") {
+  if (use_sanitizer_configs_without_instrumentation) {
+    defines = [ "ADDRESS_SANITIZER_WITHOUT_INSTRUMENTATION" ]
+  }
+}
+
+if (perfetto_build_with_embedder) {
+  if (is_win) {
+    system_include_flag = "-imsvc"
+  } else {
+    system_include_flag = "-isystem"
+  }
+}
+
+config("gtest_config") {
+  if (perfetto_build_with_embedder) {
+    cflags = [
+      # Using -isystem instead of include_dirs (-I), so we don't need to
+      # suppress warnings coming from third-party headers. Doing so would mask
+      # warnings in our own code.
+      system_include_flag,
+      rebase_path("//testing/gtest/include"),
+      system_include_flag,
+      rebase_path("//third_party/googletest/src/googletest/include"),
+    ]
+  }
+}
+
+config("gmock_config") {
+  if (perfetto_build_with_embedder) {
+    cflags = [
+      # Using -isystem instead of include_dirs (-I), so we don't need to
+      # suppress warnings coming from third-party headers. Doing so would mask
+      # warnings in our own code.
+      system_include_flag,
+      rebase_path("//testing/gmock/include"),
+      system_include_flag,
+      rebase_path("//third_party/googletest/src/googlemock/include"),
+    ]
+  }
+}
+
+group("gtest_and_gmock") {
+  testonly = true
+
+  public_configs = [
+    ":gtest_config",
+    ":gmock_config",
+  ]
+
+  if (perfetto_build_standalone || perfetto_build_with_android) {
+    public_deps = [
+      "//buildtools:gmock",
+      "//buildtools:gtest",
+    ]
+  } else {
+    public_deps = [
+      "//testing/gmock",
+      "//testing/gtest",
+    ]
+  }
+}
+
+group("gtest_main") {
+  testonly = true
+
+  if (perfetto_build_standalone || perfetto_build_with_android) {
+    public_deps = [
+      "//buildtools:gtest_main",
+    ]
+  } else if (build_with_chromium) {
+    public_deps = [
+      "//base/test:run_all_unittests",
+    ]
+  } else {
+    public_deps = [
+      "//testing/gtest:gtest_main",
+    ]
+  }
+}
+
+group("sqlite") {
+  if (perfetto_build_standalone || perfetto_build_with_android) {
+    public_deps = [
+      "//buildtools:sqlite",
+    ]
+  } else if (build_with_chromium) {
+    public_deps = [
+      "//third_party/sqlite:sqlite",
+    ]
+  }
+}
+
+# protoc compiler library, for building protoc plugins on the host.
+if (current_toolchain == host_toolchain) {
+  group("protoc_lib") {
+    public_deps = [
+      "${perfetto_protobuf_target_prefix}:protoc_lib",
+    ]
+  }
+
+  group("protoc") {
+    public_deps = [
+      "${perfetto_protobuf_target_prefix}:protoc",
+    ]
+  }
+}
+
+group("protobuf_full") {
+  testonly = true
+  public_deps = [
+    "${perfetto_protobuf_target_prefix}:protobuf_full",
+  ]
+}
+
+group("protobuf_lite") {
+  public_deps = [
+    "${perfetto_protobuf_target_prefix}:protobuf_lite",
+  ]
+}
+
+# For now JsonCpp is supported only in standalone and Chrome builds,
+# not in Android.
+group("jsoncpp") {
+  if (perfetto_build_standalone) {
+    public_configs = [ "//buildtools:jsoncpp_config" ]
+    public_deps = [
+      "//buildtools:jsoncpp",
+    ]
+  } else if (build_with_chromium) {
+    public_deps = [
+      "//third_party/jsoncpp:jsoncpp",
+    ]
+  }
+}
+
+group("zlib") {
+  if (perfetto_build_standalone || perfetto_build_with_android) {
+    public_configs = [ "//buildtools:zlib_config" ]
+    public_deps = [
+      "//buildtools:zlib",
+    ]
+  } else if (build_with_chromium) {
+    public_configs = [ "//third_party/zlib:zlib_config" ]
+    public_deps = [
+      "//third_party/zlib",
+    ]
+  }
+}
+
+# The Google C++ Benchmark library.
+# Only avilable in standalone builds.
+group("benchmark") {
+  testonly = true
+  if (perfetto_build_standalone) {
+    public_deps = [
+      "//buildtools:benchmark",
+    ]
+  }
+}
+
+# Libbacktrace, used for printing stack traces from crash handler, only in
+# standalone debug builds.
+group("libbacktrace") {
+  if (perfetto_build_standalone && (is_linux || is_android)) {
+    public_deps = [
+      "//buildtools:libbacktrace",
+    ]
+  }
+}
+
+# Used by the trace_processor_shell for REPL history.
+# Only avilable in standalone builds.
+group("linenoise") {
+  if (perfetto_build_standalone && (is_linux || is_android || is_mac)) {
+    public_deps = [
+      "//buildtools:linenoise",
+    ]
+  }
+}
+
+# Only used by the src/profiling in standalone and android builds.
+group("libunwindstack") {
+  if (perfetto_build_standalone || perfetto_build_with_android) {
+    public_configs = [ "//buildtools:libunwindstack_config" ]
+    public_deps = [
+      "//buildtools:libunwindstack",
+    ]
+  }
+}
+
+# Used by fuzzers.
+if (use_libfuzzer) {
+  group("libfuzzer") {
+    if (perfetto_build_standalone) {
+      public_deps = [
+        "//buildtools:libfuzzer",
+      ]
+    }
+  }
+}

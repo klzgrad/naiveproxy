@@ -1,0 +1,69 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/buildflag_header.gni")
+import("//sandbox/features.gni")
+import("//testing/libfuzzer/fuzzer_test.gni")
+
+# Several targets want to include this header file. We separate it out
+# here so multiple targets can depend on it.
+source_set("sandbox_export") {
+  sources = [
+    "sandbox_export.h",
+  ]
+}
+
+source_set("common") {
+  sources = [
+    "constants.h",
+  ]
+}
+
+# Meta-target that forwards to the proper platform one.
+group("sandbox") {
+  if (is_win) {
+    public_deps = [
+      "//sandbox/win:sandbox",
+    ]
+  } else if (is_mac) {
+    public_deps = [
+      "//sandbox/mac:seatbelt",
+      "//sandbox/mac:seatbelt_extension",
+      "//sandbox/mac:system_services",
+      "//sandbox/mac/mojom",
+    ]
+  } else if (is_linux || is_android) {
+    public_deps = [
+      "//sandbox/linux:sandbox",
+    ]
+  }
+}
+
+buildflag_header("sandbox_buildflags") {
+  header = "sandbox_buildflags.h"
+  flags = [ "USE_SECCOMP_BPF=$use_seccomp_bpf" ]
+}
+
+# This target must be here and not in win/ otherwise it would require a full
+# parse of win/BUILD.gn which fails on non-Windows platforms.
+#
+# Although the code is Windows-based, the fuzzer is designed to work on Linux,
+# so do not disable this fuzzer on non-Windows platforms.
+fuzzer_test("sandbox_ipc_fuzzer") {
+  set_sources_assignment_filter([])
+  sources = [
+    "win/fuzzer/fuzzer_types.h",
+    "win/fuzzer/sandbox_ipc_fuzzer.cc",
+    "win/src/crosscall_server.cc",
+    "win/src/ipc_args.cc",
+  ]
+  if (!is_win) {
+    defines = [ "SANDBOX_FUZZ_TARGET" ]
+  }
+  deps = [
+    "//base",
+  ]
+  dict = "ipc.dict"
+  libfuzzer_options = [ "max_len=1024" ]
+}

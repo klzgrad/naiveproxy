@@ -1,0 +1,85 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/features.gni")
+import("//printing/buildflags/buildflags.gni")
+
+assert(is_chromeos,
+       "Non-Chrome-OS builds must not depend on //chrome/services/cups_proxy")
+
+source_set("cups_proxy") {
+  sources = [
+    "cups_proxy_service.cc",
+    "cups_proxy_service.h",
+    "cups_proxy_service_delegate.cc",
+    "cups_proxy_service_delegate.h",
+  ]
+
+  deps = [
+    "//base",
+    "//chrome/services/cups_proxy/public/cpp",
+    "//chrome/services/cups_proxy/public/mojom",
+    "//chromeos/dbus",
+    "//net",
+    "//services/service_manager/public/cpp",
+    "//services/service_manager/public/mojom",
+  ]
+
+  # We stub this service if libCUPS is not present.
+  if (use_cups) {
+    configs += [ "//printing:cups" ]
+    sources += [
+      "ipp_attribute_validator.cc",
+      "ipp_attribute_validator.h",
+      "ipp_validator.cc",
+      "ipp_validator.h",
+      "printer_installer.cc",
+      "printer_installer.h",
+      "socket_manager.cc",
+      "socket_manager.h",
+    ]
+  }
+
+  public_deps = [
+    "//printing",
+  ]
+}
+
+static_library("test_support") {
+  testonly = true
+  sources = [
+    "fake_cups_proxy_service_delegate.cc",
+    "fake_cups_proxy_service_delegate.h",
+  ]
+
+  public_deps = [
+    ":cups_proxy",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+
+  # Target is empty unless libCUPS is available.
+  if (use_cups) {
+    sources = [
+      "ipp_validator_unittest.cc",
+      "printer_installer_unittest.cc",
+      "socket_manager_unittest.cc",
+    ]
+
+    deps = [
+      ":cups_proxy",
+      ":test_support",
+      "//base",
+      "//chrome/services/cups_proxy/public/cpp",
+      "//chrome/services/cups_proxy/public/cpp:unit_tests",
+      "//testing/gtest",
+    ]
+
+    data = [
+      "//chrome/test/data/cups_proxy",
+    ]
+  }
+}
