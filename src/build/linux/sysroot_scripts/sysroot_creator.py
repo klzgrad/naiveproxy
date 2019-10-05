@@ -40,10 +40,6 @@ ARCHIVE_TIMESTAMP = "20250129T203412Z"
 
 ARCHIVE_URL = f"https://snapshot.debian.org/archive/debian/{ARCHIVE_TIMESTAMP}/"
 APT_SOURCES_LIST = [
-    # Debian 12 (Bookworm) is needed for GTK4.  It should be kept before
-    # bullseye so that bullseye takes precedence.
-    ("bookworm", ["main"]),
-    ("bookworm-updates", ["main"]),
     # This mimics a sources.list from bullseye.
     ("bullseye", ["main", "contrib", "non-free"]),
     ("bullseye-updates", ["main", "contrib", "non-free"]),
@@ -58,6 +54,8 @@ TRIPLES = {
     "mipsel": "mipsel-linux-gnu",
     "mips64el": "mips64el-linux-gnuabi64",
     "ppc64el": "powerpc64le-linux-gnu",
+    "riscv64": "riscv64-linux-gnu",
+    "loong64": "loongarch64-linux-gnu",
 }
 
 REQUIRED_TOOLS = [
@@ -74,72 +72,15 @@ PACKAGES_EXT = "xz"
 RELEASE_FILE = "Release"
 RELEASE_FILE_GPG = "Release.gpg"
 
+GCC_VERSION = 10
+
 # List of development packages. Dependencies are automatically included.
 DEBIAN_PACKAGES = [
-    "libasound2-dev",
-    "libavformat-dev",
-    "libbluetooth-dev",
     "libc6-dev",
-    "libcap-dev",
-    "libcolord-dev",
-    "libcups2-dev",
-    "libcupsimage2-dev",
-    "libcurl4-gnutls-dev",
-    "libdbusmenu-glib-dev",
-    "libdeflate-dev",
-    "libelf-dev",
-    "libflac-dev",
-    "libgbm-dev",
-    "libgcrypt20-dev",
-    "libgnutls28-dev",
-    "libgtk-3-dev",
-    "libgtk-4-dev",
-    "libinput-dev",
-    "libjbig-dev",
-    "libjpeg-dev",
-    "libjsoncpp-dev",
-    "libkrb5-dev",
-    "liblcms2-dev",
-    "liblzma-dev",
-    "libminizip-dev",
-    "libmtdev-dev",
-    "libncurses-dev",
-    "libnss3-dev",
-    "libopus-dev",
-    "libpam0g-dev",
-    "libpci-dev",
-    "libpipewire-0.3-dev",
-    "libpulse-dev",
-    "libre2-dev",
-    "libsnappy-dev",
-    "libspeechd-dev",
-    "libssl-dev",
-    "libsystemd-dev",
-    "libtiff-dev",
-    "libutempter-dev",
-    "libva-dev",
-    "libvpx-dev",
-    "libwayland-egl-backend-dev",
-    "libwebp-dev",
-    "libx11-xcb-dev",
-    "libxcb-dri2-0-dev",
-    "libxcb-dri3-dev",
-    "libxcb-glx0-dev",
-    "libxcb-image0-dev",
-    "libxcb-present-dev",
-    "libxcb-render-util0-dev",
-    "libxcb-util-dev",
-    "libxshmfence-dev",
-    "libxslt1-dev",
-    "libxss-dev",
-    "libxt-dev",
-    "libxxf86vm-dev",
-    "mesa-common-dev",
-    "qt6-base-dev",
-    "qtbase5-dev",
-    "valgrind",
+    "libgcc-10-dev",
+    "libstdc++-10-dev",
+    "linux-libc-dev",
 ]
-
 
 def banner(message: str) -> None:
     print("#" * 70)
@@ -284,11 +225,13 @@ def generate_package_list_dist_repo(arch: str, dist: str,
     download_or_copy_non_unique_filename(package_list_arch, package_list)
     verify_package_listing(package_file_arch, package_list, dist)
 
+    # `not line.endswith(":")` is added here to handle the case of
+    # "X-Cargo-Built-Using:\n rust-adler (= 1.0.2-2), ..."
     with lzma.open(package_list, "rt") as src:
         return [
             dict(
                 line.split(": ", 1) for line in package_meta.splitlines()
-                if not line.startswith(" "))
+                if not line.startswith(" ") and not line.endswith(":"))
             for package_meta in src.read().split("\n\n") if package_meta
         ]
 
@@ -358,13 +301,6 @@ def hacks_and_patches(install_root: str, script_dir: str, arch: str) -> None:
     if os.path.exists(qtchooser_conf):
         os.remove(qtchooser_conf)
 
-    # libxcomposite1 is missing a symbols file.
-    atomic_copyfile(
-        os.path.join(script_dir, "libxcomposite1-symbols"),
-        os.path.join(install_root, "debian", "libxcomposite1", "DEBIAN",
-                     "symbols"),
-    )
-
     # __GLIBC_MINOR__ is used as a feature test macro. Replace it with the
     # earliest supported version of glibc (2.26).
     features_h = os.path.join(install_root, "usr", "include", "features.h")
@@ -385,7 +321,7 @@ def hacks_and_patches(install_root: str, script_dir: str, arch: str) -> None:
         "include",
         TRIPLES[arch],
         "c++",
-        "10",
+        f"{GCC_VERSION}",
         "bits",
         "c++config.h",
     )
@@ -410,19 +346,19 @@ def hacks_and_patches(install_root: str, script_dir: str, arch: str) -> None:
 
     # Avoid requiring unsupported glibc versions.
     for lib in ["libc.so.6", "libm.so.6", "libcrypt.so.1"]:
+        # RISCV64 is new and has no backward compatibility.
+        # Reversioning would remove necessary symbols and cause linking failures.
+        if arch == "riscv64" or arch == "loong64":
+            continue
         lib_path = os.path.join(install_root, "lib", TRIPLES[arch], lib)
         reversion_glibc.reversion_glibc(lib_path)
 
-    # GTK4 is provided by bookworm (12), but pango is provided by bullseye
-    # (11).  Fix the GTK4 pkgconfig file to relax the pango version
-    # requirement.
-    gtk4_pc = os.path.join(pkgconfig_dir, "gtk4.pc")
-    replace_in_file(gtk4_pc, r"pango [>=0-9. ]*", "pango")
-    replace_in_file(gtk4_pc, r"pangocairo [>=0-9. ]*", "pangocairo")
+    if not os.path.exists(os.path.join(install_root, "lib")):
+        os.symlink(os.path.join("usr", "lib"), os.path.join(install_root, "lib"))
 
-    # Remove a cyclic symlink: /usr/bin/X11 -> /usr/bin
-    os.remove(os.path.join(install_root, "usr/bin/X11"))
-
+    if (os.path.exists(os.path.join(install_root, "usr", "lib64")) and
+        not os.path.exists(os.path.join(install_root, "lib64"))):
+        os.symlink(os.path.join("usr", "lib64"), os.path.join(install_root, "lib64"))
 
 def replace_in_file(file_path: str, search_pattern: str,
                     replace_pattern: str) -> None:
@@ -550,10 +486,13 @@ def removing_unnecessary_files(install_root, arch):
     # Preserve these files.
     gcc_triple = "i686-linux-gnu" if arch == "i386" else TRIPLES[arch]
     ALLOWLIST = {
-        "usr/bin/cups-config",
-        f"usr/lib/gcc/{gcc_triple}/10/libgcc.a",
+        f"usr/lib/gcc/{gcc_triple}/{GCC_VERSION}/libgcc.a",
         f"usr/lib/{TRIPLES[arch]}/libc_nonshared.a",
-        f"usr/lib/{TRIPLES[arch]}/libffi_pic.a",
+
+        # https://developers.redhat.com/articles/2021/12/17/why-glibc-234-removed-libpthread
+        f"usr/lib/{TRIPLES[arch]}/libdl.a",
+        f"usr/lib/{TRIPLES[arch]}/libpthread.a",
+        f"usr/lib/{TRIPLES[arch]}/librt.a",
     }
 
     for file in ALLOWLIST:
@@ -709,9 +648,7 @@ def build_sysroot(arch: str) -> None:
     hacks_and_patches(install_root, SCRIPT_DIR, arch)
     cleanup_jail_symlinks(install_root)
     removing_unnecessary_files(install_root, arch)
-    strip_sections(install_root, arch)
     restore_metadata(install_root, old_metadata)
-    create_tarball(install_root, arch)
 
 
 def upload_sysroot(arch: str) -> str:
@@ -777,6 +714,26 @@ def main():
     args = parser.parse_args()
 
     sanity_check()
+
+    # RISCV64 only has support in debian-ports, no support in bookworm.
+    global ARCHIVE_URL, APT_SOURCES_LIST
+    if args.architecture == "riscv64":
+        # This is the last snapshot that uses glibc 2.31, similar to bullseye
+        ARCHIVE_URL = "https://snapshot.debian.org/archive/debian-ports/20210906T080750Z/"
+        APT_SOURCES_LIST = [("sid", ["main"])]
+
+    if args.architecture == "loong64":
+        ARCHIVE_URL = "https://snapshot.debian.org/archive/debian-ports/20240531T134713Z/"
+        APT_SOURCES_LIST = [("sid", ["main"])]
+
+        global GCC_VERSION, DEBIAN_PACKAGES
+        GCC_VERSION = 13
+        DEBIAN_PACKAGES = [
+            "libc6-dev",
+            f"libgcc-{GCC_VERSION}-dev",
+            f"libstdc++-{GCC_VERSION}-dev",
+            "linux-libc-dev",
+        ]
 
     if args.command == "build":
         build_sysroot(args.architecture)
