@@ -2,10 +2,18 @@
 
 [ "$1" ] || exit 1
 naive="$1"
+eval "$EXTRA_FLAGS"
+if [ "$use_sysroot" = true ]; then
+  case "$target_cpu" in
+    arm64) naive="qemu-aarch64 -L src/build/linux/debian_sid_arm64-sysroot $naive";;
+    arm) naive="qemu-arm -L src/build/linux/debian_sid_arm-sysroot $naive";;
+  esac
+fi
+
 set -ex
 
 test_proxy() {
-  curl -v --proxy "$1" https://www.google.com/humans.txt | grep '^Google is built'
+  curl -v --proxy "$1" https://www.microsoft.com/robots.txt | grep 'www.microsoft.com'
 }
 
 test_naive() {

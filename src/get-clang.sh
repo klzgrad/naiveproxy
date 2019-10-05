@@ -7,6 +7,31 @@ case "$ARCH" in
   MSYS*) ARCH=Windows;;
 esac
 
+eval "$EXTRA_FLAGS"
+
+if [ "$use_sysroot" = true ]; then
+  ln -sfn / ./build/linux/debian_sid_amd64-sysroot
+  sudo mount --bind /usr/lib/x86_64-linux-gnu/pkgconfig /usr/lib/pkgconfig
+  case "$target_cpu" in
+    arm64)
+      rm -rf ./build/linux/debian_sid_arm64-sysroot
+      ./build/linux/sysroot_scripts/sysroot-creator-sid-naive.sh BuildSysrootARM64
+      mkdir -p ./build/linux/debian_sid_arm64-sysroot
+      tar xf ./out/sysroot-build/sid/debian_sid_arm64_sysroot.tar.xz -C ./build/linux/debian_sid_arm64-sysroot
+    ;;
+    arm)
+      rm -rf ./build/linux/debian_sid_arm-sysroot
+      ./build/linux/sysroot_scripts/sysroot-creator-sid-naive.sh BuildSysrootARM
+      mkdir -p ./build/linux/debian_sid_arm-sysroot
+      tar xf ./out/sysroot-build/sid/debian_sid_arm_sysroot.tar.xz -C ./build/linux/debian_sid_arm-sysroot
+      rm -rf ./build/linux/debian_sid_i386-sysroot
+      ./build/linux/sysroot_scripts/sysroot-creator-sid-naive.sh BuildSysrootI386
+      mkdir -p ./build/linux/debian_sid_i386-sysroot
+      tar xf ./out/sysroot-build/sid/debian_sid_i386_sysroot.tar.xz -C ./build/linux/debian_sid_i386-sysroot
+    ;;
+  esac
+fi
+
 # Clang
 python2=$(which python2 2>/dev/null || which python 2>/dev/null)
 CLANG_REVISION=$($python2 tools/clang/scripts/update.py --print-revision)

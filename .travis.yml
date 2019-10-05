@@ -4,18 +4,27 @@ branches:
 language: cpp
 matrix:
   include:
-    - os: linux
-      dist: xenial
-    - os: osx
+    - name: "linux-x64"
+      os: linux
+      dist: bionic
+    - name: "linux-arm64"
+      os: linux
+      dist: bionic
+      env: EXTRA_FLAGS='target_cpu="arm64" use_sysroot=true'
+    - name: "linux-arm"
+      os: linux
+      dist: bionic
+      env: EXTRA_FLAGS='target_cpu="arm" use_sysroot=true'
+    - name: "osx"
+      os: osx
       osx_image: xcode10.2
 addons:
   apt:
-    sources:
-      - sourceline: 'deb http://archive.ubuntu.com/ubuntu/ xenial-backports universe'
     packages:
-      - ninja-build=1.7.1-1~ubuntu16.04.1
+      - ninja-build
       - pkg-config
       - libnss3-dev
+      - qemu-user
   homebrew:
     packages:
       - ninja
@@ -28,7 +37,7 @@ script:
   - ( cd src; ./build.sh )
   - ccache -s
   - ./tests/basic.sh src/out/Release/naive
-  - export BUILD_NAME="naiveproxy-$TRAVIS_BRANCH-$TRAVIS_OS_NAME"
+  - export BUILD_NAME="naiveproxy-$TRAVIS_BRANCH-$TRAVIS_JOB_NAME"
   - mkdir $BUILD_NAME
   - cp src/out/Release/naive src/config.json LICENSE USAGE.txt $BUILD_NAME
   - tar cJf $BUILD_NAME.tar.xz $BUILD_NAME
