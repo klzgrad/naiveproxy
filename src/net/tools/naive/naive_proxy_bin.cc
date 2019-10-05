@@ -47,6 +47,7 @@
 #include "net/socket/ssl_client_socket.h"
 #include "net/socket/tcp_server_socket.h"
 #include "net/ssl/ssl_key_logger_impl.h"
+#include "net/third_party/quiche/src/quic/core/quic_versions.h"
 #include "net/tools/naive/naive_proxy.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_request_context.h"
@@ -74,6 +75,7 @@ struct CommandLine {
   std::string proxy;
   bool padding;
   std::string host_resolver_rules;
+  std::string quic_version;
   bool no_log;
   base::FilePath log;
   base::FilePath log_net_log;
@@ -89,6 +91,7 @@ struct Params {
   std::string proxy_user;
   std::string proxy_pass;
   std::string host_resolver_rules;
+  quic::ParsedQuicVersion quic_version = quic::UnsupportedQuicVersion();
   logging::LoggingSettings log_settings;
   base::FilePath log_path;
   base::FilePath net_log_path;
@@ -140,6 +143,12 @@ std::unique_ptr<net::URLRequestContext> BuildURLRequestContext(
     builder.set_host_mapping_rules(params.host_resolver_rules);
   }
 
+  if (params.quic_version != quic::UnsupportedQuicVersion()) {
+    net::HttpNetworkSession::Params session_params;
+    session_params.quic_params.supported_versions = {params.quic_version};
+    builder.set_http_network_session_params(session_params);
+  }
+
   auto context = builder.Build();
 
   if (!params.proxy_url.empty() && !params.proxy_user.empty() &&
@@ -175,6 +184,7 @@ void GetCommandLine(const base::CommandLine& proc, CommandLine* cmdline) {
                  "                           proto: https, quic\n"
                  "--padding                  Use padding\n"
                  "--host-resolver-rules=...  Resolver rules\n"
+                 "--quic-version=...         Force QUIC version\n"
                  "--log[=<path>]             Log to stderr, or file\n"
                  "--log-net-log=<path>       Save NetLog\n"
                  "--ssl-key-log-file=<path>  Save SSL keys for Wireshark\n"
@@ -192,6 +202,7 @@ void GetCommandLine(const base::CommandLine& proc, CommandLine* cmdline) {
   cmdline->padding = proc.HasSwitch("padding");
   cmdline->host_resolver_rules =
       proc.GetSwitchValueASCII("host-resolver-rules");
+  cmdline->quic_version = proc.GetSwitchValueASCII("quic-version");
   cmdline->no_log = !proc.HasSwitch("log");
   cmdline->log = proc.GetSwitchValuePath("log");
   cmdline->log_net_log = proc.GetSwitchValuePath("log-net-log");
@@ -226,6 +237,9 @@ void GetCommandLineFromConfig(const base::FilePath& config_path,
   if (value->FindKeyOfType("host-resolver-rules", base::Value::Type::STRING)) {
     cmdline->host_resolver_rules =
         value->FindKey("host-resolver-rules")->GetString();
+  }
+  if (value->FindKeyOfType("quic-version", base::Value::Type::STRING)) {
+    cmdline->quic_version = value->FindKey("quic-version")->GetString();
   }
   cmdline->no_log = true;
   if (value->FindKeyOfType("log", base::Value::Type::STRING)) {
@@ -321,6 +335,14 @@ bool ParseCommandLine(const CommandLine& cmdline, Params* params) {
                 << url.host();
       params->host_resolver_rules =
           std::string("MAP ") + kDefaultHostName + " " + url.host();
+    }
+  }
+
+  if (!cmdline.quic_version.empty()) {
+    params->quic_version = quic::ParseQuicVersionString(cmdline.quic_version);
+    if (params->quic_version == quic::UnsupportedQuicVersion()) {
+      std::cerr << "Invalid QUIC version" << std::endl;
+      return false;
     }
   }
 
