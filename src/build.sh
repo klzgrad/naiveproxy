@@ -6,12 +6,12 @@ mkdir -p "$TMPDIR"
 
 if [ "$1" = debug ]; then
   out=out/Debug
-  flags="$EXTRA_FLAGS
+  flags="
     is_debug=true
     is_component_build=true"
 else
   out=out/Release
-  flags="$EXTRA_FLAGS
+  flags="
     is_official_build=true
     use_jumbo_build=true
     exclude_unwind_tables=true
@@ -55,6 +55,7 @@ flags="$flags"'
   enable_mdns=false
   enable_reporting=false
   include_transport_security_state_preload_list=false
+  rtc_use_pipewire=false
 '
 
 if [ "$(uname)" = Linux ]; then
@@ -71,6 +72,6 @@ mkdir -p out
 python2=$(which python2 2>/dev/null || which python 2>/dev/null)
 export DEPOT_TOOLS_WIN_TOOLCHAIN=0
 
-./gn/out/gn gen "$out" --args="$flags" --script-executable=$python2
+./gn/out/gn gen "$out" --args="$flags $EXTRA_FLAGS" --script-executable=$python2
 
 ninja -C "$out" naive
