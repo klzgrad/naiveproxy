@@ -36,7 +36,6 @@ flags="$flags"'
 
   fatal_linker_warnings=false
   treat_warnings_as_errors=false
-  use_sysroot=false
 
   fieldtrial_testing_like_official_build=true
 
