@@ -7,6 +7,29 @@ case "$ARCH" in
   MSYS*) ARCH=Windows;;
 esac
 
+eval "$EXTRA_FLAGS"
+
+build_sysroot() {
+  local lower="$(echo "$1" | tr '[:upper:]' '[:lower:]')"
+  ./build/linux/sysroot_scripts/sysroot-creator-sid-naive.sh "BuildSysroot$1"
+  rm -rf "./build/linux/debian_sid_$lower-sysroot"
+  mkdir "./build/linux/debian_sid_$lower-sysroot"
+  tar xf "./out/sysroot-build/sid/debian_sid_${lower}_sysroot.tar.xz" -C "./build/linux/debian_sid_$lower-sysroot"
+}
+
+if [ "$ARCH" = Linux ]; then
+  build_sysroot Amd64
+  case "$target_cpu" in
+    arm64)
+      build_sysroot ARM64
+    ;;
+    arm)
+      build_sysroot I386
+      build_sysroot ARM
+    ;;
+  esac
+fi
+
 # Clang
 python2=$(which python2 2>/dev/null || which python 2>/dev/null)
 CLANG_REVISION=$($python2 tools/clang/scripts/update.py --print-revision)
