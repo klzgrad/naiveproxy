@@ -27,6 +27,7 @@ class ProxyInfo;
 class StreamSocket;
 struct NetworkTrafficAnnotationTag;
 struct SSLConfig;
+class RedirectResolver;
 
 class NaiveConnection {
  public:
@@ -52,6 +53,7 @@ class NaiveConnection {
                   const ProxyInfo& proxy_info,
                   const SSLConfig& server_ssl_config,
                   const SSLConfig& proxy_ssl_config,
+                  RedirectResolver* resolver,
                   HttpNetworkSession* session,
                   const NetLogWithSource& net_log,
                   std::unique_ptr<StreamSocket> accepted_socket,
@@ -103,6 +105,7 @@ class NaiveConnection {
   const ProxyInfo& proxy_info_;
   const SSLConfig& server_ssl_config_;
   const SSLConfig& proxy_ssl_config_;
+  RedirectResolver* resolver_;
   HttpNetworkSession* session_;
   const NetLogWithSource& net_log_;
 
