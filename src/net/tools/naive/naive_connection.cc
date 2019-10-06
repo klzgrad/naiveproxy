@@ -24,6 +24,7 @@
 #include "net/socket/stream_socket.h"
 #include "net/spdy/spdy_session.h"
 #include "net/tools/naive/http_proxy_socket.h"
+#include "net/tools/naive/redirect_resolver.h"
 #include "net/tools/naive/socks5_server_socket.h"
 
 #if defined(OS_LINUX)
@@ -52,6 +53,7 @@ NaiveConnection::NaiveConnection(
     const ProxyInfo& proxy_info,
     const SSLConfig& server_ssl_config,
     const SSLConfig& proxy_ssl_config,
+    RedirectResolver* resolver,
     HttpNetworkSession* session,
     const NetLogWithSource& net_log,
     std::unique_ptr<StreamSocket> accepted_socket,
@@ -62,6 +64,7 @@ NaiveConnection::NaiveConnection(
       proxy_info_(proxy_info),
       server_ssl_config_(server_ssl_config),
       proxy_ssl_config_(proxy_ssl_config),
+      resolver_(resolver),
       session_(session),
       net_log_(net_log),
       next_state_(STATE_NONE),
@@ -208,7 +211,17 @@ int NaiveConnection::DoConnectServer() {
     if (rv == 0) {
       IPEndPoint ipe;
       if (ipe.FromSockAddr(dst.addr, dst.addr_len)) {
-        origin = HostPortPair::FromIPEndPoint(ipe);
+        const auto& addr = ipe.address();
+        auto name = resolver_->FindNameByAddress(addr);
+        if (!name.empty()) {
+          origin = HostPortPair(name, ipe.port());
+        } else if (!resolver_->IsInResolvedRange(addr)) {
+          origin = HostPortPair::FromIPEndPoint(ipe);
+        } else {
+          LOG(ERROR) << "Connection " << id_ << " to unresolved name for "
+                     << addr.ToString();
+          return ERR_ADDRESS_INVALID;
+        }
       }
     }
 #else
