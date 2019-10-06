@@ -28,11 +28,13 @@ namespace net {
 NaiveProxy::NaiveProxy(std::unique_ptr<ServerSocket> listen_socket,
                        NaiveConnection::Protocol protocol,
                        bool use_padding,
+                       RedirectResolver* resolver,
                        HttpNetworkSession* session,
                        const NetworkTrafficAnnotationTag& traffic_annotation)
     : listen_socket_(std::move(listen_socket)),
       protocol_(protocol),
       use_padding_(use_padding),
+      resolver_(resolver),
       session_(session),
       net_log_(
           NetLogWithSource::Make(session->net_log(), NetLogSourceType::NONE)),
@@ -110,7 +112,7 @@ void NaiveProxy::DoConnect() {
   }
   auto connection_ptr = std::make_unique<NaiveConnection>(
       ++last_id_, protocol_, pad_direction, proxy_info_, server_ssl_config_,
-      proxy_ssl_config_, session_, net_log_, std::move(socket),
+      proxy_ssl_config_, resolver_, session_, net_log_, std::move(socket),
       traffic_annotation_);
   auto* connection = connection_ptr.get();
   connection_by_id_[connection->id()] = std::move(connection_ptr);
