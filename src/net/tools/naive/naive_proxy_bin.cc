@@ -46,9 +46,11 @@
 #include "net/socket/client_socket_pool_manager.h"
 #include "net/socket/ssl_client_socket.h"
 #include "net/socket/tcp_server_socket.h"
+#include "net/socket/udp_server_socket.h"
 #include "net/ssl/ssl_key_logger_impl.h"
 #include "net/third_party/quiche/src/quic/core/quic_versions.h"
 #include "net/tools/naive/naive_proxy.h"
+#include "net/tools/naive/redirect_resolver.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_builder.h"
@@ -76,6 +78,7 @@ struct CommandLine {
   bool padding;
   std::string host_resolver_rules;
   std::string quic_version;
+  std::string resolver_range;
   bool no_log;
   base::FilePath log;
   base::FilePath log_net_log;
@@ -91,6 +94,8 @@ struct Params {
   std::string proxy_user;
   std::string proxy_pass;
   std::string host_resolver_rules;
+  net::IPAddress resolver_range;
+  size_t resolver_prefix;
   quic::ParsedQuicVersion quic_version = quic::UnsupportedQuicVersion();
   logging::LoggingSettings log_settings;
   base::FilePath log_path;
@@ -185,6 +190,7 @@ void GetCommandLine(const base::CommandLine& proc, CommandLine* cmdline) {
                  "--padding                  Use padding\n"
                  "--host-resolver-rules=...  Resolver rules\n"
                  "--quic-version=...         Force QUIC version\n"
+                 "--resolver-range=...       Redirect resolver range\n"
                  "--log[=<path>]             Log to stderr, or file\n"
                  "--log-net-log=<path>       Save NetLog\n"
                  "--ssl-key-log-file=<path>  Save SSL keys for Wireshark\n"
@@ -203,6 +209,7 @@ void GetCommandLine(const base::CommandLine& proc, CommandLine* cmdline) {
   cmdline->host_resolver_rules =
       proc.GetSwitchValueASCII("host-resolver-rules");
   cmdline->quic_version = proc.GetSwitchValueASCII("quic-version");
+  cmdline->resolver_range = proc.GetSwitchValueASCII("resolver-range");
   cmdline->no_log = !proc.HasSwitch("log");
   cmdline->log = proc.GetSwitchValuePath("log");
   cmdline->log_net_log = proc.GetSwitchValuePath("log-net-log");
@@ -240,6 +247,9 @@ void GetCommandLineFromConfig(const base::FilePath& config_path,
   }
   if (value->FindKeyOfType("quic-version", base::Value::Type::STRING)) {
     cmdline->quic_version = value->FindKey("quic-version")->GetString();
+  }
+  if (value->FindKeyOfType("resolver-range", base::Value::Type::STRING)) {
+    cmdline->resolver_range = value->FindKey("resolver-range")->GetString();
   }
   cmdline->no_log = true;
   if (value->FindKeyOfType("log", base::Value::Type::STRING)) {
@@ -280,8 +290,13 @@ bool ParseCommandLine(const CommandLine& cmdline, Params* params) {
       params->protocol = net::NaiveConnection::kHttp;
       params->listen_port = 8080;
     } else if (url.scheme() == "redir") {
+#if defined(OS_LINUX)
       params->protocol = net::NaiveConnection::kRedir;
       params->listen_port = 1080;
+#else
+      std::cerr << "Redir protocol only supports Linux." << std::endl;
+      return false;
+#endif
     } else {
       std::cerr << "Invalid scheme in --listen" << std::endl;
       return false;
@@ -342,6 +357,22 @@ bool ParseCommandLine(const CommandLine& cmdline, Params* params) {
     params->quic_version = quic::ParseQuicVersionString(cmdline.quic_version);
     if (params->quic_version == quic::UnsupportedQuicVersion()) {
       std::cerr << "Invalid QUIC version" << std::endl;
+      return false;
+    }
+  }
+
+  if (params->protocol == net::NaiveConnection::kRedir) {
+    std::string range = "100.64.0.0/10";
+    if (!cmdline.resolver_range.empty())
+      range = cmdline.resolver_range;
+
+    if (!net::ParseCIDRBlock(range, &params->resolver_range,
+                             &params->resolver_prefix)) {
+      std::cerr << "Invalid resolver range" << std::endl;
+      return false;
+    }
+    if (params->resolver_range.IsIPv6()) {
+      std::cerr << "IPv6 resolver range not supported" << std::endl;
       return false;
     }
   }
@@ -471,8 +502,7 @@ int main(int argc, char* argv[]) {
     observer->StartObserving(&net_log, net::NetLogCaptureMode::kDefault);
   }
   PrintingLogObserver printing_log_observer;
-  net_log.AddObserver(&printing_log_observer,
-                      net::NetLogCaptureMode::kDefault);
+  net_log.AddObserver(&printing_log_observer, net::NetLogCaptureMode::kDefault);
 
   auto context = BuildURLRequestContext(params, &net_log);
   auto* session = context->http_transaction_factory()->GetSession();
@@ -489,8 +519,32 @@ int main(int argc, char* argv[]) {
   LOG(INFO) << "Listening on " << params.listen_addr << ":"
             << params.listen_port;
 
+  std::unique_ptr<net::RedirectResolver> resolver;
+  if (params.protocol == net::NaiveConnection::kRedir) {
+    auto resolver_socket =
+        std::make_unique<net::UDPServerSocket>(&net_log, net::NetLogSource());
+    resolver_socket->AllowAddressReuse();
+    net::IPAddress listen_addr;
+    if (!listen_addr.AssignFromIPLiteral(params.listen_addr)) {
+      LOG(ERROR) << "Failed to open resolver: " << net::ERR_ADDRESS_INVALID;
+      return EXIT_FAILURE;
+    }
+
+    result = resolver_socket->Listen(
+        net::IPEndPoint(listen_addr, params.listen_port));
+    if (result != net::OK) {
+      LOG(ERROR) << "Failed to open resolver: " << result;
+      return EXIT_FAILURE;
+    }
+
+    resolver = std::make_unique<net::RedirectResolver>(
+        std::move(resolver_socket), params.resolver_range,
+        params.resolver_prefix);
+  }
+
   net::NaiveProxy naive_proxy(std::move(listen_socket), params.protocol,
-                              params.use_padding, session, kTrafficAnnotation);
+                              params.use_padding, resolver.get(), session,
+                              kTrafficAnnotation);
 
   base::RunLoop().Run();
 
