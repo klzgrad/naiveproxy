@@ -25,12 +25,14 @@ class NaiveConnection;
 class ServerSocket;
 class StreamSocket;
 struct NetworkTrafficAnnotationTag;
+class RedirectResolver;
 
 class NaiveProxy {
  public:
   NaiveProxy(std::unique_ptr<ServerSocket> server_socket,
              NaiveConnection::Protocol protocol,
              bool use_padding,
+             RedirectResolver* resolver,
              HttpNetworkSession* session,
              const NetworkTrafficAnnotationTag& traffic_annotation);
   ~NaiveProxy();
@@ -58,6 +60,7 @@ class NaiveProxy {
   ProxyInfo proxy_info_;
   SSLConfig server_ssl_config_;
   SSLConfig proxy_ssl_config_;
+  RedirectResolver* resolver_;
   HttpNetworkSession* session_;
   NetLogWithSource net_log_;
 
