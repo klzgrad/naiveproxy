@@ -1,6 +1,6 @@
 # NaïveProxy [![Build Status](https://travis-ci.com/klzgrad/naiveproxy.svg?branch=master)](https://travis-ci.com/klzgrad/naiveproxy) [![Build status](https://ci.appveyor.com/api/projects/status/ohpyaf49baihmxa9?svg=true)](https://ci.appveyor.com/project/klzgrad/naiveproxy)
 
-NaïveProxy uses Chrome's network stack to make proxied traffic even more censorship-resistent and less detectable than custom-made network stacks (Shadowsocks and variants, V2Ray suite, handmade Golang stacks). Reusing Chrome's stack also ensures NaïveProxy has the best practices in performance and security.
+NaïveProxy uses Chrome's network stack to camouflage traffic with stronger censorship resistence and less detectablility than custom-made network stacks (Shadowsocks and variants, V2Ray suite, handmade Golang stacks). Reusing Chrome's stack also ensures NaïveProxy has the best practices in performance and security.
 
 The following traffic attacks are mitigated in NaïveProxy:
 
