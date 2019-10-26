@@ -1,10 +1,8 @@
 # NaïveProxy [![Build Status](https://travis-ci.com/klzgrad/naiveproxy.svg?branch=master)](https://travis-ci.com/klzgrad/naiveproxy) [![Build status](https://ci.appveyor.com/api/projects/status/ohpyaf49baihmxa9?svg=true)](https://ci.appveyor.com/project/klzgrad/naiveproxy)
 
-A secure, censorship-resistent proxy.
+NaïveProxy uses Chrome's network stack to make proxied traffic even more censorship-resistent and less detectable than custom-made network stacks (Shadowsocks and variants, V2Ray suite, handmade Golang stacks). Reusing Chrome's stack also ensures NaïveProxy has the best practices in performance and security.
 
-NaïveProxy is naïve as it reuses standard protocols (HTTP/2, HTTP/3) and common network stacks (Chrome, Caddy) with little variation. By being as common and boring as possible NaïveProxy is practically indistinguishable from mainstream traffic. Reusing common software stacks also ensures best practices in performance and security.
-
-The following attacks are mitigated:
+The following traffic attacks are mitigated in NaïveProxy:
 
 * Website fingerprinting / traffic classification: [mitigated](https://arxiv.org/abs/1707.00641) by traffic multiplexing in HTTP/2.
 * [TLS parameter fingerprinting](https://arxiv.org/abs/1607.01639): defeated by reusing [Chrome's network stack](https://www.chromium.org/developers/design-documents/network-stack).
@@ -15,11 +13,9 @@ The following attacks are mitigated:
 
 [Browser → Naïve (client)] ⟶ Censor ⟶ [Frontend → Naïve (server)] ⟶ Internet
 
-NaïveProxy uses Chrome's network stack. What the censor can see is exactly regular HTTP/2 traffic between Chrome and standard Frontend (e.g. Caddy, HAProxy).
+NaïveProxy uses Chrome's network stack. The traffic behavior intercepted by the censor is identical to regular HTTP/2 traffic between Chrome and standard Frontend (e.g. Caddy, HAProxy).
 
-Frontend also reroutes unauthenticated users and active probes to a backend HTTP server, making it impossible to detect the existence of a proxy:
-
-Probe ⟶ Frontend ⟶ index.html
+Frontend also reroutes unauthenticated users and active probes to a backend HTTP server, making it impossible to detect the existence of a proxy, like this: Probe ⟶ Frontend ⟶ index.html
 
 ## Download
 
