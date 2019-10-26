@@ -1,0 +1,94 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//third_party/closure_compiler/compile_js.gni")
+
+js_type_check("closure_compile") {
+  deps = [
+    ":database_tab",
+    ":discards",
+    ":discards_tab",
+    ":graph_doc",
+    ":graph_tab",
+  ]
+}
+
+js_library("sorted_table_behavior") {
+  deps = [
+    "//ui/webui/resources/js:assert",
+  ]
+}
+
+js_library("discards") {
+  deps = [
+    "//ui/webui/resources/js:assert",
+    "//ui/webui/resources/js:cr",
+  ]
+}
+
+js_library("database_tab") {
+  deps = [
+    ":discards",
+    ":sorted_table_behavior",
+    "//chrome/browser/ui/webui/discards:mojo_bindings_js_library_for_compile",
+    "//ui/webui/resources/js:assert",
+    "//ui/webui/resources/js:cr",
+  ]
+}
+
+js_library("discards_tab") {
+  deps = [
+    ":discards",
+    ":sorted_table_behavior",
+    "//chrome/browser/ui/webui/discards:mojo_bindings_js_library_for_compile",
+    "//ui/webui/resources/js:assert",
+    "//ui/webui/resources/js:icon",
+    "//ui/webui/resources/js:util",
+  ]
+}
+
+js_library("graph_tab") {
+  deps = [
+    "//chrome/browser/performance_manager:mojo_bindings_js_library_for_compile",
+    "//chrome/browser/ui/webui/discards:mojo_bindings_js_library_for_compile",
+    "//ui/webui/resources/js:assert",
+    "//ui/webui/resources/js:cr",
+  ]
+}
+
+js_library("graph_doc") {
+  deps = [
+    "//chrome/browser/performance_manager:mojo_bindings_js_library_for_compile",
+  ]
+
+  externs_list = [ "../../../../third_party/d3/src/externs.js" ]
+}
+
+# This action merges the graph tab script into the graph_doc HTML template.
+# It then base64 encodes the combination, and merges into the graph_tab HTML
+# template to complete the data: URL for the webview therein.
+action("generate_graph_tab") {
+  script = "generate_graph_tab.py"
+  sources = [
+    "graph_doc.js",
+    "graph_doc_template.html",
+    "graph_tab_template.html",
+  ]
+  outputs = [
+    "$target_gen_dir/graph_tab.html",
+  ]
+
+  args = rebase_path(outputs) + rebase_path([
+                                              "graph_doc_template.html",
+                                              "graph_doc.js",
+                                              "graph_tab_template.html",
+                                            ])
+}
+
+# Action with a transparent name.
+group("discards_resources_gen") {
+  deps = [
+    ":generate_graph_tab",
+  ]
+}

@@ -1,0 +1,89 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ios/rules.gni")
+import("//ios/third_party/firebase/firebase.gni")
+
+template("ios_eg2_test_app_host") {
+  ios_app_bundle(target_name) {
+    testonly = true
+    forward_variables_from(invoker, "*")
+
+    configs += [ "//build/config/ios:xctest_config" ]
+
+    if (!defined(bundle_deps)) {
+      bundle_deps = []
+    }
+    bundle_deps += [ "//ios/third_party/earl_grey2:app_framework+bundle" ]
+    if (ios_enable_firebase_sdk) {
+      assert(ios_firebase_resources_target != "",
+             "ios_firebase_resources_target must be defined if Firebase SDK " +
+                 "is enabled.")
+      bundle_deps += [ ios_firebase_resources_target ]
+    }
+
+    if (!defined(deps)) {
+      deps = []
+    }
+    deps += [ "//ios/third_party/earl_grey2:app_framework+link" ]
+    if (ios_enable_firebase_sdk) {
+      deps += [ "//ios/third_party/firebase" ]
+    }
+
+    # Xcode needs the following frameworks installed in the application (and
+    # signed) for the XCTest to run, so install them using
+    # extra_system_frameworks.
+    _ios_platform_library = "$ios_sdk_platform_path/Developer/Library"
+    extra_system_frameworks = [
+      "$_ios_platform_library/Frameworks/XCTest.framework",
+      "$ios_sdk_platform_path/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework",
+    ]
+
+    if (!defined(ldflags)) {
+      ldflags = []
+    }
+    ldflags += [
+      "-Xlinker",
+      "-rpath",
+      "-Xlinker",
+      "@executable_path/Frameworks",
+      "-Xlinker",
+      "-rpath",
+      "-Xlinker",
+      "@loader_path/Frameworks",
+    ]
+  }
+}
+
+set_defaults("ios_eg2_test_app_host") {
+  configs = default_executable_configs
+}
+
+# EarlGrey2 tests are just XCUITests that also depends on EarlGrey2.
+template("ios_eg2_test") {
+  assert(defined(invoker.xcode_test_application_name),
+         "xcode_test_application_name must be defined for $target_name")
+  assert(
+      defined(invoker.deps),
+      "deps must be defined for $target_name to include at least one earl grey test file.")
+
+  ios_xcuitest_test(target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "xcode_test_application_name",
+                             "xctest_bundle_principal_class",
+                             "bundle_deps",
+                             "deps",
+                           ])
+
+    if (!defined(deps)) {
+      deps = []
+    }
+    deps += [ "//ios/third_party/earl_grey2:test_lib" ]
+  }
+}
+
+set_defaults("ios_eg2_test") {
+  configs = default_shared_library_configs
+}

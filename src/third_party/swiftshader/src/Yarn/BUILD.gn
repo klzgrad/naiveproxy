@@ -1,0 +1,110 @@
+# Copyright 2019 The SwiftShader Authors. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../swiftshader.gni")
+
+import("//testing/test.gni")
+
+config("yarn_config") {
+  include_dirs = [
+    "..",
+  ]
+}
+
+swiftshader_source_set("Yarn_headers") {
+  sources = [
+    "ConditionVariable.hpp",
+    "Containers.hpp",
+    "Debug.hpp",
+    "Defer.hpp",
+    "Finally.hpp",
+    "OSFiber.hpp",
+    "Pool.hpp",
+    "SAL.hpp",
+    "Scheduler.hpp",
+    "Thread.hpp",
+    "Ticket.hpp",
+    "Trace.hpp",
+    "Utils.hpp",
+    "WaitGroup.hpp",
+  ]
+
+  if (is_win) {
+    sources += [ "OSFiber_windows.hpp" ]
+  } else {
+    sources += [
+      "OSFiber_asm.hpp",
+      "OSFiber_asm_aarch64.h",
+      "OSFiber_asm_arm.h",
+      "OSFiber_asm_x64.h",
+      "OSFiber_asm_x86.h",
+    ]
+  }
+
+  public_configs = [
+    ":yarn_config",
+  ]
+}
+
+swiftshader_source_set("Yarn") {
+  sources = [
+    "Debug.cpp",
+    "Scheduler.cpp",
+    "Thread.cpp",
+    "Trace.cpp",
+  ]
+
+  if (!is_win) {
+    sources += [
+      "OSFiber_aarch64.c",
+      "OSFiber_arm.c",
+      "OSFiber_asm_aarch64.S",
+      "OSFiber_asm_arm.S",
+      "OSFiber_asm_x64.S",
+      "OSFiber_asm_x86.S",
+      "OSFiber_x64.c",
+      "OSFiber_x86.c",
+    ]
+  }
+
+  public_deps = [
+    ":Yarn_headers",
+  ]
+}
+
+test("yarn_unittests") {
+  sources = [
+    "ConditionVariable_test.cpp",
+    "Containers_test.cpp",
+    "Defer_test.cpp",
+    "OSFiber_test.cpp",
+    "Pool_test.cpp",
+    "Scheduler_test.cpp",
+    "Ticket_test.cpp",
+    "WaitGroup_test.cpp",
+    "Yarn_test.cpp",
+  ]
+  deps = [
+    ":Yarn",
+    "//testing/gtest",
+    "//testing/gmock",
+  ]
+
+  if (!swiftshader_standalone) {
+    deps += [
+      "//third_party/googletest:gmock",
+      "//third_party/googletest:gtest",
+    ]
+  }
+}

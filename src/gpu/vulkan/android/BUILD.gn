@@ -1,0 +1,52 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ui.gni")
+import("//gpu/vulkan/features.gni")
+import("//testing/test.gni")
+
+assert(enable_vulkan)
+assert(is_android)
+
+config("vulkan_android") {
+  defines = [ "VK_USE_PLATFORM_ANDROID_KHR" ]
+}
+
+component("android") {
+  output_name = "vulkan_android"
+
+  sources = [
+    "vulkan_implementation_android.cc",
+    "vulkan_implementation_android.h",
+  ]
+
+  defines = [ "IS_VULKAN_ANDROID_IMPL" ]
+
+  deps = [
+    "//gpu/ipc/common",
+    "//gpu/ipc/common:vulkan_ycbcr_info",
+    "//ui/gfx",
+  ]
+
+  public_configs = [ ":vulkan_android" ]
+
+  public_deps = [
+    "//base",
+    "//gpu/vulkan",
+  ]
+}
+
+test("vk_tests") {
+  deps = [
+    ":android",
+    "//base:base",
+    "//base/test:test_support",
+    "//components/viz/common:vulkan_context_provider",
+    "//testing/gtest",
+  ]
+  sources = [
+    "run_all_unittests.cc",
+    "vulkan_android_unittests.cc",
+  ]
+}

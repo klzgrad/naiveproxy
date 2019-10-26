@@ -1,0 +1,82 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("///build/config/sanitizers/sanitizers.gni")
+
+config("ignore_unused_result_warning") {
+  if (is_clang) {
+    cflags = [
+      # See crbug.com/932188, libFuzzer does not check the result of write()
+      # when it does raw printing.
+      "-Wno-unused-result",
+    ]
+  }
+}
+
+# Engine should be compiled without coverage (infinite loop in trace_cmp).
+fuzzing_engine_remove_configs = [
+  "//build/config/coverage:default_coverage",
+  "//build/config/sanitizers:default_sanitizer_flags",
+]
+
+# Add any sanitizer flags back. In MSAN builds, instrumenting libfuzzer with
+# MSAN is necessary since all parts of the binary need to be instrumented for it
+# to work. ASAN builds are more subtle: libfuzzer depends on features from the
+# C++ STL. If it were not instrumented, templates would be insantiated without
+# ASAN from libfuzzer and with ASAN in other TUs. The linker might merge
+# instrumented template instantiations with non-instrumented ones (which could
+# have a different ABI) in the final binary, which is problematic for TUs
+# expecting one particular ABI (https://crbug.com/915422). The other sanitizers
+# are added back for the same reason.
+fuzzing_engine_add_configs = [
+  "//build/config/sanitizers:default_sanitizer_flags_but_coverage",
+  ":ignore_unused_result_warning",
+]
+
+source_set("libfuzzer") {
+  sources = [
+    "src/FuzzerCrossOver.cpp",
+    "src/FuzzerDataFlowTrace.cpp",
+    "src/FuzzerDriver.cpp",
+    "src/FuzzerExtFunctionsDlsym.cpp",
+    "src/FuzzerExtFunctionsWeak.cpp",
+    "src/FuzzerExtFunctionsWindows.cpp",
+    "src/FuzzerExtraCounters.cpp",
+    "src/FuzzerFork.cpp",
+    "src/FuzzerIO.cpp",
+    "src/FuzzerIOPosix.cpp",
+    "src/FuzzerIOWindows.cpp",
+    "src/FuzzerLoop.cpp",
+    "src/FuzzerMain.cpp",
+    "src/FuzzerMerge.cpp",
+    "src/FuzzerMutate.cpp",
+    "src/FuzzerSHA1.cpp",
+    "src/FuzzerTracePC.cpp",
+    "src/FuzzerUtil.cpp",
+    "src/FuzzerUtilDarwin.cpp",
+    "src/FuzzerUtilFuchsia.cpp",
+    "src/FuzzerUtilLinux.cpp",
+    "src/FuzzerUtilPosix.cpp",
+    "src/FuzzerUtilWindows.cpp",
+  ]
+
+  configs -= fuzzing_engine_remove_configs
+  configs += fuzzing_engine_add_configs
+
+  deps = []
+  if (is_fuchsia) {
+    deps += [ "//third_party/fuchsia-sdk/sdk:fdio" ]
+  }
+}
+
+if (use_afl) {
+  source_set("afl_driver") {
+    sources = [
+      "src/afl/afl_driver.cpp",
+    ]
+
+    configs -= fuzzing_engine_remove_configs
+    configs += fuzzing_engine_add_configs
+  }
+}

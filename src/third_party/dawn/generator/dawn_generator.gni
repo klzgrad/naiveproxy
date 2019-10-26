@@ -1,0 +1,78 @@
+# Copyright 2019 The Dawn Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../scripts/dawn_overrides_with_defaults.gni")
+import("generator_lib.gni")
+
+# Template to help invoking Dawn code generators based on generator_lib
+#
+#   dawn_generator("my_target_gen") {
+#     # The script and generator specific arguments
+#     script = [ "my_awesome_generator.py" ]
+#     args = [
+#       "--be-awesome",
+#       "yes"
+#     ]
+#
+#     # The list of expected outputs, generation fails if there's a mismatch
+#     outputs = [
+#       "MyAwesomeTarget.cpp",
+#       "MyAwesomeTarget.h",
+#     ]
+#
+#     # Optional, use a custom generated file directory.
+#     custom_gen_dir = "${target_gen_dir}/.."
+#   }
+#
+# Using the generated files is done like so:
+#
+#   shared_library("my_target") {
+#     deps = [ ":my_target_gen "]
+#     sources = get_target_outputs(":my_target_gen")
+#   }
+#
+template("dawn_generator") {
+  generator_lib_action(target_name) {
+    forward_variables_from(invoker, "*")
+    generator_lib_dir = "${dawn_root}/generator"
+    jinja2_path = dawn_jinja2_dir
+  }
+}
+
+# Helper generator for calling the generator from dawn.json
+#
+#   dawn_json_generator("my_target_gen") {
+#     # Which generator target to output
+#     target = "my_target"
+#
+#     # Also supports `outputs` and `custom_gen_dir` like dawn_generator.
+#   }
+template("dawn_json_generator") {
+  dawn_generator(target_name) {
+    script = "${dawn_root}/generator/dawn_json_generator.py"
+
+    # The base arguments for the generator: from this dawn.json, generate this
+    # target using templates in this directory.
+    args = [
+      "--dawn-json",
+      rebase_path("${dawn_root}/dawn.json", root_build_dir),
+      "--wire-json",
+      rebase_path("${dawn_root}/dawn_wire.json", root_build_dir),
+      "--targets",
+      invoker.target,
+    ]
+
+    forward_variables_from(invoker, "*", [ "target" ])
+  }
+}

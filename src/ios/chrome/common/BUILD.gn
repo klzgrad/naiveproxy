@@ -1,0 +1,104 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/buildflag_header.gni")
+import("//build/config/ios/ios_sdk.gni")
+
+source_set("common") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "channel_info.h",
+    "channel_info.mm",
+    "string_util.h",
+    "string_util.mm",
+    "x_callback_url.cc",
+    "x_callback_url.h",
+  ]
+
+  deps = [
+    "//base",
+    "//build:branding_buildflags",
+    "//components/version_info",
+    "//components/version_info:version_string",
+    "//ios/chrome/common/app_group:main_app",
+    "//net",
+    "//url",
+  ]
+
+  public_deps = [
+    ":timing",
+  ]
+
+  libs = [ "QuartzCore.framework" ]
+}
+
+source_set("common_extension") {
+  sources = [
+    "highlight_button.h",
+    "highlight_button.mm",
+  ]
+
+  libs = [ "UIKit.framework" ]
+
+  public_deps = [
+    ":timing",
+  ]
+
+  configs += [ "//build/config/compiler:enable_arc" ]
+}
+
+source_set("timing") {
+  sources = [
+    "material_timing.h",
+    "material_timing.mm",
+  ]
+
+  libs = [ "QuartzCore.framework" ]
+
+  configs += [ "//build/config/compiler:enable_arc" ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "block_unittest.mm",
+    "ns_regular_expression_unittest.mm",
+    "string_util_unittest.mm",
+    "x_callback_url_unittest.cc",
+  ]
+  deps = [
+    ":common",
+    ":noarc_unit_tests",
+    "//base",
+    "//testing/gtest",
+  ]
+  configs += [ "//build/config/compiler:enable_arc" ]
+  if (use_xcode_clang) {
+    # TODO(crbug.com/939749): Remove once Xcode's Clang has Clang r355012.
+    defines = [ "XCODE_CLANG" ]
+  }
+}
+
+# The block_unittest.mm has been duplicated during the migration of iOS code
+# to ARC (see crbug.com/624363). As this test checks the interaction of C++
+# objects and Objective-C blocks, it is necessary to keep two version of the
+# test compiled with and without ARC. Remove this file when the conversion to
+# ARC is complete.
+source_set("noarc_unit_tests") {
+  visibility = [ ":unit_tests" ]
+  testonly = true
+  sources = [
+    "noarc_block_unittest.mm",
+  ]
+  deps = [
+    ":common",
+    "//base",
+    "//testing/gtest",
+  ]
+}
+
+buildflag_header("ios_app_bundle_id_prefix_buildflags") {
+  header = "ios_app_bundle_id_prefix_buildflags.h"
+  flags = [ "IOS_APP_BUNDLE_ID_PREFIX=\"$ios_app_bundle_id_prefix\"" ]
+}

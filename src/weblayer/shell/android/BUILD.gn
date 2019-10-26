@@ -1,0 +1,126 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/android/config.gni")
+import("//build/config/android/rules.gni")
+import("//third_party/icu/config.gni")
+import("//tools/v8_context_snapshot/v8_context_snapshot.gni")
+
+weblayer_shell_manifest =
+    "$target_gen_dir/weblayer_shell_manifest/AndroidManifest.xml"
+
+jinja_template("weblayer_shell_manifest") {
+  input = "shell_apk/AndroidManifest.xml"
+  output = weblayer_shell_manifest
+}
+
+android_assets("weblayer_shell_assets") {
+  testonly = true
+
+  sources = [
+    "$root_out_dir/weblayer_shell.pak",
+  ]
+  disable_compression = true
+  deps = [
+    "//weblayer/shell:shell_pak",
+  ]
+}
+
+android_library("weblayer_shell_java") {
+  testonly = true
+
+  deps = [
+    ":weblayer_shell_manifest",
+    "//third_party/android_deps:android_support_v4_java",
+    "//weblayer/public/java",
+  ]
+  java_files =
+      [ "shell_apk/src/org/chromium/weblayer/shell/WebLayerShellActivity.java" ]
+
+  android_manifest_for_lint = weblayer_shell_manifest
+}
+
+android_apk("weblayer_shell_apk") {
+  testonly = true
+
+  deps = [
+    ":weblayer_shell_assets",
+    ":weblayer_shell_java",
+    ":weblayer_shell_manifest",
+  ]
+  apk_name = "WebLayerShell"
+  android_manifest = weblayer_shell_manifest
+  min_sdk_version = 21
+  target_sdk_version = 28
+  android_manifest_dep = ":weblayer_shell_manifest"
+}
+
+weblayer_support_manifest =
+    "$target_gen_dir/weblayer_support_manifest/AndroidManifest.xml"
+
+jinja_template("weblayer_support_manifest") {
+  input = "support_apk/AndroidManifest.xml"
+  output = weblayer_support_manifest
+}
+
+android_assets("weblayer_support_assets") {
+  testonly = true
+
+  sources = [
+    "$root_out_dir/weblayer_support.pak",
+  ]
+  disable_compression = true
+  deps = [
+    "//third_party/icu:icu_assets",
+    "//weblayer/shell:support_pak",
+  ]
+  if (use_v8_context_snapshot) {
+    deps += [ "//tools/v8_context_snapshot:v8_context_snapshot_assets" ]
+  } else {
+    deps += [ "//v8:v8_external_startup_data_assets" ]
+  }
+}
+
+android_apk("weblayer_support_apk") {
+  testonly = true
+
+  deps = [
+    ":weblayer_support_assets",
+    ":weblayer_support_manifest",
+    "//base:base_java",
+    "//weblayer/browser/java",
+  ]
+
+  # Transitive dependencies
+  deps += [
+    "//components/viz/service:service_java",
+    "//media/base/android:media_java",
+    "//media/capture/video/android:capture_java",
+    "//mojo/public/java:system_java",
+    "//net/android:net_java",
+  ]
+  apk_name = "WebLayerSupport"
+  android_manifest = weblayer_support_manifest
+  min_sdk_version = 21
+  target_sdk_version = 28
+  android_manifest_dep = ":weblayer_support_manifest"
+  shared_libraries = [ "//weblayer:libweblayer" ]
+}
+
+generate_wrapper("run_weblayer_shell") {
+  testonly = true
+  wrapper_script = "$root_out_dir/bin/run_weblayer_shell"
+  executable = "//weblayer/tools/run_weblayer_shell.py"
+  executable_args = [
+    "--shell-apk-path",
+    "@WrappedPath(apks/WebLayerShell.apk)",
+    "--support-apk-path",
+    "@WrappedPath(apks/WebLayerSupport.apk)",
+  ]
+
+  deps = [
+    ":weblayer_shell_apk",
+    ":weblayer_support_apk",
+  ]
+}

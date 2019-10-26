@@ -1,0 +1,69 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("../../../build/config/services.gni")
+
+source_set("mdns_interface") {
+  sources = [
+    "domain_name.cc",
+    "domain_name.h",
+    "mdns_responder_adapter.cc",
+    "mdns_responder_adapter.h",
+  ]
+
+  public_deps = [
+    "../../../../platform",
+    "../../../../util",
+  ]
+}
+
+source_set("mdns_unittests") {
+  testonly = true
+
+  sources = [
+    "domain_name_unittest.cc",
+  ]
+
+  deps = [
+    ":mdns_interface",
+    "../../../../third_party/googletest:gmock",
+    "../../../../third_party/googletest:gtest",
+  ]
+
+  if (use_mdns_responder) {
+    sources += [ "mdns_responder_adapter_impl_unittest.cc" ]
+    deps += [ ":mdns" ]
+  }
+}
+
+if (use_mdns_responder) {
+  executable("embedder_demo") {
+    sources = [
+      "embedder_demo.cc",
+    ]
+
+    deps = [
+      ":mdns",
+    ]
+  }
+
+  source_set("mdns") {
+    sources = [
+      "mdns_responder_adapter_impl.cc",
+      "mdns_responder_adapter_impl.h",
+      "mdns_responder_platform.cc",
+      "mdns_responder_platform.h",
+    ]
+
+    public_deps = [
+      ":mdns_interface",
+      "../../../../platform",
+      "../../../../util",
+    ]
+
+    deps = [
+      "../../../../third_party/mDNSResponder:core",
+    ]
+  }
+}

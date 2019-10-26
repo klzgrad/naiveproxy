@@ -1,0 +1,50 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# Generate the binary proto form of "safety_tips" from the ascii proto.
+#
+# TODO(meacer): Remove this from the build once we have the script to push the
+# generated protobuf ready. This will most likely be a manual process and won't
+# be part of the build.
+#
+action("make_safety_tips_protobuf") {
+  script = "gen_safety_tips_proto.py"
+
+  # The output goes in $target_gen_dir since that's where
+  # chrome/browser/browser_resources.grd will look for it.
+
+  input_filename = "safety_tips.asciipb"
+  output_dir = target_gen_dir
+  output_basename = "safety_tips.pb"
+  python_path_root = "$root_out_dir/pyproto"
+  python_path_safety_tips =
+      "$python_path_root/chrome/browser/lookalikes/safety_tips/"
+
+  inputs = [
+    input_filename,
+  ]
+
+  deps = [
+    "//chrome/browser/lookalikes/safety_tips:proto",
+    "//third_party/protobuf:py_proto",
+  ]
+
+  outputs = [
+    "$output_dir/$output_basename",
+  ]
+
+  args = [
+    "-w",
+    "-i",
+    rebase_path(input_filename, root_build_dir),
+    "-d",
+    rebase_path(output_dir, root_build_dir),
+    "-o",
+    output_basename,
+    "-p",
+    rebase_path(python_path_root, root_build_dir),
+    "-p",
+    rebase_path(python_path_safety_tips, root_build_dir),
+  ]
+}

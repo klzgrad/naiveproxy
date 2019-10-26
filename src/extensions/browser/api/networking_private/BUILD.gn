@@ -1,0 +1,68 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//extensions/buildflags/buildflags.gni")
+
+assert(enable_extensions,
+       "Cannot depend on extensions because enable_extensions=false.")
+
+import("//build/config/features.gni")
+
+source_set("networking_private") {
+  # Sources that will be added if a non-stub implementation is chosen.
+  default_sources = [
+    "networking_cast_private_delegate.cc",
+    "networking_cast_private_delegate.h",
+    "networking_private_api.cc",
+    "networking_private_api.h",
+    "networking_private_delegate.cc",
+    "networking_private_delegate.h",
+    "networking_private_delegate_factory.cc",
+    "networking_private_delegate_factory.h",
+    "networking_private_delegate_observer.h",
+    "networking_private_event_router.h",
+    "networking_private_event_router_factory.cc",
+    "networking_private_event_router_factory.h",
+  ]
+
+  deps = [
+    "//extensions/common/api",
+    "//net",
+  ]
+
+  public_deps = [
+    "//extensions/browser:browser_sources",
+  ]
+
+  if (!is_chromeos && is_linux && use_dbus) {
+    sources = default_sources + [
+                "network_config_dbus_constants_linux.cc",
+                "network_config_dbus_constants_linux.h",
+                "networking_private_event_router_nonchromeos.cc",
+                "networking_private_linux.cc",
+                "networking_private_linux.h",
+              ]
+    if (use_dbus) {
+      deps += [ "//dbus" ]
+    }
+  } else if (is_win || is_mac) {
+    sources = default_sources + [
+                "networking_private_event_router_nonchromeos.cc",
+                "networking_private_service_client.cc",
+                "networking_private_service_client.h",
+              ]
+    deps += [ "//components/wifi" ]
+  } else if (is_chromeos) {
+    sources = default_sources + [
+                "networking_private_chromeos.cc",
+                "networking_private_chromeos.h",
+                "networking_private_event_router_chromeos.cc",
+              ]
+  } else {
+    not_needed([ "default_sources" ])
+    sources = [
+      "networking_private_stubs.cc",
+    ]
+  }
+}

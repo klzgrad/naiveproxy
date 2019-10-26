@@ -1,0 +1,69 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+// Next MinVersion: 4
+
+module arc.mojom;
+
+[Extensible]
+enum BootType {
+  // This is used only for backward compatibility reasons and the value has to
+  // be 0.
+  UNKNOWN = 0,
+
+  // This is for the very first (opt-in) boot.
+  FIRST_BOOT = 1,
+  // This is for the first boot after Chrome OS update which also updates the
+  // ARC image.
+  FIRST_BOOT_AFTER_UPDATE = 2,
+  // This is for a regular boot.
+  REGULAR_BOOT = 3,
+};
+
+// Describes a boot progress event.
+struct BootProgressEvent {
+  // Name of the boot progress event in Android. Currently there are
+  // 11 boot progress events found in Android source repository:
+  //   system/core/logcat/event.logtags
+  //   frameworks/base/services/core/java/com/android/server/am/
+  //       EventLogTags.logtags
+  //   frameworks/base/services/core/java/com/android/server/
+  //       EventLogTags.logtags
+  string event;
+
+  // Timestamp of the event in uptime obtained in ARC. The uptime
+  // is from clock source MONOTONIC_CLOCK since Chrome OS boots up.
+  // Therefore, we need to calibrate the correct elapsed time of the
+  // event by comparing the uptime with the ARC start time from
+  // the same clock source MONOTONIC_CLOCK in session manager.
+  int64 uptimeMillis;
+};
+
+[Extensible]
+enum NativeBridgeType {
+  // Native bridge is not used.
+  NONE = 0,
+  // Using houdini translator.
+  HOUDINI = 1,
+  // Using ndk-translation translator.
+  NDK_TRANSLATION = 2,
+};
+
+// Next method ID: 2
+interface MetricsHost {
+  // Reports boot progress events from ARC instance.
+  ReportBootProgress@0(array<BootProgressEvent> events,
+                       [MinVersion=1] BootType boot_type);
+
+  // Reports native bridge used by ARC instance.
+  [MinVersion=3] ReportNativeBridge@1(NativeBridgeType native_bridge_type);
+};
+
+// Next method ID: 2
+interface MetricsInstance {
+  // DEPRECATED: Please use Init@1 instead.
+  InitDeprecated@0(MetricsHost host_ptr);
+
+  // Establishes full-duplex communication with the host.
+  [MinVersion=2] Init@1(MetricsHost host_ptr) => ();
+};

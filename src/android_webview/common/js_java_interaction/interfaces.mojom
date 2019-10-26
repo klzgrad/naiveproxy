@@ -1,0 +1,39 @@
+// Copyright 2019 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module android_webview.mojom;
+
+import "mojo/public/mojom/base/string16.mojom";
+import "services/network/public/mojom/proxy_config.mojom";
+
+// For JavaScript postMessage() API, implemented by browser.
+interface JsToJavaMessaging {
+  // Called from renderer, browser receives |message| and possible |ports|.
+  // The |message| is an opaque type and the contents are defined by the client
+  // of this API.
+  PostMessage(mojo_base.mojom.String16 message,
+              array<handle<message_pipe>> ports);
+
+  // When there is a new JavaToJsMessaging created in renderer, we need to send
+  // it to browser, so browser could send message back to Js.
+  SetJavaToJsMessaging(pending_remote<JavaToJsMessaging> java_to_js_messaging);
+};
+
+// For Java to reply back to injected JavaScript object. Implemented by
+// renderer.
+interface JavaToJsMessaging {
+  // Called from browser, to send message from Java to JavaScript.
+  OnPostMessage(mojo_base.mojom.String16 message);
+};
+
+// For browser to configure renderer, implemented by renderer.
+interface JsJavaConfigurator {
+  // Called from browser, to tell renderer that if we need to inject
+  // a JavaScript object with the given |js_object_name| based on
+  // |need_to_inject_js_object| flag. Only frames with the origin matches
+  // |allowed_origin_rules| will have the object injected.
+  SetJsApiService(bool need_to_inject_js_object,
+                  mojo_base.mojom.String16 js_object_name,
+                  network.mojom.ProxyBypassRules allowed_origin_rules);
+};

@@ -1,0 +1,69 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// This file exposes an interface to the chrome://discards Web UI to allow
+// viewing and exploring the CU graph.
+
+module performance_manager.mojom;
+
+import "mojo/public/mojom/base/process_id.mojom";
+import "mojo/public/mojom/base/time.mojom";
+import "url/mojom/url.mojom";
+
+// Represents the momentary state of a Page CU.
+struct WebUIPageInfo {
+  int64 id;
+
+  url.mojom.Url main_frame_url;
+
+  // TODO(siggi): Estimate data.
+};
+
+// Represents the momentary state of a Frame CU.
+struct WebUIFrameInfo {
+  int64 id;
+
+  url.mojom.Url url;
+  int64 page_id;
+  int64 parent_frame_id;
+  int64 process_id;
+};
+
+// Represents the momentary state of a Process CU.
+struct WebUIProcessInfo {
+  int64 id;
+
+  mojo_base.mojom.ProcessId pid;
+  mojo_base.mojom.TimeDelta cumulative_cpu_usage;
+  uint64 private_footprint_kb;
+};
+
+// Used to transport favicon data.
+struct WebUIFavIconInfo {
+  int64 node_id;
+
+  // Contains the base64-encoded icon data, suitable for inclusion in a
+  // data URL.
+  string icon_data;
+};
+
+interface WebUIGraphChangeStream {
+  FrameCreated(WebUIFrameInfo frame);
+  PageCreated(WebUIPageInfo pages);
+  ProcessCreated(WebUIProcessInfo process);
+
+  FrameChanged(WebUIFrameInfo frame);
+  PageChanged(WebUIPageInfo page);
+  ProcessChanged(WebUIProcessInfo process);
+
+  FavIconDataAvailable(WebUIFavIconInfo favicon);
+
+  NodeDeleted(int64 node_id);
+};
+
+// This interface allows subscribing to a stream of events that track the state
+// of the performance manager graph.
+interface WebUIGraphDump {
+  SubscribeToChanges(WebUIGraphChangeStream change_subscriber);
+};

@@ -1,0 +1,99 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/android/rules.gni")
+
+android_library("module_installer_java") {
+  java_files = [
+    "java/src/org/chromium/components/module_installer/ModuleInstallerImpl.java",
+    "java/src/org/chromium/components/module_installer/ModuleInstallerBackend.java",
+    "java/src/org/chromium/components/module_installer/FakeModuleInstallerBackend.java",
+    "java/src/org/chromium/components/module_installer/PlayCoreModuleInstallerBackend.java",
+    "java/src/org/chromium/components/module_installer/ApkModuleInstaller.java",
+    "java/src/org/chromium/components/module_installer/ModuleInstaller.java",
+    "java/src/org/chromium/components/module_installer/OnModuleInstallFinishedListener.java",
+    "java/src/org/chromium/components/module_installer/Module.java",
+    "java/src/org/chromium/components/module_installer/Timer.java",
+    "java/src/org/chromium/components/module_installer/observers/ModuleActivityObserver.java",
+    "java/src/org/chromium/components/module_installer/observers/ObserverStrategy.java",
+    "java/src/org/chromium/components/module_installer/observers/ObserverStrategyImpl.java",
+  ]
+
+  deps = [
+    "//base:base_java",
+    "//components/crash/android:java",
+    "//third_party/google_android_play_core:com_google_android_play_core_java",
+  ]
+
+  srcjar_deps = [ ":module_installer_build_config" ]
+
+  jar_excluded_patterns = [ "*/ModuleInstallerConfig.class" ]
+
+  jacoco_never_instrument = true
+}
+
+android_library("module_installer_test_java") {
+  testonly = true
+  java_files = [ "javatests/src/org/chromium/components/module_installer/ModuleInstallerRule.java" ]
+  deps = [
+    ":module_installer_java",
+    "//base:base_java",
+    "//third_party/junit",
+  ]
+  jacoco_never_instrument = true
+}
+
+junit_binary("module_installer_junit_tests") {
+  java_files = [ "junit/src/org/chromium/components/module_installer/observers/ModuleActivityObserverTest.java" ]
+  deps = [
+    ":module_installer_java",
+    "//base:base_java",
+    "//base:base_junit_test_support",
+  ]
+}
+
+java_library("module_interface_java") {
+  supports_android = true
+  java_files = [
+    "java/src/org/chromium/components/module_installer/ModuleInterface.java",
+  ]
+}
+
+java_annotation_processor("module_interface_processor") {
+  java_files = [ "java/src/org/chromium/components/module_installer/ModuleInterfaceProcessor.java" ]
+  main_class =
+      "org.chromium.components.module_installer.ModuleInterfaceProcessor"
+  annotation_processor_deps = [ "//third_party/auto:auto_service_processor" ]
+  deps = [
+    ":module_interface_java",
+    "//third_party/android_deps:com_squareup_javapoet_java",
+    "//third_party/auto:auto_service_java",
+  ]
+  jacoco_never_instrument = true
+}
+
+# Use this one if your target needs to depend on ModuleInstallerConfig. The
+# other two targets are automatically added to build targets.
+java_cpp_template("module_installer_build_config") {
+  package_path = "org/chromium/components/module_installer"
+  sources = [
+    "build/ModuleInstallerConfig.template",
+  ]
+}
+
+java_cpp_template("module_installer_bundle_build_config") {
+  package_path = "org/chromium/components/module_installer"
+  sources = [
+    "build/ModuleInstallerConfig.template",
+  ]
+  defines = [ "IS_BUNDLE_BUILD" ]
+}
+
+java_cpp_template("module_installer_apk_build_config") {
+  package_path = "org/chromium/components/module_installer"
+  sources = [
+    "build/ModuleInstallerConfig.template",
+  ]
+  defines = [ "IS_APK_BUILD" ]
+}

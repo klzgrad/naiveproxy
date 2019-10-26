@@ -1,0 +1,173 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/features.gni")
+import("//build/config/sanitizers/sanitizers.gni")
+import("//build/config/ui.gni")
+import("//build/config/win/console_app.gni")
+import("//build/config/win/manifest.gni")
+import("//gpu/vulkan/features.gni")
+import("//media/media_options.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
+import("//tools/grit/grit_rule.gni")
+import("//tools/grit/repack.gni")
+import("//tools/v8_context_snapshot/v8_context_snapshot.gni")
+if (is_android) {
+  import("//build/config/android/config.gni")
+} else if (is_mac) {
+  import("//build/config/mac/rules.gni")
+  import("//build/mac/tweak_info_plist.gni")
+  import("//content/public/app/mac_helpers.gni")
+  import("//third_party/icu/config.gni")
+  import("//ui/gl/features.gni")
+  import("//v8/gni/v8.gni")
+}
+
+source_set("android_descriptors") {
+  sources = [
+    "browser/android_descriptors.h",
+  ]
+  public_deps = [
+    "//content/public/common:content_descriptors",
+  ]
+}
+
+jumbo_static_library("weblayer_lib") {
+  sources = [
+    "app/content_main_delegate_impl.cc",
+    "app/content_main_delegate_impl.h",
+    "app/main.cc",
+    "browser/browser_controller_impl.cc",
+    "browser/browser_controller_impl.h",
+    "browser/browser_main_parts_impl.cc",
+    "browser/browser_main_parts_impl.h",
+    "browser/content_browser_client_impl.cc",
+    "browser/content_browser_client_impl.h",
+    "browser/navigation_controller_impl.cc",
+    "browser/navigation_controller_impl.h",
+    "browser/navigation_impl.cc",
+    "browser/navigation_impl.h",
+    "browser/profile_impl.cc",
+    "browser/profile_impl.h",
+    "common/content_client_impl.cc",
+    "common/content_client_impl.h",
+    "public/browser_controller.h",
+    "public/browser_observer.h",
+    "public/main.h",
+    "public/navigation.h",
+    "public/navigation_controller.h",
+    "public/navigation_observer.h",
+    "public/profile.h",
+  ]
+
+  configs += [
+    "//build/config:precompiled_headers",
+
+    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+    "//build/config/compiler:no_size_t_to_int_warning",
+  ]
+
+  public_deps = [
+    ":android_descriptors",
+  ]
+  deps = [
+    "//base",
+    "//base:base_static",
+    "//base/third_party/dynamic_annotations",
+    "//cc",
+    "//content:resources",
+    "//content/app/resources",
+    "//content/app/strings",
+    "//content/public/app:both",
+    "//content/public/child:child",
+    "//content/public/common",
+    "//content/public/common:service_names",
+    "//net",
+    "//net:net_resources",
+    "//sandbox",
+    "//skia",
+    "//third_party/icu",
+    "//ui/base",
+    "//ui/base/clipboard",
+    "//ui/base/ime/init",
+    "//ui/display",
+    "//ui/events:events_base",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+    "//ui/gfx/ipc",
+    "//ui/gfx/ipc/geometry",
+    "//ui/gfx/ipc/skia",
+    "//ui/gl",
+    "//ui/platform_window",
+    "//url",
+    "//v8",
+  ]
+
+  if (enable_vulkan) {
+    deps += [ "//gpu/vulkan/init" ]
+  }
+  if (mojo_media_host == "browser") {
+    deps += [
+      "//media/mojo/mojom:constants",
+      "//media/mojo/services",
+    ]
+  }
+
+  if (is_win) {
+    deps += [ "//content:sandbox_helper_win" ]
+    if (win_console_app) {
+      defines = [ "WIN_CONSOLE_APP" ]
+    }
+  }
+
+  if (is_linux) {
+    deps += [
+      "//build/config/freetype",
+      "//third_party/fontconfig",
+    ]
+  }
+
+  if (is_android) {
+    deps += [
+      "//components/embedder_support/android:view",
+      "//ui/android",
+      "//weblayer/browser/java:jni",
+    ]
+    sources += [
+      "browser/browser_observer_proxy.cc",
+      "browser/browser_observer_proxy.h",
+    ]
+  }
+
+  if (toolkit_views) {
+    deps += [ "//ui/views" ]
+  }
+
+  if (use_aura) {
+    deps += [
+      "//ui/aura",
+      "//ui/events",
+      "//ui/strings",
+      "//ui/wm",
+    ]
+  }
+}
+
+# TODO(jam): move weblayer_shell_resources_grit and copy_shell_resources here in
+# a way that's shareable?
+
+if (is_android) {
+  shared_library("libweblayer") {
+    sources = [
+      "app/jni_onload.cc",
+    ]
+    deps = [
+      ":weblayer_lib",
+      "//base",
+      "//content/public/app:both",
+    ]
+    configs -= [ "//build/config/android:hide_all_but_jni_onload" ]
+    configs += [ "//build/config/android:hide_all_but_jni" ]
+  }
+}

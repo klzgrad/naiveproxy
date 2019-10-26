@@ -1,0 +1,108 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <PropertyPageSchema
+      Include="$(MSBuildThisFileDirectory)$(MSBuildThisFileName).xml" />
+    <AvailableItemName
+      Include="YASM">
+      <Targets>_YASM</Targets>
+    </AvailableItemName>
+  </ItemGroup>
+  <UsingTask
+    TaskName="YASM"
+    TaskFactory="XamlTaskFactory"
+    AssemblyName="Microsoft.Build.Tasks.v4.0">
+    <Task>$(MSBuildThisFileDirectory)$(MSBuildThisFileName).xml</Task>
+  </UsingTask>
+  <Target
+    Name="_YASM"
+    BeforeTargets="$(YASMBeforeTargets)"
+    AfterTargets="$(YASMAfterTargets)"
+    Condition="'@(YASM)' != ''"
+    DependsOnTargets="$(YASMDependsOn);ComputeYASMOutput"
+    Outputs="@(YASM->'%(ObjectFile)')"
+    Inputs="@(YASM);%(YASM.AdditionalDependencies);$(MSBuildProjectFile)">
+    <ItemGroup
+      Condition="'@(SelectedFiles)' != ''">
+      <YASM
+        Remove="@(YASM)"
+        Condition="'%(Identity)' != '@(SelectedFiles)'" />
+    </ItemGroup>
+    <ItemGroup>
+      <YASM_tlog
+        Include="%(YASM.ObjectFile)"
+        Condition="'%(YASM.ObjectFile)' != '' and '%(YASM.ExcludedFromBuild)' != 'true'">
+        <Source>@(YASM, '|')</Source>
+      </YASM_tlog>
+    </ItemGroup>
+    <Message
+      Importance="High"
+      Text="%(YASM.ExecutionDescription)" />
+    <WriteLinesToFile
+      Condition="'@(YASM_tlog)' != '' and '%(YASM_tlog.ExcludedFromBuild)' != 'true'"
+      File="$(IntDir)$(ProjectName).write.1.tlog"
+      Lines="^%(YASM_tlog.Source);@(YASM_tlog->'%(Fullpath)')" />
+    <YASM
+      Condition="'@(YASM)' != '' and '%(YASM.ExcludedFromBuild)' != 'true'"
+      CommandLineTemplate="%(YASM.CommandLineTemplate)"
+      Debug="%(YASM.Debug)"
+      PreIncludeFile="%(YASM.PreIncludeFile)"
+      IncludePaths="%(YASM.IncludePaths)"
+      Defines="%(YASM.Defines)"
+      UnDefines="%(YASM.UnDefines)"
+      ObjectFile="%(YASM.ObjectFile)"
+      ListFile="%(YASM.ListFile)"
+      MapFile="%(YASM.MapFile)"
+      ErrorFile="%(YASM.ErrorFile)"
+      SymbolPrefix="%(YASM.SymbolPrefix)"
+      SymbolSuffix="%(YASM.SymbolSuffix)"
+      PreProc="%(YASM.PreProc)"
+      Parser="%(YASM.Parser)"
+      AdditionalOptions="%(YASM.AdditionalOptions)"
+      Inputs="@(YASM)" />
+  </Target>
+  <PropertyGroup>
+    <ComputeLinkInputsTargets>
+            $(ComputeLinkInputsTargets);
+            ComputeYASMOutput;
+          </ComputeLinkInputsTargets>
+    <ComputeLibInputsTargets>
+            $(ComputeLibInputsTargets);
+            ComputeYASMOutput;
+          </ComputeLibInputsTargets>
+  </PropertyGroup>
+  <Target
+    Name="ComputeYASMOutput"
+    Condition="'@(YASM)' != ''">
+    <ItemGroup>
+      <YASMDirsToMake
+        Condition="'@(YASM)' != '' and '%(YASM.ExcludedFromBuild)' != 'true' and !HasTrailingSlash('%(YASM.ObjectFile)')"
+        Include="%(YASM.ObjectFile)" />
+      <Link
+        Include="%(YASMDirsToMake.Identity)"
+        Condition="'%(Extension)'=='.obj' or '%(Extension)'=='.res' or '%(Extension)'=='.rsc' or '%(Extension)'=='.lib'" />
+      <Lib
+        Include="%(YASMDirsToMake.Identity)"
+        Condition="'%(Extension)'=='.obj' or '%(Extension)'=='.res' or '%(Extension)'=='.rsc' or '%(Extension)'=='.lib'" />
+      <ImpLib
+        Include="%(YASMDirsToMake.Identity)"
+        Condition="'%(Extension)'=='.obj' or '%(Extension)'=='.res' or '%(Extension)'=='.rsc' or '%(Extension)'=='.lib'" />
+    </ItemGroup>
+    <ItemGroup>
+      <YASMDirsToMake
+        Condition="'@(YASM)' != '' and '%(YASM.ExcludedFromBuild)' != 'true' and HasTrailingSlash('%(YASM.ObjectFile)')"
+        Include="@(YASM->'%(ObjectFile)%(Filename).obj')" />
+      <Link
+        Include="%(YASMDirsToMake.Identity)"
+        Condition="'%(Extension)'=='.obj' or '%(Extension)'=='.res' or '%(Extension)'=='.rsc' or '%(Extension)'=='.lib'" />
+      <Lib
+        Include="%(YASMDirsToMake.Identity)"
+        Condition="'%(Extension)'=='.obj' or '%(Extension)'=='.res' or '%(Extension)'=='.rsc' or '%(Extension)'=='.lib'" />
+      <ImpLib
+        Include="%(YASMDirsToMake.Identity)"
+        Condition="'%(Extension)'=='.obj' or '%(Extension)'=='.res' or '%(Extension)'=='.rsc' or '%(Extension)'=='.lib'" />
+    </ItemGroup>
+    <MakeDir
+      Directories="@(YASMDirsToMake->'%(RootDir)%(Directory)')" />
+  </Target>
+</Project>

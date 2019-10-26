@@ -1,0 +1,70 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//testing/test.gni")
+import("//third_party/protobuf/proto_library.gni")
+
+proto_library("video_decode_stats_proto") {
+  sources = [
+    "video_decode_stats.proto",
+  ]
+}
+
+source_set("capabilities") {
+  # Do not expand the visibility here without double-checking with OWNERS, this
+  # is a roll-up target which is part of the //media component. Most other DEPs
+  # should be using //media and not directly DEP this roll-up target.
+  visibility = [ "//media" ]
+
+  sources = [
+    "bucket_utility.cc",
+    "bucket_utility.h",
+    "in_memory_video_decode_stats_db_impl.cc",
+    "in_memory_video_decode_stats_db_impl.h",
+    "learning_helper.cc",
+    "learning_helper.h",
+    "video_decode_stats_db.cc",
+    "video_decode_stats_db.h",
+    "video_decode_stats_db_impl.cc",
+    "video_decode_stats_db_impl.h",
+    "video_decode_stats_db_provider.cc",
+    "video_decode_stats_db_provider.h",
+  ]
+
+  public_deps = [
+    ":video_decode_stats_proto",
+    "//base",
+    "//components/leveldb_proto",
+    "//media/base",
+    "//ui/gfx/geometry",
+  ]
+
+  deps = [
+    "//media/learning/common",
+    "//media/learning/impl",
+  ]
+
+  configs += [ "//media:subcomponent_config" ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "in_memory_video_decode_stats_db_unittest.cc",
+    "video_decode_stats_db_impl_unittest.cc",
+    "video_decode_stats_db_unittest.cc",
+  ]
+
+  deps = [
+    # Explicitly adding the proto lib here (in addition to "capabilities"
+    # public_deps), because the generated files seem not to be available through
+    # the transitive "capabilities" target (via media:test_support -> media).
+    ":video_decode_stats_proto",
+    "//base/test:test_support",
+    "//components/leveldb_proto:test_support",
+    "//media:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+}
