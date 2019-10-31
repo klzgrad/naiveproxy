@@ -16,8 +16,6 @@ DEBIAN_PACKAGES='
   libgcc1
   libgomp1
   libatomic1
-  libasan3
-  libubsan0
   libstdc++6
   libnspr4
   libnspr4-dev
@@ -26,16 +24,26 @@ DEBIAN_PACKAGES='
   libsqlite3-0
 '
 
+DEBIAN_PACKAGES_AMD64='
+  liblsan0
+  libtsan0
+'
 DEBIAN_PACKAGES_X86='
+  libasan3
   libcilkrts5
   libitm1
   libmpx2
   libquadmath0
+  libubsan0
 '
 DEBIAN_PACKAGES_ARM='
+  libasan3
+  libubsan0
 '
 DEBIAN_PACKAGES_ARM64='
+  libasan3
   libitm1
+  libubsan0
 '
 
 # Disables libdbus workarounds
