@@ -3,7 +3,7 @@
 [ "$1" ] || exit 1
 naive="$1"
 eval "$EXTRA_FLAGS"
-if [ "$use_sysroot" = true ]; then
+if [ "$(uname)" = Linux ]; then
   case "$target_cpu" in
     arm64) naive="qemu-aarch64 -L src/build/linux/debian_sid_arm64-sysroot $naive";;
     arm) naive="qemu-arm -L src/build/linux/debian_sid_arm-sysroot $naive";;
