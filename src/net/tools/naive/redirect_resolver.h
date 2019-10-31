@@ -41,6 +41,7 @@ class RedirectResolver {
                    size_t prefix);
   ~RedirectResolver();
 
+  bool IsInResolvedRange(const IPAddress& address) const;
   std::string FindNameByAddress(const IPAddress& address) const;
 
  private:
