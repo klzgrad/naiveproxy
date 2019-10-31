@@ -218,6 +218,8 @@ int NaiveConnection::DoConnectServer() {
         }
       }
     }
+#else
+    static_cast<void>(resolver_);
 #endif
   }
 
