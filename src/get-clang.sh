@@ -18,17 +18,14 @@ build_sysroot() {
 }
 
 if [ "$ARCH" = Linux ]; then
+  build_sysroot Amd64
   case "$target_cpu" in
     arm64)
-      build_sysroot Amd64
       build_sysroot ARM64
     ;;
     arm)
       build_sysroot I386
       build_sysroot ARM
-    ;;
-    *)
-      build_sysroot Amd64
     ;;
   esac
 fi
