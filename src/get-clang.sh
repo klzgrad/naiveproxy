@@ -9,25 +9,26 @@ esac
 
 eval "$EXTRA_FLAGS"
 
-if [ "$use_sysroot" = true ]; then
-  ln -sfn / ./build/linux/debian_sid_amd64-sysroot
-  sudo mount --bind /usr/lib/x86_64-linux-gnu/pkgconfig /usr/lib/pkgconfig
+build_sysroot() {
+  local lower="$(echo "$1" | tr '[:upper:]' '[:lower:]')"
+  ./build/linux/sysroot_scripts/sysroot-creator-sid-naive.sh "BuildSysroot$1"
+  rm -rf "./build/linux/debian_sid_$lower-sysroot"
+  mkdir "./build/linux/debian_sid_$lower-sysroot"
+  tar xf "./out/sysroot-build/sid/debian_sid_${lower}_sysroot.tar.xz" -C "./build/linux/debian_sid_$lower-sysroot"
+}
+
+if [ "$ARCH" = Linux ]; then
   case "$target_cpu" in
     arm64)
-      rm -rf ./build/linux/debian_sid_arm64-sysroot
-      ./build/linux/sysroot_scripts/sysroot-creator-sid-naive.sh BuildSysrootARM64
-      mkdir -p ./build/linux/debian_sid_arm64-sysroot
-      tar xf ./out/sysroot-build/sid/debian_sid_arm64_sysroot.tar.xz -C ./build/linux/debian_sid_arm64-sysroot
+      build_sysroot Amd64
+      build_sysroot ARM64
     ;;
     arm)
-      rm -rf ./build/linux/debian_sid_arm-sysroot
-      ./build/linux/sysroot_scripts/sysroot-creator-sid-naive.sh BuildSysrootARM
-      mkdir -p ./build/linux/debian_sid_arm-sysroot
-      tar xf ./out/sysroot-build/sid/debian_sid_arm_sysroot.tar.xz -C ./build/linux/debian_sid_arm-sysroot
-      rm -rf ./build/linux/debian_sid_i386-sysroot
-      ./build/linux/sysroot_scripts/sysroot-creator-sid-naive.sh BuildSysrootI386
-      mkdir -p ./build/linux/debian_sid_i386-sysroot
-      tar xf ./out/sysroot-build/sid/debian_sid_i386_sysroot.tar.xz -C ./build/linux/debian_sid_i386-sysroot
+      build_sysroot I386
+      build_sysroot ARM
+    ;;
+    *)
+      build_sysroot Amd64
     ;;
   esac
 fi
