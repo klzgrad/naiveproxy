@@ -211,10 +211,16 @@ int NaiveConnection::DoConnectServer() {
     if (rv == 0) {
       IPEndPoint ipe;
       if (ipe.FromSockAddr(dst.addr, dst.addr_len)) {
-        origin = HostPortPair::FromIPEndPoint(ipe);
-        auto name = resolver_->FindNameByAddress(ipe.address());
+        const auto& addr = ipe.address();
+        auto name = resolver_->FindNameByAddress(addr);
         if (!name.empty()) {
-          origin.set_host(name);
+          origin = HostPortPair(name, ipe.port());
+        } else if (!resolver_->IsInResolvedRange(addr)) {
+          origin = HostPortPair::FromIPEndPoint(ipe);
+        } else {
+          LOG(ERROR) << "Connection " << id_ << " to unresolved name for "
+                     << addr.ToString();
+          return ERR_ADDRESS_INVALID;
         }
       }
     }

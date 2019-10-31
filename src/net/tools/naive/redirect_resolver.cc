@@ -20,6 +20,12 @@
 
 namespace {
 constexpr int kUdpReadBufferSize = 1024;
+constexpr int kResolutionTtl = 60;
+constexpr int kResolutionRecycleTime = 60 * 5;
+
+std::string PackedIPv4ToString(uint32_t addr) {
+  return net::IPAddress(addr >> 24, addr >> 16, addr >> 8, addr).ToString();
+}
 }  // namespace
 
 namespace net {
@@ -133,6 +139,9 @@ int RedirectResolver::HandleReadResult(int result) {
         // Too few available addresses. Overwrites old one.
         auto res_it = by_addr->second;
 
+        LOG(INFO) << "Overwrite " << res_it->name << " "
+                  << PackedIPv4ToString(res_it->addr) << " with " << name << " "
+                  << PackedIPv4ToString(addr);
         resolution_by_name_.erase(res_it->by_name);
         resolutions_.erase(res_it);
         resolutions_.emplace_back();
@@ -146,6 +155,7 @@ int RedirectResolver::HandleReadResult(int result) {
         res_it->by_name = by_name;
         res_it->by_addr = by_addr;
       } else {
+        LOG(INFO) << "Add " << name << " " << PackedIPv4ToString(addr);
         resolutions_.emplace_back();
         auto res_it = std::prev(resolutions_.end());
 
@@ -161,8 +171,10 @@ int RedirectResolver::HandleReadResult(int result) {
         auto now = base::TimeTicks::Now();
         for (auto it = resolutions_.begin();
              it != resolutions_.end() &&
-             (now - it->time).InSeconds() > 60 * 5;) {
+             (now - it->time).InSeconds() > kResolutionRecycleTime;) {
           auto next = std::next(it);
+          LOG(INFO) << "Drop " << it->name << " "
+                    << PackedIPv4ToString(it->addr);
           resolution_by_name_.erase(it->by_name);
           resolution_by_addr_.erase(it->by_addr);
           resolutions_.erase(it);
@@ -175,7 +187,7 @@ int RedirectResolver::HandleReadResult(int result) {
     record.name = name;
     record.type = dns_protocol::kTypeA;
     record.klass = dns_protocol::kClassIN;
-    record.ttl = 60;
+    record.ttl = kResolutionTtl;
     uint32_t addr = by_name->second->addr;
     record.SetOwnedRdata(IPAddressToPackedString(
         IPAddress(addr >> 24, addr >> 16, addr >> 8, addr)));
@@ -206,6 +218,12 @@ int RedirectResolver::HandleReadResult(int result) {
   return socket_->SendTo(
       buffer_.get(), size, recv_address_,
       base::BindOnce(&RedirectResolver::OnSend, base::Unretained(this)));
+}
+
+bool RedirectResolver::IsInResolvedRange(const IPAddress& address) const {
+  if (!address.IsIPv4())
+    return false;
+  return IPAddressMatchesPrefix(address, range_, prefix_);
 }
 
 std::string RedirectResolver::FindNameByAddress(
