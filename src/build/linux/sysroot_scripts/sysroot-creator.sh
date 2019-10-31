@@ -327,6 +327,14 @@ HacksAndPatchesCommon() {
   nm -D --defined-only --with-symbol-versions "${libc_so}" | \
     "${SCRIPT_DIR}/find_incompatible_glibc_symbols.py" >> "${glob_h}"
 
+  # fcntl64() was introduced in glibc 2.28.  Make sure to use fcntl() instead.
+  local fcntl_h="${INSTALL_ROOT}/usr/include/fcntl.h"
+  sed -i '{N; s/#ifndef \(__USE_FILE_OFFSET64\nextern int fcntl\)/#ifdef \1/}' \
+      "${fcntl_h}"
+  # On i386, fcntl() was updated in glibc 2.28.
+  nm -D --defined-only --with-symbol-versions "${libc_so}" | \
+    "${SCRIPT_DIR}/find_incompatible_glibc_symbols.py" >> "${fcntl_h}"
+
   # This is for chrome's ./build/linux/pkg-config-wrapper
   # which overwrites PKG_CONFIG_LIBDIR internally
   SubBanner "Move pkgconfig scripts"
