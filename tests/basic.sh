@@ -7,6 +7,7 @@ if [ "$(uname)" = Linux ]; then
   case "$target_cpu" in
     arm64) naive="qemu-aarch64 -L src/build/linux/debian_sid_arm64-sysroot $naive";;
     arm) naive="qemu-arm -L src/build/linux/debian_sid_arm-sysroot $naive";;
+    x86) naive="qemu-i386 -L src/build/linux/debian_sid_i386-sysroot $naive";;
   esac
 fi
 
