@@ -23,8 +23,10 @@ if [ "$ARCH" = Linux ]; then
     arm64)
       build_sysroot ARM64
     ;;
-    arm)
+    x86)
       build_sysroot I386
+    ;;
+    arm)
       build_sysroot ARM
     ;;
   esac
