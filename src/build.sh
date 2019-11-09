@@ -50,7 +50,6 @@ flags="$flags"'
   enable_websockets=false
   disable_ftp_support=true
   use_kerberos=false
-  disable_brotli_filter=true
   enable_mdns=false
   enable_reporting=false
   include_transport_security_state_preload_list=false
