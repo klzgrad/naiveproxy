@@ -30,6 +30,12 @@ if [ "$ARCH" = Linux ]; then
     x86)
       build_sysroot I386
     ;;
+    mips64el)
+      build_sysroot Mips64el
+    ;;
+    mipsel)
+      build_sysroot I386
+      build_sysroot Mips
   esac
 fi
 
