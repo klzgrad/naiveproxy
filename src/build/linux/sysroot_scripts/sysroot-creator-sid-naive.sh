@@ -45,16 +45,23 @@ DEBIAN_PACKAGES_ARM64='
   libitm1
   libubsan0
 '
+DEBIAN_PACKAGES_MIPS64EL='
+'
 
 # Disables libdbus workarounds
 ln -sf /bin/true strip
 ln -sf /bin/true arm-linux-gnueabihf-strip
+ln -sf /bin/true mipsel-linux-gnu-strip
+ln -sf /bin/true mips64el-linux-gnuabi64-strip
 export PATH="$PWD:$PATH"
 cp() {
   [ "${1##*/}" = libdbus-1-3-symbols ] && return
   /bin/cp "$@"
 }
+tar() {
+  echo tar "$@"
+}
 
-trap "cd $PWD; rm strip arm-linux-gnueabihf-strip" EXIT
+trap "cd $PWD; rm strip *-strip" EXIT
 
 . "${SCRIPT_DIR}/sysroot-creator.sh"

@@ -34,6 +34,7 @@ fi
 flags="$flags"'
   is_clang=true
   linux_use_bundled_binutils=false
+  use_sysroot=false
 
   fatal_linker_warnings=false
   treat_warnings_as_errors=false
@@ -62,6 +63,12 @@ if [ "$(uname)" = Linux ]; then
     ozone_auto_platforms=false
     ozone_platform="headless"
     ozone_platform_headless=true'
+  . ./get-sysroot.sh
+  sysroot=$(get_sysroot)
+  if [ "$sysroot" ]; then
+      flags="$flags
+        target_sysroot=\"//$sysroot\""
+  fi
 fi
 
 rm -rf "./$out"
