@@ -132,6 +132,7 @@ bool MallocDumpProvider::OnMemoryDump(const MemoryDumpArgs& args,
   }
 #elif defined(OS_FUCHSIA)
 // TODO(fuchsia): Port, see https://crbug.com/706592.
+#elif defined(__UCLIBC__)
 #else
   struct mallinfo info = mallinfo();
 #if !defined(ADDRESS_SANITIZER) && !defined(THREAD_SANITIZER)
