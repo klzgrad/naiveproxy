@@ -1293,7 +1293,6 @@ bool GlobalActivityTracker::CreateWithFile(const FilePath& file_path,
                                            StringPiece name,
                                            int stack_depth) {
   DCHECK(!file_path.empty());
-  DCHECK_GE(static_cast<uint64_t>(std::numeric_limits<int64_t>::max()), size);
 
   // Create and map the file into memory and make it globally available.
   std::unique_ptr<MemoryMappedFile> mapped_file(new MemoryMappedFile());
