@@ -489,17 +489,24 @@ DnsConfigServiceLinux::ResolvReader::GetResState() {
   auto res = std::make_unique<struct __res_state>();
   memset(res.get(), 0, sizeof(struct __res_state));
 
+#if defined(__UCLIBC__)
+  if (res_init() != 0)
+    return nullptr;
+#else
   if (res_ninit(res.get()) != 0) {
     CloseResState(res.get());
     return nullptr;
   }
+#endif
 
   return res;
 }
 
 void DnsConfigServiceLinux::ResolvReader::CloseResState(
     struct __res_state* res) {
+#if !defined(__UCLIBC__)
   res_nclose(res);
+#endif
 }
 
 DnsConfigServiceLinux::DnsConfigServiceLinux()
