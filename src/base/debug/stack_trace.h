@@ -110,6 +110,9 @@ class BASE_EXPORT StackTrace {
   // prefix string prepended to each line.
   void OutputToStreamWithPrefix(std::ostream* os,
                                 const char* prefix_string) const;
+#else
+  void OutputToStream(std::ostream* os) const;
+  void OutputToStreamWithPrefix(std::ostream*, const char*) const {}
 #endif
 
   // Resolves backtrace to symbols and returns as string.
