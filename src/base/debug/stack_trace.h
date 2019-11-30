@@ -131,6 +131,10 @@ class BASE_EXPORT StackTrace {
   // prefix string prepended to each line.
   void OutputToStreamWithPrefix(std::ostream* os,
                                 cstring_view prefix_string) const;
+#else
+  void OutputToStream(std::ostream* os) const;
+  void OutputToStreamWithPrefix(std::ostream* os,
+                                cstring_view prefix_string) const;
 #endif
 
   // Resolves backtrace to symbols and returns as string.
@@ -154,6 +158,9 @@ class BASE_EXPORT StackTrace {
 #if !defined(__UCLIBC__) && !defined(_AIX)
   void OutputToStreamWithPrefixImpl(std::ostream* os,
                                     cstring_view prefix_string) const;
+#else
+  void OutputToStreamWithPrefixImpl(std::ostream* os,
+                                    cstring_view prefix_string) const {}
 #endif
 
   // Returns true if generation of symbolized stack traces is to be suppressed.
