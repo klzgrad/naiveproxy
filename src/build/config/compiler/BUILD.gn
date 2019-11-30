@@ -128,6 +128,8 @@ declare_args() {
 
   # By default only the binaries in official builds get build IDs.
   force_local_build_id = false
+
+  is_openwrt = false
 }
 
 declare_args() {
@@ -561,6 +563,11 @@ config("compiler") {
     ldflags += [ "-stdlib=libc++" ]
   }
 
+  if (is_openwrt && current_cpu == target_cpu) {
+    defines += [ "_LIBCPP_HAS_MUSL_LIBC", "__UCLIBC__" ]
+    libs = [ "atomic" ]
+  }
+
   # Add flags for link-time optimization. These flags enable
   # optimizations/transformations that require whole-program visibility at link
   # time, so they need to be applied to all translation units, and we may end up
@@ -764,6 +771,9 @@ config("compiler_cpu_abi") {
           if (is_android) {
             cflags += [ "--target=mipsel-linux-android" ]
             ldflags += [ "--target=mipsel-linux-android" ]
+          } else if (is_openwrt) {
+            cflags += [ "--target=mipsel-openwrt-linux-musl" ]
+            ldflags += [ "--target=mipsel-openwrt-linux-musl" ]
           } else {
             cflags += [ "--target=mipsel-linux-gnu" ]
             ldflags += [ "--target=mipsel-linux-gnu" ]
@@ -846,8 +856,13 @@ config("compiler_cpu_abi") {
       ldflags += [ "-Wl,--hash-style=sysv" ]
       if (custom_toolchain == "") {
         if (is_clang) {
-          cflags += [ "--target=mips-linux-gnu" ]
-          ldflags += [ "--target=mips-linux-gnu" ]
+          if (is_openwrt) {
+            cflags += [ "--target=mips-openwrt-linux-musl" ]
+            ldflags += [ "--target=mips-openwrt-linux-musl" ]
+          } else {
+            cflags += [ "--target=mips-linux-gnu" ]
+            ldflags += [ "--target=mips-linux-gnu" ]
+          }
         } else {
           cflags += [ "-EB" ]
           ldflags += [ "-EB" ]
@@ -895,6 +910,9 @@ config("compiler_cpu_abi") {
           if (is_android) {
             cflags += [ "--target=mips64el-linux-android" ]
             ldflags += [ "--target=mips64el-linux-android" ]
+          } else if (is_openwrt) {
+            cflags += [ "--target=mips64el-openwrt-linux-musl" ]
+            ldflags += [ "--target=mips64el-openwrt-linux-musl" ]
           } else {
             cflags += [ "--target=mips64el-linux-gnuabi64" ]
             ldflags += [ "--target=mips64el-linux-gnuabi64" ]
@@ -955,8 +973,13 @@ config("compiler_cpu_abi") {
       ldflags += [ "-Wl,--hash-style=sysv" ]
       if (custom_toolchain == "") {
         if (is_clang) {
-          cflags += [ "--target=mips64-linux-gnuabi64" ]
-          ldflags += [ "--target=mips64-linux-gnuabi64" ]
+          if (is_openwrt) {
+            cflags += [ "--target=mips64-openwrt-linux-musl" ]
+            ldflags += [ "--target=mips64-openwrt-linux-musl" ]
+          } else {
+            cflags += [ "--target=mips64-linux-gnuabi64" ]
+            ldflags += [ "--target=mips64-linux-gnuabi64" ]
+          }
         } else {
           cflags += [
             "-EB",
