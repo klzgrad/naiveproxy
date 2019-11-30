@@ -23,16 +23,23 @@ std::unique_ptr<struct __res_state> ResolvReader::GetResState() {
   auto res = std::make_unique<struct __res_state>();
   memset(res.get(), 0, sizeof(struct __res_state));
 
+#if defined(__MUSL__)
+  if (res_init() != 0)
+    return nullptr;
+#else
   if (res_ninit(res.get()) != 0) {
     CloseResState(res.get());
     return nullptr;
   }
+#endif
 
   return res;
 }
 
 void ResolvReader::CloseResState(struct __res_state* res) {
+#if !defined(__MUSL__)
   res_nclose(res);
+#endif
 }
 
 absl::optional<std::vector<IPEndPoint>> GetNameservers(
