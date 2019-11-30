@@ -7,21 +7,22 @@ case "$ARCH" in
   MSYS*) ARCH=Windows;;
 esac
 
-eval "$EXTRA_FLAGS"
-
 build_sysroot() {
   ./build/linux/sysroot_scripts/sysroot-creator-sid-naive.sh "BuildSysroot$1"
 }
 
 if [ "$ARCH" = Linux ]; then
-  case "$target_cpu" in
-    x64) build_sysroot Amd64;;
-    x86) build_sysroot I386;;
-    arm64) build_sysroot ARM64;;
-    arm) build_sysroot ARM;;
-    mips64el) build_sysroot Mips64el;;
-    mipsel) build_sysroot Mips;;
-  esac
+  if [ "$OPENWRT_ARCH" ]; then
+    ./get-openwrt.sh
+  else
+    eval "$EXTRA_FLAGS"
+    case "$target_cpu" in
+      x64) build_sysroot Amd64;;
+      x86) build_sysroot I386;;
+      arm64) build_sysroot ARM64;;
+      arm) build_sysroot ARM;;
+    esac
+  fi
 fi
 
 # Clang
