@@ -10,32 +10,17 @@ esac
 eval "$EXTRA_FLAGS"
 
 build_sysroot() {
-  local lower="$(echo "$1" | tr '[:upper:]' '[:lower:]')"
   ./build/linux/sysroot_scripts/sysroot-creator-sid-naive.sh "BuildSysroot$1"
-  rm -rf "./build/linux/debian_sid_$lower-sysroot"
-  mkdir "./build/linux/debian_sid_$lower-sysroot"
-  tar xf "./out/sysroot-build/sid/debian_sid_${lower}_sysroot.tar.xz" -C "./build/linux/debian_sid_$lower-sysroot"
 }
 
 if [ "$ARCH" = Linux ]; then
-  build_sysroot Amd64
   case "$target_cpu" in
-    arm64)
-      build_sysroot ARM64
-    ;;
-    arm)
-      build_sysroot I386
-      build_sysroot ARM
-    ;;
-    x86)
-      build_sysroot I386
-    ;;
-    mips64el)
-      build_sysroot Mips64el
-    ;;
-    mipsel)
-      build_sysroot I386
-      build_sysroot Mips
+    x64) build_sysroot Amd64;;
+    x86) build_sysroot I386;;
+    arm64) build_sysroot ARM64;;
+    arm) build_sysroot ARM;;
+    mips64el) build_sysroot Mips64el;;
+    mipsel) build_sysroot Mips;;
   esac
 fi
 

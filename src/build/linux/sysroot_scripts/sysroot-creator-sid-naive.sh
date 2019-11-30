@@ -58,6 +58,9 @@ cp() {
   [ "${1##*/}" = libdbus-1-3-symbols ] && return
   /bin/cp "$@"
 }
+tar() {
+  echo tar "$@"
+}
 
 trap "cd $PWD; rm strip *-strip" EXIT
 

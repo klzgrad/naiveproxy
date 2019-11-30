@@ -34,6 +34,7 @@ fi
 flags="$flags"'
   is_clang=true
   linux_use_bundled_binutils=false
+  use_sysroot=false
 
   fatal_linker_warnings=false
   treat_warnings_as_errors=false
@@ -62,6 +63,21 @@ if [ "$(uname)" = Linux ]; then
     ozone_auto_platforms=false
     ozone_platform="headless"
     ozone_platform_headless=true'
+  if [ ! "$target_sysroot" ]; then
+    eval "$EXTRA_FLAGS"
+    sysroot_type=''
+    case "$target_cpu" in
+      x64) sysroot_type=amd64;;
+      x86) sysroot_type=i386;;
+      arm64) sysroot_type=arm64;;
+      arm) sysroot_type=arm;;
+      mipsel) sysroot_type=mips;;
+    esac
+    if [ "$sysroot_type" ]; then
+      flags="$flags"'
+        target_sysroot="//out/sysroot-build/sid/sid_'"$sysroot_type"'_staging"'
+    fi
+  fi
 fi
 
 rm -rf "./$out"
