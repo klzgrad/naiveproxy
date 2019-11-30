@@ -31,7 +31,7 @@
 // architectures (first added in MIPS32r2). To avoid assembler errors when
 // targeting pre-r2, we must encode the instruction manually.
 #define PA_YIELD_PROCESSOR __asm__ __volatile__(".word 0x00000140")
-#elif defined(ARCH_CPU_MIPS64EL) && __mips_isa_rev >= 2
+#elif defined(ARCH_CPU_MIPS_FAMILY) && __mips_isa_rev >= 2
 // Don't bother doing using .word here since r2 is the lowest supported mips64
 // that Chromium supports.
 #define PA_YIELD_PROCESSOR __asm__ __volatile__("pause")
