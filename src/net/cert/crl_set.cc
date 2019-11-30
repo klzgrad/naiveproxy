@@ -46,8 +46,8 @@ base::DictionaryValue* ReadHeader(base::StringPiece* data) {
   uint16_t header_len;
   if (data->size() < sizeof(header_len))
     return nullptr;
-  // Assumes little-endian.
-  memcpy(&header_len, data->data(), sizeof(header_len));
+  header_len = static_cast<uint8_t>(data->data()[0]);
+  header_len |= static_cast<uint8_t>(data->data()[1]) << 8;
   data->remove_prefix(sizeof(header_len));
 
   if (data->size() < header_len)
@@ -81,8 +81,10 @@ bool ReadCRL(base::StringPiece* data,
   uint32_t num_serials;
   if (data->size() < sizeof(num_serials))
     return false;
-  // Assumes little endian.
-  memcpy(&num_serials, data->data(), sizeof(num_serials));
+  num_serials = static_cast<uint8_t>(data->data()[0]);
+  num_serials |= static_cast<uint8_t>(data->data()[1]) << 8;
+  num_serials |= static_cast<uint8_t>(data->data()[2]) << 16;
+  num_serials |= static_cast<uint8_t>(data->data()[3]) << 24;
   data->remove_prefix(sizeof(num_serials));
 
   if (num_serials > 32 * 1024 * 1024)  // Sanity check.
@@ -194,16 +196,6 @@ CRLSet::~CRLSet() = default;
 // static
 bool CRLSet::Parse(base::StringPiece data, scoped_refptr<CRLSet>* out_crl_set) {
   TRACE_EVENT0(NetTracingCategory(), "CRLSet::Parse");
-// Other parts of Chrome assume that we're little endian, so we don't lose
-// anything by doing this.
-#if defined(__BYTE_ORDER)
-  // Linux check
-  static_assert(__BYTE_ORDER == __LITTLE_ENDIAN, "assumes little endian");
-#elif defined(__BIG_ENDIAN__)
-// Mac check
-#error assumes little endian
-#endif
-
   std::unique_ptr<base::DictionaryValue> header_dict(ReadHeader(&data));
   if (!header_dict.get())
     return false;
