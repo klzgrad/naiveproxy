@@ -93,7 +93,7 @@ absl::optional<DnsConfig> ReadDnsConfig() {
 
   absl::optional<DnsConfig> dns_config;
 // TODO(fuchsia): Use res_ninit() when it's implemented on Fuchsia.
-#if defined(OS_OPENBSD) || defined(OS_FUCHSIA)
+#if defined(OS_OPENBSD) || defined(OS_FUCHSIA) || defined(__UCLIBC__)
   // Note: res_ninit in glibc always returns 0 and sets RES_INIT.
   // res_init behaves the same way.
   memset(&_res, 0, sizeof(_res));
