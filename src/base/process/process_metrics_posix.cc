@@ -109,6 +109,9 @@ void IncreaseFdLimitTo(unsigned int max_descriptors) {
 namespace {
 
 size_t GetMallocUsageMallinfo() {
+#if defined(OS_LINUX) && defined(__UCLIBC__)
+  return 0;
+#else
 #if defined(__GLIBC__) && defined(__GLIBC_PREREQ)
 #if __GLIBC_PREREQ(2, 33)
 #define MALLINFO2_FOUND_IN_LIBC
@@ -123,6 +126,7 @@ size_t GetMallocUsageMallinfo() {
   return minfo.uordblks;
 #else
   return minfo.hblkhd + minfo.arena;
+#endif
 #endif
 }
 
