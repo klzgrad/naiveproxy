@@ -57,20 +57,32 @@ class DnsReloader : public NetworkChangeNotifier::DNSObserver {
     if (!reload_state) {
       auto new_reload_state = std::make_unique<ReloadState>();
       new_reload_state->resolver_generation = resolver_generation_;
+#ifndef __UCLIBC__
       res_ninit(&_res);
+#else
+      res_init();
+#endif
       tls_reload_state_.Set(std::move(new_reload_state));
     } else if (reload_state->resolver_generation != resolver_generation_) {
       reload_state->resolver_generation = resolver_generation_;
       // It is safe to call res_nclose here since we know res_ninit will have
       // been called above.
+#ifndef __UCLIBC__
       res_nclose(&_res);
       res_ninit(&_res);
+#else
+      res_init();
+#endif
     }
   }
 
  private:
   struct ReloadState {
-    ~ReloadState() { res_nclose(&_res); }
+    ~ReloadState() {
+#ifndef __UCLIBC__
+      res_nclose(&_res);
+#endif
+    }
 
     int resolver_generation;
   };
