@@ -119,6 +119,8 @@ size_t ProcessMetrics::GetMallocUsage() {
   malloc_statistics_t stats = {0};
   malloc_zone_statistics(nullptr, &stats);
   return stats.size_in_use;
+#elif defined(OS_LINUX) && defined(__UCLIBC__)
+  return 0;
 #elif defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID)
   struct mallinfo minfo = mallinfo();
 #if BUILDFLAG(USE_TCMALLOC)
