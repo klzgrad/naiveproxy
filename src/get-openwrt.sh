@@ -2,14 +2,7 @@
 
 set -ex
 
-arch=$OPENWRT_ARCH
-release=$OPENWRT_RELEASE
-gcc_ver=$OPENWRT_GCC
-
-case "$arch" in
-  mipsel_24kc) target=ramips subtarget=rt305x;;
-  *) exit 1;;
-esac
+eval "$OPENWRT_FLAGS"
 
 sysroot=$PWD/out/sysroot-build/openwrt/$release/$arch
 if [ -d $sysroot/lib ]; then
@@ -17,17 +10,20 @@ if [ -d $sysroot/lib ]; then
 fi
 mkdir -p $sysroot
 
-SDK_PATH=openwrt-sdk-$release-$target-${subtarget}_${gcc_ver}_musl.Linux-x86_64
+SDK_PATH=openwrt-sdk-$release-$target-${subtarget}_gcc-${gcc_ver}_musl.Linux-x86_64
 SDK_URL=https://downloads.openwrt.org/releases/$release/targets/$target/$subtarget/$SDK_PATH.tar.xz
 rm -rf $SDK_PATH
 curl $SDK_URL | tar xJf -
 cd $SDK_PATH
 ./scripts/feeds update base packages
 ./scripts/feeds install libnss
-cp ../$target-$subtarget.config .config
-yes | make oldconfig
+make defconfig
+for flag in ALL_NONSHARED ALL_KMODS ALL SIGNED_PACKAGES; do
+  sed -i "s/CONFIG_$flag=y/# CONFIG_$flag is not set/" .config
+done
+make oldconfig
 make
-full_root=staging_dir/toolchain-${arch}_${gcc_ver}_musl
+full_root=staging_dir/toolchain-${arch}_gcc-${gcc_ver}_musl
 cp -r staging_dir/target-${arch}_musl/usr $full_root
 echo '
 ./include

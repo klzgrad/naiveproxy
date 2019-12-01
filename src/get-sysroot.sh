@@ -1,8 +1,11 @@
 get_sysroot() {
+  if [ "$OPENWRT_FLAGS" ]; then
+     eval "$OPENWRT_FLAGS"
+     echo "out/sysroot-build/openwrt/$release/$arch"
+     return
+  fi
   eval "$EXTRA_FLAGS"
-  if [ "$OPENWRT_ARCH" -a "$OPENWRT_RELEASE" ]; then
-     echo "out/sysroot-build/openwrt/$OPENWRT_RELEASE/$OPENWRT_ARCH"
-  elif [ ! "$target_sysroot" ]; then
+  if [ ! "$target_sysroot" ]; then
     local sysroot_type
     case "$target_cpu" in
       x64) sysroot_type=amd64;;

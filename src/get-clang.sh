@@ -12,7 +12,7 @@ build_sysroot() {
 }
 
 if [ "$ARCH" = Linux ]; then
-  if [ "$OPENWRT_ARCH" ]; then
+  if [ "$OPENWRT_FLAGS" ]; then
     ./get-openwrt.sh
   else
     eval "$EXTRA_FLAGS"
