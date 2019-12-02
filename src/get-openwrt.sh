@@ -39,6 +39,9 @@ echo '
 ./lib/libresolv.a
 ./lib/librt.a
 ./usr
+*ld.bin
 ' >include.txt
 tar cf - -C $full_root . | tar xf - -C $sysroot --wildcards --wildcards-match-slash -T include.txt
 rm include.txt
+cd $sysroot/*-openwrt-linux-musl/bin
+mv .ld.bin ld
