@@ -114,16 +114,16 @@ Complex, battle-tested logic for connection management was [implemented](https:/
 
 Because the first rule of cryptography is: [Don't roll your](http://loup-vaillant.fr/articles/rolling-your-own-crypto) [own cryptos](https://security.stackexchange.com/questions/18197/why-shouldnt-we-roll-our-own).
 
-If you do roll your own cryptos, see what [happened](https://groups.google.com/d/msg/traffic-obf/CWO0peBJLGc/Py-clLSTBwAJ) with Shadowsocks. (Spoiler: it encrypts, but doesn't authenticates, leading to active probing exploits, and more exploits after duct-tape fixes.)
+If you do roll your own cryptos, see what [happened](https://groups.google.com/d/msg/traffic-obf/CWO0peBJLGc/Py-clLSTBwAJ) with Shadowsocks. (Spoiler: it encrypts, but doesn't authenticate, leading to active probing exploits, and more exploits after duct-tape fixes.)
 
 ### Why not use HTTP/2 proxy from browser directly?
 
-You may have wondered why not use Chrome directly if NaïveProxy reuses Chrome's network stack. The answer is yes, you can. You will get 80% of what NaïveProxy does (TLS, connection multiplexing, application fronting) without NaïveProxy, which is also what makes NaïveProxy indistinguishale from normal traffic. Simply point your browser to Caddy as an HTTP/2 or HTTP/3 forward proxy directly.
+You may have wondered why not use Chrome directly if NaïveProxy reuses Chrome's network stack. The answer is yes, you can. You will get 80% of what NaïveProxy does (TLS, connection multiplexing, application fronting) without NaïveProxy, which is also what makes NaïveProxy indistinguishable from normal traffic. Simply point your browser to Caddy as an HTTP/2 or HTTP/3 forward proxy directly.
 
 But this setup is prone to basic traffic analysis due to lack of obfuscation and predictable packet sizes in TLS handshakes. [The bane of "TLS-in-TLS" tunnels](http://blog.zorinaq.com/my-experience-with-the-great-firewall-of-china/) is that this combination is just so different from any normal protocols (nobody does 3-way handshakes twice in a row) and the record sizes of TLS handshakes are so predictable that no machine learning is needed to [detect it](https://github.com/shadowsocks/shadowsocks-org/issues/86#issuecomment-362809854).
 
 The browser will introduce an extra 1RTT delay during proxied connection setup because of interpretation of HTTP RFCs. The browser will wait for a 200 response after a CONNECT request, incuring 1RTT which is not necessary. NaïveProxy does HTTP Fast CONNECT similar to TCP Fast Open, i.e. send subsequent data immediately after CONNECT. Also, you may have to type in the password for the proxy everytime you open the browser. NaïveProxy sends the password automatically.
 
-Thus, traffic obfuscation, HTTP Fast CONNECT, and auto-authentication are the crucial last 20% provided by NaïveProxy. These can't be really achieved inside Chrome as extensions/apps because they don't have access to sockets. NaïveProxy extracts Chromium's network stack without all the other baggage to build a small binary (4% of full Chrome build).
+Thus, traffic obfuscation, HTTP Fast CONNECT, and auto-authentication are the crucial last 20% provided by NaïveProxy. These can't be really achieved inside Chrome as extensions/apps because they don't have access to sockets. NaïveProxy extracts Chromium's network stack without all the other baggage to build a small binary (4% of a full Chrome build).
 
 But if you don't need the best performance, and unobfuscated TLS-in-TLS somehow still works for you, you can just keep using Caddy proxy with your browser.
