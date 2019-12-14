@@ -1,0 +1,52 @@
+// Copyright 2019 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module blink.mojom;
+
+import "mojo/public/mojom/base/string16.mojom";
+import "third_party/blink/public/mojom/frame/fullscreen.mojom";
+
+// Implemented in Browser, this interface defines frame-specific methods that will
+// be invoked from the render process (e.g. content::RenderFrameHostImpl).
+//
+// Note that this is different than content/common/frame.mojom in that the
+// methods defined here are called directly in Blink without passing through
+// content. In the future this interface will likely host more methods as the
+// Onion Soup project advances, which can potentially lead to the removal of
+// content/common/frame.mojom if enough code is moved to Blink.
+interface LocalFrameHost {
+
+  // Request to the browser that the frame wishes to enter fullscreen mode.
+  EnterFullscreen(FullscreenOptions options);
+
+  // Request to the browser to exit fullscreen mode.
+  ExitFullscreen();
+
+  // Notifies the browser that the current frame has either become or is no
+  // longer fullscreen.
+  FullscreenStateChanged(bool is_fullscreen);
+};
+
+// Implemented in Blink, this interface defines frame-specific methods that will
+// be invoked from the browser process (e.g. content::RenderFrameHostImpl).
+//
+// Note that this is different than content/common/frame.mojom in that the
+// methods defined here are handled directly in Blink without passing through
+// content. In the future this interface will likely host more methods as the
+// Onion Soup project advances, which can potentially lead to the removal of
+// content/common/frame.mojom if enough code is moved to Blink.
+// TODO(dtapuska): Rename to LocalFrame
+interface Frame {
+  // Retrieves the text surrounding the current selection for the frame up to
+  // the length specified by |max_length|, along with its start and end offsets.
+  GetTextSurroundingSelection(uint32 max_length)
+      => (mojo_base.mojom.String16 content, uint32 start_offset,
+          uint32 end_offset);
+
+  // Creates an intervention report in the frame with contents |id| and
+  // |message|, returns once the report has been queued. |id| identifies the
+  // intervention that occurred. |message| is a human-readable string that
+  // can provide additional context to the cause of the intervention.
+  SendInterventionReport(string id, string message);
+};

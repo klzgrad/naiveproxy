@@ -1,0 +1,195 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/chrome_build.gni")
+import("//build/config/ios/asset_catalog.gni")
+import("//build/config/ios/rules.gni")
+import("//build/config/locales.gni")
+import("//ios/build/chrome_build.gni")
+import("//ios/chrome/app/resources/ios_chrome_repack.gni")
+import("//ios/chrome/tools/strings/generate_localizable_strings.gni")
+import("//ios/public/provider/chrome/browser/build_config.gni")
+import("//tools/grit/grit_rule.gni")
+
+group("resources") {
+  public_deps = [
+    ":launchscreen_xib",
+    ":quick_action_icons",
+    ":system_strings",
+    ios_packed_resources_target,
+  ]
+}
+
+grit("ios_resources") {
+  source = "ios_resources.grd"
+  output_dir = "$root_gen_dir/ios/chrome"
+
+  # The .grd contains references to generated files.
+  source_is_generated = true
+
+  outputs = [
+    "grit/ios_resources.h",
+    "ios_resources.pak",
+  ]
+}
+
+group("packed_resources") {
+  public_deps = [
+    ":repack_locales",
+    ":repack_scalable_resources",
+    ":repack_unscaled_resources",
+  ]
+}
+
+ios_chrome_repack_locales("repack_locales") {
+  visibility = [ ":packed_resources" ]
+  input_locales = ios_packed_locales
+  output_locales = ios_packed_locales_as_mac_outputs
+}
+
+ios_chrome_repack_all_scales("repack_scalable_resources") {
+  visibility = [ ":packed_resources" ]
+  scales = [
+    "100",
+    "200",
+    "300",
+  ]
+}
+
+repack("repack_unscaled_resources") {
+  visibility = [ ":packed_resources" ]
+  sources = [
+    "$root_gen_dir/components/components_resources.pak",
+    "$root_gen_dir/components/sync_driver_resources.pak",
+    "$root_gen_dir/ios/chrome/ios_resources.pak",
+    "$root_gen_dir/ios/web/ios_web_resources.pak",
+    "$root_gen_dir/mojo/public/js/mojo_bindings_resources.pak",
+    "$root_gen_dir/net/net_resources.pak",
+    "$root_gen_dir/ui/resources/webui_resources.pak",
+  ]
+  deps = [
+    ":ios_resources",
+    "//components/resources",
+    "//components/sync/driver:resources",
+    "//ios/web:resources",
+    "//mojo/public/js:resources",
+    "//net:net_resources",
+    "//ui/resources",
+  ]
+  output = "$target_gen_dir/resources.pak"
+  copy_data_to_bundle = true
+}
+
+appiconset("chromium_icons") {
+  sources = [
+    "chromium/AppIcon.appiconset/Contents.json",
+    "chromium/AppIcon.appiconset/Icon-1024.png",
+    "chromium/AppIcon.appiconset/Icon-120.png",
+    "chromium/AppIcon.appiconset/Icon-152.png",
+    "chromium/AppIcon.appiconset/Icon-167.png",
+    "chromium/AppIcon.appiconset/Icon-180.png",
+    "chromium/AppIcon.appiconset/Icon-29.png",
+    "chromium/AppIcon.appiconset/Icon-40.png",
+    "chromium/AppIcon.appiconset/Icon-58.png",
+    "chromium/AppIcon.appiconset/Icon-76.png",
+    "chromium/AppIcon.appiconset/Icon-80.png",
+    "chromium/AppIcon.appiconset/Icon-87.png",
+  ]
+}
+
+imageset("launchscreen_app_logo") {
+  sources = [
+    "launchscreen_app_logo.imageset/Contents.json",
+    "launchscreen_app_logo.imageset/launchscreen_app_logo@2x.png",
+    "launchscreen_app_logo.imageset/launchscreen_app_logo@3x.png",
+  ]
+}
+
+imageset("launchscreen_brand_name") {
+  sources = [
+    "launchscreen_brand_name.imageset/Contents.json",
+    "launchscreen_brand_name.imageset/launchscreen_brand_name_dark@2x.png",
+    "launchscreen_brand_name.imageset/launchscreen_brand_name_dark@3x.png",
+    "launchscreen_brand_name.imageset/launchscreen_brand_name_light@2x.png",
+    "launchscreen_brand_name.imageset/launchscreen_brand_name_light@3x.png",
+  ]
+}
+
+group("launchscreen_assets") {
+  public_deps = [
+    ":launchscreen_app_logo",
+    ":launchscreen_brand_name",
+    "//ios/chrome/common/colors/resources:background_color",
+  ]
+}
+
+if (ios_enable_multi_window) {
+  # Multi window requires both additional plist entries (handled in ../BUILD.gn) and
+  # an additional storyboard file.
+  bundle_data_ib_file("base_scene_storyboard") {
+    source = "BaseScene.storyboard"
+  }
+}
+
+bundle_data_ib_file("launchscreen_xib") {
+  source = "LaunchScreen.xib"
+  deps = [
+    ios_launchscreen_assets_target,
+  ]
+}
+
+generate_localizable_strings("system_strings") {
+  config_file = "chrome_localize_strings_config.plist"
+  datapack_dir = get_label_info(ios_packed_resources_target, "target_gen_dir")
+  packed_locales = ios_packed_locales_as_mac_outputs
+  output_filenames = [
+    "InfoPlist.strings",
+    "Localizable.strings",
+    "Intents.strings",
+  ]
+  deps = [
+    ios_packed_resources_target,
+  ]
+}
+
+imageset("quick_action_incognito_search") {
+  sources = [
+    "quick_action_incognito_search.imageset/Contents.json",
+    "quick_action_incognito_search.imageset/quick_action_incognito_search@2x.png",
+    "quick_action_incognito_search.imageset/quick_action_incognito_search@3x.png",
+  ]
+}
+
+imageset("quick_action_new_search") {
+  sources = [
+    "quick_action_new_search.imageset/Contents.json",
+    "quick_action_new_search.imageset/quick_action_new_search@2x.png",
+    "quick_action_new_search.imageset/quick_action_new_search@3x.png",
+  ]
+}
+
+imageset("quick_action_qr_scanner") {
+  sources = [
+    "quick_action_qr_scanner.imageset/Contents.json",
+    "quick_action_qr_scanner.imageset/quick_action_qr_scanner@2x.png",
+    "quick_action_qr_scanner.imageset/quick_action_qr_scanner@3x.png",
+  ]
+}
+
+imageset("quick_action_voice_search") {
+  sources = [
+    "quick_action_voice_search.imageset/Contents.json",
+    "quick_action_voice_search.imageset/quick_action_voice_search@2x.png",
+    "quick_action_voice_search.imageset/quick_action_voice_search@3x.png",
+  ]
+}
+
+group("quick_action_icons") {
+  public_deps = [
+    ":quick_action_incognito_search",
+    ":quick_action_new_search",
+    ":quick_action_qr_scanner",
+    ":quick_action_voice_search",
+  ]
+}

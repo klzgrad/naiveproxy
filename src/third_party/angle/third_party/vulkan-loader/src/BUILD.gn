@@ -1,0 +1,125 @@
+# Copyright (C) 2018-2019 The ANGLE Project Authors.
+# Copyright (C) 2019 LunarG, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("//build_overrides/vulkan_loader.gni")
+
+# Fuchsia has non-upstream changes to the vulkan loader, so we don't want
+# to build it from upstream sources.
+assert(!is_fuchsia)
+
+if (!is_android) {
+  vulkan_undefine_configs = []
+}
+if (is_win) {
+  vulkan_undefine_configs += [
+    "//build/config/win:nominmax",
+    "//build/config/win:unicode",
+  ]
+}
+
+config("vulkan_internal_config") {
+  defines = [ "VULKAN_NON_CMAKE_BUILD" ]
+  if (is_clang || !is_win) {
+    cflags = [ "-Wno-unused-function" ]
+  }
+  if (is_linux) {
+    defines += [
+      "SYSCONFDIR=\"/etc\"",
+      "FALLBACK_CONFIG_DIRS=\"/etc/xdg\"",
+      "FALLBACK_DATA_DIRS=\"/usr/local/share:/usr/share\"",
+    ]
+  }
+}
+
+# Vulkan loader
+# -------------
+
+config("vulkan_loader_config") {
+  include_dirs = [
+    "loader/generated",
+    "loader",
+  ]
+  defines = [ "API_NAME=\"Vulkan\"" ]
+
+  if (is_win) {
+    cflags = [ "/wd4201" ]
+  }
+  if (is_linux) {
+    # assume secure_getenv() is available
+    defines += [ "HAVE_SECURE_GETENV" ]
+  }
+}
+
+if (!is_android) {
+  if (vulkan_loader_shared) {
+    library_type = "shared_library"
+  } else {
+    library_type = "static_library"
+  }
+
+  target(library_type, "libvulkan") {
+    sources = [
+      "loader/asm_offset.c",
+      "loader/cJSON.c",
+      "loader/cJSON.h",
+      "loader/debug_utils.c",
+      "loader/debug_utils.h",
+      "loader/dev_ext_trampoline.c",
+      "loader/extension_manual.c",
+      "loader/extension_manual.h",
+      "loader/gpa_helper.h",
+      "loader/loader.c",
+      "loader/loader.h",
+      "loader/murmurhash.c",
+      "loader/murmurhash.h",
+      "loader/phys_dev_ext.c",
+      "loader/trampoline.c",
+
+      # TODO(jmadill): Use assembler where available.
+      "loader/unknown_ext_chain.c",
+      "loader/vk_loader_platform.h",
+      "loader/wsi.c",
+      "loader/wsi.h",
+    ]
+    if (is_win) {
+      sources += [
+        "loader/dirent_on_windows.c",
+        "loader/dirent_on_windows.h",
+      ]
+      if (!is_clang) {
+        cflags = [
+          "/wd4054",  # Type cast from function pointer
+          "/wd4055",  # Type cast from data pointer
+          "/wd4100",  # Unreferenced formal parameter
+          "/wd4152",  # Nonstandard extension used (pointer conversion)
+          "/wd4201",  # Nonstandard extension used: nameless struct/union
+          "/wd4214",  # Nonstandard extension used: bit field types other than int
+          "/wd4232",  # Nonstandard extension used: address of dllimport is not static
+          "/wd4305",  # Type cast truncation
+          "/wd4706",  # Assignment within conditional expression
+          "/wd4996",  # Unsafe stdlib function
+        ]
+      }
+    }
+    public_deps = [
+      "$vulkan_headers_dir:vulkan_headers",
+    ]
+    configs -= [ "//build/config/compiler:chromium_code" ]
+    configs += [ "//build/config/compiler:no_chromium_code" ]
+    configs += [ ":vulkan_internal_config" ]
+    public_configs = [ ":vulkan_loader_config" ]
+    configs -= vulkan_undefine_configs
+  }
+}

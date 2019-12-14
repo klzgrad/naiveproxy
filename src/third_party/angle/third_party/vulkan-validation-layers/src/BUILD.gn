@@ -1,0 +1,271 @@
+# Copyright (C) 2018-2019 The ANGLE Project Authors.
+# Copyright (C) 2019 LunarG, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("//build_overrides/vulkan_validation_layers.gni")
+
+# Fuchsia has non-upstream changes to the vulkan layers, so we don't want
+# to build it from upstream sources.
+assert(!is_fuchsia)
+
+vulkan_undefine_configs = []
+if (is_win) {
+  vulkan_undefine_configs += [
+    "//build/config/win:nominmax",
+    "//build/config/win:unicode",
+  ]
+}
+
+vulkan_gen_dir = "$target_gen_dir/$vulkan_gen_subdir"
+raw_vulkan_gen_dir = rebase_path(vulkan_gen_dir, root_build_dir)
+
+vulkan_data_dir = "$root_out_dir/$vulkan_data_subdir"
+raw_vulkan_data_dir = rebase_path(vulkan_data_dir, root_build_dir)
+
+raw_root_out_dir = rebase_path(root_out_dir, root_build_dir)
+
+# This special action is needed to remove old VVL objects that are now renamed.
+action("vulkan_clean_old_validation_layer_objects") {
+  script = "build-gn/remove_files.py"
+
+  # inputs is a (random) new file since the vvl roll, used to ensure the cleanup is done only once
+  inputs = [
+    "layers/gpu_validation.cpp",
+  ]
+  outputs = [
+    "$vulkan_gen_dir/old_vvl_files_are_removed",
+  ]
+  args = [
+    "$raw_vulkan_gen_dir/old_vvl_files_are_removed",
+    "$raw_root_out_dir/libVkLayer*",
+    "$raw_root_out_dir/VkLayer*",
+    "$raw_vulkan_data_dir/VkLayer*.json",
+  ]
+}
+
+config("vulkan_internal_config") {
+  defines = [
+    "VULKAN_NON_CMAKE_BUILD",
+    "API_NAME=\"Vulkan\"",
+  ]
+  if (is_clang || !is_win) {
+    cflags = [ "-Wno-unused-function" ]
+  }
+  if (is_linux) {
+    defines += [
+      "SYSCONFDIR=\"/etc\"",
+      "FALLBACK_CONFIG_DIRS=\"/etc/xdg\"",
+      "FALLBACK_DATA_DIRS=\"/usr/local/share:/usr/share\"",
+    ]
+  }
+}
+
+# The validation layers
+# ---------------------
+
+config("vulkan_layer_config") {
+  include_dirs = [
+    "layers",
+    "layers/generated",
+  ]
+}
+
+core_validation_sources = [
+  # This file is manually included in the layer
+  # "layers/generated/vk_safe_struct.cpp",
+  "layers/buffer_validation.cpp",
+  "layers/buffer_validation.h",
+  "layers/state_tracker.cpp",
+  "layers/state_tracker.h",
+  "layers/core_validation.cpp",
+  "layers/core_validation.h",
+  "layers/convert_to_renderpass2.cpp",
+  "layers/descriptor_sets.cpp",
+  "layers/descriptor_sets.h",
+  "layers/drawdispatch.cpp",
+  "layers/gpu_validation.cpp",
+  "layers/gpu_validation.h",
+  "layers/shader_validation.cpp",
+  "layers/shader_validation.h",
+  "layers/xxhash.c",
+  "layers/xxhash.h",
+]
+
+object_lifetimes_sources = [
+  "layers/generated/object_tracker.cpp",
+  "layers/generated/object_tracker.h",
+  "layers/object_tracker_utils.cpp",
+]
+
+stateless_validation_sources = [
+  "layers/generated/parameter_validation.cpp",
+  "layers/generated/parameter_validation.h",
+  "layers/parameter_validation_utils.cpp",
+]
+
+thread_safety_sources = [
+  "layers/generated/thread_safety.cpp",
+  "layers/generated/thread_safety.h",
+]
+
+unique_objects_sources = []
+
+best_practices_sources = [
+  "layers/best_practices.cpp",
+  "layers/best_practices.h",
+  "layers/best_practices_error_enums.h",
+]
+
+chassis_sources = [
+  "layers/state_tracker.h",
+  "layers/core_validation.h",
+  "layers/generated/vk_safe_struct.h",
+  "layers/generated/thread_safety.h",
+  "layers/generated/chassis.cpp",
+  "layers/generated/chassis.h",
+  "layers/generated/layer_chassis_dispatch.cpp",
+  "layers/generated/layer_chassis_dispatch.h",
+  "$vulkan_headers_dir/include/vulkan/vk_layer.h",
+  "$vulkan_headers_dir/include/vulkan/vulkan.h",
+]
+
+layers = [ [
+      "khronos_validation",
+      core_validation_sources + object_lifetimes_sources +
+          stateless_validation_sources + thread_safety_sources +
+          unique_objects_sources + best_practices_sources + chassis_sources,
+      [ ":vulkan_core_validation_glslang" ],
+      [],
+    ] ]
+
+if (!is_android) {
+  action("vulkan_gen_json_files") {
+    script = "build-gn/generate_vulkan_layers_json.py"
+
+    # Make sure that the cleanup of old layer JSON files happens before the new ones are generated.
+    deps = [
+      ":vulkan_clean_old_validation_layer_objects",
+    ]
+    json_names = [
+      "VkLayer_standard_validation.json",
+      "VkLayer_khronos_validation.json",
+    ]
+    sources = [
+      "$vulkan_headers_dir/include/vulkan/vulkan_core.h",
+    ]
+    outputs = []
+    foreach(json_name, json_names) {
+      sources += [ "layers/json/$json_name.in" ]
+      outputs += [ "$vulkan_data_dir/$json_name" ]
+    }
+    args = [
+             rebase_path("layers/json", root_build_dir),
+             rebase_path(vulkan_data_dir, root_build_dir),
+           ] + rebase_path(sources, root_build_dir)
+
+    # The layer JSON files are part of the necessary data deps.
+    data = outputs
+  }
+}
+
+source_set("vulkan_layer_utils") {
+  include_dirs = [
+    "layers",
+    "layers/generated",
+  ]
+  sources = [
+    "$vulkan_headers_dir/include/vulkan/vk_layer.h",
+    "$vulkan_headers_dir/include/vulkan/vk_sdk_platform.h",
+    "$vulkan_headers_dir/include/vulkan/vulkan.h",
+    "layers/vk_format_utils.cpp",
+    "layers/vk_format_utils.h",
+    "layers/vk_layer_config.cpp",
+    "layers/vk_layer_config.h",
+    "layers/vk_layer_extension_utils.cpp",
+    "layers/vk_layer_extension_utils.h",
+    "layers/vk_layer_utils.cpp",
+    "layers/vk_layer_utils.h",
+  ]
+  public_configs = [
+    "$vulkan_headers_dir:vulkan_headers_config",
+    ":vulkan_internal_config",
+  ]
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [ "//build/config/compiler:no_chromium_code" ]
+  public_deps = []
+  configs -= vulkan_undefine_configs
+}
+
+config("vulkan_core_validation_config") {
+  include_dirs = [ "$vvl_glslang_dir" ]
+}
+
+source_set("vulkan_core_validation_glslang") {
+  public_deps = [
+    "${vvl_spirv_tools_dir}:spvtools",
+    "${vvl_spirv_tools_dir}:spvtools_opt",
+    "${vvl_spirv_tools_dir}:spvtools_val",
+  ]
+  public_configs = [
+    "$vulkan_headers_dir:vulkan_headers_config",
+    ":vulkan_core_validation_config",
+  ]
+}
+
+config("vulkan_stateless_validation_config") {
+  if (is_clang) {
+    cflags_cc = [ "-Wno-unused-const-variable" ]
+  }
+}
+
+foreach(layer_info, layers) {
+  name = layer_info[0]
+  shared_library("VkLayer_$name") {
+    configs -= [ "//build/config/compiler:chromium_code" ]
+    configs += [ "//build/config/compiler:no_chromium_code" ]
+    configs -= vulkan_undefine_configs
+    public_configs = [ ":vulkan_layer_config" ]
+    deps = [
+      # Make sure the cleanup of old layers happen before the new ones are compiled.
+      ":vulkan_clean_old_validation_layer_objects",
+      ":vulkan_layer_utils",
+    ]
+    if (layer_info[2] != "") {
+      deps += layer_info[2]
+    }
+    sources = layer_info[1]
+    if (is_win) {
+      sources += [ "layers/VkLayer_$name.def" ]
+    }
+    if (is_linux || is_android) {
+      ldflags = [ "-Wl,-Bsymbolic,--exclude-libs,ALL" ]
+    }
+    if (is_android) {
+      libs = [
+        "log",
+        "nativewindow",
+      ]
+      configs -= [ "//build/config/android:hide_all_but_jni_onload" ]
+    }
+    defines = layer_info[3]
+  }
+}
+
+group("vulkan_validation_layers") {
+  data_deps = []
+  foreach(layer_info, layers) {
+    name = layer_info[0]
+    data_deps += [ ":VkLayer_$name" ]
+  }
+}

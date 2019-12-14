@@ -1,0 +1,69 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//chromecast/chromecast.gni")
+import("//testing/test.gni")
+
+cast_source_set("reboot_util") {
+  sources = [
+    "reboot_util.h",
+    "reboot_util_core.cc",
+  ]
+
+  deps = [
+    "//base",
+  ]
+
+  if (chromecast_branding == "google") {
+    deps += [ "//chromecast/internal/system/reboot:reboot_util" ]
+  } else {
+    sources += [ "reboot_util_dummy.cc" ]
+  }
+
+  if (is_android && chromecast_branding != "public") {
+    deps += [
+      "//chromecast/internal/system/reboot/android:reboot_shlib_impl",
+      "//chromecast/public",
+    ]
+  } else if (is_fuchsia) {
+    deps += [ ":fuchsia" ]
+  } else {
+    deps += [ ":libcast_reboot_1.0" ]
+  }
+}
+
+test("cast_reboot_unittests") {
+  sources = [
+    "reboot_util_test.cc",
+  ]
+
+  deps = [
+    ":reboot_util",
+    "//base/test:run_all_unittests",
+    "//base/test:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+}
+
+# Target for OEM partners to override reboot shared library, i.e.
+# libcast_reboot_1.0.so.
+cast_shared_library("libcast_reboot_1.0") {
+  sources = [
+    "reboot_dummy.cc",
+  ]
+
+  public_deps = [
+    "//chromecast/public",
+  ]
+}
+
+cast_source_set("fuchsia") {
+  sources = [
+    "reboot_fuchsia.cc",
+  ]
+  public_deps = [
+    "//chromecast/public",
+  ]
+}

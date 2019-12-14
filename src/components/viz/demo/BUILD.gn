@@ -1,0 +1,84 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ui.gni")
+
+static_library("client") {
+  output_name = "demo_client"
+
+  sources = [
+    "client/demo_client.cc",
+    "client/demo_client.h",
+  ]
+
+  deps = [
+    "//components/viz/common",
+    "//mojo/public/cpp/bindings",
+    "//services/viz/public/mojom",
+  ]
+}
+
+static_library("host") {
+  output_name = "demo_host"
+  sources = [
+    "host/demo_host.cc",
+    "host/demo_host.h",
+  ]
+
+  deps = [
+    ":client",
+    "//components/viz/common",
+    "//components/viz/host",
+    "//mojo/public/cpp/system",
+    "//services/viz/privileged/mojom",
+  ]
+}
+
+static_library("service") {
+  output_name = "demo_service"
+  sources = [
+    "service/demo_service.cc",
+    "service/demo_service.h",
+  ]
+
+  deps = [
+    "//components/viz/common",
+    "//components/viz/service/main",
+    "//mojo/public/cpp/system",
+    "//services/viz/privileged/mojom",
+  ]
+}
+
+executable("viz_demo") {
+  sources = [
+    "demo_main.cc",
+  ]
+
+  deps = [
+    "//base",
+    "//base:i18n",
+    "//build/win:default_exe_manifest",
+    "//components/viz/demo:host",
+    "//components/viz/demo:service",
+    "//components/viz/service",
+    "//components/viz/service/main",
+    "//mojo/core/embedder",
+    "//skia",
+    "//ui/events",
+    "//ui/events/platform",
+    "//ui/platform_window",
+  ]
+
+  if (use_x11) {
+    deps += [
+      "//ui/events/platform/x11",
+      "//ui/platform_window/x11",
+    ]
+    configs += [ "//build/config/linux:x11" ]
+  }
+
+  if (is_win) {
+    deps += [ "//ui/platform_window/win" ]
+  }
+}

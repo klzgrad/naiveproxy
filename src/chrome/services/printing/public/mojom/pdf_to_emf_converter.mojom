@@ -1,0 +1,36 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module printing.mojom;
+
+import "chrome/services/printing/public/mojom/pdf_render_settings.mojom";
+import "mojo/public/mojom/base/shared_memory.mojom";
+import "mojo/public/mojom/base/string16.mojom";
+
+// This set of interfaces is used to convert PDF files to EMF.
+// Usage:
+// - generate a PdfToEmfConverter by binding the PdfToEmfConverterFactory
+//   interface and calling PdfToEmfConverterFactory.CreateConverter(). This also
+//   returns the number of pages that will be generated.
+// - call PdfToEmfConverter.ConvertPage() for each page to generate the EMF
+//   files.
+
+interface PdfToEmfConverterClient {
+  [Sync]
+  PreCacheFontCharacters(array<uint8> logfont,
+                         mojo_base.mojom.String16 characters) => ();
+};
+
+interface PdfToEmfConverter {
+  ConvertPage(uint32 page_number) =>
+      (mojo_base.mojom.ReadOnlySharedMemoryRegion? emf_region,
+       float scale_factor);
+};
+
+interface PdfToEmfConverterFactory {
+  CreateConverter(mojo_base.mojom.ReadOnlySharedMemoryRegion pdf_region,
+                  PdfRenderSettings render_settings,
+                  pending_remote<PdfToEmfConverterClient> client)
+      => (pending_remote<PdfToEmfConverter> converter, uint32 page_count);
+};

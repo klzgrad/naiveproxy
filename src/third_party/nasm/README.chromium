@@ -1,0 +1,68 @@
+Name: Netwide Assembler
+Short Name: nasm
+URL: https://www.nasm.us/
+Version: bfa1ed0ae9cb15b54b008431d122db3c22cd45eb
+License: 2-Clause BSD
+License File: LICENSE
+Security Critical: no
+Source: https://repo.or.cz/nasm.git
+
+--[ DESCRIPTION ] ------------------
+This contains the source to NASM, the assembler used for parts of Chromium.
+
+
+--[ PATCHES ] ------------------
+* See README.patches for the full listing.
+
+If you make any changes to nasm which are not in upstream, please update the
+README.patches file with the following command:
+
+  ./find_patches.py > README.patches
+
+Note: This script only works if you have added upstream as a remote per the
+directions in updating below.
+
+
+--[ UPDATING ] ------------------
+To update, have clang in your system path (from //third_party/llvm-
+build/Release+Asserts/bin) then do the following:
+
+  git remote add upstream https://repo.or.cz/nasm.git
+  git fetch upstream
+  git merge upstream/master
+
+  # Maybe use git mergetool to resolve any conflicts with local patches.
+
+  # ***DO NOT USE*** git cl upload for this part or you will spam every author
+  # who committed something upstream with a Gerrit issue... :O You must also
+  # have the correct Gerrit permissions from one of the OWNERS to do this.
+  git push origin master
+
+  # You can safely use git cl upload for all of your own modifications past this
+  # point; I.e., once you have pushed all the commits from the git merge.
+
+  CC=clang CXX=clang++ ./autogen.sh
+  CC=clang CXX=clang++ ./configure
+  make perlreq
+  ./generate_nasm_sources.py
+  git add <any new .c/.h files which show up>
+
+  # Copy config/config.h to config-(mac|win|linux).h
+  # Revert config/config.h to the checked in version
+
+  git commit -a
+
+
+--[ CONFIG_H_ ] ------------------
+In the event any new config.h flags are added, you may need to regenerate the
+config.h for Linux and Mac. You may be able to just copy new flags into all
+platform configurations, but this may not always work.
+
+The mac configuration may need some additional changes depending on the current
+SDK version being targeted by Chrome; the following change was made for 10.9:
+/* #undef HAVE_FACCESSAT */
+
+
+--[ TODOS ] ------------------
+TODO(dalecurtis): See if there's a CFLAG that can be given to configure to avoid
+it using 10.10 features while Chrome targets 10.9 SDK.

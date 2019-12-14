@@ -1,0 +1,189 @@
+;; --------------------------------------------------------------------------
+;;   
+;;   Copyright 1996-2017 The NASM Authors - All Rights Reserved
+;;   See the file AUTHORS included with the NASM distribution for
+;;   the specific copyright holders.
+;;
+;;   Redistribution and use in source and binary forms, with or without
+;;   modification, are permitted provided that the following
+;;   conditions are met:
+;;
+;;   * Redistributions of source code must retain the above copyright
+;;     notice, this list of conditions and the following disclaimer.
+;;   * Redistributions in binary form must reproduce the above
+;;     copyright notice, this list of conditions and the following
+;;     disclaimer in the documentation and/or other materials provided
+;;     with the distribution.
+;;     
+;;     THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+;;     CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+;;     INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+;;     MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+;;     DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+;;     CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+;;     SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+;;     NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+;;     LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+;;     HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+;;     CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+;;     OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+;;     EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+;;
+;; --------------------------------------------------------------------------
+
+;
+; Smart alignment macros
+;
+USE: smartalign
+
+%imacro alignmode 1-2.nolist
+  %ifidni %1,nop
+    %define __ALIGN_JMP_THRESHOLD__ 16
+
+    %define __ALIGN_16BIT_1B__ 0x90
+    %define __ALIGN_16BIT_GROUP__ 1
+
+    %define __ALIGN_32BIT_1B__ 0x90
+    %define __ALIGN_32BIT_GROUP__ 1
+
+    %define __ALIGN_64BIT_1B__ 0x90
+    %define __ALIGN_64BIT_GROUP__ 1
+  %elifidni %1,generic
+    %define __ALIGN_JMP_THRESHOLD__ 8
+
+    %define __ALIGN_16BIT_1B__ 0x90
+    %define __ALIGN_16BIT_2B__ 0x89,0xf6
+    %define __ALIGN_16BIT_3B__ 0x8d,0x74,0x00
+    %define __ALIGN_16BIT_4B__ 0x8d,0xb4,0x00,0x00
+    %define __ALIGN_16BIT_5B__ 0x8d,0xb4,0x00,0x00,0x90
+    %define __ALIGN_16BIT_6B__ 0x8d,0xb4,0x00,0x00,0x89,0xff
+    %define __ALIGN_16BIT_7B__ 0x8d,0xb4,0x00,0x00,0x8d,0x7d,0x00
+    %define __ALIGN_16BIT_8B__ 0x8d,0xb4,0x00,0x00,0x8d,0xbd,0x00,0x00
+    %define __ALIGN_16BIT_GROUP__ 8
+
+    %define __ALIGN_32BIT_1B__ 0x90
+    %define __ALIGN_32BIT_2B__ 0x89,0xf6
+    %define __ALIGN_32BIT_3B__ 0x8d,0x76,0x00
+    %define __ALIGN_32BIT_4B__ 0x8d,0x74,0x26,0x00
+    %define __ALIGN_32BIT_5B__ 0x90,0x8d,0x74,0x26,0x00
+    %define __ALIGN_32BIT_6B__ 0x8d,0xb6,0x00,0x00,0x00,0x00
+    %define __ALIGN_32BIT_7B__ 0x8d,0xb4,0x26,0x00,0x00,0x00,0x00
+    %define __ALIGN_32BIT_GROUP__ 7
+
+    %define __ALIGN_64BIT_1B__ 0x90
+    %define __ALIGN_64BIT_2B__ 0x66,0x90
+    %define __ALIGN_64BIT_3B__ 0x66,0x66,0x90
+    %define __ALIGN_64BIT_4B__ 0x66,0x66,0x66,0x90
+    %define __ALIGN_64BIT_GROUP__ 4
+  %elifidni %1,k8
+    %define __ALIGN_JMP_THRESHOLD__ 16
+
+    %define __ALIGN_16BIT_1B__ 0x90
+    %define __ALIGN_16BIT_2B__ 0x66,0x90
+    %define __ALIGN_16BIT_3B__ 0x66,0x66,0x90
+    %define __ALIGN_16BIT_4B__ 0x66,0x66,0x66,0x90
+    %define __ALIGN_16BIT_GROUP__ 4
+
+    %define __ALIGN_32BIT_1B__ 0x90
+    %define __ALIGN_32BIT_2B__ 0x66,0x90
+    %define __ALIGN_32BIT_3B__ 0x66,0x66,0x90
+    %define __ALIGN_32BIT_4B__ 0x66,0x66,0x66,0x90
+    %define __ALIGN_32BIT_GROUP__ 4
+
+    %define __ALIGN_64BIT_1B__ 0x90
+    %define __ALIGN_64BIT_2B__ 0x66,0x90
+    %define __ALIGN_64BIT_3B__ 0x66,0x66,0x90
+    %define __ALIGN_64BIT_4B__ 0x66,0x66,0x66,0x90
+    %define __ALIGN_64BIT_GROUP__ 4
+  %elifidni %1,k7
+    %define __ALIGN_JMP_THRESHOLD__ 16
+
+    %define __ALIGN_16BIT_1B__ 0x90
+    %define __ALIGN_16BIT_2B__ 0x66,0x90
+    %define __ALIGN_16BIT_3B__ 0x66,0x66,0x90
+    %define __ALIGN_16BIT_4B__ 0x66,0x66,0x66,0x90
+    %define __ALIGN_64BIT_GROUP__ 4
+
+    %define __ALIGN_32BIT_1B__ 0x90
+    %define __ALIGN_32BIT_2B__ 0x8b,0xc0
+    %define __ALIGN_32BIT_3B__ 0x8d,0x04,0x20
+    %define __ALIGN_32BIT_4B__ 0x8d,0x44,0x20,0x00
+    %define __ALIGN_32BIT_5B__ 0x8d,0x44,0x20,0x00,0x90
+    %define __ALIGN_32BIT_6B__ 0x8d,0x80,0x00,0x00,0x00,0x00
+    %define __ALIGN_32BIT_7B__ 0x8d,0x04,0x05,0x00,0x00,0x00,0x00
+    %define __ALIGN_32BIT_GROUP__ 7
+
+    %define __ALIGN_64BIT_1B__ 0x90
+    %define __ALIGN_64BIT_2B__ 0x66,0x90
+    %define __ALIGN_64BIT_3B__ 0x66,0x66,0x90
+    %define __ALIGN_64BIT_4B__ 0x66,0x66,0x66,0x90
+    %define __ALIGN_64BIT_GROUP__ 4
+  %elifidni %1,p6
+    %define __ALIGN_JMP_THRESHOLD__ 16
+
+    %define __ALIGN_16BIT_1B__ 0x90
+    %define __ALIGN_16BIT_2B__ 0x66,0x90
+    %define __ALIGN_16BIT_3B__ 0x0f,0x1f,0x00
+    %define __ALIGN_16BIT_4B__ 0x0f,0x1f,0x40,0x00
+    %define __ALIGN_16BIT_GROUP__ 4
+
+    %define __ALIGN_32BIT_1B__ 0x90
+    %define __ALIGN_32BIT_2B__ 0x66,0x90
+    %define __ALIGN_32BIT_3B__ 0x0f,0x1f,0x00
+    %define __ALIGN_32BIT_4B__ 0x0f,0x1f,0x40,0x00
+    %define __ALIGN_32BIT_5B__ 0x0f,0x1f,0x44,0x00,0x00
+    %define __ALIGN_32BIT_6B__ 0x66,0x0f,0x1f,0x44,0x00,0x00
+    %define __ALIGN_32BIT_7B__ 0x0f,0x1f,0x80,0x00,0x00,0x00,0x00
+    %define __ALIGN_32BIT_8B__ 0x0f,0x1f,0x84,0x00,0x00,0x00,0x00,0x00
+    %define __ALIGN_32BIT_GROUP__ 8
+
+    %define __ALIGN_64BIT_1B__ 0x90
+    %define __ALIGN_64BIT_2B__ 0x66,0x90
+    %define __ALIGN_64BIT_3B__ 0x0f,0x1f,0x00
+    %define __ALIGN_64BIT_4B__ 0x0f,0x1f,0x40,0x00
+    %define __ALIGN_64BIT_5B__ 0x0f,0x1f,0x44,0x00,0x00
+    %define __ALIGN_64BIT_6B__ 0x66,0x0f,0x1f,0x44,0x00,0x00
+    %define __ALIGN_64BIT_7B__ 0x0f,0x1f,0x80,0x00,0x00,0x00,0x00
+    %define __ALIGN_64BIT_8B__ 0x0f,0x1f,0x84,0x00,0x00,0x00,0x00,0x00
+    %define __ALIGN_64BIT_GROUP__ 8
+  %else
+    %error unknown alignment mode: %1
+  %endif
+  %ifnempty %2
+    %ifidni %2,nojmp
+      %xdefine __ALIGN_JMP_THRESHOLD__ -1
+    %else
+      %xdefine __ALIGN_JMP_THRESHOLD__ %2
+    %endif
+  %endif
+  %xdefine __ALIGNMODE__ %1,__ALIGN_JMP_THRESHOLD__
+%endmacro
+
+%unimacro align 1-2+.nolist
+%imacro align 1-2+.nolist
+  sectalign %1   ; align a segment as well
+  %ifnempty %2
+    times (((%1) - (($-$$) % (%1))) % (%1)) %2
+  %elif __PASS__ == 0 || __PASS__ == 3
+    times (((%1) - (($-$$) % (%1))) % (%1)) nop
+  %else
+    %push
+    %assign %$pad (((%1) - (($-$$) % (%1))) % (%1))
+    %if __ALIGN_JMP_THRESHOLD__ != -1 && %$pad > __ALIGN_JMP_THRESHOLD__
+      jmp %$end
+      ; We can't re-use %$pad here as $ will have changed!
+      times (((%1) - (($-$$) % (%1))) % (%1)) nop
+    %else
+      times (%$pad / __ALIGN_%[__BITS__]BIT_GROUP__) \
+        db __ALIGN_%[__BITS__]BIT_%[__ALIGN_%[__BITS__]BIT_GROUP__]B__
+      %assign %$pad %$pad % __ALIGN_%[__BITS__]BIT_GROUP__
+      %if %$pad > 0
+        db __ALIGN_%[__BITS__]BIT_%[%$pad]B__
+      %endif
+    %endif
+%$end:
+    %pop
+  %endif
+%endmacro
+
+	alignmode generic

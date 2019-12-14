@@ -1,0 +1,148 @@
+# Copyright 2016 The SwiftShader Authors. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../swiftshader.gni")
+
+# Need a separate config to ensure the warnings are added to the end.
+config("swiftshader_libGLESv2_private_config") {
+  defines = [
+    "GL_API=",
+    "GL_GLEXT_PROTOTYPES",
+  ]
+
+  if (is_win) {
+    cflags = [
+      "/wd4201",  # nameless struct/union
+      "/wd4324",  # structure was padded due to alignment specifier
+      "/wd5030",  # attribute is not recognized
+    ]
+
+    defines += [
+      "GL_APICALL=",
+      "GLAPI=",
+    ]
+
+    if (is_clang) {
+      defines += [
+        "__STDC_CONSTANT_MACROS",
+        "__STDC_LIMIT_MACROS",
+      ]
+    }
+  } else {
+    cflags = [ "-Wno-sign-compare" ]
+    if (!is_clang) {
+      cflags += [ "-Wno-unused-but-set-variable" ]
+    }
+
+    defines += [
+      "__STDC_CONSTANT_MACROS",
+      "__STDC_LIMIT_MACROS",
+      "GLAPI=GL_APICALL",
+    ]
+
+    if (is_mac) {
+      cflags += [ "-fvisibility=protected" ]
+      defines += [ "GL_APICALL=__attribute__((no_sanitize(\"function\")))" ]
+    } else {
+      defines += [ "GL_APICALL=__attribute__((visibility(\"protected\"))) __attribute__((no_sanitize(\"function\")))" ]
+    }
+  }
+}
+
+swiftshader_static_library("swiftshader_libGLESv2_static") {
+  deps = [
+    "../../OpenGL/common:swiftshader_opengl_common",
+    "../../OpenGL/compiler:swiftshader_opengl_compiler",
+    "../../Reactor:swiftshader_reactor",
+    "../../Renderer:swiftshader_renderer",
+  ]
+
+  sources = [
+    "../../Common/SharedLibrary.cpp",
+    "Buffer.cpp",
+    "Context.cpp",
+    "Device.cpp",
+    "Fence.cpp",
+    "Framebuffer.cpp",
+    "IndexDataManager.cpp",
+    "Program.cpp",
+    "Query.cpp",
+    "Renderbuffer.cpp",
+    "ResourceManager.cpp",
+    "Shader.cpp",
+    "Texture.cpp",
+    "TransformFeedback.cpp",
+    "VertexArray.cpp",
+    "VertexDataManager.cpp",
+    "libGLESv2.cpp",
+    "libGLESv3.cpp",
+    "main.cpp",
+    "resource.h",
+    "utilities.cpp",
+  ]
+
+  if (is_mac) {
+    libs = [
+      "CoreFoundation.framework",
+      "IOSurface.framework",
+    ]
+  }
+
+  configs = [ ":swiftshader_libGLESv2_private_config" ]
+
+  include_dirs = [
+    "../../../include",
+    "../..",
+    "..",
+  ]
+}
+
+swiftshader_shared_library("swiftshader_libGLESv2") {
+  if (!is_mac && !is_fuchsia) {
+    output_name = "libGLESv2"
+    output_dir = "$root_out_dir/swiftshader"
+  }
+
+  deps = [
+    ":swiftshader_libGLESv2_static",
+  ]
+
+  sources = [
+    "entry_points.cpp",
+    "libGLESv2.def",
+    "libGLESv2.rc",
+  ]
+
+  if (is_mac) {
+    ldflags = [
+      "-Wl,-install_name,@rpath/libswiftshader_libGLESv2.dylib",
+      "-Wl,-exported_symbols_list," +
+          rebase_path("libGLESv2.exports", root_build_dir),
+    ]
+  } else if (is_linux) {
+    inputs = [
+      "libGLESv2.lds",
+    ]
+    ldflags = [ "-Wl,--version-script=" +
+                rebase_path("libGLESv2.lds", root_build_dir) ]
+  }
+
+  configs = [ ":swiftshader_libGLESv2_private_config" ]
+
+  include_dirs = [
+    "../../../include",
+    "../..",
+    "..",
+  ]
+}

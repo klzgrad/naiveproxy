@@ -1,0 +1,93 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module blink.mojom;
+
+// Gives information about changes to a StorageArea.
+// Note that observer methods are called before the callbacks for the
+// StorageArea methods are run.
+interface StorageAreaObserver {
+  KeyAdded(array<uint8> key, array<uint8> value, string source);
+  KeyChanged(array<uint8> key, array<uint8> new_value, array<uint8> old_value,
+             string source);
+  KeyDeleted(array<uint8> key, array<uint8> old_value, string source);
+  AllDeleted(string source);
+
+  // Tells the client if it should send the old values for the key on Put() and
+  // Delete() calls for sending notifications. By default the clients are
+  // expected to send old values. It is set to true when the storage area
+  // does not cache values in memory.
+  ShouldSendOldValueOnMutations(bool value);
+};
+
+struct KeyValue {
+  array<uint8> key;
+  array<uint8> value;
+};
+
+// Since the GetAll call is synchronous, StorageArea users need this
+// asynchronously delivered notification to avoid applying changes to the
+// returned array that it already contains. This is not sent over the
+// normal StorageAreaObserver interface as there can be many observers and
+// only the connection that made the GetAll call needs to be notified of
+// its completion.
+interface StorageAreaGetAllCallback {
+  Complete(bool success);
+};
+
+// The mojo interface representing the connection to a single DOMStorage Area.
+interface StorageArea {
+  // The quota for each storage area.
+  // This value is enforced in renderer processes and the browser process.
+  const uint32 kPerStorageAreaQuota = 10485760; // 10 MiB
+
+  // In the browser process we allow some overage to
+  // accommodate concurrent writes from different renderers
+  // that were allowed because the limit imposed in the renderer
+  // wasn't exceeded.
+  const uint32 kPerStorageAreaOverQuotaAllowance = 102400; // 100 KiB
+
+  // Adds an observer to monitor changes to the StorageArea.
+  AddObserver(pending_associated_remote<StorageAreaObserver> observer);
+
+  // Set the database entry for |key| to |value|.
+  // Takes an optional |client_old_value| (see ShouldSendOldValueOnMutations()):
+  // 1. If the client is notified to not send old value on mutations
+  //    |client_old_value| is unused and can be nullopt.
+  // 2. If the client is notified to send old values or not notified at all,
+  //    |client_old_value| must be filled in with old value of the |key|, or
+  //    nullopt if |key| was not present in database. This value is used to send
+  //    notifications to StorageArea(s).
+  // Returns OK on success.
+  Put(array<uint8> key, array<uint8> value, array<uint8>? client_old_value,
+      string source) =>
+          (bool success);
+
+  // Remove the database entry (if any) for |key|.
+  // Takes an optional |client_old_value| (see ShouldSendOldValueOnMutations()):
+  // 1. If the client is notified to not send old value on mutations,
+  //    |client_old_value| is unused and can be nullopt.
+  // 2. If the client is notified to send old values or not notified at all,
+  //    |client_old_value| must be filled in with old value of the |key|, or
+  //    nullopt if |key| was not present in database. This value is used to send
+  //    notifications to StorageAreaObserver(s).
+  // Returns OK on success, and a non-OK status on error. It is not an error if
+  // |key| did not exist in the database.
+  Delete(array<uint8> key, array<uint8>? client_old_value, string source) =>
+      (bool success);
+
+  // Removes all the entries.
+  DeleteAll(string source) => (bool success);
+
+  // [DEPRECATED] Returns the value of the |key| only if values are
+  // stored in the internal in-memory cache. Fails if the |key| does not exist
+  // or if values are not required to be stored in the cache.
+  // TODO(ssid): Remove this function, crbug.com/764127.
+  Get(array<uint8> key) => (bool success, array<uint8> value);
+
+  // Returns all key/value pairs.
+  [Sync]
+  GetAll(pending_associated_remote<StorageAreaGetAllCallback> complete_callback)
+    => (bool success, array<KeyValue> data);
+};

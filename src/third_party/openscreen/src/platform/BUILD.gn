@@ -1,0 +1,202 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build_overrides/build.gni")
+
+source_set("platform") {
+  defines = []
+
+  sources = [
+    "api/internal/trace_logging_internal.cc",
+    "api/internal/trace_logging_internal.h",
+    "api/internal/trace_logging_macros_internal.h",
+    "api/logging.h",
+    "api/logging_util.cc",
+    "api/network_interface.cc",
+    "api/network_interface.h",
+    "api/platform_client.cc",
+    "api/platform_client.h",
+    "api/scoped_wake_lock.cc",
+    "api/scoped_wake_lock.h",
+    "api/socket.h",
+    "api/task_runner.h",
+    "api/time.h",
+    "api/tls_connection.cc",
+    "api/tls_connection.h",
+    "api/tls_connection_factory.cc",
+    "api/tls_connection_factory.h",
+    "api/trace_logging.h",
+    "api/trace_logging_platform.cc",
+    "api/trace_logging_platform.h",
+    "api/trace_logging_types.h",
+    "api/udp_packet.h",
+    "api/udp_read_callback.h",
+    "api/udp_socket.cc",
+    "api/udp_socket.h",
+    "base/error.cc",
+    "base/error.h",
+    "base/ip_address.cc",
+    "base/ip_address.h",
+    "base/location.cc",
+    "base/location.h",
+    "base/socket_state.h",
+    "base/tls_connect_options.h",
+    "base/tls_credentials.cc",
+    "base/tls_credentials.h",
+    "base/tls_listen_options.h",
+  ]
+
+  public_deps = [
+    "../third_party/abseil",
+    "../third_party/boringssl",
+    "../util",
+  ]
+
+  configs += [ "../build:allow_build_from_embedder" ]
+
+  if (!build_with_chromium) {
+    sources += [
+      "impl/socket_handle.h",
+      "impl/socket_handle_waiter.cc",
+      "impl/socket_handle_waiter.h",
+      "impl/task_runner.cc",
+      "impl/task_runner.h",
+      "impl/task_runner_thread.cc",
+      "impl/task_runner_thread.h",
+      "impl/text_trace_logging_platform.cc",
+      "impl/text_trace_logging_platform.h",
+      "impl/time.cc",
+      "impl/tls_write_buffer.cc",
+      "impl/tls_write_buffer.h",
+    ]
+
+    if (is_linux) {
+      sources += [ "impl/network_interface_linux.cc" ]
+    } else if (is_mac) {
+      defines += [
+        # Required, to use the new IPv6 Sockets options introduced by RFC 3542.
+        "__APPLE_USE_RFC_3542",
+      ]
+
+      sources += [ "impl/network_interface_mac.cc" ]
+    }
+
+    if (is_posix) {
+      sources += [
+        "impl/platform_client_posix.cc",
+        "impl/platform_client_posix.h",
+        "impl/scoped_pipe.h",
+        "impl/scoped_wake_lock_posix.cc",
+        "impl/scoped_wake_lock_posix.h",
+        "impl/socket_address_posix.cc",
+        "impl/socket_address_posix.h",
+        "impl/socket_handle_posix.cc",
+        "impl/socket_handle_posix.h",
+        "impl/socket_handle_waiter_posix.cc",
+        "impl/socket_handle_waiter_posix.h",
+        "impl/socket_handle_waiter_thread.cc",
+        "impl/socket_handle_waiter_thread.h",
+        "impl/stream_socket.h",
+        "impl/stream_socket_posix.cc",
+        "impl/stream_socket_posix.h",
+        "impl/tls_connection_factory_posix.cc",
+        "impl/tls_connection_factory_posix.h",
+        "impl/tls_connection_posix.cc",
+        "impl/tls_connection_posix.h",
+        "impl/tls_data_router_posix.cc",
+        "impl/tls_data_router_posix.h",
+        "impl/udp_socket_posix.cc",
+        "impl/udp_socket_posix.h",
+        "impl/udp_socket_reader_posix.cc",
+        "impl/udp_socket_reader_posix.h",
+      ]
+    }
+
+    deps = [
+      ":default_logger",
+    ]
+  }
+}
+
+source_set("test") {
+  testonly = true
+  sources = [
+    "test/fake_clock.cc",
+    "test/fake_clock.h",
+    "test/fake_task_runner.cc",
+    "test/fake_task_runner.h",
+    "test/fake_udp_socket.cc",
+    "test/fake_udp_socket.h",
+    "test/trace_logging_helpers.h",
+  ]
+
+  configs += [ "../build:allow_build_from_embedder" ]
+
+  deps = [
+    ":platform",
+    "../third_party/googletest:gmock",
+  ]
+}
+
+source_set("default_logger") {
+  sources = [
+    "impl/logging.cc",
+  ]
+
+  if (is_posix) {
+    sources += [ "impl/log_initializer_posix.cc" ]
+  }
+
+  configs += [ "../build:allow_build_from_embedder" ]
+
+  deps = [
+    "../third_party/abseil",
+    "../util",
+  ]
+}
+
+source_set("unittests") {
+  testonly = true
+
+  sources = [
+    "api/internal/trace_logging_internal_unittest.cc",
+    "api/time_unittest.cc",
+    "api/trace_logging_unittest.cc",
+    "api/udp_socket_unittest.cc",
+    "base/error_unittest.cc",
+    "base/ip_address_unittest.cc",
+    "base/location_unittest.cc",
+    "base/tls_credentials_unittest.cc",
+  ]
+
+  # The unit tests in impl/ assume the standalone implementation is being used.
+  # Exclude them if an embedder is providing the implementation.
+  if (!build_with_chromium) {
+    sources += [
+      # TODO(jophba): move over to general sources when UDP socket create
+      # is implemented in Chromium, as part of the NetworkRunner work.
+      "api/socket_integration_unittest.cc",
+      "impl/task_runner_unittest.cc",
+      "impl/time_unittest.cc",
+    ]
+
+    if (is_posix) {
+      sources += [
+        "impl/scoped_pipe_unittest.cc",
+        "impl/socket_address_posix_unittest.cc",
+        "impl/socket_handle_waiter_posix_unittest.cc",
+        "impl/tls_data_router_posix_unittest.cc",
+        "impl/udp_socket_reader_posix_unittest.cc",
+      ]
+    }
+  }
+
+  deps = [
+    ":platform",
+    "../third_party/googletest:gmock",
+    "../third_party/googletest:gtest",
+  ]
+
+  configs += [ "../build:allow_build_from_embedder" ]
+}

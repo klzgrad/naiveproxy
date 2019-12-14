@@ -1,0 +1,82 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//chrome/process_version_rc_template.gni")
+import("//testing/test.gni")
+
+assert(is_win)
+
+shared_library("gcapi") {
+  output_name = "gcapi_dll"
+
+  sources = [
+    "gcapi.def",
+    "gcapi_dll.cc",
+  ]
+
+  deps = [
+    ":copy_gcapi_header",
+    ":gcapi_dll_version",
+    ":lib",
+    "//base",
+  ]
+}
+
+copy("copy_gcapi_header") {
+  sources = [
+    "gcapi.h",
+  ]
+  outputs = [
+    "$root_out_dir/{{source_file_part}}",
+  ]
+}
+
+process_version_rc_template("gcapi_dll_version") {
+  template_file = "gcapi_dll_version.rc.version"
+  output = "$target_gen_dir/gcapi_dll_version.rc"
+}
+
+source_set("lib") {
+  sources = [
+    "gcapi.cc",
+    "gcapi.h",
+    "gcapi_omaha_experiment.cc",
+    "gcapi_omaha_experiment.h",
+    "gcapi_reactivation.cc",
+    "gcapi_reactivation.h",
+    "google_update_util.cc",
+    "google_update_util.h",
+  ]
+
+  deps = [
+    "//base",
+    "//chrome/installer/launcher_support",
+    "//chrome/installer/util:with_no_strings",
+    "//google_update",
+  ]
+}
+
+test("gcapi_test") {
+  sources = [
+    "gcapi_last_run_test.cc",
+    "gcapi_omaha_experiment_test.cc",
+    "gcapi_reactivation_test.cc",
+    "gcapi_test.cc",
+    "gcapi_test.rc",
+    "resource.h",
+  ]
+
+  deps = [
+    ":lib",
+    "//base/test:test_support",
+    "//chrome/install_static:install_static_util",
+    "//chrome/install_static/test:test_support",
+    "//chrome/installer/util:with_no_strings",
+    "//testing/gtest",
+  ]
+
+  data_deps = [
+    ":gcapi",  # Runtime dependency on this DLL.
+  ]
+}

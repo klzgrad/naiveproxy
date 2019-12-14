@@ -1,0 +1,74 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/features.gni")
+import("//components/safe_browsing/buildflags.gni")
+
+source_set("cpp") {
+  public_deps = [
+    "//chrome/services/file_util/public/mojom",
+  ]
+
+  if (safe_browsing_mode == 1) {
+    sources = [
+      "sandboxed_dmg_analyzer_mac.cc",
+      "sandboxed_dmg_analyzer_mac.h",
+      "sandboxed_rar_analyzer.cc",
+      "sandboxed_rar_analyzer.h",
+      "sandboxed_zip_analyzer.cc",
+      "sandboxed_zip_analyzer.h",
+    ]
+    if (is_chromeos) {
+      sources += [
+        "zip_file_creator.cc",
+        "zip_file_creator.h",
+      ]
+    }
+
+    public_deps += [ "//chrome/common/safe_browsing" ]
+  }
+}
+
+if (safe_browsing_mode == 1) {
+  source_set("unit_tests") {
+    testonly = true
+
+    sources = [
+      "sandboxed_dmg_analyzer_mac_unittest.cc",
+      "sandboxed_rar_analyzer_unittest.cc",
+      "sandboxed_zip_analyzer_unittest.cc",
+    ]
+
+    deps = [
+      ":cpp",
+      "//chrome/services/file_util",
+      "//content/test:test_support",
+      "//crypto:platform",
+      "//skia",
+      "//testing/gmock",
+      "//testing/gtest",
+    ]
+  }
+}
+
+if (is_chromeos) {
+  source_set("browser_tests") {
+    testonly = true
+
+    sources = [
+      "zip_file_creator_browsertest.cc",
+    ]
+    defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+
+    deps = [
+      "//base",
+      "//chrome/test:test_support",
+      "//content/public/browser",
+      "//content/public/common",
+      "//content/test:test_support",
+      "//testing/gtest",
+      "//third_party/zlib",
+    ]
+  }
+}

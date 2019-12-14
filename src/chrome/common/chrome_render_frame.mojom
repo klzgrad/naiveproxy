@@ -1,0 +1,50 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module chrome.mojom;
+
+import "mojo/public/mojom/base/string16.mojom";
+import "third_party/blink/public/mojom/window_features/window_features.mojom";
+import "ui/gfx/geometry/mojom/geometry.mojom";
+
+enum ImageFormat {
+  JPEG,
+  PNG,
+};
+
+[Native]
+struct WebApplicationInfo;
+
+// Messages sent from chrome to the render frame.
+interface ChromeRenderFrame {
+
+  // Updates the window features of the main frame's render view.
+  SetWindowFeatures(blink.mojom.WindowFeatures window_features);
+
+  // Reloads the image selected by the most recently opened context menu
+  // (if there indeed is an image at that location).
+  RequestReloadImageForContextNode();
+
+  // Requests an encoded thumbnail of the image selected by the most recently
+  // opened context menu. The encoding format is specified as a parameter. If
+  // no image is selected or there's an error capturing a thumbnail,
+  // |thumbnail_data| will be empty. If the image area is larger than
+  // |thumbnail_min_area_pixels| it will be downscaled to fit within
+  // |thumbnail_max_size_pixels|.
+  RequestThumbnailForContextNode(int32 thumbnail_min_area_pixels,
+                                 gfx.mojom.Size thumbnail_max_size_pixels,
+                                 ImageFormat image_format)
+      => (array<uint8> thumbnail_data, gfx.mojom.Size original_size);
+
+  // For WebUI testing, this message requests JavaScript to be executed at a
+  // time which is late enough to not be thrown out, and early enough to be
+  // before onload events are fired.
+  ExecuteWebUIJavaScript(mojo_base.mojom.String16 javascript);
+
+  // Sent when the profile changes the kSafeBrowsingEnabled preference.
+  SetClientSidePhishingDetection(bool enable_phishing_detection);
+
+  // Requests the web application info from the renderer.
+  GetWebApplicationInfo() => (WebApplicationInfo web_application_info);
+};

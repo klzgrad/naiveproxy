@@ -1,0 +1,90 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/mac/mac_sdk.gni")
+import("//testing/test.gni")
+import("//third_party/protobuf/proto_library.gni")
+
+proto_library("seatbelt_proto") {
+  visibility = [ ":*" ]
+  sources = [
+    "seatbelt.proto",
+  ]
+}
+
+component("seatbelt") {
+  sources = [
+    "sandbox_compiler.cc",
+    "sandbox_compiler.h",
+    "sandbox_logging.cc",
+    "sandbox_logging.h",
+    "seatbelt.cc",
+    "seatbelt.h",
+    "seatbelt_exec.cc",
+    "seatbelt_exec.h",
+    "seatbelt_export.h",
+  ]
+  libs = [ "sandbox" ]
+  deps = [
+    ":seatbelt_proto",
+  ]
+  public_deps = [
+    "//third_party/protobuf:protobuf_lite",
+  ]
+  defines = [ "SEATBELT_IMPLEMENTATION" ]
+}
+
+component("seatbelt_extension") {
+  sources = [
+    "seatbelt_extension.cc",
+    "seatbelt_extension.h",
+    "seatbelt_extension_token.cc",
+    "seatbelt_extension_token.h",
+  ]
+  libs = [ "sandbox" ]
+  public_deps = [
+    "//base",
+  ]
+  defines = [ "SEATBELT_IMPLEMENTATION" ]
+}
+
+component("system_services") {
+  sources = [
+    "seatbelt_export.h",
+    "system_services.cc",
+    "system_services.h",
+  ]
+  libs = [
+    "Carbon.framework",
+    "CoreFoundation.framework",
+  ]
+  public_deps = [
+    "//base",
+  ]
+  defines = [ "SEATBELT_IMPLEMENTATION" ]
+}
+
+test("sandbox_mac_unittests") {
+  sources = [
+    "mojom/mojom_traits_unittest.cc",
+    "sandbox_mac_compiler_unittest.mm",
+    "sandbox_mac_seatbelt_exec_unittest.cc",
+    "seatbelt_extension_unittest.cc",
+  ]
+
+  libs = [
+    "CoreFoundation.framework",
+    "Foundation.framework",
+  ]
+
+  deps = [
+    ":seatbelt",
+    ":seatbelt_extension",
+    ":seatbelt_proto",
+    "mojom:test_interfaces",
+    "//base",
+    "//mojo/core/test:run_all_unittests",
+    "//testing/gtest",
+  ]
+}

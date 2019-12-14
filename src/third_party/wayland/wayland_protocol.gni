@@ -1,0 +1,96 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# Template to generate wayland protocol code with wayland-scanner.
+#
+# Example:
+#  wayland_protocol("foo") {
+#    sources = [ "foo.xml" ]
+#  }
+
+import("//third_party/wayland/features.gni")
+
+template("wayland_protocol") {
+  assert(defined(invoker.sources), "Need sources for wayland protocol")
+
+  # Calculate the output paths.
+  protocol_outputs = []
+  output_dirs = []
+  foreach(protocol, invoker.sources) {
+    dir = "$root_gen_dir/" + rebase_path(get_path_info(protocol, "dir"), "//")
+    name = get_path_info(protocol, "name")
+    protocol_outputs += [
+      "${dir}/${name}-protocol.c",
+      "${dir}/${name}-client-protocol.h",
+      "${dir}/${name}-server-protocol.h",
+    ]
+    output_dirs += [ dir ]
+  }
+
+  action_name = "${target_name}_gen"
+  config_name = "${target_name}_config"
+  source_set_name = "${target_name}"
+
+  # Action which runs wayland-scanner to generate the code.
+  action(action_name) {
+    visibility = [ ":$source_set_name" ]
+    script = "//third_party/wayland/wayland_scanner_wrapper.py"
+    sources = invoker.sources
+    outputs = protocol_outputs
+
+    # Paths in invoker.sources are relative to the invoker.
+    # Make it relative to the src root.
+    args = rebase_path(invoker.sources, "//")
+
+    args += [
+      "--src-root",
+      rebase_path("//", root_build_dir),
+    ]
+    args += [
+      "--root-gen-dir",
+      rebase_path(root_gen_dir, root_build_dir),
+    ]
+
+    if (use_system_libwayland) {
+      args += [
+        "--cmd",
+        system_wayland_scanner_path,
+      ]
+    } else {
+      wayland_scanner_label =
+          "//third_party/wayland:wayland_scanner($host_toolchain)"
+      deps = [
+        wayland_scanner_label,
+      ]
+      wayland_scanner_path = get_label_info(wayland_scanner_label,
+                                            "root_out_dir") + "/wayland_scanner"
+      cmd = "./" + rebase_path(wayland_scanner_path, root_build_dir)
+      args += [
+        "--cmd",
+        cmd,
+      ]
+    }
+  }
+
+  # Config to include the generated headers only with the file names.
+  # e.g. #include <foo-client-protocol.h>
+  config(config_name) {
+    include_dirs = output_dirs
+  }
+
+  # Source set which consists of the generated code.
+  source_set(source_set_name) {
+    sources = get_target_outputs(":$action_name")
+
+    deps = [
+      ":$action_name",
+      "//third_party/wayland:wayland_util",
+    ]
+
+    configs -= [ "//build/config/compiler:chromium_code" ]
+    configs += [ "//build/config/compiler:no_chromium_code" ]
+
+    public_configs = [ ":$config_name" ]
+  }
+}

@@ -1,0 +1,132 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/chromecast_build.gni")
+import("//chromecast/chromecast.gni")
+import("//media/media_options.gni")
+
+declare_args() {
+  mixer_output = ""
+}
+
+cast_source_set("mixer_control") {
+  sources = [
+    "mixer_control.h",
+  ]
+  deps = [
+    "//chromecast/public",
+  ]
+}
+
+cast_source_set("post_processor_paths") {
+  sources = [
+    "post_processor_paths.cc",
+    "post_processor_paths.h",
+  ]
+  deps = [
+    "//base",
+  ]
+}
+
+cast_source_set("mixer") {
+  sources = [
+    "audio_output_redirector.cc",
+    "audio_output_redirector.h",
+    "audio_output_redirector_input.h",
+    "buffering_mixer_source.cc",
+    "buffering_mixer_source.h",
+    "direct_mixer_source.cc",
+    "direct_mixer_source.h",
+    "filter_group.cc",
+    "filter_group.h",
+    "loopback_handler.cc",
+    "loopback_handler.h",
+    "mixer_input.cc",
+    "mixer_input.h",
+    "mixer_input_connection.cc",
+    "mixer_input_connection.h",
+    "mixer_pipeline.cc",
+    "mixer_pipeline.h",
+    "mixer_service_receiver.cc",
+    "mixer_service_receiver.h",
+    "post_processing_pipeline.h",
+    "post_processing_pipeline_impl.cc",
+    "post_processing_pipeline_impl.h",
+    "post_processing_pipeline_parser.cc",
+    "post_processing_pipeline_parser.h",
+    "post_processor_factory.cc",
+    "post_processor_factory.h",
+    "stream_mixer.cc",
+    "stream_mixer.h",
+  ]
+
+  deps = [
+    ":mixer_control",
+    ":post_processor_paths",
+    "//base",
+    "//chromecast/base",
+    "//chromecast/base:chromecast_switches",
+    "//chromecast/base:thread_health_checker",
+    "//chromecast/media/audio:libcast_external_audio_pipeline_1.0",
+    "//chromecast/media/audio/mixer_service:common",
+    "//chromecast/media/audio/mixer_service:proto",
+    "//chromecast/media/audio/mixer_service/receiver",
+    "//chromecast/media/base",
+    "//chromecast/media/cma/backend:audio_helpers",
+    "//chromecast/media/cma/backend:audio_resampler",
+    "//chromecast/media/cma/backend:cast_audio_json",
+    "//chromecast/media/cma/backend:interleaved_channel_mixer",
+    "//chromecast/media/cma/backend:volume_map",
+    "//chromecast/media/cma/backend/mixer/post_processors:post_processor_wrapper",
+    "//chromecast/media/cma/base",
+    "//chromecast/net:io_buffer_pool",
+    "//chromecast/public",
+    "//chromecast/public/media",
+    "//media",
+    "//media:shared_memory_support",
+  ]
+
+  if (use_alsa) {
+    deps += [ "//chromecast/media/cma/backend/alsa:mixer_output" ]
+  } else if (is_fuchsia) {
+    deps += [ "//chromecast/media/cma/backend/fuchsia:mixer_output" ]
+  } else {
+    # If enable_video_with_mixed_audio && !use_alsa, the platform needs to
+    # provide its own mixer output.
+    if (!enable_video_with_mixed_audio) {
+      sources += [ "mixer_output_stream_dummy.cc" ]
+    } else {
+      assert("$mixer_output" != "")
+      deps += [ "$mixer_output" ]
+    }
+  }
+}
+
+cast_source_set("unittests") {
+  testonly = true
+  sources = [
+    "filter_group_unittest.cc",
+    "mock_mixer_source.cc",
+    "mock_mixer_source.h",
+    "mock_post_processor_factory.cc",
+    "mock_post_processor_factory.h",
+    "mock_redirected_audio_output.cc",
+    "mock_redirected_audio_output.h",
+    "stream_mixer_external_audio_pipeline_unittest.cc",
+    "stream_mixer_unittest.cc",
+  ]
+
+  deps = [
+    ":mixer",
+    "//base",
+    "//chromecast/media/audio:fake_external_audio_pipeline",
+    "//chromecast/media/cma/backend/mixer/post_processors:unittests",
+    "//chromecast/public",
+    "//chromecast/public/media",
+    "//media",
+    "//media:shared_memory_support",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+}

@@ -1,0 +1,140 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//media/media_options.gni")
+
+source_set("video") {
+  # Do not expand the visibility here without double-checking with OWNERS, this
+  # is a roll-up target which is part of the //media component. Most other DEPs
+  # should be using //media and not directly DEP this roll-up target.
+  visibility = [
+    "//media",
+    "//media/filters",
+    "//media/formats",
+    "//media/renderers",
+  ]
+
+  sources = [
+    "gpu_memory_buffer_video_frame_pool.cc",
+    "gpu_memory_buffer_video_frame_pool.h",
+    "gpu_video_accelerator_factories.h",
+    "h264_bit_reader.cc",
+    "h264_bit_reader.h",
+    "h264_level_limits.cc",
+    "h264_level_limits.h",
+    "h264_parser.cc",
+    "h264_parser.h",
+    "h264_poc.cc",
+    "h264_poc.h",
+    "half_float_maker.cc",
+    "half_float_maker.h",
+    "picture.cc",
+    "picture.h",
+    "supported_video_decoder_config.cc",
+    "supported_video_decoder_config.h",
+    "trace_util.cc",
+    "trace_util.h",
+    "video_decode_accelerator.cc",
+    "video_decode_accelerator.h",
+    "video_encode_accelerator.cc",
+    "video_encode_accelerator.h",
+  ]
+
+  if (proprietary_codecs && enable_platform_hevc) {
+    sources += [
+      "h265_parser.cc",
+      "h265_parser.h",
+    ]
+  }
+
+  public_deps = [
+    "//gpu/command_buffer/client:gles2_interface",
+  ]
+
+  deps = [
+    "//gpu/command_buffer/client",
+    "//gpu/command_buffer/common",
+    "//media/base",
+    "//third_party/libyuv",
+    "//ui/gfx",
+    "//ui/gl",
+  ]
+
+  configs += [
+    # TODO(crbug.com/167187): Fix size_t to int truncations.
+    "//build/config/compiler:no_size_t_to_int_warning",
+    "//media:subcomponent_config",
+  ]
+}
+
+# Note: This is a roll-up only target; do not expand the visibility. DEPS should
+# depend on the //media:test_support target instead.
+static_library("test_support") {
+  visibility = [ "//media:test_support" ]
+  testonly = true
+  sources = [
+    "fake_gpu_memory_buffer.cc",
+    "fake_gpu_memory_buffer.h",
+    "fake_video_encode_accelerator.cc",
+    "fake_video_encode_accelerator.h",
+    "mock_gpu_memory_buffer_video_frame_pool.cc",
+    "mock_gpu_memory_buffer_video_frame_pool.h",
+    "mock_gpu_video_accelerator_factories.cc",
+    "mock_gpu_video_accelerator_factories.h",
+    "mock_video_decode_accelerator.cc",
+    "mock_video_decode_accelerator.h",
+    "mock_video_encode_accelerator.cc",
+    "mock_video_encode_accelerator.h",
+  ]
+  configs += [ "//media:media_config" ]
+  deps = [
+    "//base",
+    "//gpu/command_buffer/client:gles2_interface",
+    "//gpu/command_buffer/common",
+    "//media/base:test_support",
+    "//services/viz/public/cpp/gpu",
+    "//testing/gmock",
+    "//ui/gfx",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "gpu_memory_buffer_video_frame_pool_unittest.cc",
+    "h264_bit_reader_unittest.cc",
+    "h264_parser_unittest.cc",
+    "h264_poc_unittest.cc",
+    "half_float_maker_unittest.cc",
+    "supported_video_decoder_config_unittest.cc",
+  ]
+  if (enable_platform_hevc) {
+    sources += [ "h265_parser_unittest.cc" ]
+  }
+
+  configs += [ "//media:media_config" ]
+  deps = [
+    "//base",
+    "//base/test:test_support",
+    "//components/viz/test:test_support",
+    "//gpu:test_support",
+    "//gpu/command_buffer/client:gles2_interface",
+    "//gpu/command_buffer/common",
+    "//media:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//ui/gfx",
+  ]
+}
+
+fuzzer_test("media_h264_parser_fuzzer") {
+  sources = [
+    "h264_parser_fuzzertest.cc",
+  ]
+  deps = [
+    "//base",
+    "//media",
+    "//ui/gfx/geometry",
+  ]
+}
