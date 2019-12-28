@@ -214,7 +214,7 @@ int NaiveConnection::DoConnectServer() {
         const auto& addr = ipe.address();
         auto name = resolver_->FindNameByAddress(addr);
         if (!name.empty()) {
-          origin.set_host(name);
+          origin = HostPortPair(name, ipe.port());
         } else if (!resolver_->IsInResolvedRange(addr)) {
           origin = HostPortPair::FromIPEndPoint(ipe);
         } else {
