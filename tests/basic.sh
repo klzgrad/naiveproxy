@@ -9,6 +9,7 @@ if [ "$(uname)" = Linux ]; then
   case "$target_cpu" in
     arm64) naive="qemu-aarch64 -L src/$sysroot $naive";;
     arm) naive="qemu-arm -L src/$sysroot $naive";;
+    x64) naive="qemu-x86_64 -L src/$sysroot $naive";;
     x86) naive="qemu-i386 -L src/$sysroot $naive";;
     mipsel) naive="qemu-mipsel -L src/$sysroot $naive";;
   esac
