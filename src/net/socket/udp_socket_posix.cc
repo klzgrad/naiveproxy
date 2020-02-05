@@ -1155,8 +1155,12 @@ SendResult UDPSocketPosixSender::InternalSendmmsgBuffers(
   for (auto& buffer : buffers)
     msg_iov->push_back({const_cast<char*>(buffer->data()), buffer->length()});
   msgvec->reserve(buffers.size());
-  for (size_t j = 0; j < buffers.size(); j++)
-    msgvec->push_back({{nullptr, 0, &msg_iov[j], 1, nullptr, 0, 0}, 0});
+  for (size_t j = 0; j < buffers.size(); j++) {
+    struct mmsghdr hdr = {};
+    hdr.msg_hdr.msg_iov = &msg_iov[j];
+    hdr.msg_hdr.msg_iovlen = 1;
+    msgvec->push_back(hdr);
+  }
   int result = HANDLE_EINTR(Sendmmsg(fd, &msgvec[0], buffers.size(), 0));
   SendResult send_result(0, 0, std::move(buffers));
   if (result < 0) {
