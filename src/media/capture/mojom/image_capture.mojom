@@ -1,0 +1,153 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module media.mojom;
+
+// Equivalent to idl MediaSettingsRange, arbitrary range representing the
+// allowed variations of a Capability or an Option.
+// https://w3c.github.io/mediacapture-image/#mediasettingsrange-section
+struct Range {
+  double max;
+  double min;
+  double current;
+  double step;
+};
+
+// https://w3c.github.io/mediacapture-image/#meteringmode-section
+enum MeteringMode { NONE, MANUAL, SINGLE_SHOT, CONTINUOUS };
+
+// https://w3c.github.io/mediacapture-image/#redeyereduction-section
+enum RedEyeReduction { NEVER, ALWAYS, CONTROLLABLE };
+
+//  https://www.w3.org/TR/image-capture/#FillLightMode
+enum FillLightMode { OFF, AUTO, FLASH };
+
+// Equivalent to idl's MediaTrackCapabilities plus PhotoCapabilities and their
+// associated settings.
+struct PhotoState {
+  // https://w3c.github.io/mediacapture-image/#mediatrackcapabilities-section
+  // and https://w3c.github.io/mediacapture-image/#mediatracksettings-section
+  array<MeteringMode> supported_white_balance_modes;
+  MeteringMode current_white_balance_mode;
+  array<MeteringMode> supported_exposure_modes;
+  MeteringMode current_exposure_mode;
+  array<MeteringMode> supported_focus_modes;
+  MeteringMode current_focus_mode;
+  array<Point2D> points_of_interest;
+
+  Range exposure_compensation;
+  Range exposure_time;
+  Range color_temperature;
+  Range iso;
+
+  Range brightness;
+  Range contrast;
+  Range saturation;
+  Range sharpness;
+
+  Range focus_distance;
+
+  Range pan;
+  Range tilt;
+  Range zoom;
+
+  bool supports_torch;
+  bool torch;
+
+  // https://w3c.github.io/mediacapture-image/##photocapabilities-section and
+  // https://w3c.github.io/mediacapture-image/##photosettings-section
+  RedEyeReduction red_eye_reduction;
+  Range height;
+  Range width;
+  array<FillLightMode> fill_light_mode;
+};
+
+// Equivalent to idl Point2D.
+// https://w3c.github.io/mediacapture-image/#point2d-section
+// TODO(mcasas): use gfx::mojom::PointF after https://crbug.com/640049.
+struct Point2D {
+  double x;
+  double y;
+};
+
+// Equivalent to idl PhotoSettings + MediaTrackSettings/MediaTrackConstraintSet.
+// PODs cannot be nullable, i.e. uint32? bla doesn't work, use |has_bla| flags.
+struct PhotoSettings {
+  // https://w3c.github.io/mediacapture-image/#mediatracksettings-section and
+  // https://w3c.github.io/mediacapture-image/#mediatrackconstraintset-section
+  bool has_white_balance_mode;
+  MeteringMode white_balance_mode;
+  bool has_exposure_mode;
+  MeteringMode exposure_mode;
+  bool has_focus_mode;
+  MeteringMode focus_mode;
+  array<Point2D> points_of_interest;
+
+  bool has_exposure_compensation;
+  double exposure_compensation;
+  bool has_exposure_time;
+  double exposure_time;
+  bool has_color_temperature;
+  double color_temperature;
+  bool has_iso;
+  double iso;
+
+  bool has_brightness;
+  double brightness;
+  bool has_contrast;
+  double contrast;
+  bool has_saturation;
+  double saturation;
+  bool has_sharpness;
+  double sharpness;
+
+  bool has_focus_distance;
+  double focus_distance;
+
+  bool has_pan;
+  double pan;
+  bool has_tilt;
+  double tilt;
+  bool has_zoom;
+  double zoom;
+
+  bool has_torch;
+  bool torch;
+
+  // https://w3c.github.io/mediacapture-image/##photosettings-section
+  bool has_fill_light_mode;
+  FillLightMode fill_light_mode;
+  bool has_width;
+  double width;
+  bool has_height;
+  double height;
+  bool has_red_eye_reduction;
+  bool red_eye_reduction;
+};
+
+// This is a mojo move-only equivalent of a Blob, i.e. MIME type and Data.
+struct Blob {
+  string mime_type;
+  array<uint8> data;
+};
+
+// |source_id| is the renderer-side UUID identifier of the image capture device.
+interface ImageCapture
+{
+    // Retrieves the image capture device capabilities and current settings.
+    // https://www.w3.org/TR/image-capture/#dom-imagecapture-getphotocapabilities
+    GetPhotoState(string source_id)
+        => (PhotoState state);
+
+    // Sets the |settings| on the associated video capture device.
+    // https://www.w3.org/TR/image-capture/#dom-imagecapture-setoptions
+    SetOptions(string source_id, PhotoSettings settings)
+        => (bool success);
+
+    // Takes a Photo from the given |source_id|, returning it encoded in |blob|
+    // with the format specified in its |mime_type|.
+    // https://www.w3.org/TR/image-capture/#dom-imagecapture-takephoto
+    TakePhoto(string source_id)
+        => (Blob blob);
+};

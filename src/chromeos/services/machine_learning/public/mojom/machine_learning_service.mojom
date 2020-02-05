@@ -1,0 +1,40 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// Top-level API of the Machine Learning Service: loading models for inference.
+
+// NOTE: This mojom exists in two places and must be kept in sync:
+//       Chromium:  //chromeos/services/machine_learning/public/mojom/
+//       Chrome OS: src/platform2/ml/mojom/
+// Example: A backwards-compatible mojom change (and corresponding
+// implementation change) can be made in Chrome OS first, then replicated to the
+// client (Chromium) later.
+
+module chromeos.machine_learning.mojom;
+
+// NOTE: The base directory for 'import' statements is expected to differ
+//       between Chromium and Chrome OS versions of this file.
+import "chromeos/services/machine_learning/public/mojom/model.mojom";
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum LoadModelResult {
+  OK = 0,
+  MODEL_SPEC_ERROR = 1,
+  LOAD_MODEL_ERROR = 2,
+  // Remove kMax and use builtin kMaxValue after Mojo uprev (crbug.com/909719).
+  kMax = LOAD_MODEL_ERROR,
+};
+
+// Top-level interface between Chromium and the ML Service daemon.
+interface MachineLearningService {
+  // The BuiltinModelId inside BuiltinModelSpec is used to specify the model to
+  // be loaded.
+  LoadBuiltinModel(BuiltinModelSpec spec, Model& request)
+      => (LoadModelResult result);
+  // The FlatbufferModelSpec contains both of the flatbuffer content and the
+  // metadata.
+  LoadFlatBufferModel(FlatBufferModelSpec spec, Model& request)
+      => (LoadModelResult result);
+};

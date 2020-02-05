@@ -1,0 +1,104 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# Keep in sync with group("perf_without_chrome").
+group("perf") {
+  testonly = true
+  deps = [
+    "//tools/perf/chrome_telemetry_build:telemetry_chrome_test",
+  ]
+
+  data = [
+    "//tools/perf/",
+
+    # Field trial config
+    "//tools/variations/",
+    "//testing/variations/",
+
+    # Field trial dependencies
+    "//tools/json_comment_eater/",
+    "//tools/json_to_struct/",
+    "//components/variations/service/generate_ui_string_overrider.py",
+
+    # For blink_perf benchmarks.
+    "//third_party/blink/perf_tests/",
+
+    # For smoothness.tough_canvas_cases
+    "//chrome/test/data/perf/",
+
+    # For image_decoding.measurement
+    "//chrome/test/data/image_decoding/",
+
+    # For Pylib used by VR tests
+    "//build/android/pylib/",
+  ]
+
+  # Runs a script which generates the ad tagging ruleset.
+  if (!is_ios) {
+    data_deps = [
+      "//components/subresource_filter/tools:index_ruleset",
+    ]
+  }
+
+  # TODO(crbug.com/1028612): Remove this if when trace processor can be built
+  # on Android.
+  if (!is_android) {
+    data_deps +=
+        [ "//third_party/perfetto/src/trace_processor:trace_processor_shell" ]
+  }
+}
+
+if (is_android) {
+  import("//build/util/generate_wrapper.gni")
+
+  generate_wrapper("run_benchmark_wrapper") {
+    executable = "run_benchmark"
+    wrapper_script = "$root_build_dir/bin/run_benchmark"
+    executable_args = [
+      "--chromium-output-directory",
+      "@WrappedPath(.)",
+    ]
+  }
+}
+
+# Group for running benchmarks without building Chrome. Keep in sync with
+# group("perf").
+group("perf_without_chrome") {
+  testonly = true
+  deps = [
+    "//tools/perf/chrome_telemetry_build:telemetry_chrome_test_without_chrome",
+  ]
+
+  data = [
+    "//tools/perf/",
+
+    # Field trial config
+    "//tools/variations/",
+    "//testing/variations/",
+
+    # Field trial dependencies
+    "//tools/json_comment_eater/",
+    "//tools/json_to_struct/",
+    "//components/variations/service/generate_ui_string_overrider.py",
+
+    # For blink_perf benchmarks.
+    "//third_party/blink/perf_tests/",
+
+    # For smoothness.tough_canvas_cases
+    "//chrome/test/data/perf/",
+
+    # For image_decoding.measurement
+    "//chrome/test/data/image_decoding/",
+
+    # For Pylib used by VR tests
+    "//build/android/pylib/",
+  ]
+
+  # Runs a script which generates the ad tagging ruleset.
+  if (!is_ios) {
+    data_deps = [
+      "//components/subresource_filter/tools:index_ruleset",
+    ]
+  }
+}

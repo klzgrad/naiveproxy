@@ -1,0 +1,177 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ui.gni")
+import("//media/gpu/args.gni")
+
+source_set("helpers") {
+  testonly = true
+  sources = [
+    "image.cc",
+    "image.h",
+    "video_frame_helpers.cc",
+    "video_frame_helpers.h",
+    "video_test_environment.cc",
+    "video_test_environment.h",
+  ]
+  deps = [
+    "//base:base",
+    "//base/test:test_config",
+    "//base/test:test_support",
+    "//gpu/ipc/common",
+    "//media:test_support",
+    "//media/gpu",
+    "//mojo/core/embedder:embedder",
+    "//third_party/libyuv",
+  ]
+  public_deps = [
+    "//testing/gtest",
+  ]
+
+  if (use_ozone) {
+    deps += [ "//ui/ozone" ]
+  }
+  if (use_vaapi) {
+    deps += [ "//media/gpu/vaapi" ]
+  }
+}
+
+source_set("frame_validator") {
+  testonly = true
+  sources = [
+    "video_frame_validator.cc",
+    "video_frame_validator.h",
+  ]
+  deps = [
+    ":decode_helpers",
+    ":helpers",
+    "//media/gpu",
+  ]
+}
+
+source_set("frame_file_writer") {
+  testonly = true
+  sources = [
+    "video_frame_file_writer.cc",
+    "video_frame_file_writer.h",
+  ]
+  deps = [
+    ":helpers",
+    "//media/gpu",
+    "//ui/gfx/codec:codec",
+  ]
+}
+
+source_set("decode_helpers") {
+  testonly = true
+  sources = [
+    "video_decode_accelerator_unittest_helpers.cc",
+    "video_decode_accelerator_unittest_helpers.h",
+  ]
+  public_deps = [
+    ":helpers",
+  ]
+  deps = [
+    "//media/gpu",
+    "//testing/gtest",
+  ]
+  if (use_ozone) {
+    deps += [ "//ui/ozone" ]
+  }
+}
+
+static_library("video_player_thumbnail_renderer") {
+  testonly = true
+  sources = [
+    "video_player/frame_renderer.h",
+    "video_player/frame_renderer_thumbnail.cc",
+    "video_player/frame_renderer_thumbnail.h",
+  ]
+  deps = [
+    ":decode_helpers",
+    "//gpu/command_buffer/common",
+    "//media/gpu",
+    "//ui/gfx/codec:codec",
+    "//ui/gl:gl",
+    "//ui/gl/init:init",
+  ]
+}
+
+static_library("video_player") {
+  testonly = true
+  sources = [
+    "video_player/frame_renderer.h",
+    "video_player/frame_renderer_dummy.cc",
+    "video_player/frame_renderer_dummy.h",
+    "video_player/test_vda_video_decoder.cc",
+    "video_player/test_vda_video_decoder.h",
+    "video_player/video.cc",
+    "video_player/video.h",
+    "video_player/video_decoder_client.cc",
+    "video_player/video_decoder_client.h",
+    "video_player/video_player.cc",
+    "video_player/video_player.h",
+  ]
+  deps = [
+    ":decode_helpers",
+    "//media/gpu",
+    "//testing/gtest:gtest",
+  ]
+}
+
+static_library("video_player_test_environment") {
+  testonly = true
+  sources = [
+    "video_player/video_player_test_environment.cc",
+    "video_player/video_player_test_environment.h",
+  ]
+  data = [
+    "//media/test/data/",
+  ]
+  deps = [
+    ":frame_file_writer",
+    ":helpers",
+    ":video_player",
+    "//media/gpu",
+  ]
+}
+
+if (use_vaapi || use_v4l2_codec) {
+  static_library("image_processor") {
+    testonly = true
+    sources = [
+      "image_processor/image_processor_client.cc",
+      "image_processor/image_processor_client.h",
+    ]
+    deps = [
+      ":helpers",
+      "//media:test_support",
+      "//media/gpu",
+      "//media/gpu/chromeos",
+      "//testing/gtest",
+      "//third_party/libyuv",
+    ]
+    data = [
+      "//media/test/data/",
+    ]
+  }
+}
+
+if (is_linux) {
+  static_library("local_gpu_memory_buffer_manager") {
+    testonly = true
+    sources = [
+      "local_gpu_memory_buffer_manager.cc",
+      "local_gpu_memory_buffer_manager.h",
+    ]
+    deps = [
+      "//base",
+      "//build/config/linux/libdrm",
+      "//gpu/command_buffer/client",
+      "//third_party/minigbm",
+      "//ui/gfx:memory_buffer",
+      "//ui/gfx/geometry",
+    ]
+  }
+}

@@ -1,0 +1,108 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/android/config.gni")
+import("//build/config/android/rules.gni")
+import("//remoting/android/client_java_tmpl.gni")
+import("//remoting/android/remoting_apk_tmpl.gni")
+import("//remoting/credits/credits.gni")
+import("//remoting/remoting_options.gni")
+import("//remoting/tools/build/remoting_localize.gni")
+
+generate_jni("jni_headers") {
+  sources = [
+    "java/src/org/chromium/chromoting/jni/Client.java",
+    "java/src/org/chromium/chromoting/jni/DirectoryService.java",
+    "java/src/org/chromium/chromoting/jni/GlDisplay.java",
+    "java/src/org/chromium/chromoting/jni/JniInterface.java",
+    "java/src/org/chromium/chromoting/jni/JniOAuthTokenGetter.java",
+    "java/src/org/chromium/chromoting/jni/NotificationPresenter.java",
+    "java/src/org/chromium/chromoting/jni/TouchEventData.java",
+  ]
+}
+
+_raw_resources_base_dir = "$target_gen_dir/credits_resources_raw/res"
+
+# The target is named this way, instead of "..._raw_resources", specifically
+# to avoid matching any of the _java_target_whitelist items in
+# build/config/android/internal_rules.gni
+remoting_credits("credits_resources_raw") {
+  credits_gen_dir = "$_raw_resources_base_dir/raw"
+  gn_target = "//remoting/android:remoting_apk"
+}
+
+remoting_localize("remoting_apk_manifest") {
+  sources = [
+    "java/AndroidManifest.xml.jinja2",
+  ]
+  locales = [ "en" ]
+  variables = [ rebase_path(branding_path) ]
+  output = "$root_gen_dir/remoting/android/{{source_name_part}}"
+}
+
+android_resources("remoting_android_client_java_resources") {
+  custom_package = "org.chromium.chromoting"
+  resource_dirs = [ "java/res" ]
+  generated_resource_dirs = [ _raw_resources_base_dir ]
+  generated_resource_files = get_target_outputs(":credits_resources_raw")
+  deps = [
+    ":credits_resources_raw",
+    "//remoting/resources:strings_java",
+    "//third_party/android_deps:android_support_v7_appcompat_java",
+  ]
+}
+
+remoting_android_client_java_tmpl("remoting_android_client_java") {
+  # This should always be the public play services libraries since it is only
+  # used by non-_google apks. Explicitly use the string literal rather than
+  # google_play_services_package to ensure this.
+  play_services_package = "//third_party/android_deps"
+}
+
+remoting_apk_tmpl("remoting_apk") {
+  apk_name = "Chromoting"
+  java_files = [ "//remoting/android/apk/src/org/chromium/chromoting/RemotingApplication.java" ]
+  deps = [
+    ":remoting_android_client_java",
+    "//base:base_java",
+    "//net/android:net_java",
+  ]
+}
+
+remoting_localize("remoting_test_apk_manifest") {
+  sources = [
+    "javatests/AndroidManifest.xml.jinja2",
+  ]
+  locales = [ "en" ]
+  variables = [ rebase_path(branding_path) ]
+  output = "$root_gen_dir/remoting/android_test/{{source_name_part}}"
+}
+
+instrumentation_test_apk("remoting_test_apk") {
+  android_manifest = "$root_gen_dir/remoting/android_test/AndroidManifest.xml"
+  android_manifest_dep = ":remoting_test_apk_manifest"
+  target_sdk_version = 23
+  apk_name = "ChromotingTest"
+  apk_under_test = ":remoting_apk"
+  java_files = [
+    "javatests/src/org/chromium/chromoting/EventTest.java",
+    "javatests/src/org/chromium/chromoting/MockInputStub.java",
+    "javatests/src/org/chromium/chromoting/SwipePinchDetectorTest.java",
+    "javatests/src/org/chromium/chromoting/TapGestureDetectorTest.java",
+    "javatests/src/org/chromium/chromoting/TouchEventBuilder.java",
+    "javatests/src/org/chromium/chromoting/TouchEventGenerator.java",
+    "javatests/src/org/chromium/chromoting/TouchInputStrategyTest.java",
+    "javatests/src/org/chromium/chromoting/test/util/MutableReference.java",
+  ]
+  deps = [
+    ":remoting_android_client_java",
+    "//base:base_java",
+    "//base:base_java_test_support",
+    "//third_party/android_support_test_runner:runner_java",
+    "//third_party/junit:junit",
+  ]
+  if (!is_java_debug) {
+    proguard_enabled = true
+  }
+}

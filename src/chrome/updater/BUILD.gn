@@ -1,0 +1,119 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/chrome_build.gni")
+import("//build/config/sanitizers/sanitizers.gni")
+import("//build/util/process_version.gni")
+import("//testing/test.gni")
+
+# TODO(sorin): make the code build on Linux. https://crbug.com/1014320
+group("updater") {
+  if (is_win) {
+    deps = [
+      "//chrome/updater/win",
+    ]
+  }
+  if (is_mac) {
+    deps = [
+      "//chrome/updater/mac",
+    ]
+  }
+}
+
+# Conditional build is needed, otherwise the analyze script on Linux
+# requires all targets and it is going to include the targets below.
+if (is_win || is_mac) {
+  source_set("common") {
+    sources = [
+      "action_handler.h",
+      "configurator.cc",
+      "configurator.h",
+      "crash_client.cc",
+      "crash_client.h",
+      "crash_reporter.cc",
+      "crash_reporter.h",
+      "installer.cc",
+      "installer.h",
+      "patcher.cc",
+      "patcher.h",
+      "prefs.cc",
+      "prefs.h",
+      "unzipper.cc",
+      "unzipper.h",
+      "update_apps.cc",
+      "update_apps.h",
+      "updater.cc",
+      "updater.h",
+      "updater_constants.cc",
+      "updater_constants.h",
+      "util.cc",
+      "util.h",
+    ]
+
+    deps = [
+      ":version_header",
+      "//base",
+      "//components/crash/core/common:crash_key",
+      "//components/crx_file",
+      "//components/prefs",
+      "//components/update_client",
+      "//components/version_info",
+      "//courgette:bsdiff",
+      "//courgette:courgette_lib",
+      "//third_party/crashpad/crashpad/client",
+      "//third_party/crashpad/crashpad/handler",
+      "//third_party/zlib/google:zip",
+      "//url",
+    ]
+
+    if (is_win) {
+      deps += [ "//chrome/updater/win:updater_idl_idl" ]
+    }
+  }
+
+  process_version("version_header") {
+    sources = [
+      "//chrome/VERSION",
+      "BRANDING",
+    ]
+    template_file = "updater_version.h.in"
+    output = "$target_gen_dir/updater_version.h"
+  }
+
+  test("updater_tests") {
+    testonly = true
+
+    sources = [
+      "run_all_unittests.cc",
+      "updater_unittest.cc",
+    ]
+
+    deps = [
+      ":common",
+      ":updater",
+      "//base",
+      "//base/test:test_support",
+      "//testing/gtest",
+    ]
+
+    if (is_win) {
+      deps += [
+        "//chrome/updater/win:com",
+        "//chrome/updater/win:updater_tests",
+      ]
+
+      data_deps = [
+        "//chrome/updater/win:updater",
+      ]
+    }
+
+    if (is_mac) {
+      deps += [ "//chrome/updater/mac:updater_tests" ]
+
+      data_deps = [
+        "//chrome/updater/mac:updater",
+      ]
+    }
+  }
+}

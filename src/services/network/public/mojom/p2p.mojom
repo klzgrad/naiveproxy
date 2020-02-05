@@ -1,0 +1,70 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module network.mojom;
+
+import "mojo/public/mojom/base/time.mojom";
+import "services/network/public/mojom/network_interface.mojom";
+import "services/network/public/mojom/ip_address.mojom";
+import "services/network/public/mojom/ip_endpoint.mojom";
+import "services/network/public/mojom/mutable_network_traffic_annotation_tag.mojom";
+
+[Native]
+enum P2PSocketType;
+
+[Native]
+struct P2PHostAndIPEndPoint;
+
+[Native]
+struct P2PPacketInfo;
+
+[Native]
+struct P2PPortRange;
+
+[Native]
+struct P2PSendPacketMetrics;
+
+[Native]
+enum P2PSocketOption;
+
+interface P2PNetworkNotificationClient {
+  NetworkListChanged(array<NetworkInterface> networks,
+                     IPAddress default_ipv4_local_address,
+                     IPAddress default_ipv6_local_address);
+};
+
+interface P2PSocketManager {
+  // Starts listening to network list changed events.
+  StartNetworkNotifications(
+      pending_remote<P2PNetworkNotificationClient> client);
+
+  GetHostAddress(string host_name, bool enable_mdns)
+      => (array<IPAddress> addresses);
+
+  CreateSocket(P2PSocketType type,
+               IPEndPoint local_address,
+               P2PPortRange port_range,
+               P2PHostAndIPEndPoint remote_address,
+               pending_remote<P2PSocketClient> client,
+               pending_receiver<P2PSocket> socket);
+};
+
+interface P2PSocket {
+  // TODO(sergeyu): Use shared memory to pass the data.
+  Send(array<int8> data,
+       P2PPacketInfo packet_info,
+       network.mojom.MutableNetworkTrafficAnnotationTag traffic_annotation);
+  SetOption(P2PSocketOption option, int32 value);
+};
+
+interface P2PSocketClient {
+  SocketCreated(IPEndPoint local_address, IPEndPoint remote_address);
+  SendComplete(P2PSendPacketMetrics send_metrics);
+  IncomingTcpConnection(IPEndPoint socket_address,
+                        pending_remote<P2PSocket> socket,
+                        pending_receiver<P2PSocketClient> client);
+  DataReceived(IPEndPoint socket_address,
+               array<int8> data,
+               mojo_base.mojom.TimeTicks timestamp);
+};

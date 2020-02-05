@@ -1,0 +1,453 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//components/viz/viz.gni")
+import("//gpu/vulkan/features.gni")
+import("//skia/features.gni")
+import("//testing/test.gni")
+
+source_set("resource_format") {
+  sources = [
+    "resources/resource_format.h",
+  ]
+}
+
+viz_component("resource_format_utils") {
+  output_name = "viz_resource_format_utils"
+
+  defines = [ "VIZ_RESOURCE_FORMAT_IMPLEMENTATION" ]
+
+  sources = [
+    "resources/resource_format_utils.cc",
+    "resources/resource_format_utils.h",
+    "resources/resource_sizes.h",
+    "viz_resource_format_export.h",
+  ]
+
+  configs = [ "//third_party/khronos:khronos_headers" ]
+
+  public_deps = [
+    ":resource_format",
+  ]
+
+  deps = [
+    "//base",
+    "//cc/base:base",
+    "//gpu/vulkan:buildflags",
+    "//skia",
+    "//ui/gfx:buffer_types",
+    "//ui/gfx/geometry:geometry",
+  ]
+
+  if (skia_use_dawn) {
+    deps += [ "//third_party/dawn/src/dawn:dawncpp_headers" ]
+  }
+}
+
+# TODO(sgilhuly): To reduce link times, merge these context provider components
+# into a single gr_context_provider component.
+if (is_mac) {
+  viz_component("metal_context_provider") {
+    output_name = "viz_metal_context_provider"
+
+    defines = [ "VIZ_METAL_CONTEXT_PROVIDER_IMPLEMENTATION" ]
+
+    sources = [
+      "gpu/metal_api_proxy.h",
+      "gpu/metal_api_proxy.mm",
+      "gpu/metal_context_provider.h",
+      "gpu/metal_context_provider.mm",
+      "viz_metal_context_provider_export.h",
+    ]
+
+    public_deps = [
+      "//skia",
+    ]
+
+    deps = [
+      "//base",
+      "//components/crash/core/common:crash_key",
+      "//components/metal_util",
+      "//ui/gfx",
+      "//ui/gl",
+    ]
+
+    libs = [
+      "Metal.framework",
+      "Foundation.framework",
+    ]
+  }
+}
+
+if (enable_vulkan) {
+  viz_component("vulkan_context_provider") {
+    output_name = "viz_vulkan_context_provider"
+
+    defines = [ "VIZ_VULKAN_CONTEXT_PROVIDER_IMPLEMENTATION" ]
+
+    # TODO(cblume): http://crbug.com/911313
+    # Abstract out the platform specific defines. Right now we need the android
+    # platform specific define here to be able to include android specific
+    # functions.
+    if (is_android) {
+      defines += [ "VK_USE_PLATFORM_ANDROID_KHR" ]
+    }
+    sources = [
+      "gpu/vulkan_context_provider.h",
+      "gpu/vulkan_in_process_context_provider.cc",
+      "gpu/vulkan_in_process_context_provider.h",
+      "viz_vulkan_context_provider_export.h",
+    ]
+    configs = [ "//third_party/vulkan:vulkan_config" ]
+
+    public_deps = [
+      "//skia",
+    ]
+
+    deps = [
+      "//base",
+      "//gpu/vulkan",
+      "//gpu/vulkan:buildflags",
+      "//ui/gfx",
+    ]
+  }
+}
+
+if (skia_use_dawn) {
+  viz_component("dawn_context_provider") {
+    output_name = "viz_dawn_context_provider"
+
+    defines = [ "VIZ_DAWN_CONTEXT_PROVIDER_IMPLEMENTATION" ]
+
+    sources = [
+      "gpu/dawn_context_provider.cc",
+      "gpu/dawn_context_provider.h",
+      "viz_dawn_context_provider_export.h",
+    ]
+
+    public_deps = [
+      "//skia",
+      "//third_party/dawn/src/dawn:dawn_headers",
+    ]
+
+    deps = [
+      "//base",
+      "//third_party/dawn:libdawn_native",
+      "//third_party/dawn:libdawn_native_sources",
+      "//third_party/dawn/src/dawn:dawncpp",
+      "//third_party/dawn/src/dawn:libdawn_proc",
+    ]
+  }
+}
+
+viz_component("common") {
+  output_name = "viz_common"
+
+  defines = [ "VIZ_COMMON_IMPLEMENTATION" ]
+
+  sources = [
+    "constants.cc",
+    "constants.h",
+    "display/de_jelly.cc",
+    "display/de_jelly.h",
+    "display/overlay_strategy.cc",
+    "display/overlay_strategy.h",
+    "display/renderer_settings.cc",
+    "display/renderer_settings.h",
+    "display/update_vsync_parameters_callback.h",
+    "features.cc",
+    "features.h",
+    "frame_sinks/begin_frame_args.cc",
+    "frame_sinks/begin_frame_args.h",
+    "frame_sinks/begin_frame_source.cc",
+    "frame_sinks/begin_frame_source.h",
+    "frame_sinks/copy_output_request.cc",
+    "frame_sinks/copy_output_request.h",
+    "frame_sinks/copy_output_result.cc",
+    "frame_sinks/copy_output_result.h",
+    "frame_sinks/copy_output_util.cc",
+    "frame_sinks/copy_output_util.h",
+    "frame_sinks/delay_based_time_source.cc",
+    "frame_sinks/delay_based_time_source.h",
+    "frame_timing_details.h",
+    "frame_timing_details_map.h",
+    "gl_helper.cc",
+    "gl_helper.h",
+    "gl_helper_scaling.cc",
+    "gl_helper_scaling.h",
+    "gl_i420_converter.cc",
+    "gl_i420_converter.h",
+    "gl_scaler.cc",
+    "gl_scaler.h",
+    "gpu/context_cache_controller.cc",
+    "gpu/context_cache_controller.h",
+    "gpu/context_lost_observer.h",
+    "gpu/context_lost_reason.cc",
+    "gpu/context_lost_reason.h",
+    "gpu/context_provider.cc",
+    "gpu/context_provider.h",
+    "gpu/gpu_vsync_callback.h",
+    "gpu/raster_context_provider.cc",
+    "gpu/raster_context_provider.h",
+    "hit_test/aggregated_hit_test_region.h",
+    "hit_test/hit_test_region_list.cc",
+    "hit_test/hit_test_region_list.h",
+    "quads/compositor_frame.cc",
+    "quads/compositor_frame.h",
+    "quads/compositor_frame_metadata.cc",
+    "quads/compositor_frame_metadata.h",
+    "quads/content_draw_quad_base.cc",
+    "quads/content_draw_quad_base.h",
+    "quads/debug_border_draw_quad.cc",
+    "quads/debug_border_draw_quad.h",
+    "quads/draw_quad.cc",
+    "quads/draw_quad.h",
+    "quads/frame_deadline.cc",
+    "quads/frame_deadline.h",
+    "quads/largest_draw_quad.cc",
+    "quads/largest_draw_quad.h",
+    "quads/picture_draw_quad.cc",
+    "quads/picture_draw_quad.h",
+    "quads/render_pass.cc",
+    "quads/render_pass.h",
+    "quads/render_pass_draw_quad.cc",
+    "quads/render_pass_draw_quad.h",
+    "quads/selection.h",
+    "quads/shared_quad_state.cc",
+    "quads/shared_quad_state.h",
+    "quads/solid_color_draw_quad.cc",
+    "quads/solid_color_draw_quad.h",
+    "quads/stream_video_draw_quad.cc",
+    "quads/stream_video_draw_quad.h",
+    "quads/surface_draw_quad.cc",
+    "quads/surface_draw_quad.h",
+    "quads/texture_draw_quad.cc",
+    "quads/texture_draw_quad.h",
+    "quads/tile_draw_quad.cc",
+    "quads/tile_draw_quad.h",
+    "quads/video_hole_draw_quad.cc",
+    "quads/video_hole_draw_quad.h",
+    "quads/yuv_video_draw_quad.cc",
+    "quads/yuv_video_draw_quad.h",
+    "resources/bitmap_allocation.cc",
+    "resources/bitmap_allocation.h",
+    "resources/platform_color.h",
+    "resources/release_callback.h",
+    "resources/resource_id.h",
+    "resources/resource_settings.cc",
+    "resources/resource_settings.h",
+    "resources/return_callback.h",
+    "resources/returned_resource.h",
+    "resources/shared_bitmap.cc",
+    "resources/shared_bitmap.h",
+    "resources/single_release_callback.cc",
+    "resources/single_release_callback.h",
+    "resources/transferable_resource.cc",
+    "resources/transferable_resource.h",
+    "skia_helper.cc",
+    "skia_helper.h",
+    "surfaces/child_local_surface_id_allocator.cc",
+    "surfaces/child_local_surface_id_allocator.h",
+    "surfaces/frame_sink_id.cc",
+    "surfaces/frame_sink_id.h",
+    "surfaces/frame_sink_id_allocator.cc",
+    "surfaces/frame_sink_id_allocator.h",
+    "surfaces/local_surface_id.cc",
+    "surfaces/local_surface_id.h",
+    "surfaces/local_surface_id_allocation.cc",
+    "surfaces/local_surface_id_allocation.h",
+    "surfaces/parent_local_surface_id_allocator.cc",
+    "surfaces/parent_local_surface_id_allocator.h",
+    "surfaces/scoped_surface_id_allocator.cc",
+    "surfaces/scoped_surface_id_allocator.h",
+    "surfaces/surface_id.cc",
+    "surfaces/surface_id.h",
+    "surfaces/surface_info.cc",
+    "surfaces/surface_info.h",
+    "surfaces/surface_range.cc",
+    "surfaces/surface_range.h",
+    "switches.cc",
+    "switches.h",
+    "traced_value.cc",
+    "traced_value.h",
+    "vertical_scroll_direction.h",
+    "viz_common_export.h",
+    "viz_utils.cc",
+    "viz_utils.h",
+  ]
+
+  deps = [
+    "//base",
+
+    # TODO(staraz): cc/base was added because SharedQuadState includes
+    # cc::MathUtil. Remove it once cc/base/math_util* are moved to viz.
+    "//cc/base",
+    "//cc/paint",
+    "//gpu/command_buffer/client:gles2_implementation",
+    "//gpu/command_buffer/client:gles2_interface",
+    "//gpu/command_buffer/client:raster",
+    "//gpu/command_buffer/client:raster_interface",
+    "//gpu/config",
+    "//gpu/ipc/common:common",
+    "//gpu/vulkan:buildflags",
+    "//mojo/public/cpp/base",
+    "//mojo/public/cpp/system",
+    "//services/tracing/public/cpp:cpp",
+    "//third_party/libyuv",
+    "//ui/gfx",
+    "//ui/gfx:color_space",
+    "//ui/gfx:geometry_skia",
+    "//ui/gfx/geometry",
+    "//ui/gl",
+    "//ui/latency",
+  ]
+
+  if (is_win) {
+    sources += [
+      "display/use_layered_window.cc",
+      "display/use_layered_window.h",
+    ]
+
+    deps += [ "//ui/base" ]
+  }
+
+  if (is_android) {
+    deps += [
+      ":common_jni_headers",
+      "//gpu/config",
+    ]
+  }
+
+  public_deps = [
+    ":resource_format_utils",
+    "//gpu/command_buffer/client",
+    "//gpu/command_buffer/common",
+    "//mojo/public/cpp/bindings",
+    "//skia",
+  ]
+  if (enable_vulkan) {
+    public_deps += [ ":vulkan_context_provider" ]
+  }
+  if (is_mac) {
+    public_deps += [ ":metal_context_provider" ]
+  }
+  if (skia_use_dawn) {
+    public_deps += [ ":dawn_context_provider" ]
+  }
+}
+
+viz_source_set("unit_tests") {
+  # Not ready for jumbo compilation. Too much repeated test code.
+  never_build_jumbo = true
+  testonly = true
+  sources = [
+    "display/overlay_strategy_unittest.cc",
+    "frame_sinks/begin_frame_args_unittest.cc",
+    "frame_sinks/begin_frame_source_unittest.cc",
+    "frame_sinks/copy_output_util_unittest.cc",
+    "frame_sinks/delay_based_time_source_unittest.cc",
+    "gl_helper_unittest.cc",
+    "gl_i420_converter_pixeltest.cc",
+    "gl_i420_converter_unittest.cc",
+    "gl_scaler_overscan_pixeltest.cc",
+    "gl_scaler_pixeltest.cc",
+    "gl_scaler_shader_pixeltest.cc",
+    "gl_scaler_test_util.cc",
+    "gl_scaler_test_util.h",
+    "gl_scaler_unittest.cc",
+    "gpu/context_cache_controller_unittest.cc",
+    "quads/draw_quad_unittest.cc",
+    "quads/render_pass_unittest.cc",
+    "resources/resource_sizes_unittest.cc",
+    "surfaces/child_local_surface_id_allocator_unittest.cc",
+    "surfaces/local_surface_id_unittest.cc",
+    "surfaces/parent_local_surface_id_allocator_unittest.cc",
+    "surfaces/scoped_surface_id_allocator_unittest.cc",
+    "surfaces/surface_range_unittest.cc",
+    "yuv_readback_unittest.cc",
+  ]
+
+  deps = [
+    ":common",
+    "//base/test:test_support",
+    "//cc:test_support",
+    "//components/viz/test:test_support",
+    "//gpu/command_buffer/client:gles2_implementation",
+    "//gpu/command_buffer/client:gles2_interface",
+    "//gpu/ipc:gl_in_process_context",
+    "//gpu/ipc/common:surface_handle_type",
+    "//media",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//ui/gfx",
+    "//ui/gfx:color_space",
+    "//ui/gfx/geometry",
+  ]
+}
+
+# Microbenchmark to measure performance of GLHelper code, for use in
+# debugging, profiling, and optimizing.
+viz_test("viz_benchmark") {
+  sources = [
+    "gl_helper_benchmark.cc",
+  ]
+
+  configs = [
+    "//build/config/compiler:no_size_t_to_int_warning",
+    "//third_party/khronos:khronos_headers",
+  ]
+
+  deps = [
+    ":common",
+    "//base",
+    "//base/test:test_support",
+    "//components/test:run_all_unittests",
+    "//components/viz/test:test_support",
+    "//gpu/command_buffer/client",
+    "//gpu/command_buffer/client:gles2_implementation",
+    "//gpu/ipc:gl_in_process_context",
+    "//gpu/ipc:gpu_thread_holder",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//ui/gfx",
+  ]
+
+  data_deps = [
+    "//third_party/mesa_headers",
+  ]
+}
+
+viz_source_set("perf_tests") {
+  testonly = true
+  sources = [
+    "quads/draw_quad_perftest.cc",
+  ]
+
+  deps = [
+    ":common",
+    "//base",
+    "//cc/base",
+    "//skia",
+    "//testing/gtest",
+    "//testing/perf",
+  ]
+}
+
+if (is_android) {
+  android_library("common_java") {
+    deps = [
+      "//base:base_java",
+    ]
+    java_files = [
+      "java/src/org/chromium/components/viz/common/display/DeJellyUtils.java",
+      "java/src/org/chromium/components/viz/common/VizSwitches.java",
+    ]
+  }
+
+  generate_jni("common_jni_headers") {
+    sources = [
+      "java/src/org/chromium/components/viz/common/display/DeJellyUtils.java",
+    ]
+  }
+}

@@ -1,0 +1,124 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//testing/test.gni")
+
+# The Url-Keyed Metrics (UKM) service is responsible for gathering and
+# uploading reports that contain fine grained performance metrics including
+# URLs for top-level navigations.
+static_library("ukm") {
+  sources = [
+    "app_source_url_recorder.cc",
+    "app_source_url_recorder.h",
+    "scheme_constants.cc",
+    "scheme_constants.h",
+    "ukm_pref_names.cc",
+    "ukm_pref_names.h",
+    "ukm_recorder_impl.cc",
+    "ukm_recorder_impl.h",
+    "ukm_reporting_service.cc",
+    "ukm_reporting_service.h",
+    "ukm_rotation_scheduler.cc",
+    "ukm_rotation_scheduler.h",
+    "ukm_service.cc",
+    "ukm_service.h",
+    "unsent_log_store_metrics_impl.cc",
+    "unsent_log_store_metrics_impl.h",
+  ]
+
+  public_deps = [
+    "//services/metrics/public/cpp:metrics_cpp",
+    "//services/metrics/public/cpp:ukm_builders",
+    "//services/metrics/public/mojom",
+    "//third_party/metrics_proto",
+  ]
+
+  deps = [
+    "//base",
+    "//components/crx_file",
+    "//components/metrics",
+    "//components/prefs",
+    "//components/variations",
+    "//url",
+  ]
+}
+
+# Helper library for observing signals that we need to clear any local data.
+static_library("observers") {
+  sources = [
+    "observers/history_delete_observer.cc",
+    "observers/history_delete_observer.h",
+    "observers/ukm_consent_state_observer.cc",
+    "observers/ukm_consent_state_observer.h",
+  ]
+
+  deps = [
+    "//base",
+    "//components/history/core/browser",
+    "//components/sync",
+    "//google_apis",
+  ]
+
+  public_deps = [
+    "//components/unified_consent",
+  ]
+}
+
+static_library("test_support") {
+  testonly = true
+  sources = [
+    "test_ukm_recorder.cc",
+    "test_ukm_recorder.h",
+  ]
+
+  public_deps = [
+    ":ukm",
+    "//third_party/metrics_proto",
+  ]
+  deps = [
+    "//base",
+    "//components/metrics:test_support",
+    "//components/prefs:test_support",
+    "//testing/gtest:gtest",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "app_source_url_recorder_test.cc",
+    "observers/ukm_consent_state_observer_unittest.cc",
+    "ukm_recorder_impl_unittest.cc",
+    "ukm_service_unittest.cc",
+  ]
+
+  deps = [
+    ":observers",
+    ":test_support",
+    ":ukm",
+    "//base",
+    "//base/test:test_support",
+    "//components/metrics",
+    "//components/metrics:test_support",
+    "//components/prefs:test_support",
+    "//components/sync:test_support",
+    "//components/sync_preferences:test_support",
+    "//components/variations",
+    "//net:test_support",
+    "//services/metrics/public/cpp:ukm_builders",
+    "//testing/gtest",
+    "//third_party/zlib/google:compression_utils",
+    "//url",
+  ]
+}
+
+# Convenience testing target
+test("ukm_unittests") {
+  deps = [
+    ":unit_tests",
+    "//base",
+    "//base/test:test_support",
+    "//components/test:run_all_unittests",
+  ]
+}

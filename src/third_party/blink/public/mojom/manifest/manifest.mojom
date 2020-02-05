@@ -1,0 +1,173 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module blink.mojom;
+
+import "services/device/public/mojom/screen_orientation_lock_types.mojom";
+import "mojo/public/mojom/base/string16.mojom";
+import "third_party/blink/public/mojom/manifest/display_mode.mojom";
+import "ui/gfx/geometry/mojom/geometry.mojom";
+import "url/mojom/url.mojom";
+
+
+// The Manifest structure is an internal representation of the Manifest file
+// described in the "Manifest for Web Application" document:
+// http://w3c.github.io/manifest/
+[JavaClassName="WebManifest"]
+struct Manifest {
+  mojo_base.mojom.String16? name;
+
+  mojo_base.mojom.String16? short_name;
+
+  url.mojom.Url start_url;
+
+  DisplayMode display;
+
+  device.mojom.ScreenOrientationLockType orientation;
+
+  array<ManifestImageResource> icons;
+
+  ManifestShareTarget? share_target;
+
+  // TODO(harrisjay): This field is non-standard and part of a Chrome
+  // experiment. See:
+  // https://github.com/WICG/file-handling/blob/master/explainer.md
+  // As such, this field should not be exposed to the drive-by web.
+  array<ManifestFileHandler> file_handlers;
+
+  array<ManifestRelatedApplication> related_applications;
+
+  // A boolean that is used as a hint for the user agent to say that related
+  // applications should be preferred over the web application. False if missing
+  // or there is a parsing failure.
+  bool prefer_related_applications;
+
+  // TODO(https://crbug.com/657632): Numeric types are not nullable. =(
+  bool has_theme_color;
+  uint32 theme_color;
+
+  // TODO(https://crbug.com/657632): Numeric types are not nullable. =(
+  bool has_background_color;
+  uint32 background_color;
+
+  mojo_base.mojom.String16? gcm_sender_id;
+
+  url.mojom.Url scope;
+};
+
+// Structure representing an icon as per the Manifest specification, see:
+// https://w3c.github.io/manifest/#dom-imageresource
+struct ManifestImageResource {
+  enum Purpose {
+    ANY = 0,
+    BADGE,
+    MASKABLE,
+  };
+
+  // MUST be a valid url. If an icon doesn't have a valid URL, it will not be
+  // successfully parsed, thus will not be represented in the Manifest.
+  url.mojom.Url src;
+
+  // The type can be any string and doesn't have to be a valid image MIME type
+  // at this point. It is up to the consumer of the object to check if the type
+  // matches a supported type.
+  mojo_base.mojom.String16? type;
+
+  // The special value "any" is represented by gfx::Size(0, 0).
+  array<gfx.mojom.Size> sizes;
+
+  // Never empty. Defaults to a vector with a single value, IconPurpose::ANY,
+  // if not explicitly specified in the manifest.
+  array<Purpose> purpose;
+};
+
+// Structure representing a share target file.
+struct ManifestFileFilter {
+  mojo_base.mojom.String16? name;
+
+  // A sequence of accepted MIME types.
+  array<mojo_base.mojom.String16> accept;
+};
+
+// Structure representing a related application.
+struct ManifestRelatedApplication {
+  // The platform on which the application can be found. This can be any
+  // string, and is interpreted by the consumer of the object.
+  mojo_base.mojom.String16? platform;
+
+  // URL at which the application can be found. One of |url| or |id| must be
+  // present.
+  url.mojom.Url? url;
+
+  // An id which is used to represent the application on the platform. One of
+  // |url| or |id| must be present.
+  mojo_base.mojom.String16? id;
+};
+
+
+// Structure representing how a Web Share target fills query parameters of an
+// incoming share. These fields contain the names of the query parameters that
+// will hold the value of the corresponding share data.
+struct ManifestShareTargetParams {
+  mojo_base.mojom.String16? title;
+  mojo_base.mojom.String16? text;
+  mojo_base.mojom.String16? url;
+
+  // An array of share target files, which is represented by two members:
+  // name and accept.
+  array<ManifestFileFilter>? files;
+};
+
+// Structure representing how a Web Share target handles an incoming share.
+struct ManifestShareTarget {
+  // This enum corresponds to HTTP methods, where kGet corresponds to GET
+  // and kPost corresponds to POST.
+  enum Method {
+    kGet,
+    kPost,
+  };
+
+  // This enum corresponds to HTTP enctype, where kApplication corresponds
+  // to application/x-www-url-encoded and kMultipart corresponds to
+  // multipart/form-data.
+  enum Enctype {
+    kFormUrlEncoded,
+    kMultipartFormData,
+  };
+
+  // The URL that will be opened when the share target is invoked.
+  url.mojom.Url action;
+
+  // The method that specifies the HTTP request method for web share target.
+  Method method;
+
+  // The enctype that specifies how share data is encoded in a POST request.
+  // It is ignored when method is "GET".
+  Enctype enctype;
+
+  ManifestShareTargetParams params;
+};
+
+struct ManifestFileHandler {
+  // The URL that will be opened when the file handler is invoked.
+  url.mojom.Url action;
+  mojo_base.mojom.String16? name;
+  // A mapping of a MIME types to a corresponding list of file extensions.
+  map<mojo_base.mojom.String16, array<mojo_base.mojom.String16>> accept;
+};
+
+// Debug information for a parsed manifest.
+struct ManifestDebugInfo {
+  array<ManifestError> errors;
+
+  string raw_manifest;
+};
+
+// An individual manifest parsing error.
+struct ManifestError {
+  string message;
+  bool critical;
+  uint32 line;
+  uint32 column;
+};

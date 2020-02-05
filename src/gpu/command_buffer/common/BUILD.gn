@@ -1,0 +1,221 @@
+# Copyright (c) 2013 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# The files here go into the "gpu" component in a component build (with
+# "command_buffer_common" just forwarding) and goes into a static library in
+# non-component build. This needs to match the GYP build which was likely an
+# attempt to make larger components to help with loading.
+
+import("//build/config/jumbo.gni")
+import("//ui/gl/features.gni")
+
+group("common") {
+  if (is_component_build) {
+    public_deps = [
+      "//gpu",
+    ]
+  } else {
+    public_deps = [
+      ":common_sources",
+    ]
+  }
+}
+
+group("gles2") {
+  if (is_component_build) {
+    public_deps = [
+      "//gpu:gles2",
+    ]
+  } else {
+    public_deps = [
+      ":gles2_sources",
+    ]
+  }
+}
+
+group("raster") {
+  if (is_component_build) {
+    public_deps = [
+      "//gpu:gles2",
+    ]
+  } else {
+    public_deps = [
+      ":raster_sources",
+    ]
+  }
+}
+
+group("webgpu") {
+  public_deps = [
+    ":webgpu_sources",
+  ]
+}
+
+jumbo_source_set("common_sources") {
+  visibility = [ "//gpu/*" ]
+
+  sources = [
+    "activity_flags.cc",
+    "activity_flags.h",
+    "bitfield_helpers.h",
+    "buffer.cc",
+    "buffer.h",
+    "capabilities.cc",
+    "capabilities.h",
+    "cmd_buffer_common.cc",
+    "cmd_buffer_common.h",
+    "command_buffer.h",
+    "command_buffer_id.h",
+    "common_cmd_format.h",
+    "constants.h",
+    "context_creation_attribs.cc",
+    "context_creation_attribs.h",
+    "context_result.cc",
+    "context_result.h",
+    "debug_marker_manager.cc",
+    "debug_marker_manager.h",
+    "discardable_handle.cc",
+    "discardable_handle.h",
+    "gl2_types.h",
+    "gpu_memory_buffer_support.cc",
+    "gpu_memory_buffer_support.h",
+    "id_allocator.cc",
+    "id_allocator.h",
+    "mailbox.cc",
+    "mailbox.h",
+    "mailbox_holder.cc",
+    "mailbox_holder.h",
+    "presentation_feedback_utils.cc",
+    "presentation_feedback_utils.h",
+    "scheduling_priority.cc",
+    "scheduling_priority.h",
+    "shared_image_trace_utils.cc",
+    "shared_image_trace_utils.h",
+    "shared_image_usage.h",
+    "swap_buffers_complete_params.cc",
+    "swap_buffers_complete_params.h",
+    "swap_buffers_flags.h",
+    "sync_token.cc",
+    "sync_token.h",
+    "texture_in_use_response.h",
+    "thread_local.h",
+    "time.h",
+  ]
+
+  configs += [ "//gpu:gpu_implementation" ]
+
+  public_deps = [
+    "//base/util/type_safety",
+    "//mojo/public/cpp/system",
+    "//ui/gfx:memory_buffer",
+    "//ui/gfx/geometry",
+  ]
+
+  deps = [
+    "//base",
+  ]
+
+  # TODO(piman): needed for gpu_memory_buffer_support.cc. Split common vs gles2
+  # specifics.
+  configs += [ "//third_party/khronos:khronos_headers" ]
+}
+
+source_set("gles2_sources") {
+  visibility = [ "//gpu/*" ]
+
+  sources = [
+    "gles2_cmd_format.cc",
+    "gles2_cmd_format.h",
+    "gles2_cmd_format_autogen.h",
+    "gles2_cmd_ids.h",
+    "gles2_cmd_ids_autogen.h",
+  ]
+
+  configs += [
+    "//gpu:gpu_gles2_implementation",
+    "//build/config/compiler:no_shorten_64_warnings",
+  ]
+
+  deps = [
+    ":gles2_utils",
+    "//base",
+  ]
+  public_deps = [
+    ":common",
+  ]
+}
+
+source_set("raster_sources") {
+  visibility = [ "//gpu/*" ]
+
+  sources = [
+    "raster_cmd_format.cc",
+    "raster_cmd_format.h",
+    "raster_cmd_format_autogen.h",
+    "raster_cmd_ids.h",
+    "raster_cmd_ids_autogen.h",
+    "skia_utils.cc",
+    "skia_utils.h",
+  ]
+
+  configs += [ "//gpu:raster_implementation" ]
+
+  deps = [
+    ":gles2_utils",
+    "//base",
+    "//skia",
+    "//ui/gl:gl",
+  ]
+  public_deps = [
+    ":common",
+    "//components/viz/common:resource_format",
+  ]
+}
+
+source_set("webgpu_sources") {
+  visibility = [ "//gpu/*" ]
+
+  sources = [
+    "dawn_memory_transfer_handle.h",
+    "webgpu_cmd_enums.h",
+    "webgpu_cmd_format.cc",
+    "webgpu_cmd_format.h",
+    "webgpu_cmd_format_autogen.h",
+    "webgpu_cmd_ids.h",
+    "webgpu_cmd_ids_autogen.h",
+  ]
+
+  configs += [ "//gpu:webgpu_implementation" ]
+
+  deps = [
+    ":gles2_utils",
+    "//base",
+  ]
+
+  if (use_dawn) {
+    deps += [ "//third_party/dawn:libdawn_wire" ]
+  }
+
+  public_deps = [
+    ":common",
+    "//third_party/dawn/src/dawn_wire:libdawn_wire_headers",
+    "//ui/gl:buildflags",
+  ]
+}
+
+component("gles2_utils") {
+  sources = [
+    "gles2_cmd_utils.cc",
+    "gles2_cmd_utils.h",
+    "gles2_utils_export.h",
+  ]
+
+  defines = [ "GLES2_UTILS_IMPLEMENTATION" ]
+
+  deps = [
+    "//base",
+  ]
+
+  all_dependent_configs = [ "//third_party/khronos:khronos_headers" ]
+}

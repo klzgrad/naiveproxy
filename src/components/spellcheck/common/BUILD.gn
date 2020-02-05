@@ -1,0 +1,71 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//components/spellcheck/spellcheck_build_features.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
+
+source_set("common") {
+  sources = [
+    "spellcheck_common.cc",
+    "spellcheck_common.h",
+    "spellcheck_features.cc",
+    "spellcheck_features.h",
+  ]
+
+  public_deps = [
+    ":interfaces",
+    ":spellcheck_result",
+    "//components/spellcheck:buildflags",
+  ]
+
+  deps = [
+    "//base:i18n",
+    "//ipc",
+    "//third_party/icu",
+  ]
+}
+
+# This is separated out because it is used by both the mojo interfaces below
+# (see spellcheck.typemap) and by "common" above.
+source_set("spellcheck_result") {
+  sources = [
+    "spellcheck_result.cc",
+    "spellcheck_result.h",
+  ]
+
+  deps = [
+    "//base",
+  ]
+}
+
+mojom("interfaces") {
+  sources = [
+    "spellcheck.mojom",
+  ]
+
+  if (has_spellcheck_panel) {
+    sources += [ "spellcheck_panel.mojom" ]
+  }
+
+  public_deps = [
+    "//mojo/public/mojom/base",
+  ]
+
+  enabled_features = []
+  if (use_browser_spellchecker) {
+    enabled_features += [ "USE_BROWSER_SPELLCHECKER" ]
+  }
+
+  if (use_renderer_spellchecker) {
+    enabled_features += [ "USE_RENDERER_SPELLCHECKER" ]
+  }
+
+  if (use_win_hybrid_spellchecker) {
+    enabled_features += [ "USE_WIN_HYBRID_SPELLCHECKER" ]
+  }
+
+  if (use_windows_preferred_languages_for_spellcheck) {
+    enabled_features += [ "USE_WINDOWS_PREFERRED_LANGUAGES_FOR_SPELLCHECK" ]
+  }
+}

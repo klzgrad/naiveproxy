@@ -1,0 +1,173 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//components/signin/features.gni")
+
+if (is_android) {
+  import("//build/config/android/rules.gni")
+}
+
+# This target contains code that is used by clients of //components/signin.
+static_library("browser") {
+  sources = [
+    "about_signin_internals.cc",
+    "about_signin_internals.h",
+    "account_investigator.cc",
+    "account_investigator.h",
+    "account_reconcilor.cc",
+    "account_reconcilor.h",
+    "account_reconcilor_delegate.cc",
+    "account_reconcilor_delegate.h",
+    "chrome_connected_header_helper.cc",
+    "chrome_connected_header_helper.h",
+    "consistency_cookie_manager_base.cc",
+    "consistency_cookie_manager_base.h",
+    "cookie_reminter.cc",
+    "cookie_reminter.h",
+    "cookie_settings_util.cc",
+    "cookie_settings_util.h",
+    "dice_account_reconcilor_delegate.cc",
+    "dice_account_reconcilor_delegate.h",
+    "dice_header_helper.cc",
+    "dice_header_helper.h",
+    "mice_account_reconcilor_delegate.cc",
+    "mice_account_reconcilor_delegate.h",
+    "mirror_account_reconcilor_delegate.cc",
+    "mirror_account_reconcilor_delegate.h",
+    "signin_error_controller.cc",
+    "signin_error_controller.h",
+    "signin_header_helper.cc",
+    "signin_header_helper.h",
+    "signin_internals_util.cc",
+    "signin_internals_util.h",
+    "signin_investigator.cc",
+    "signin_investigator.h",
+    "signin_status_metrics_provider.cc",
+    "signin_status_metrics_provider.h",
+    "signin_status_metrics_provider_base.cc",
+    "signin_status_metrics_provider_base.h",
+    "signin_status_metrics_provider_delegate.cc",
+    "signin_status_metrics_provider_delegate.h",
+  ]
+
+  configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+
+  public_deps = [
+    "//base",
+    "//components/content_settings/core/browser",
+    "//components/content_settings/core/common",
+    "//components/keyed_service/core",
+    "//components/prefs",
+    "//components/signin/public/base",
+    "//components/signin/public/base:signin_buildflags",
+    "//google_apis",
+    "//net",
+    "//services/network/public/cpp",
+    "//ui/gfx",
+    "//url",
+  ]
+  deps = [
+    "//base:i18n",
+    "//components/google/core/common",
+    "//components/metrics",
+    "//components/os_crypt",
+    "//components/signin/public/identity_manager",
+    "//components/webdata/common",
+    "//crypto",
+    "//services/network/public/cpp",
+    "//skia",
+    "//sql",
+    "//third_party/icu",
+  ]
+
+  if (is_chromeos) {
+    sources += [
+      "active_directory_account_reconcilor_delegate.cc",
+      "active_directory_account_reconcilor_delegate.h",
+    ]
+    deps += [ "//chromeos/tpm:tpm" ]
+    sources -= [
+      "signin_status_metrics_provider.cc",
+      "signin_status_metrics_provider_delegate.cc",
+    ]
+  }
+
+  if (is_android) {
+    sources += [
+      "consistency_cookie_manager_android.cc",
+      "consistency_cookie_manager_android.h",
+    ]
+    deps += [ "android:jni_headers" ]
+  }
+
+  if (!enable_dice_support) {
+    sources -= [
+      "dice_account_reconcilor_delegate.cc",
+      "dice_account_reconcilor_delegate.h",
+      "dice_header_helper.cc",
+      "dice_header_helper.h",
+    ]
+  }
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "account_investigator_unittest.cc",
+    "account_reconcilor_unittest.cc",
+    "dice_account_reconcilor_delegate_unittest.cc",
+    "mice_account_reconcilor_delegate_unittest.cc",
+    "signin_error_controller_unittest.cc",
+    "signin_header_helper_unittest.cc",
+    "signin_investigator_unittest.cc",
+    "signin_status_metrics_provider_unittest.cc",
+  ]
+
+  deps = [
+    ":browser",
+    "//base",
+    "//base/test:test_support",
+    "//components/content_settings/core/browser",
+    "//components/prefs",
+    "//components/prefs:test_support",
+    "//components/signin/public/base",
+    "//components/signin/public/base:signin_buildflags",
+    "//components/signin/public/base:test_support",
+    "//components/signin/public/identity_manager",
+    "//components/signin/public/identity_manager:test_support",
+    "//components/sync_preferences:test_support",
+    "//google_apis",
+    "//net:test_support",
+    "//net/traffic_annotation:test_support",
+    "//services/network:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//url",
+  ]
+
+  if (is_chromeos) {
+    deps += [ "//chromeos/tpm:test_support" ]
+    sources -= [
+      "account_investigator_unittest.cc",
+      "signin_status_metrics_provider_unittest.cc",
+    ]
+  }
+
+  if (is_android) {
+    sources += [ "consistency_cookie_manager_unittest.cc" ]
+  }
+
+  if (!enable_dice_support) {
+    sources -= [ "dice_account_reconcilor_delegate_unittest.cc" ]
+  }
+}
+
+if (is_android) {
+  java_cpp_enum("signin_enums_javagen") {
+    sources = [
+      "signin_header_helper.h",
+      "signin_investigator.h",
+    ]
+  }
+}

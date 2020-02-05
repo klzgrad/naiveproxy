@@ -1,0 +1,136 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//testing/libfuzzer/fuzzer_test.gni")
+
+source_set("lib") {
+  sources = [
+    "data_decoder_service.cc",
+    "data_decoder_service.h",
+    "json_parser_impl.cc",
+    "json_parser_impl.h",
+    "web_bundle_parser.cc",
+    "web_bundle_parser.h",
+    "web_bundle_parser_factory.cc",
+    "web_bundle_parser_factory.h",
+    "xml_parser.cc",
+    "xml_parser.h",
+  ]
+
+  if (is_chromeos) {
+    sources += [
+      "ble_scan_parser_impl.cc",
+      "ble_scan_parser_impl.h",
+    ]
+  }
+
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
+
+  deps = [
+    "//base",
+    "//components/cbor",
+    "//mojo/public/cpp/bindings",
+    "//net",
+    "//skia",
+    "//third_party/libxml:xml_reader",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+  ]
+
+  public_deps = [
+    "//services/data_decoder/public/mojom",
+  ]
+
+  if (!is_ios) {
+    sources += [
+      "image_decoder_impl.cc",
+      "image_decoder_impl.h",
+    ]
+
+    deps += [ "//third_party/blink/public:blink" ]
+  }
+}
+
+source_set("tests") {
+  testonly = true
+
+  sources = [
+    "public/cpp/data_decoder_unittest.cc",
+    "public/cpp/json_sanitizer_unittest.cc",
+    "public/cpp/safe_web_bundle_parser_unittest.cc",
+    "public/cpp/safe_xml_parser_unittest.cc",
+    "web_bundle_parser_factory_unittest.cc",
+    "web_bundle_parser_unittest.cc",
+    "xml_parser_unittest.cc",
+  ]
+
+  if (is_chromeos) {
+    sources += [ "ble_scan_parser_impl_unittest.cc" ]
+  }
+
+  deps = [
+    ":lib",
+    "//base",
+    "//base/test:test_support",
+    "//components/cbor",
+    "//services/data_decoder/public/cpp",
+    "//services/data_decoder/public/cpp:test_support",
+    "//skia",
+    "//testing/gtest",
+    "//ui/gfx",
+  ]
+
+  if (!is_ios) {
+    sources += [ "image_decoder_impl_unittest.cc" ]
+    deps += [
+      "//gin",
+      "//gin:gin_test",
+      "//third_party/blink/public:blink",
+    ]
+    data_deps = [
+      "//tools/v8_context_snapshot",
+    ]
+    configs += [
+      "//tools/v8_context_snapshot:use_v8_context_snapshot",
+      "//v8:external_startup_data",
+    ]
+  }
+}
+
+fuzzer_test("web_bundle_parser_fuzzer") {
+  sources = [
+    "web_bundle_parser_fuzzer.cc",
+  ]
+  deps = [
+    ":lib",
+    "//base",
+    "//mojo/core/embedder",
+  ]
+  seed_corpus = "//services/test/data/web_bundle"
+}
+
+fuzzer_test("xml_parser_fuzzer") {
+  sources = [
+    "xml_parser_fuzzer.cc",
+  ]
+  deps = [
+    ":lib",
+    "//base",
+    "//third_party/libxml:libxml_utils",
+    "//third_party/libxml:xml_reader",
+  ]
+  dict = "//third_party/libxml/fuzz/xml.dict"
+  seed_corpus = "//third_party/libxml/fuzz/seed_corpus"
+}
+
+if (is_chromeos) {
+  fuzzer_test("ble_scan_parser_fuzzer") {
+    sources = [
+      "ble_scan_parser_impl_fuzzer.cc",
+    ]
+    deps = [
+      ":lib",
+    ]
+  }
+}

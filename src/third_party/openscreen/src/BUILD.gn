@@ -1,0 +1,95 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build_overrides/build.gni")
+import("osp/build/config/services.gni")
+
+# All compilable non-test targets in the repository (both executables and
+# source_sets).
+group("gn_all") {
+  deps = [
+    "cast/common:certificate",
+    "cast/common:channel",
+    "cast/sender:channel",
+    "cast/streaming:receiver",
+    "cast/streaming:sender",
+    "discovery:dnssd",
+    "discovery:mdns",
+    "osp",
+    "osp/msgs",
+    "platform",
+    "third_party/abseil",
+    "third_party/boringssl",
+    "third_party/jsoncpp",
+    "third_party/tinycbor",
+    "util",
+  ]
+
+  if (current_toolchain == host_toolchain) {
+    deps += [ "tools/cddl" ]
+  }
+
+  if (use_mdns_responder) {
+    deps += [ "osp/impl/discovery/mdns:mdns_demo" ]
+  }
+
+  if (use_chromium_quic) {
+    deps += [
+      "third_party/chromium_quic",
+      "third_party/chromium_quic:quic_demo_client",
+      "third_party/chromium_quic:quic_demo_server",
+    ]
+  }
+
+  if (use_chromium_quic && use_mdns_responder) {
+    deps += [ "osp:osp_demo" ]
+  }
+
+  if (!build_with_chromium) {
+    deps += [
+      "third_party/protobuf:protoc",
+      "third_party/zlib",
+    ]
+
+    # TODO(crbug.com/openscreen/86): Build for Mac too once the mac buildbot
+    # compiler is upgraded.
+    if (!is_mac) {
+      deps += [ "cast/standalone_receiver:cast_receiver" ]
+    }
+  }
+}
+
+source_set("openscreen_unittests_all") {
+  testonly = true
+  public_deps = [
+    "cast/common:unittests",
+    "cast/sender:unittests",
+    "cast/streaming:unittests",
+    "discovery:unittests",
+    "osp:unittests",
+    "osp/msgs:unittests",
+    "platform:unittests",
+    "third_party/abseil",
+    "third_party/googletest:gtest_main",
+    "util:unittests",
+  ]
+
+  if (use_mdns_responder) {
+    public_deps += [
+      "osp/impl/discovery/mdns:unittests",
+
+      # Currently this target only includes mDNS tests.
+      "osp/impl/testing:unittests",
+    ]
+  }
+}
+
+if (!build_with_chromium) {
+  executable("openscreen_unittests") {
+    testonly = true
+    deps = [
+      ":openscreen_unittests_all",
+    ]
+  }
+}

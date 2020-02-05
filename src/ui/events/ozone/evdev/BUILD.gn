@@ -1,0 +1,186 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ui.gni")
+
+assert(use_ozone && is_linux)
+
+visibility = [ ":*" ]
+
+declare_args() {
+  # Support ChromeOS touchpad gestures with ozone.
+  use_evdev_gestures = false
+}
+
+config("evdev_config") {
+  defines = [ "USE_EVDEV" ]
+}
+
+if (use_evdev_gestures) {
+  config("evdev_gestures_config") {
+    defines = [ "USE_EVDEV_GESTURES" ]
+  }
+}
+
+component("evdev") {
+  output_name = "events_ozone_evdev"
+
+  sources = [
+    "device_event_dispatcher_evdev.cc",
+    "device_event_dispatcher_evdev.h",
+    "event_converter_evdev.cc",
+    "event_converter_evdev.h",
+    "event_converter_evdev_impl.cc",
+    "event_converter_evdev_impl.h",
+    "event_device_info.cc",
+    "event_device_info.h",
+    "event_factory_evdev.cc",
+    "event_factory_evdev.h",
+    "event_thread_evdev.cc",
+    "event_thread_evdev.h",
+    "gamepad_event_converter_evdev.cc",
+    "gamepad_event_converter_evdev.h",
+    "input_controller_evdev.cc",
+    "input_controller_evdev.h",
+    "input_device_factory_evdev.cc",
+    "input_device_factory_evdev.h",
+    "input_device_factory_evdev_proxy.cc",
+    "input_device_factory_evdev_proxy.h",
+    "input_device_settings_evdev.cc",
+    "input_device_settings_evdev.h",
+    "input_injector_evdev.cc",
+    "input_injector_evdev.h",
+    "keyboard_evdev.cc",
+    "keyboard_evdev.h",
+    "keyboard_util_evdev.cc",
+    "keyboard_util_evdev.h",
+    "mouse_button_map_evdev.cc",
+    "mouse_button_map_evdev.h",
+    "tablet_event_converter_evdev.cc",
+    "tablet_event_converter_evdev.h",
+    "touch_evdev_debug_buffer.cc",
+    "touch_evdev_debug_buffer.h",
+    "touch_evdev_types.cc",
+    "touch_evdev_types.h",
+    "touch_event_converter_evdev.cc",
+    "touch_event_converter_evdev.h",
+    "touch_filter/edge_touch_filter.cc",
+    "touch_filter/edge_touch_filter.h",
+    "touch_filter/false_touch_finder.cc",
+    "touch_filter/false_touch_finder.h",
+    "touch_filter/heuristic_stylus_palm_detection_filter.cc",
+    "touch_filter/heuristic_stylus_palm_detection_filter.h",
+    "touch_filter/neural_stylus_palm_detection_filter.cc",
+    "touch_filter/neural_stylus_palm_detection_filter.h",
+    "touch_filter/neural_stylus_palm_detection_filter_model.cc",
+    "touch_filter/neural_stylus_palm_detection_filter_model.h",
+    "touch_filter/neural_stylus_palm_detection_filter_util.cc",
+    "touch_filter/neural_stylus_palm_detection_filter_util.h",
+    "touch_filter/neural_stylus_palm_report_filter.cc",
+    "touch_filter/neural_stylus_palm_report_filter.h",
+    "touch_filter/open_palm_detection_filter.cc",
+    "touch_filter/open_palm_detection_filter.h",
+    "touch_filter/palm_detection_filter.cc",
+    "touch_filter/palm_detection_filter.h",
+    "touch_filter/palm_detection_filter_factory.cc",
+    "touch_filter/palm_detection_filter_factory.h",
+    "touch_filter/palm_model/onedevice_train_palm_detection_filter_inference.cc",
+    "touch_filter/palm_model/onedevice_train_palm_detection_filter_inference.h",
+    "touch_filter/palm_model/onedevice_train_palm_detection_filter_model.cc",
+    "touch_filter/palm_model/onedevice_train_palm_detection_filter_model.h",
+    "touch_filter/shared_palm_detection_filter_state.h",
+    "touch_filter/touch_filter.h",
+  ]
+
+  defines = [ "IS_EVDEV_IMPL" ]
+
+  deps = [
+    "//base",
+    "//ui/display",
+    "//ui/events",
+    "//ui/events:dom_keycode_converter",
+    "//ui/events:events_base",
+    "//ui/events/devices",
+    "//ui/events/ozone",
+    "//ui/events/ozone/layout",
+    "//ui/events/platform",
+    "//ui/gfx",
+    "//ui/ozone:ozone_base",
+  ]
+
+  public_configs = [ ":evdev_config" ]
+
+  if (use_evdev_gestures) {
+    sources += [
+      "libgestures_glue/event_reader_libevdev_cros.cc",
+      "libgestures_glue/event_reader_libevdev_cros.h",
+      "libgestures_glue/gesture_feedback.cc",
+      "libgestures_glue/gesture_feedback.h",
+      "libgestures_glue/gesture_interpreter_libevdev_cros.cc",
+      "libgestures_glue/gesture_interpreter_libevdev_cros.h",
+      "libgestures_glue/gesture_logging.cc",
+      "libgestures_glue/gesture_logging.h",
+      "libgestures_glue/gesture_properties_service.cc",
+      "libgestures_glue/gesture_properties_service.h",
+      "libgestures_glue/gesture_property_provider.cc",
+      "libgestures_glue/gesture_property_provider.h",
+      "libgestures_glue/gesture_timer_provider.cc",
+      "libgestures_glue/gesture_timer_provider.h",
+    ]
+
+    deps += [
+      "//third_party/gestures",
+      "//third_party/libevdev",
+      "//ui/ozone/public/mojom:gesture_properties_service",
+    ]
+
+    public_configs += [ ":evdev_gestures_config" ]
+  }
+
+  visibility += [
+    "//ui/ozone/*",
+    "//ui/chromeos/*",
+  ]
+}
+
+source_set("unittests") {
+  testonly = true
+
+  sources = [
+    "event_converter_evdev_impl_unittest.cc",
+    "event_converter_test_util.cc",
+    "event_converter_test_util.h",
+    "event_device_info_unittest.cc",
+    "event_device_test_util.cc",
+    "event_device_test_util.h",
+    "gamepad_event_converter_evdev_unittest.cc",
+    "input_injector_evdev_unittest.cc",
+    "tablet_event_converter_evdev_unittest.cc",
+    "testing/fake_cursor_delegate_evdev.h",
+    "touch_event_converter_evdev_unittest.cc",
+    "touch_filter/false_touch_finder_unittest.cc",
+    "touch_filter/heuristic_stylus_palm_detection_filter_unittest.cc",
+    "touch_filter/neural_stylus_palm_detection_filter_unittest.cc",
+    "touch_filter/neural_stylus_palm_detection_filter_util_unittest.cc",
+    "touch_filter/neural_stylus_palm_report_filter_unittest.cc",
+    "touch_filter/open_palm_detection_filter_unittest.cc",
+    "touch_filter/palm_detection_filter_factory_unittest.cc",
+  ]
+
+  deps = [
+    ":evdev",
+    "//base",
+    "//base/test:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//ui/events",
+    "//ui/events:dom_keycode_converter",
+    "//ui/events/devices",
+    "//ui/events/ozone",
+    "//ui/events/ozone/layout",
+    "//ui/gfx/geometry",
+  ]
+
+  visibility += [ "//ui/events/ozone:unittests" ]
+}

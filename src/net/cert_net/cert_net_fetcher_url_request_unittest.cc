@@ -1,0 +1,732 @@
+// Copyright 2015 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "net/cert_net/cert_net_fetcher_url_request.h"
+
+#include <memory>
+#include <string>
+#include <utility>
+
+#include "base/bind.h"
+#include "base/compiler_specific.h"
+#include "base/message_loop/message_pump_type.h"
+#include "base/run_loop.h"
+#include "base/synchronization/lock.h"
+#include "base/test/scoped_feature_list.h"
+#include "net/base/features.h"
+#include "net/base/network_isolation_key.h"
+#include "net/cert/cert_net_fetcher.h"
+#include "net/cert/ct_policy_enforcer.h"
+#include "net/cert/mock_cert_verifier.h"
+#include "net/cert/multi_log_ct_verifier.h"
+#include "net/dns/mock_host_resolver.h"
+#include "net/http/http_server_properties.h"
+#include "net/quic/quic_context.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
+#include "net/test/gtest_util.h"
+#include "net/test/test_with_task_environment.h"
+#include "net/test/url_request/url_request_hanging_read_job.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
+#include "net/url_request/url_request_filter.h"
+#include "net/url_request/url_request_job_factory_impl.h"
+#include "net/url_request/url_request_test_util.h"
+#include "testing/gmock/include/gmock/gmock.h"
+#include "testing/gtest/include/gtest/gtest.h"
+#include "testing/platform_test.h"
+#include "url/origin.h"
+
+using net::test::IsOk;
+
+// TODO(eroman): Test that cookies aren't sent.
+
+namespace net {
+
+namespace {
+
+const base::FilePath::CharType kDocRoot[] =
+    FILE_PATH_LITERAL("net/data/cert_net_fetcher_impl_unittest");
+
+// A non-mock URLRequestContext which can access http:// urls.
+class RequestContext : public URLRequestContext {
+ public:
+  RequestContext() : storage_(this) {
+    ProxyConfig no_proxy;
+    storage_.set_host_resolver(std::make_unique<MockHostResolver>());
+    storage_.set_cert_verifier(std::make_unique<MockCertVerifier>());
+    storage_.set_transport_security_state(
+        std::make_unique<TransportSecurityState>());
+    storage_.set_cert_transparency_verifier(
+        std::make_unique<MultiLogCTVerifier>());
+    storage_.set_ct_policy_enforcer(
+        std::make_unique<DefaultCTPolicyEnforcer>());
+    storage_.set_proxy_resolution_service(ProxyResolutionService::CreateFixed(
+        ProxyConfigWithAnnotation(no_proxy, TRAFFIC_ANNOTATION_FOR_TESTS)));
+    storage_.set_ssl_config_service(
+        std::make_unique<SSLConfigServiceDefaults>());
+    storage_.set_http_server_properties(
+        std::make_unique<HttpServerProperties>());
+    storage_.set_quic_context(std::make_unique<QuicContext>());
+
+    HttpNetworkSession::Context session_context;
+    session_context.host_resolver = host_resolver();
+    session_context.cert_verifier = cert_verifier();
+    session_context.transport_security_state = transport_security_state();
+    session_context.cert_transparency_verifier = cert_transparency_verifier();
+    session_context.ct_policy_enforcer = ct_policy_enforcer();
+    session_context.proxy_resolution_service = proxy_resolution_service();
+    session_context.ssl_config_service = ssl_config_service();
+    session_context.http_server_properties = http_server_properties();
+    session_context.quic_context = quic_context();
+    storage_.set_http_network_session(std::make_unique<HttpNetworkSession>(
+        HttpNetworkSession::Params(), session_context));
+    storage_.set_http_transaction_factory(std::make_unique<HttpCache>(
+        storage_.http_network_session(), HttpCache::DefaultBackend::InMemory(0),
+        false /* is_main_cache */));
+    storage_.set_job_factory(std::make_unique<URLRequestJobFactoryImpl>());
+  }
+
+  ~RequestContext() override { AssertNoURLRequests(); }
+
+ private:
+  URLRequestContextStorage storage_;
+};
+
+// Wait for the request to complete, and verify that it completed successfully
+// with the indicated bytes.
+void VerifySuccess(const std::string& expected_body,
+                   CertNetFetcher::Request* request) {
+  Error actual_error;
+  std::vector<uint8_t> actual_body;
+  request->WaitForResult(&actual_error, &actual_body);
+
+  EXPECT_THAT(actual_error, IsOk());
+  EXPECT_EQ(expected_body, std::string(actual_body.begin(), actual_body.end()));
+}
+
+// Wait for the request to complete, and verify that it completed with the
+// indicated failure.
+void VerifyFailure(Error expected_error, CertNetFetcher::Request* request) {
+  Error actual_error;
+  std::vector<uint8_t> actual_body;
+  request->WaitForResult(&actual_error, &actual_body);
+
+  EXPECT_EQ(expected_error, actual_error);
+  EXPECT_EQ(0u, actual_body.size());
+}
+
+struct NetworkThreadState {
+  TestNetworkDelegate network_delegate;
+  RequestContext context;
+};
+
+class CertNetFetcherURLRequestTest : public PlatformTest {
+ public:
+  CertNetFetcherURLRequestTest() {
+    test_server_.AddDefaultHandlers(base::FilePath(kDocRoot));
+    StartNetworkThread();
+  }
+
+  ~CertNetFetcherURLRequestTest() override {
+    if (!network_thread_)
+      return;
+    network_thread_->task_runner()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&CertNetFetcherURLRequestTest::TeardownOnNetworkThread,
+                       base::Unretained(this)));
+    network_thread_->Stop();
+  }
+
+ protected:
+  CertNetFetcher* fetcher() const { return fetcher_.get(); }
+
+  void CreateFetcherOnNetworkThread(base::WaitableEvent* done) {
+    fetcher_ = base::MakeRefCounted<CertNetFetcherURLRequest>();
+    fetcher_->SetURLRequestContext(&state_->context);
+    done->Signal();
+  }
+
+  void CreateFetcher() {
+    base::WaitableEvent done(base::WaitableEvent::ResetPolicy::MANUAL,
+                             base::WaitableEvent::InitialState::NOT_SIGNALED);
+    network_thread_->task_runner()->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            &CertNetFetcherURLRequestTest::CreateFetcherOnNetworkThread,
+            base::Unretained(this), &done));
+    done.Wait();
+  }
+
+  void ShutDownFetcherOnNetworkThread(base::WaitableEvent* done) {
+    fetcher_->Shutdown();
+    done->Signal();
+  }
+
+  void ShutDownFetcher() {
+    base::WaitableEvent done(base::WaitableEvent::ResetPolicy::MANUAL,
+                             base::WaitableEvent::InitialState::NOT_SIGNALED);
+    network_thread_->task_runner()->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            &CertNetFetcherURLRequestTest::ShutDownFetcherOnNetworkThread,
+            base::Unretained(this), &done));
+    done.Wait();
+  }
+
+  int NumCreatedRequests() {
+    int count = 0;
+    base::WaitableEvent done(base::WaitableEvent::ResetPolicy::MANUAL,
+                             base::WaitableEvent::InitialState::NOT_SIGNALED);
+    network_thread_->task_runner()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&CertNetFetcherURLRequestTest::CountCreatedRequests,
+                       base::Unretained(this), &count, &done));
+    done.Wait();
+    return count;
+  }
+
+  void StartNetworkThread() {
+    // Start the network thread.
+    network_thread_.reset(new base::Thread("network thread"));
+    base::Thread::Options options(base::MessagePumpType::IO, 0);
+    EXPECT_TRUE(network_thread_->StartWithOptions(options));
+
+    // Initialize the URLRequestContext (and wait till it has completed).
+    base::WaitableEvent done(base::WaitableEvent::ResetPolicy::MANUAL,
+                             base::WaitableEvent::InitialState::NOT_SIGNALED);
+    network_thread_->task_runner()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&CertNetFetcherURLRequestTest::InitOnNetworkThread,
+                       base::Unretained(this), &done));
+    done.Wait();
+  }
+
+  void InitOnNetworkThread(base::WaitableEvent* done) {
+    state_.reset(new NetworkThreadState);
+    state_->context.set_network_delegate(&state_->network_delegate);
+    done->Signal();
+  }
+
+  void ResetStateOnNetworkThread(base::WaitableEvent* done) {
+    state_.reset();
+    done->Signal();
+  }
+
+  void ResetState() {
+    base::WaitableEvent done(base::WaitableEvent::ResetPolicy::MANUAL,
+                             base::WaitableEvent::InitialState::NOT_SIGNALED);
+    network_thread_->task_runner()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&CertNetFetcherURLRequestTest::ResetStateOnNetworkThread,
+                       base::Unretained(this), &done));
+    done.Wait();
+  }
+
+  void TeardownOnNetworkThread() {
+    fetcher_->Shutdown();
+    state_.reset();
+    fetcher_ = nullptr;
+  }
+
+  void CountCreatedRequests(int* count, base::WaitableEvent* done) {
+    *count = state_->network_delegate.created_requests();
+    done->Signal();
+  }
+
+  EmbeddedTestServer test_server_;
+  std::unique_ptr<base::Thread> network_thread_;
+  scoped_refptr<CertNetFetcherURLRequest> fetcher_;
+
+  std::unique_ptr<NetworkThreadState> state_;
+};
+
+// Installs URLRequestHangingReadJob handlers and clears them on teardown.
+class CertNetFetcherURLRequestTestWithHangingReadHandler
+    : public CertNetFetcherURLRequestTest,
+      public WithTaskEnvironment {
+ protected:
+  void SetUp() override { URLRequestHangingReadJob::AddUrlHandler(); }
+
+  void TearDown() override { URLRequestFilter::GetInstance()->ClearHandlers(); }
+};
+
+// Helper to start an AIA fetch using default parameters.
+WARN_UNUSED_RESULT std::unique_ptr<CertNetFetcher::Request> StartRequest(
+    CertNetFetcher* fetcher,
+    const GURL& url,
+    const NetworkIsolationKey& network_isolation_key = NetworkIsolationKey()) {
+  return fetcher->FetchCaIssuers(url, network_isolation_key,
+                                 CertNetFetcher::DEFAULT,
+                                 CertNetFetcher::DEFAULT);
+}
+
+// Fetch a few unique URLs using GET in parallel. Each URL has a different body
+// and Content-Type.
+TEST_F(CertNetFetcherURLRequestTest, ParallelFetchNoDuplicates) {
+  ASSERT_TRUE(test_server_.Start());
+  CreateFetcher();
+
+  // Request a URL with Content-Type "application/pkix-cert"
+  GURL url1 = test_server_.GetURL("/cert.crt");
+  std::unique_ptr<CertNetFetcher::Request> request1 =
+      StartRequest(fetcher(), url1);
+
+  // Request a URL with Content-Type "application/pkix-crl"
+  GURL url2 = test_server_.GetURL("/root.crl");
+  std::unique_ptr<CertNetFetcher::Request> request2 =
+      StartRequest(fetcher(), url2);
+
+  // Request a URL with Content-Type "application/pkcs7-mime"
+  GURL url3 = test_server_.GetURL("/certs.p7c");
+  std::unique_ptr<CertNetFetcher::Request> request3 =
+      StartRequest(fetcher(), url3);
+
+  // Wait for all of the requests to complete and verify the fetch results.
+  VerifySuccess("-cert.crt-\n", request1.get());
+  VerifySuccess("-root.crl-\n", request2.get());
+  VerifySuccess("-certs.p7c-\n", request3.get());
+
+  EXPECT_EQ(3, NumCreatedRequests());
+}
+
+// Fetch a caIssuers URL which has an unexpected extension and Content-Type.
+// The extension is .txt and the Content-Type is text/plain. Despite being
+// unusual this succeeds as the extension and Content-Type are not required to
+// be meaningful.
+TEST_F(CertNetFetcherURLRequestTest, ContentTypeDoesntMatter) {
+  ASSERT_TRUE(test_server_.Start());
+  CreateFetcher();
+
+  GURL url = test_server_.GetURL("/foo.txt");
+  std::unique_ptr<CertNetFetcher::Request> request =
+      StartRequest(fetcher(), url);
+  VerifySuccess("-foo.txt-\n", request.get());
+}
+
+// Fetch a URLs whose HTTP response code is not 200. These are considered
+// failures.
+TEST_F(CertNetFetcherURLRequestTest, HttpStatusCode) {
+  ASSERT_TRUE(test_server_.Start());
+  CreateFetcher();
+
+  // Response was HTTP status 404.
+  {
+    GURL url = test_server_.GetURL("/404.html");
+    std::unique_ptr<CertNetFetcher::Request> request =
+        StartRequest(fetcher(), url);
+    VerifyFailure(ERR_HTTP_RESPONSE_CODE_FAILURE, request.get());
+  }
+
+  // Response was HTTP status 500.
+  {
+    GURL url = test_server_.GetURL("/500.html");
+    std::unique_ptr<CertNetFetcher::Request> request =
+        StartRequest(fetcher(), url);
+    VerifyFailure(ERR_HTTP_RESPONSE_CODE_FAILURE, request.get());
+  }
+}
+
+// Fetching a URL with a Content-Disposition header should have no effect.
+TEST_F(CertNetFetcherURLRequestTest, ContentDisposition) {
+  ASSERT_TRUE(test_server_.Start());
+  CreateFetcher();
+
+  GURL url = test_server_.GetURL("/downloadable.js");
+  std::unique_ptr<CertNetFetcher::Request> request =
+      StartRequest(fetcher(), url);
+  VerifySuccess("-downloadable.js-\n", request.get());
+}
+
+// Verifies that a cacheable request will be served from the HTTP cache the
+// second time it is requested.
+TEST_F(CertNetFetcherURLRequestTest, Cache) {
+  ASSERT_TRUE(test_server_.Start());
+
+  CreateFetcher();
+
+  // Fetch a URL whose HTTP headers make it cacheable for 1 hour.
+  GURL url(test_server_.GetURL("/cacheable_1hr.crt"));
+  {
+    std::unique_ptr<CertNetFetcher::Request> request =
+        StartRequest(fetcher(), url);
+    VerifySuccess("-cacheable_1hr.crt-\n", request.get());
+  }
+
+  EXPECT_EQ(1, NumCreatedRequests());
+
+  // Kill the HTTP server.
+  ASSERT_TRUE(test_server_.ShutdownAndWaitUntilComplete());
+
+  // Fetch again -- will fail unless served from cache.
+  {
+    std::unique_ptr<CertNetFetcher::Request> request =
+        StartRequest(fetcher(), url);
+    VerifySuccess("-cacheable_1hr.crt-\n", request.get());
+  }
+
+  EXPECT_EQ(2, NumCreatedRequests());
+}
+
+// Verify that the maximum response body constraints are enforced by fetching a
+// resource that is larger than the limit.
+TEST_F(CertNetFetcherURLRequestTest, TooLarge) {
+  ASSERT_TRUE(test_server_.Start());
+
+  CreateFetcher();
+
+  // This file has a response body 12 bytes long. So setting the maximum to 11
+  // bytes will cause it to fail.
+  GURL url(test_server_.GetURL("/certs.p7c"));
+  std::unique_ptr<CertNetFetcher::Request> request = fetcher()->FetchCaIssuers(
+      url, NetworkIsolationKey(), CertNetFetcher::DEFAULT, 11);
+
+  VerifyFailure(ERR_FILE_TOO_BIG, request.get());
+}
+
+// Set the timeout to 10 milliseconds, and try fetching a URL that takes 5
+// seconds to complete. It should fail due to a timeout.
+TEST_F(CertNetFetcherURLRequestTest, Hang) {
+  ASSERT_TRUE(test_server_.Start());
+
+  CreateFetcher();
+
+  GURL url(test_server_.GetURL("/slow/certs.p7c?5"));
+  std::unique_ptr<CertNetFetcher::Request> request = fetcher()->FetchCaIssuers(
+      url, NetworkIsolationKey(), 10, CertNetFetcher::DEFAULT);
+  VerifyFailure(ERR_TIMED_OUT, request.get());
+}
+
+// Verify that if a response is gzip-encoded it gets inflated before being
+// returned to the caller.
+TEST_F(CertNetFetcherURLRequestTest, Gzip) {
+  ASSERT_TRUE(test_server_.Start());
+
+  CreateFetcher();
+
+  GURL url(test_server_.GetURL("/gzipped_crl"));
+  std::unique_ptr<CertNetFetcher::Request> request =
+      StartRequest(fetcher(), url);
+  VerifySuccess("-gzipped_crl-\n", request.get());
+}
+
+// Try fetching an unsupported URL scheme (https).
+TEST_F(CertNetFetcherURLRequestTest, HttpsNotAllowed) {
+  ASSERT_TRUE(test_server_.Start());
+
+  CreateFetcher();
+
+  GURL url("https://foopy/foo.crt");
+  std::unique_ptr<CertNetFetcher::Request> request =
+      StartRequest(fetcher(), url);
+  VerifyFailure(ERR_DISALLOWED_URL_SCHEME, request.get());
+
+  // No request was created because the URL scheme was unsupported.
+  EXPECT_EQ(0, NumCreatedRequests());
+}
+
+// Try fetching a URL which redirects to https.
+TEST_F(CertNetFetcherURLRequestTest, RedirectToHttpsNotAllowed) {
+  ASSERT_TRUE(test_server_.Start());
+
+  CreateFetcher();
+
+  GURL url(test_server_.GetURL("/redirect_https"));
+
+  std::unique_ptr<CertNetFetcher::Request> request =
+      StartRequest(fetcher(), url);
+  VerifyFailure(ERR_DISALLOWED_URL_SCHEME, request.get());
+
+  EXPECT_EQ(1, NumCreatedRequests());
+}
+
+// Try fetching an unsupported URL scheme (https) and then immediately
+// cancelling. This is a bit special because this codepath needs to post a task.
+TEST_F(CertNetFetcherURLRequestTest, CancelHttpsNotAllowed) {
+  ASSERT_TRUE(test_server_.Start());
+
+  CreateFetcher();
+
+  GURL url("https://foopy/foo.crt");
+  std::unique_ptr<CertNetFetcher::Request> request =
+      StartRequest(fetcher(), url);
+
+  // Cancel the request (May or may not have started yet, as the request is
+  // running on another thread).
+  request.reset();
+}
+
+// Start a few requests, and cancel one of them before running the message loop
+// again.
+TEST_F(CertNetFetcherURLRequestTest, CancelBeforeRunningMessageLoop) {
+  ASSERT_TRUE(test_server_.Start());
+
+  CreateFetcher();
+
+  GURL url1 = test_server_.GetURL("/cert.crt");
+  std::unique_ptr<CertNetFetcher::Request> request1 =
+      StartRequest(fetcher(), url1);
+
+  GURL url2 = test_server_.GetURL("/root.crl");
+  std::unique_ptr<CertNetFetcher::Request> request2 =
+      StartRequest(fetcher(), url2);
+
+  GURL url3 = test_server_.GetURL("/certs.p7c");
+
+  std::unique_ptr<CertNetFetcher::Request> request3 =
+      StartRequest(fetcher(), url3);
+
+  // Cancel the second request.
+  request2.reset();
+
+  // Wait for the non-cancelled requests to complete, and verify the fetch
+  // results.
+  VerifySuccess("-cert.crt-\n", request1.get());
+  VerifySuccess("-certs.p7c-\n", request3.get());
+}
+
+// Start several requests, and cancel one of them after the first has completed.
+// NOTE: The python test server is single threaded and can only service one
+// request at a time. After a socket is opened by the server it waits for it to
+// be completed, and any subsequent request will hang until the first socket is
+// closed.
+// Cancelling the first request can therefore be problematic, since if
+// cancellation is done after the socket is opened but before reading/writing,
+// then the socket is re-cycled and things will be stalled until the cleanup
+// timer (10 seconds) closes it.
+// To work around this, the last request is cancelled, and hope that the
+// requests are given opened sockets in a FIFO order.
+// TODO(eroman): Make this more robust.
+// TODO(eroman): Rename this test.
+TEST_F(CertNetFetcherURLRequestTest, CancelAfterRunningMessageLoop) {
+  ASSERT_TRUE(test_server_.Start());
+
+  CreateFetcher();
+
+  GURL url1 = test_server_.GetURL("/cert.crt");
+
+  std::unique_ptr<CertNetFetcher::Request> request1 =
+      StartRequest(fetcher(), url1);
+
+  GURL url2 = test_server_.GetURL("/certs.p7c");
+  std::unique_ptr<CertNetFetcher::Request> request2 =
+      StartRequest(fetcher(), url2);
+
+  GURL url3("ftp://www.not.supported.com/foo");
+  std::unique_ptr<CertNetFetcher::Request> request3 =
+      StartRequest(fetcher(), url3);
+
+  // Wait for the ftp request to complete (it should complete right away since
+  // it doesn't even try to connect to the server).
+  VerifyFailure(ERR_DISALLOWED_URL_SCHEME, request3.get());
+
+  // Cancel the second outstanding request.
+  request2.reset();
+
+  // Wait for the first request to complete and verify the fetch result.
+  VerifySuccess("-cert.crt-\n", request1.get());
+}
+
+// Fetch the same URLs in parallel and verify that only 1 request is made per
+// URL.
+TEST_F(CertNetFetcherURLRequestTest, ParallelFetchDuplicates) {
+  ASSERT_TRUE(test_server_.Start());
+
+  CreateFetcher();
+
+  GURL url1 = test_server_.GetURL("/cert.crt");
+  GURL url2 = test_server_.GetURL("/root.crl");
+
+  // Issue 3 requests for url1, and 3 requests for url2
+  std::unique_ptr<CertNetFetcher::Request> request1 =
+      StartRequest(fetcher(), url1);
+
+  std::unique_ptr<CertNetFetcher::Request> request2 =
+      StartRequest(fetcher(), url2);
+
+  std::unique_ptr<CertNetFetcher::Request> request3 =
+      StartRequest(fetcher(), url1);
+
+  std::unique_ptr<CertNetFetcher::Request> request4 =
+      StartRequest(fetcher(), url2);
+
+  std::unique_ptr<CertNetFetcher::Request> request5 =
+      StartRequest(fetcher(), url2);
+
+  std::unique_ptr<CertNetFetcher::Request> request6 =
+      StartRequest(fetcher(), url1);
+
+  // Cancel all but one of the requests for url1.
+  request1.reset();
+  request3.reset();
+
+  // Wait for the remaining requests to finish and verify the fetch results.
+  VerifySuccess("-root.crl-\n", request2.get());
+  VerifySuccess("-root.crl-\n", request4.get());
+  VerifySuccess("-root.crl-\n", request5.get());
+  VerifySuccess("-cert.crt-\n", request6.get());
+
+  // Verify that only 2 URLRequests were started even though 6 requests were
+  // issued.
+  EXPECT_EQ(2, NumCreatedRequests());
+}
+
+// Cancel a request and then start another one for the same URL.
+TEST_F(CertNetFetcherURLRequestTest, CancelThenStart) {
+  ASSERT_TRUE(test_server_.Start());
+
+  CreateFetcher();
+
+  GURL url = test_server_.GetURL("/cert.crt");
+
+  std::unique_ptr<CertNetFetcher::Request> request1 =
+      StartRequest(fetcher(), url);
+  request1.reset();
+
+  std::unique_ptr<CertNetFetcher::Request> request2 =
+      StartRequest(fetcher(), url);
+
+  std::unique_ptr<CertNetFetcher::Request> request3 =
+      StartRequest(fetcher(), url);
+  request3.reset();
+
+  // All but |request2| were canceled.
+  VerifySuccess("-cert.crt-\n", request2.get());
+}
+
+// Start duplicate requests and then cancel all of them.
+TEST_F(CertNetFetcherURLRequestTest, CancelAll) {
+  ASSERT_TRUE(test_server_.Start());
+
+  CreateFetcher();
+  std::unique_ptr<CertNetFetcher::Request> requests[3];
+
+  GURL url = test_server_.GetURL("/cert.crt");
+
+  for (auto& request : requests) {
+    request = StartRequest(fetcher(), url);
+  }
+
+  // Cancel all the requests.
+  for (auto& request : requests) {
+    request.reset();
+  }
+
+  EXPECT_EQ(1, NumCreatedRequests());
+}
+
+// Tests that Requests are signalled for completion even if they are
+// created after the CertNetFetcher has been shutdown.
+TEST_F(CertNetFetcherURLRequestTest, RequestsAfterShutdown) {
+  ASSERT_TRUE(test_server_.Start());
+  CreateFetcher();
+  ShutDownFetcher();
+
+  GURL url = test_server_.GetURL("/cert.crt");
+  std::unique_ptr<CertNetFetcher::Request> request =
+      StartRequest(fetcher(), url);
+  VerifyFailure(ERR_ABORTED, request.get());
+  EXPECT_EQ(0, NumCreatedRequests());
+}
+
+// Tests that Requests are signalled for completion if the fetcher is
+// shutdown and the network thread stopped before the request is
+// started.
+TEST_F(CertNetFetcherURLRequestTest,
+       RequestAfterShutdownAndNetworkThreadStopped) {
+  ASSERT_TRUE(test_server_.Start());
+  CreateFetcher();
+  ShutDownFetcher();
+  ResetState();
+  network_thread_.reset();
+
+  GURL url = test_server_.GetURL("/cert.crt");
+  std::unique_ptr<CertNetFetcher::Request> request =
+      StartRequest(fetcher(), url);
+  VerifyFailure(ERR_ABORTED, request.get());
+}
+
+// Make sure that "duplicate" requests are only merged if their
+// NetworkIsolationKey matches.
+TEST_F(CertNetFetcherURLRequestTest,
+       MergeDuplicatesRespectsNetworkIsolationKey) {
+  const url::Origin kOrigin1 = url::Origin::Create(GURL("https://a.test"));
+  const url::Origin kOrigin2 = url::Origin::Create(GURL("https://b.test"));
+  const NetworkIsolationKey kNetworkIsolationKey1(kOrigin1, kOrigin1);
+  const NetworkIsolationKey kNetworkIsolationKey2(kOrigin2, kOrigin2);
+
+  ASSERT_TRUE(test_server_.Start());
+
+  CreateFetcher();
+
+  GURL url = test_server_.GetURL("/cert.crt");
+
+  std::unique_ptr<CertNetFetcher::Request> request1 =
+      StartRequest(fetcher(), url, kNetworkIsolationKey1);
+
+  std::unique_ptr<CertNetFetcher::Request> request2 =
+      StartRequest(fetcher(), url, kNetworkIsolationKey2);
+
+  std::unique_ptr<CertNetFetcher::Request> request3 =
+      StartRequest(fetcher(), url, kNetworkIsolationKey1);
+
+  VerifySuccess("-cert.crt-\n", request1.get());
+  VerifySuccess("-cert.crt-\n", request2.get());
+  VerifySuccess("-cert.crt-\n", request3.get());
+
+  // Verify that only 2 URLRequests were started even though 3 requests were
+  // issued.
+  EXPECT_EQ(2, NumCreatedRequests());
+}
+
+// Make sure the NetworkIsolationKey is respected.
+TEST_F(CertNetFetcherURLRequestTest, NetworkIsolationKeyPassedToURLLoader) {
+  const url::Origin kOrigin1 = url::Origin::Create(GURL("https://a.test"));
+  const url::Origin kOrigin2 = url::Origin::Create(GURL("https://b.test"));
+  const NetworkIsolationKey kNetworkIsolationKey1(kOrigin1, kOrigin1);
+  const NetworkIsolationKey kNetworkIsolationKey2(kOrigin2, kOrigin2);
+
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      features::kSplitCacheByNetworkIsolationKey);
+
+  CreateFetcher();
+
+  // Start server, fetch a cacheable file using kNetworkIsolationKey1, and stop
+  // the server. The response should be stored in the cache using
+  // kNetworkIsolationKey1.
+  ASSERT_TRUE(test_server_.Start());
+  GURL url = test_server_.GetURL("/cacheable_1hr.crt");
+  std::unique_ptr<CertNetFetcher::Request> request1 =
+      StartRequest(fetcher(), url, kNetworkIsolationKey1);
+  VerifySuccess("-cacheable_1hr.crt-\n", request1.get());
+  ASSERT_TRUE(test_server_.ShutdownAndWaitUntilComplete());
+
+  // Try fetching the resources with kNetworkIsolationKey2. Since the server has
+  // been stopped and the resource is only cached with kNetworkIsolationKey1,
+  // the request should fail.
+  std::unique_ptr<CertNetFetcher::Request> request2 =
+      StartRequest(fetcher(), url, kNetworkIsolationKey2);
+  VerifyFailure(ERR_CONNECTION_REFUSED, request2.get());
+
+  // Fetching with kNetworkIsolationKey1 should return the cached resource.
+  std::unique_ptr<CertNetFetcher::Request> request3 =
+      StartRequest(fetcher(), url, kNetworkIsolationKey1);
+  VerifySuccess("-cacheable_1hr.crt-\n", request3.get());
+}
+
+// Tests that outstanding Requests are cancelled when Shutdown is called.
+TEST_F(CertNetFetcherURLRequestTestWithHangingReadHandler,
+       ShutdownCancelsRequests) {
+  CreateFetcher();
+
+  GURL url = URLRequestHangingReadJob::GetMockHttpUrl();
+  std::unique_ptr<CertNetFetcher::Request> request =
+      StartRequest(fetcher(), url);
+
+  ShutDownFetcher();
+  VerifyFailure(ERR_ABORTED, request.get());
+}
+
+}  // namespace
+
+}  // namespace net

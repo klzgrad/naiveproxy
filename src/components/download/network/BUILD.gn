@@ -1,0 +1,59 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+if (is_android) {
+  import("//build/config/android/config.gni")
+  import("//build/config/android/rules.gni")
+}
+
+static_library("network") {
+  sources = [
+    "network_status_listener.cc",
+    "network_status_listener.h",
+    "network_status_listener_impl.cc",
+    "network_status_listener_impl.h",
+  ]
+
+  deps = [
+    "//base",
+    "//net",
+    "//services/network/public/cpp",
+  ]
+
+  if (is_android) {
+    sources += [
+      "android/network_status_listener_android.cc",
+      "android/network_status_listener_android.h",
+    ]
+
+    deps += [ ":jni_headers" ]
+  }
+
+  if (is_mac) {
+    sources += [
+      "network_status_listener_mac.cc",
+      "network_status_listener_mac.h",
+    ]
+  }
+}
+
+if (is_android) {
+  android_library("network_java") {
+    java_files = [ "android/java/src/org/chromium/components/download/NetworkStatusListenerAndroid.java" ]
+
+    deps = [
+      "//base:base_java",
+      "//base:jni_java",
+      "//net/android:net_java",
+    ]
+    annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
+  }
+
+  generate_jni("jni_headers") {
+    visibility = [ ":*" ]
+    sources = [
+      "android/java/src/org/chromium/components/download/NetworkStatusListenerAndroid.java",
+    ]
+  }
+}

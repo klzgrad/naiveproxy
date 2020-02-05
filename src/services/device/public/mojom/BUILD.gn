@@ -1,0 +1,150 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/features.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
+
+mojom("mojom") {
+  generate_java = true
+  sources = [
+    "battery_monitor.mojom",
+    "battery_status.mojom",
+    "bluetooth_system.mojom",
+    "fingerprint.mojom",
+    "geolocation.mojom",
+    "geolocation_config.mojom",
+    "geolocation_context.mojom",
+    "geolocation_control.mojom",
+    "geoposition.mojom",
+    "hid.mojom",
+    "input_service.mojom",
+    "nfc.mojom",
+    "nfc_provider.mojom",
+    "power_monitor.mojom",
+    "public_ip_address_geolocation_provider.mojom",
+    "screen_orientation.mojom",
+    "screen_orientation_lock_types.mojom",
+    "serial.mojom",
+    "time_zone_monitor.mojom",
+    "vibration_manager.mojom",
+    "wake_lock.mojom",
+    "wake_lock_context.mojom",
+    "wake_lock_provider.mojom",
+  ]
+
+  public_deps = [
+    ":constants",
+    "//mojo/public/mojom/base",
+    "//services/network/public/mojom",
+    "//services/network/public/mojom:mutable_network_traffic_annotation_interface",
+  ]
+
+  if (is_chromeos && use_dbus) {
+    sources += [
+      "mtp_file_entry.mojom",
+      "mtp_manager.mojom",
+      "mtp_storage_info.mojom",
+    ]
+  }
+
+  # The blink variant of the Device Service mojom are depended on by the
+  # blink platform target. All blink variant mojoms use WTF types, which are
+  # part of the blink platform component. In order to avoid a dependency cycle,
+  # these targets must be part of that component.
+  export_class_attribute_blink = "BLINK_PLATFORM_EXPORT"
+  export_define_blink = "BLINK_PLATFORM_IMPLEMENTATION=1"
+  export_header_blink = "third_party/blink/public/platform/web_common.h"
+
+  visibility_blink = [
+    "//third_party/blink/renderer/bindings/modules/v8:generate_mojo_bindings",
+    "//third_party/blink/renderer/platform:blink_platform_public_deps",
+    "//third_party/blink/public/mojom:mojom_platform_blink",
+  ]
+}
+
+mojom("generic_sensor") {
+  generate_java = true
+  sources = [
+    "sensor.mojom",
+    "sensor_provider.mojom",
+  ]
+
+  public_deps = [
+    ":constants",
+  ]
+
+  export_class_attribute_blink = "BLINK_PLATFORM_EXPORT"
+  export_define_blink = "BLINK_PLATFORM_IMPLEMENTATION=1"
+  export_header_blink = "third_party/blink/public/platform/web_common.h"
+
+  visibility_blink =
+      [ "//third_party/blink/renderer/platform:blink_platform_public_deps" ]
+
+  # Generic Sensor Mojom interfaces are exposed publicly to layout tests which
+  # use prepackaged redistributable JS bindings. It is therefore not desirable
+  # to scramble these messages.
+  scramble_message_ids = false
+}
+
+mojom("constants") {
+  generate_java = true
+  sources = [
+    "constants.mojom",
+  ]
+
+  export_class_attribute_blink = "BLINK_PLATFORM_EXPORT"
+  export_define_blink = "BLINK_PLATFORM_IMPLEMENTATION=1"
+  export_header_blink = "third_party/blink/public/platform/web_common.h"
+
+  visibility_blink = [
+    "//third_party/blink/renderer/platform:blink_platform_public_deps",
+    ":*",
+  ]
+}
+
+mojom("usb") {
+  generate_java = true
+  sources = [
+    "usb_device.mojom",
+    "usb_enumeration_options.mojom",
+    "usb_manager.mojom",
+    "usb_manager_client.mojom",
+  ]
+
+  public_deps = [
+    "//mojo/public/mojom/base",
+    "//url/mojom:url_mojom_gurl",
+  ]
+
+  # USB Mojom interfaces are exposed publicly to layout tests which use
+  # prepackaged redistributable JS bindings. It is therefore not desirable to
+  # scramble these messages.
+  scramble_message_ids = false
+
+  # The blink variant of the usb mojom is depended on by the blink platform
+  # target. All blink variant mojoms use WTF types, which are part of the
+  # blink platform component. In order to avoid a dependency cycle, these
+  # targets must be part of that component.
+  export_class_attribute_blink = "BLINK_PLATFORM_EXPORT"
+  export_define_blink = "BLINK_PLATFORM_IMPLEMENTATION=1"
+  export_header_blink = "third_party/blink/public/platform/web_common.h"
+
+  visibility_blink = [
+    ":*",
+    "//components/arc/mojom:mojom_blink",
+    "//third_party/blink/public/mojom/usb:usb_blink",
+    "//third_party/blink/renderer/modules/webusb",
+    "//chrome/browser/ui/webui/usb_internals:mojo_bindings_blink",
+  ]
+}
+
+mojom("usb_test") {
+  sources = [
+    "usb_manager_test.mojom",
+  ]
+
+  public_deps = [
+    "//url/mojom:url_mojom_gurl",
+  ]
+}

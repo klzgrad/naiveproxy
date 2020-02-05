@@ -1,0 +1,140 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module chrome.mojom;
+
+import "components/remote_cocoa/common/application.mojom";
+import "mojo/public/mojom/base/file_path.mojom";
+import "mojo/public/mojom/base/string16.mojom";
+import "ui/gfx/image/mojom/image.mojom";
+import "url/mojom/url.mojom";
+
+enum AppShimLaunchType {
+  // Process the app shim's LaunchAppmessage and associate the shim with the
+  // given profile and app id.
+  kRegisterOnly,
+  // Do the above and launch the app.
+  kNormal,
+};
+
+enum AppShimLaunchResult {
+  // App launched successfully.
+  kSuccess,
+  // The app launched successfully, but is not using a host (e.g, is an
+  // open-in-a-tab bookmark app), or the host has closed.
+  kNoHost,
+  // There is already a host registered for this app.
+  kDuplicateHost,
+  // The profile was not found.
+  kProfileNotFound,
+  // The app was not found.
+  kAppNotFound,
+  // The profile was locked.
+  kProfileLocked,
+  // The app shim did not pass code signing validation.
+  kFailedValidation,
+};
+
+enum AppShimFocusType {
+  // Just focus the app.
+  kNormal,
+  // Focus the app or launch it if it has no windows open.
+  kReopen,
+  // Open the given file in the app.
+  kOpenFiles,
+};
+
+enum AppShimAttentionType {
+  // Removes any active attention request.
+  kCancel,
+  // Bounces the shim in the dock continuously.
+  kCritical,
+};
+
+// An entry in the profiles NSMenu.
+struct ProfileMenuItem {
+  // The name to display.
+  mojo_base.mojom.String16 name;
+
+  // The icon to display next to the name.
+  gfx.mojom.ImageSkia? icon;
+
+  // The index used to look up this item when selected.
+  uint32 menu_index;
+
+  // Whether or not this menu item is listed as selected.
+  bool active;
+
+  // The profile path to associate with this item.
+  mojo_base.mojom.FilePath profile_path;
+};
+
+// Interface through which the browser communicates to a shim process.
+interface AppShim {
+  // Create the interface to the NSApplication (through which NSViews and
+  // NSWindows may be created).
+  CreateRemoteCocoaApplication(
+      pending_associated_receiver<remote_cocoa.mojom.Application> application);
+
+  // Initialize the command handler for the specified BridgedNativeWidget. This
+  // method exists at this scope (as opposed to in remote_cocoa) because it
+  // creates chrome-scoped objects that implement remote_cocoa interfaces.
+  CreateCommandDispatcherForWidget(uint64 widget_id);
+
+  // Instructs the shim to request or cancel user attention.
+  SetUserAttention(AppShimAttentionType attention_type);
+
+  // Instructs the shim to set its badge label.
+  SetBadgeLabel(string badge_label);
+
+  // Called to update the state of the profiles NSMenu.
+  UpdateProfileMenu(array<ProfileMenuItem> profile_menu_items);
+};
+
+// Interface through which the a process communicates to the browser process.
+interface AppShimHost {
+  // Sent when the user has indicated a desire to focus the app, either by
+  // clicking on the app's icon in the dock or by selecting it with Cmd+Tab. In
+  // response, Chrome brings the app's windows to the foreground, or relaunches
+  // if the focus type indicates a reopen and there are no open windows.
+  FocusApp(AppShimFocusType focus_type,
+           array<mojo_base.mojom.FilePath> files);
+
+  // Called when a profile is selected from the profiles menu.
+  ProfileSelectedFromMenu(mojo_base.mojom.FilePath profile_path);
+};
+
+// Properties of an app shim that are specified when it connects to the browser
+// process for the first time.
+struct AppShimInfo {
+  // The path of the profile to use with this app.
+  mojo_base.mojom.FilePath profile_path;
+
+  // The shim's app id.
+  string app_id;
+
+  // The shortcut URL for this app (if this is a shortcut app or a PWA).
+  url.mojom.Url app_url;
+
+  // How or if the browser should launch the associated app in response to this
+  // shim process connecting.
+  AppShimLaunchType launch_type;
+
+  // The files that were dragged on to this app when launching it.
+  array<mojo_base.mojom.FilePath> files;
+};
+
+// The initial interface provided by the browser process. Used to bootstrap to
+// the AppShim and AppShimHost interfaces.
+interface AppShimHostBootstrap {
+  // Signals to the main Chrome process that a shim has started. The app shim
+  // process is requesting to be associated with the given profile and app_id.
+  // Once the profile and app_id are stored, and all future messages from the
+  // app shim relate to this app.
+  OnShimConnected(pending_receiver<AppShimHost> host_receiver,
+                  AppShimInfo app_shim_info) =>
+                      (AppShimLaunchResult launch_result,
+                       pending_receiver<AppShim> app_shim_receiver);
+};
+

@@ -1,0 +1,457 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/features.gni")
+import(
+    "//chrome/browser/resources/chromeos/accessibility/chromevox/run_jsbundler.gni")
+import("//chrome/common/features.gni")
+import("//chrome/test/base/js2gtest.gni")
+import("//testing/test.gni")
+import("//third_party/closure_compiler/compile_js.gni")
+
+assert(is_chromeos)
+
+switch_access_dir =
+    "$root_out_dir/resources/chromeos/accessibility/switch_access"
+
+group("build") {
+  deps = [
+    ":switch_access_copied_files",
+    ":switch_access_guest_manifest",
+    ":switch_access_manifest",
+    "strings:switch_access_strings",
+  ]
+}
+
+# Instead of setting up one copy target for each subdirectory, use a script
+# to copy all files.
+run_jsbundler("switch_access_copied_files") {
+  mode = "copy"
+  dest_dir = switch_access_dir
+  sources = [
+    "../chromevox/background/constants.js",
+    "../chromevox/background/tree_walker.js",
+    "../select_to_speak/closure_shim.js",
+    "//third_party/chromevox/third_party/closure-library/closure/goog/base.js",
+    "auto_scan_manager.js",
+    "background.js",
+    "commands.js",
+    "event_helper.js",
+    "focus_ring_manager.js",
+    "icons/back.svg",
+    "icons/copy.svg",
+    "icons/cut.svg",
+    "icons/decrement.svg",
+    "icons/dictation.svg",
+    "icons/increment.svg",
+    "icons/jumpToBeginningOfText.svg",
+    "icons/jumpToEndOfText.svg",
+    "icons/keyboard.svg",
+    "icons/moveBackwardOneCharOfText.svg",
+    "icons/moveBackwardOneWordOfText.svg",
+    "icons/moveCursor.svg",
+    "icons/moveDownOneLineOfText.svg",
+    "icons/moveForwardOneCharOfText.svg",
+    "icons/moveForwardOneWordOfText.svg",
+    "icons/moveUpOneLineOfText.svg",
+    "icons/paste.svg",
+    "icons/scrollDownOrForward.svg",
+    "icons/scrollLeft.svg",
+    "icons/scrollRight.svg",
+    "icons/scrollUpOrBackward.svg",
+    "icons/select.svg",
+    "icons/settings.svg",
+    "icons/showContextMenu.svg",
+    "icons/textSelectionEnd.svg",
+    "icons/textSelectionStart.svg",
+    "menu_manager.js",
+    "menu_panel.css",
+    "menu_panel.html",
+    "menu_panel.js",
+    "menu_panel_interface.js",
+    "metrics.js",
+    "navigation_manager.js",
+    "nodes/back_button_node.js",
+    "nodes/group_node.js",
+    "nodes/keyboard_node.js",
+    "nodes/node_wrapper.js",
+    "nodes/switch_access_node.js",
+    "nodes/system_menu_node.js",
+    "preferences.js",
+    "rect_helper.js",
+    "switch_access.js",
+    "switch_access_constants.js",
+    "switch_access_predicate.js",
+    "text_navigation_manager.js",
+  ]
+  rewrite_rules = [
+    rebase_path(".", root_build_dir) + ":",
+    rebase_path(closure_library_dir, root_build_dir) + ":closure",
+    rebase_path("../chromevox/background", root_build_dir) + ":",
+    rebase_path("../select_to_speak", root_build_dir) + ":",
+  ]
+}
+
+source_set("browser_tests") {
+  testonly = true
+  assert(enable_extensions)
+
+  deps = [
+    ":switch_access_extjs_tests",
+  ]
+
+  data = [
+    "//chrome/browser/resources/chromeos/accessibility/chromevox/",
+    "//chrome/browser/resources/chromeos/accessibility/switch_access/",
+    "//ui/webui/resources/js/cr.js",
+  ]
+  data += js2gtest_js_libraries
+}
+
+js2gtest("switch_access_extjs_tests") {
+  test_type = "extension"
+  sources = [
+    "auto_scan_manager_test.extjs",
+    "navigation_manager_test.extjs",
+    "nodes/node_wrapper_test.extjs",
+    "switch_access_predicate_test.extjs",
+    "text_navigation_manager_test.extjs",
+  ]
+  gen_include_files = [
+    "../chromevox/testing/callback_helper.js",
+    "switch_access_e2e_test_base.js",
+  ]
+
+  # The test base classes generate C++ code with these deps.
+  deps = [
+    "//ash",
+    "//ash/keyboard/ui",
+    "//base",
+    "//chrome/browser/chromeos",
+    "//chrome/common",
+    "//chromeos",
+  ]
+  defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+}
+
+# TODO(crbug/978200): refactor this into another file like generate_manifest.gni
+# to share with other extensions.
+template("manifest") {
+  version_file = "//chrome/VERSION"
+  version_script = "//build/util/version.py"
+  template_file = "manifest.json.jinja2"
+  output_file = invoker.output_file
+  key = "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDVWTYdXNGhIG6FJKIhaohRRrYYGwg9cR2jea2NRBSEg+T7E3EvUyFy0ouez0N0omeSAL/xlvQtCjZJ72eCqDBgON/49SRtUdLS5TQ2U9cHYcIwI86llKMqqws6uMSwlWXldyNwKx5LVT1nR0+x3J744E2mymCSip2Y+NrGEA2yCUFL8D+O/uS+d5pVFb3NNjPTVbNOlhIs5ZUVX3FBij86ILivoSfRZMIZqK7MU8XDT1zolpFPiSYvDh1Qivwqar0pVYmNbCSjEgbGIuQh7zMaMdHC1HtvjbI20XFzWHyP/cW2YKszlfqawH+kdHSp4ANIjc7GCAjGJNxm33iMNwcFAgMBAAECggEAL47YakkzjZheKp3U6mAGDSAXHV6BQrkBY1yPXGstq7B/DZzy4RrF3QOkDf2jys8dCUXTg7YjrhqVqXuNdmmphvmGq8dxnFDeDxb6wZWE3GdlUzfYK77rdGp2cVuYtMhI05LwOmPSN/bDXk9eK4bDhTTy+lgomOH/aYcntXkEpIfVQ1kVs7RLvBs3tF3QfsL7t+aqphUlbyVRxCzogK3EDnLD0NODrydx5xB2UMKcxrQD8mVl8IhyBUeluWmcqVkIv7z9C9Y6s9HgcQdxsxhClymAsXtjkZVyP/xst9iwIxOyTijffcqbQOPtB9w1d7GWUrdpwCys0TveJslU7zo6jQKBgQD3VOJSiJuENck71q2Sg4yP0ytBNWVO7xLeTDc6OPEuhqtennWYFeprdplL8aejHqPFiNi7L2QVguP1JDLWPPu+RHHsZDtvG+stssE9Z+oVzBowDJZO1EvBH7nvqgxFz4utoDIrQmkbCcsBqOqwv1i7UdJ0DPIofZE/u0G8wONriwKBgQDc02xS5HZ8ysxEdhL9dC8FSvd12lHocEuBML5ufCkK4SUo8EFeg8k+2UVwd0xXwFNv3nKRPfr/yOQ0CRlKTo3IXXj4Uie+ww3j1jWIMPzC5Oo7IUHRd69KfLvG5N9byGv4wdsPKsXsGrUlvP4meD1U9fujxJdE9RC9evZss33prwKBgAQE7BydPbG7UgbX6UAtRRZ9PwGzRW8v8WWNZYRbsoeoBpbmClErYgDXD4ytY6UB9XVbUPJRxdWXp+6u5OiYWxrvb86AnnqiwIKgmgVOb/5kr7RCMBsd1hFQW6wqXkKwKbvrk4UiciTPVu4y+YVfxqhcnwflwfWofLjFaT8Q/2EbAoGANkdtr+5iRYhfr1BKmKwvRqDHtNtGGNlJZecCWAwC1p7C0I5FsyK3m9AyJlPcmxE2MSA/jv3qLWdG2JeH9ODcLuzy6C7hgB1X07H6lJBeANXd0Uz6ba96kdeZHGlzkY7xI0MbQl4kKkXiUvVijzgs8y5HfVi8SgHm7HxGCDASehcCgYEAnw1yu4eaWqsq7ECyjEBM7sQcMVGypiG3VupzLKA75iPkg/E+peUZyDRg7LPCiX/UcW22bliUw1ASRzY+thuVlGWC2CPah95Z4m+H4cJVSEEqKUbYRGfsDlDIJNxPihGvhoTniKZwvpUacbAhop7rbiAVGx+RJ+tFG8P56AbvBVE="
+  action(target_name) {
+    script = "//chrome/browser/resources/chromeos/accessibility/chromevox/tools/generate_manifest.py"
+    inputs = [
+      version_file,
+      version_script,
+    ]
+    sources = [
+      template_file,
+    ]
+    outputs = [
+      output_file,
+    ]
+    args = [
+      "--key=$key",
+      "--version_file=" + rebase_path(version_file, root_build_dir),
+      "--output_manifest=" + rebase_path(output_file, root_build_dir),
+    ]
+    if (defined(invoker.is_guest_manifest) && invoker.is_guest_manifest) {
+      args += [ "--is_guest_manifest=1" ]
+    }
+    args += rebase_path(sources, root_build_dir)
+  }
+}
+
+manifest("switch_access_manifest") {
+  output_file = "$switch_access_dir/manifest.json"
+}
+
+manifest("switch_access_guest_manifest") {
+  output_file = "$switch_access_dir/manifest_guest.json"
+  is_guest_manifest = true
+}
+
+js_type_check("closure_compile") {
+  deps = [
+    ":auto_scan_manager",
+    ":back_button_node",
+    ":background",
+    ":commands",
+    ":event_helper",
+    ":focus_ring_manager",
+    ":group_node",
+    ":keyboard_node",
+    ":menu_manager",
+    ":menu_panel",
+    ":menu_panel_interface",
+    ":metrics",
+    ":navigation_manager",
+    ":node_wrapper",
+    ":preferences",
+    ":rect_helper",
+    ":switch_access",
+    ":switch_access_constants",
+    ":switch_access_interface",
+    ":switch_access_node",
+    ":switch_access_predicate",
+    ":system_menu_node",
+    ":text_navigation_manager",
+    "../chromevox:constants",
+    "../chromevox:tree_walker",
+    "../select_to_speak:closure_shim",
+  ]
+}
+
+js_library("auto_scan_manager") {
+  deps = [
+    ":switch_access_constants",
+    ":switch_access_interface",
+  ]
+}
+
+js_library("background") {
+  deps = [
+    ":switch_access",
+  ]
+  externs_list = [ "$externs_path/chrome_extensions.js" ]
+}
+
+js_library("back_button_node") {
+  sources = [
+    "nodes/back_button_node.js",
+  ]
+  deps = [
+    ":rect_helper",
+    ":switch_access_constants",
+    ":switch_access_node",
+  ]
+  externs_list = [
+    "$externs_path/accessibility_private.js",
+    "$externs_path/automation.js",
+  ]
+}
+
+js_library("commands") {
+  deps = [
+    ":switch_access_interface",
+  ]
+  externs_list = [ "$externs_path/accessibility_private.js" ]
+}
+
+js_library("event_helper") {
+  externs_list = [ "$externs_path/accessibility_private.js" ]
+}
+
+js_library("focus_ring_manager") {
+  deps = [
+    ":menu_panel_interface",
+    ":node_wrapper",
+    ":switch_access_node",
+  ]
+  externs_list = [ "$externs_path/accessibility_private.js" ]
+}
+
+js_library("group_node") {
+  sources = [
+    "nodes/group_node.js",
+  ]
+  deps = [
+    ":back_button_node",
+    ":node_wrapper",
+    ":rect_helper",
+    ":switch_access_constants",
+    ":switch_access_node",
+  ]
+  externs_list = [
+    "$externs_path/accessibility_private.js",
+    "$externs_path/automation.js",
+  ]
+}
+
+js_library("keyboard_node") {
+  sources = [
+    "nodes/keyboard_node.js",
+  ]
+  deps = [
+    ":event_helper",
+    ":group_node",
+    ":node_wrapper",
+    ":rect_helper",
+    ":switch_access_constants",
+    ":switch_access_node",
+    ":switch_access_predicate",
+    "../chromevox:constants",
+    "../chromevox:tree_walker",
+  ]
+  externs_list = [
+    "$externs_path/accessibility_private.js",
+    "$externs_path/automation.js",
+  ]
+}
+
+js_library("menu_manager") {
+  deps = [
+    ":event_helper",
+    ":menu_panel_interface",
+    ":metrics",
+    ":node_wrapper",
+    ":rect_helper",
+    ":switch_access_constants",
+    ":switch_access_node",
+    ":switch_access_predicate",
+    ":text_navigation_manager",
+    "../chromevox:constants",
+    "../chromevox:tree_walker",
+  ]
+  externs_list = [
+    "$externs_path/accessibility_private.js",
+    "$externs_path/automation.js",
+    "$externs_path/clipboard.js",
+  ]
+}
+
+js_library("menu_panel") {
+  deps = [
+    ":menu_manager",
+    ":switch_access_constants",
+    ":switch_access_interface",
+  ]
+  externs_list = [ "$externs_path/chrome_extensions.js" ]
+}
+
+js_library("menu_panel_interface") {
+}
+
+js_library("metrics") {
+  deps = [
+    ":switch_access_constants",
+  ]
+  externs_list = [ "$externs_path/metrics_private.js" ]
+}
+
+js_library("navigation_manager") {
+  deps = [
+    ":focus_ring_manager",
+    ":keyboard_node",
+    ":menu_manager",
+    ":menu_panel_interface",
+    ":metrics",
+    ":node_wrapper",
+    ":switch_access_constants",
+    ":switch_access_node",
+    ":switch_access_predicate",
+    ":system_menu_node",
+  ]
+  externs_list = [
+    "$externs_path/accessibility_private.js",
+    "$externs_path/automation.js",
+  ]
+}
+
+js_library("node_wrapper") {
+  sources = [
+    "nodes/node_wrapper.js",
+  ]
+  deps = [
+    ":back_button_node",
+    ":switch_access_constants",
+    ":switch_access_node",
+    ":switch_access_predicate",
+    "../chromevox:constants",
+    "../chromevox:tree_walker",
+  ]
+  externs_list = [
+    "$externs_path/accessibility_private.js",
+    "$externs_path/automation.js",
+  ]
+}
+
+js_library("preferences") {
+  deps = [
+    ":switch_access_constants",
+    ":switch_access_interface",
+  ]
+  externs_list = [ "$externs_path/settings_private.js" ]
+}
+
+js_library("rect_helper") {
+  externs_list = [ "$externs_path/accessibility_private.js" ]
+}
+
+js_library("switch_access") {
+  deps = [
+    ":auto_scan_manager",
+    ":commands",
+    ":menu_manager",
+    ":menu_panel_interface",
+    ":navigation_manager",
+    ":preferences",
+    ":switch_access_constants",
+    ":switch_access_interface",
+    "../chromevox:constants",
+    "../chromevox:tree_walker",
+  ]
+  externs_list = [
+    "$externs_path/automation.js",
+    "$externs_path/command_line_private.js",
+    "$externs_path/metrics_private.js",
+  ]
+}
+
+js_library("switch_access_constants") {
+}
+
+js_library("switch_access_interface") {
+  deps = [
+    ":menu_panel_interface",
+  ]
+}
+
+js_library("switch_access_node") {
+  sources = [
+    "nodes/switch_access_node.js",
+  ]
+  deps = [
+    ":switch_access_constants",
+  ]
+  externs_list = [
+    "$externs_path/accessibility_private.js",
+    "$externs_path/automation.js",
+  ]
+}
+
+js_library("switch_access_predicate") {
+  deps = [
+    ":switch_access_constants",
+    ":switch_access_node",
+  ]
+  externs_list = [ "$externs_path/automation.js" ]
+}
+
+js_library("system_menu_node") {
+  sources = [
+    "nodes/system_menu_node.js",
+  ]
+  deps = [
+    ":event_helper",
+    ":node_wrapper",
+    ":switch_access_constants",
+    ":switch_access_node",
+  ]
+  externs_list = [ "$externs_path/automation.js" ]
+}
+
+js_library("text_navigation_manager") {
+  deps = [
+    ":event_helper",
+  ]
+  externs_list = [
+    "$externs_path/accessibility_private.js",
+    "$externs_path/automation.js",
+  ]
+}

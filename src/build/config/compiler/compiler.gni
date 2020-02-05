@@ -1,0 +1,296 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/chrome_build.gni")
+import("//build/config/chromecast_build.gni")
+import("//build/config/chromeos/args.gni")
+import("//build/config/compiler/pgo/pgo.gni")
+import("//build/config/sanitizers/sanitizers.gni")
+import("//build/toolchain/goma.gni")
+import("//build/toolchain/toolchain.gni")
+import("//build_overrides/build.gni")
+
+if (is_android) {
+  import("//build/config/android/abi.gni")
+}
+if (current_cpu == "arm" || current_cpu == "arm64") {
+  import("//build/config/arm.gni")
+}
+
+if (is_mac) {
+  import("//build/config/mac/symbols.gni")
+}
+
+declare_args() {
+  # How many symbols to include in the build. This affects the performance of
+  # the build since the symbols are large and dealing with them is slow.
+  #   2 means regular build with symbols.
+  #   1 means minimal symbols, usually enough for backtraces only. Symbols with
+  # internal linkage (static functions or those in anonymous namespaces) may not
+  # appear when using this level.
+  #   0 means no symbols.
+  #   -1 means auto-set according to debug/release and platform.
+  symbol_level = -1
+
+  # Android-only: Strip the debug info of libraries within lib.unstripped to
+  # reduce size. As long as symbol_level > 0, this will still allow stacks to be
+  # symbolized.
+  strip_debug_info = false
+
+  # Compile in such a way as to enable profiling of the generated code. For
+  # example, don't omit the frame pointer and leave in symbols.
+  enable_profiling = false
+
+  # use_debug_fission: whether to use split DWARF debug info
+  # files. This can reduce link time significantly, but is incompatible
+  # with some utilities such as icecc and ccache. Requires gold and
+  # gcc >= 4.8 or clang.
+  # http://gcc.gnu.org/wiki/DebugFission
+  #
+  # This is a placeholder value indicating that the code below should set
+  # the default.  This is necessary to delay the evaluation of the default
+  # value expression until after its input values such as use_gold have
+  # been set, e.g. by a toolchain_args() block.
+  use_debug_fission = "default"
+
+  # Enables support for ThinLTO, which links 3x-10x faster than full LTO. See
+  # also http://blog.llvm.org/2016/06/thinlto-scalable-and-incremental-lto.html
+  use_thin_lto = is_cfi || (is_android && is_official_build)
+
+  # Limit the number of jobs (threads/processes) the linker is allowed
+  # to use (for linkers that support this).
+  max_jobs_per_link = 8
+
+  # Tell VS to create a PDB that references information in .obj files rather
+  # than copying it all. This should improve linker performance. mspdbcmf.exe
+  # can be used to convert a fastlink pdb to a normal one.
+  is_win_fastlink = false
+
+  # Whether or not we should turn on incremental WPO. Only affects the VS
+  # Windows build.
+  use_incremental_wpo = false
+
+  # Whether we're using a sample profile collected on an architecture different
+  # than the one we're compiling for.
+  #
+  # It's currently not possible to collect AFDO profiles on anything but
+  # x86{,_64}.
+  using_mismatched_sample_profile = current_cpu != "x64" && current_cpu != "x86"
+
+  # Whether an error should be raised on attempts to make debug builds with
+  # is_component_build=false. Very large debug symbols can have unwanted side
+  # effects so this is enforced by default for chromium.
+  forbid_non_component_debug_builds = build_with_chromium
+}
+
+assert(!is_cfi || use_thin_lto, "CFI requires ThinLTO")
+
+# Exclude unwind tables for official builds as unwinding can be done from stack
+# dumps produced by Crashpad at a later time "offline" in the crash server.
+# For unofficial (e.g. development) builds and non-Chrome branded (e.g. Cronet
+# which doesn't use Crashpad, crbug.com/479283) builds it's useful to be able
+# to unwind at runtime.
+exclude_unwind_tables =
+    is_official_build || (is_chromecast && !is_cast_desktop_build &&
+                          !is_debug && !cast_is_debug && !is_fuchsia)
+
+# If true, optimize for size. Does not affect windows builds.
+# Linux & Mac favor speed over size.
+# TODO(brettw) it's weird that Mac and desktop Linux are different. We should
+# explore favoring size over speed in this case as well.
+optimize_for_size = is_android || is_chromecast || is_fuchsia || is_ios
+
+declare_args() {
+  # Whether we should consider the profile we're using to be accurate. Accurate
+  # profiles have the benefit of (potentially substantial) binary size
+  # reductions, by instructing the compiler to optimize cold and uncovered
+  # functions heavily for size. This often comes at the cost of performance.
+  sample_profile_is_accurate = optimize_for_size
+}
+
+# Determine whether to enable or disable frame pointers, based on the platform
+# and build arguments.
+if (is_mac || is_ios || is_linux) {
+  enable_frame_pointers = true
+} else if (is_win) {
+  # 64-bit Windows ABI doesn't support frame pointers.
+  if (current_cpu == "x64") {
+    enable_frame_pointers = false
+  } else {
+    enable_frame_pointers = true
+  }
+} else if (is_chromeos) {
+  # ChromeOS generally prefers frame pointers, to support CWP.
+  # However, Clang does not currently generate usable frame pointers in ARM
+  # 32-bit builds (https://bugs.llvm.org/show_bug.cgi?id=18505) so disable them
+  # there to avoid the unnecessary overhead.
+  enable_frame_pointers = current_cpu != "arm"
+} else if (is_android) {
+  enable_frame_pointers =
+      enable_profiling ||
+      # Ensure that stacks from arm64 crash dumps are usable (crbug.com/391706).
+      current_cpu == "arm64" ||
+      # For x86 Android, unwind tables are huge without frame pointers
+      # (crbug.com/762629). Enabling frame pointers grows the code size slightly
+      # but overall shrinks binaries considerably by avoiding huge unwind
+      # tables.
+      (current_cpu == "x86" && !exclude_unwind_tables && optimize_for_size) ||
+      using_sanitizer ||
+      # For caller-callee instrumentation version which needs frame pointers to
+      # get the caller address.
+      use_call_graph
+} else {
+  # Explicitly ask for frame pointers, otherwise:
+  # * Stacks may be missing for sanitizer and profiling builds.
+  # * Debug tcmalloc can crash (crbug.com/636489).
+  enable_frame_pointers = using_sanitizer || enable_profiling || is_debug
+}
+
+# In general assume that if we have frame pointers then we can use them to
+# unwind the stack. However, this requires that they are enabled by default for
+# most translation units, that they are emitted correctly, and that the
+# compiler or platform provides a way to access them.
+can_unwind_with_frame_pointers = enable_frame_pointers
+if (current_cpu == "arm" && arm_use_thumb) {
+  # We cannot currently unwind ARM Thumb frame pointers correctly.
+  # See https://bugs.llvm.org/show_bug.cgi?id=18505
+  can_unwind_with_frame_pointers = false
+} else if (is_win) {
+  # Windows 32-bit does provide frame pointers, but the compiler does not
+  # provide intrinsics to access them, so we don't use them.
+  can_unwind_with_frame_pointers = false
+}
+
+assert(!can_unwind_with_frame_pointers || enable_frame_pointers)
+
+# Unwinding with CFI table is only possible on static library builds and
+# requried only when frame pointers are not enabled.
+can_unwind_with_cfi_table = is_android && !is_component_build &&
+                            !enable_frame_pointers && current_cpu == "arm"
+
+declare_args() {
+  # Whether or not the official builds should be built with full WPO. Enabled by
+  # default for the PGO and the x64 builds.
+  if (chrome_pgo_phase > 0) {
+    full_wpo_on_official = true
+  } else {
+    full_wpo_on_official = false
+  }
+}
+
+declare_args() {
+  # Set to true to use lld, the LLVM linker.
+  use_lld = is_clang && (!is_ios && !is_mac)
+}
+
+declare_args() {
+  # Whether to use the gold linker from binutils instead of lld or bfd.
+  use_gold =
+      !use_lld && !(is_chromecast && is_linux &&
+                    (current_cpu == "arm" || current_cpu == "mipsel")) &&
+      ((is_linux && (current_cpu == "x64" || current_cpu == "x86" ||
+                     current_cpu == "arm" || current_cpu == "arm64" ||
+                     current_cpu == "mipsel" || current_cpu == "mips64el")) ||
+       (is_android && (current_cpu == "x86" || current_cpu == "x64" ||
+                       current_cpu == "arm" || current_cpu == "arm64")))
+}
+
+# Use relative paths for debug info. This is important to make the build
+# results independent of the checkout and build directory names, which
+# in turn is important for goma compile hit rate.
+# Setting this to true may make it harder to debug binaries on Linux, see
+# https://chromium.googlesource.com/chromium/src/+/master/docs/linux_debugging.md#Source-level-debug-with-fdebug_compilation_dir
+# It's not clear if the crash server will correctly handle dSYMs with relative
+# paths, so we disable this feature for official benefit. The main benefit is
+# deterministic builds to reduce compile times, so this is less relevant for
+# official builders.
+strip_absolute_paths_from_debug_symbols_default =
+    is_android || is_fuchsia || is_nacl || (is_win && use_lld) || is_linux ||
+    (is_mac && !enable_dsyms)
+
+# If the platform uses stripped absolute paths by default, then we don't expose
+# it as a configuration option. If this is causing problems, please file a bug.
+if (strip_absolute_paths_from_debug_symbols_default) {
+  strip_absolute_paths_from_debug_symbols = true
+} else {
+  declare_args() {
+    strip_absolute_paths_from_debug_symbols = false
+  }
+}
+
+# If it wasn't manually set, set to an appropriate default.
+assert(symbol_level >= -1 && symbol_level <= 2, "Invalid symbol_level")
+if (symbol_level == -1) {
+  if (is_android && !is_component_build) {
+    # Reduce symbol level when it will cause invalid elf files to be created
+    # (due to file size). https://crbug.com/648948.
+    symbol_level = 1
+  } else if (is_chromeos_device) {
+    # Use lower symbol level in Simple Chrome build for faster link time.
+    # For Simple Chrome, this should take precedence over is_official_build,
+    # turned on by --internal.
+    if ((target_cpu == "x64" || target_cpu == "x86") && !is_debug) {
+      # For release x86/x64 build, specify symbol_level=0 for faster link time.
+      # x86/x64 shows backtraces with symbol_level=0 (arm requires
+      # symbol_level=1).
+      symbol_level = 0
+    } else {
+      symbol_level = 1
+    }
+  } else if (using_sanitizer) {
+    # Sanitizers need line table info for stack traces. They don't need type
+    # info or variable info, so we can leave that out to speed up the build.
+    # Sanitizers also require symbols for filename suppressions to work.
+    symbol_level = 1
+  } else if ((!is_nacl && !is_linux && !is_fuchsia && current_os != "aix") ||
+             is_debug || is_official_build || is_chromecast) {
+    # Linux builds slower by having symbols as part of the target binary,
+    # whereas Mac and Windows have them separate, so in Release Linux, default
+    # them off, but keep them on for Official builds and Chromecast builds.
+    symbol_level = 2
+  } else {
+    symbol_level = 0
+  }
+} else if (symbol_level == 2) {
+  if (is_win) {
+    # See crbug.com/630074
+    assert(is_win_fastlink || use_lld || !use_goma || is_clang,
+           "VC++ goma builds that use symbol_level 2 must use " +
+               "is_win_fastlink or use_lld.")
+  }
+}
+
+# Non-component debug builds with symbol_level = 2 are an undesirable (very slow
+# build times) and unsupported (some test binaries will fail with > 4 GB PDBs)
+# combination. This is only checked when current_toolchain == default_toolchain
+# because the is_component_build flag is set to false in various components of
+# the build (like nacl) and we don't want to assert on those.
+# iOS does not support component builds so add an exception for this platform.
+if (forbid_non_component_debug_builds) {
+  assert(symbol_level != 2 || current_toolchain != default_toolchain ||
+             is_component_build || !is_debug || is_ios,
+         "Can't do non-component debug builds at symbol_level=2")
+}
+
+# Assert that the configuration isn't going to hit https://crbug.com/648948.
+# An exception is made when target_os == "chromeos" as we only use the Android
+# toolchain there to build relatively small binaries.
+assert(ignore_elf32_limitations || !is_android || target_os == "chromeos" ||
+           is_component_build || symbol_level < 2,
+       "Android 32-bit non-component builds cannot have symbol_level=2 " +
+           "due to 4GiB file size limit, see https://crbug.com/648948. " +
+           "If you really want to try this out, " +
+           "set ignore_elf32_limitations=true.")
+
+# This variable is true if the current toolchain is either the default
+# toolchain, or, on Android, the secondary ABI toolchain. In other words, it's
+# a toolchain that generates targets for the product, as opposed to the host
+# OS. It can be used in situations where we wish to avoid doing work on the
+# host toolchain, but we don't want to break Android's secondary ABI.
+# Ie. "current_toolchain == default_toolchain" is not a good way to infer
+# "not the host toolchain".
+is_a_target_toolchain =
+    current_toolchain == default_toolchain ||
+    (is_android && defined(android_secondary_abi_toolchain) &&
+     current_toolchain == android_secondary_abi_toolchain)

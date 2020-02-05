@@ -1,0 +1,302 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+if (is_android) {
+  import("//build/config/android/rules.gni")
+}
+
+static_library("feature_list") {
+  sources = [
+    "invalidation_switches.cc",
+    "invalidation_switches.h",
+  ]
+
+  deps = [
+    "//base",
+  ]
+}
+
+static_library("impl") {
+  sources = [
+    "channels_states.cc",
+    "channels_states.h",
+    "deprecated_invalidator_registrar.cc",
+    "deprecated_invalidator_registrar.h",
+    "fcm_invalidation_listener.cc",
+    "fcm_invalidation_listener.h",
+    "fcm_invalidation_service.cc",
+    "fcm_invalidation_service.h",
+    "fcm_invalidation_service_base.cc",
+    "fcm_invalidation_service_base.h",
+    "fcm_network_handler.cc",
+    "fcm_network_handler.h",
+    "fcm_sync_network_channel.cc",
+    "fcm_sync_network_channel.h",
+    "invalidation_logger.cc",
+    "invalidation_logger.h",
+    "invalidation_logger_observer.h",
+    "invalidation_prefs.cc",
+    "invalidation_prefs.h",
+    "invalidation_service_util.cc",
+    "invalidation_service_util.h",
+    "invalidation_state_tracker.cc",
+    "invalidation_state_tracker.h",
+    "invalidator.cc",
+    "invalidator.h",
+    "invalidator_registrar_with_memory.cc",
+    "invalidator_registrar_with_memory.h",
+    "invalidator_storage.cc",
+    "invalidator_storage.h",
+    "mock_ack_handler.cc",
+    "mock_ack_handler.h",
+    "per_user_topic_registration_manager.cc",
+    "per_user_topic_registration_manager.h",
+    "per_user_topic_registration_request.cc",
+    "per_user_topic_registration_request.h",
+    "profile_identity_provider.cc",
+    "profile_identity_provider.h",
+    "profile_invalidation_provider.cc",
+    "profile_invalidation_provider.h",
+    "status.cc",
+    "status.h",
+    "unacked_invalidation_set.cc",
+    "unacked_invalidation_set.h",
+  ]
+
+  public_deps = [
+    ":feature_list",
+    "//components/invalidation/public",
+  ]
+  deps = [
+    "//base",
+    "//base:i18n",
+    "//components/gcm_driver",
+    "//components/gcm_driver/common",
+    "//components/keyed_service/core",
+    "//components/pref_registry",
+    "//components/prefs",
+    "//components/signin/public/identity_manager",
+    "//google_apis",
+    "//jingle:notifier",
+    "//net:net",
+    "//services/data_decoder/public/cpp",
+    "//services/network/public/cpp",
+    "//services/network/public/mojom",
+
+    # TODO(sync): Remove this (http://crbug.com/133352);
+    "//third_party/protobuf:protobuf_lite",
+  ]
+
+  if (!is_android) {
+    sources += [
+      "gcm_invalidation_bridge.cc",
+      "gcm_invalidation_bridge.h",
+      "gcm_network_channel.cc",
+      "gcm_network_channel.h",
+      "gcm_network_channel_delegate.h",
+      "invalidation_notifier.cc",
+      "invalidation_notifier.h",
+      "network_channel.h",
+      "non_blocking_invalidator.cc",
+      "non_blocking_invalidator.h",
+      "notifier_reason_util.cc",
+      "notifier_reason_util.h",
+      "push_client_channel.cc",
+      "push_client_channel.h",
+      "registration_manager.cc",
+      "registration_manager.h",
+      "state_writer.h",
+      "sync_invalidation_listener.cc",
+      "sync_invalidation_listener.h",
+      "sync_system_resources.cc",
+      "sync_system_resources.h",
+      "ticl_invalidation_service.cc",
+      "ticl_invalidation_service.h",
+    ]
+  }
+
+  if (is_android) {
+    sources += [
+      "invalidation_service_android.cc",
+      "invalidation_service_android.h",
+    ]
+    deps += [ ":jni_headers" ]
+  }
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "fcm_invalidation_listener_unittest.cc",
+    "fcm_invalidation_service_unittest.cc",
+    "fcm_network_handler_unittests.cc",
+    "invalidation_logger_unittest.cc",
+    "invalidator_registrar_with_memory_unittest.cc",
+    "per_user_topic_registration_manager_unittest.cc",
+    "per_user_topic_registration_request_unittest.cc",
+  ]
+  deps = [
+    ":impl",
+    ":test_support",
+    "//base",
+    "//base/test:test_support",
+    "//components/gcm_driver:test_support",
+    "//components/gcm_driver/instance_id:test_support",
+    "//components/prefs",
+    "//components/prefs:test_support",
+    "//components/signin/public/identity_manager:test_support",
+    "//components/sync_preferences:test_support",
+    "//google_apis:test_support",
+    "//google_apis/gcm:gcm",
+    "//net",
+    "//net:test_support",
+    "//services/data_decoder/public/cpp:test_support",
+    "//services/network:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+
+  if (is_android) {
+    sources += [ "invalidation_service_android_unittest.cc" ]
+    deps += [ ":jni_headers" ]
+  } else {
+    # Non-Android tests.
+    sources += [
+      "deprecated_invalidator_registrar_unittest.cc",
+      "fake_invalidator_unittest.cc",
+      "gcm_invalidation_bridge_unittest.cc",
+      "gcm_network_channel_unittest.cc",
+      "invalidation_notifier_unittest.cc",
+      "invalidator_storage_unittest.cc",
+      "non_blocking_invalidator_unittest.cc",
+      "object_id_invalidation_map_unittest.cc",
+      "push_client_channel_unittest.cc",
+      "registration_manager_unittest.cc",
+      "single_object_invalidation_set_unittest.cc",
+      "sync_invalidation_listener_unittest.cc",
+      "sync_system_resources_unittest.cc",
+      "ticl_invalidation_service_unittest.cc",
+      "unacked_invalidation_set_unittest.cc",
+    ]
+  }
+}
+
+static_library("test_support") {
+  testonly = true
+  sources = [
+    "fake_invalidation_handler.cc",
+    "fake_invalidation_handler.h",
+    "fake_invalidation_service.cc",
+    "fake_invalidation_service.h",
+    "fake_invalidation_state_tracker.cc",
+    "fake_invalidation_state_tracker.h",
+    "fake_invalidator.cc",
+    "fake_invalidator.h",
+    "fake_system_resources.cc",
+    "fake_system_resources.h",
+    "invalidation_service_test_template.cc",
+    "invalidation_service_test_template.h",
+    "invalidation_test_util.cc",
+    "invalidation_test_util.h",
+    "invalidator_test_template.cc",
+    "invalidator_test_template.h",
+    "object_id_invalidation_map_test_util.cc",
+    "object_id_invalidation_map_test_util.h",
+    "unacked_invalidation_set_test_util.cc",
+    "unacked_invalidation_set_test_util.h",
+  ]
+
+  public_deps = [
+    ":impl",
+    "//jingle:notifier_test_util",
+    "//third_party/cacheinvalidation",
+  ]
+  deps = [
+    "//base",
+    "//components/gcm_driver:test_support",
+    "//components/keyed_service/core",
+    "//jingle:notifier",
+    "//net",
+    "//testing/gmock",
+    "//testing/gtest",
+
+    # TODO(sync): Remove this (http://crbug.com/133352);
+    "//third_party/protobuf:protobuf_lite",
+
+    # "//third_party/cacheinvalidation/src/google/cacheinvalidation:cacheinvalidation_proto_cpp",
+  ]
+
+  if (is_android) {
+    deps += [ ":jni_headers" ]
+  }
+}
+
+if (is_android) {
+  android_library("java") {
+    deps = [
+      ":proto_java",
+      "//base:base_java",
+      "//base:jni_java",
+      "//components/signin/core/browser/android:java",
+      "//components/signin/public/identity_manager/android:java",
+      "//components/sync/android:sync_java",
+      "//third_party/android_deps:com_google_protobuf_protobuf_lite_java",
+      "//third_party/cacheinvalidation:cacheinvalidation_javalib",
+      "//third_party/cacheinvalidation:cacheinvalidation_proto_java",
+      "//third_party/jsr-305:jsr_305_javalib",
+    ]
+    annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
+    java_files = [
+      "android/java/src/org/chromium/components/invalidation/InvalidationClientService.java",
+      "android/java/src/org/chromium/components/invalidation/InvalidationService.java",
+      "android/java/src/org/chromium/components/invalidation/PendingInvalidation.java",
+    ]
+  }
+  proto_java_library("proto_java") {
+    proto_path = "android/proto"
+    sources = [
+      "$proto_path/serialized_invalidation.proto",
+    ]
+  }
+  android_resources("javatests__resources") {
+    testonly = true
+    resource_dirs = []
+    android_manifest = "android/javatests/AndroidManifest.xml"
+  }
+  android_library("javatests") {
+    testonly = true
+    deps = [
+      ":java",
+      ":javatests__resources",
+      "//base:base_java",
+      "//base:base_java_test_support",
+      "//components/signin/core/browser/android:java",
+      "//components/sync/android:sync_java",
+      "//third_party/android_sdk:android_test_base_java",
+      "//third_party/android_sdk:android_test_runner_java",
+      "//third_party/android_support_test_runner:runner_java",
+      "//third_party/cacheinvalidation:cacheinvalidation_javalib",
+      "//third_party/cacheinvalidation:cacheinvalidation_proto_java",
+      "//third_party/junit",
+    ]
+    java_files = [
+      "android/javatests/src/org/chromium/components/invalidation/InvalidationClientServiceTest.java",
+      "android/javatests/src/org/chromium/components/invalidation/TestableInvalidationClientService.java",
+    ]
+  }
+  junit_binary("components_invalidation_impl_junit_tests") {
+    java_files = [ "android/junit/src/org/chromium/components/invalidation/PendingInvalidationTest.java" ]
+    deps = [
+      ":java",
+      "//base:base_java",
+      "//base:base_java_test_support",
+      "//base:base_junit_test_support",
+    ]
+  }
+  generate_jni("jni_headers") {
+    sources = [
+      "android/java/src/org/chromium/components/invalidation/InvalidationService.java",
+    ]
+  }
+}

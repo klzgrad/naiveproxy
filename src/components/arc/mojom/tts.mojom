@@ -1,0 +1,46 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+// Next MinVersion: 2
+
+module arc.mojom;
+
+[Extensible]
+enum TtsEventType {
+  START = 0,
+  END,
+  INTERRUPTED,
+  ERROR
+};
+
+// Represents a tts utterance sent from Chrome to Android.
+struct TtsUtterance {
+  uint32 utteranceId;
+  string text;
+  double rate;
+  double pitch;
+};
+
+// Next Method ID: 1
+interface TtsHost {
+  // Notifies Chrome of Android tts events.
+  OnTtsEvent@0(uint32 utteranceId,
+               TtsEventType event_type,
+               uint32 charIndex,
+               string error_msg);
+};
+
+// Next Method ID: 4
+interface TtsInstance {
+  // DEPRECATED: Please use Init@3 instead.
+  InitDeprecated@0(TtsHost host_ptr);
+
+  // Establishes full-duplex communication with the host.
+  [MinVersion=1] Init@3(TtsHost host_ptr) => ();
+
+  // Sends an utterance to Android for synthesis.
+  Speak@1(TtsUtterance utterance);
+
+  // Sends a stop request to Android text to speech.
+  Stop@2();
+};

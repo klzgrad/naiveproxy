@@ -1,0 +1,204 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//base/android/proguard/proguard.gni")
+import("//build/config/android/config.gni")
+import("//build/config/android/rules.gni")
+import("//build/util/version.gni")
+import("//chrome/android/chrome_public_apk_tmpl.gni")
+
+if (!defined(default_trichrome_certdigest)) {
+  default_trichrome_certdigest =
+      "32a2fc74d731105859e5a85df16d95f102d85b22099b8064c5d8915c61dad1e0"
+}
+
+declare_args() {
+  # The package name for the Trichrome static shared library on Android.
+  trichrome_library_package = "org.chromium.trichromelibrary"
+
+  # The SHA256 certificate digest for the Trichrome static shared library on
+  # Android. You can use "apksigner verify --print-certs" on the signed APK to
+  # calculate the correct digest.
+  trichrome_certdigest = default_trichrome_certdigest
+
+  # WIP: Enable synchronized proguard for Trichrome. (http://crbug.com/901465)
+  # Only affects trichrome targets when !is_java_debug.
+  enable_trichrome_synchronized_proguard = false
+}
+
+trichrome_jinja_variables = [
+  "min_sdk_version=29",
+  "target_sdk_version=$android_sdk_version",
+  "trichrome_library=$trichrome_library_package",
+  "trichrome_certdigest=$trichrome_certdigest",
+  "use32bitAbi=android:use32bitAbi=\"true\"",
+  "include_arcore_manifest_flag=true",
+]
+
+trichrome_synchronized_proguard =
+    enable_trichrome_synchronized_proguard && !is_java_debug
+
+template("trichrome_library_apk_tmpl") {
+  android_apk(target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "android_manifest",
+                             "android_manifest_dep",
+                             "apk_name",
+                             "min_sdk_version",
+                             "proguard_jar_path",
+                             "shared_resources_whitelist_target",
+                             "shared_resources_whitelist_locales",
+                             "static_library_dependent_targets",
+                             "target_sdk_version",
+                           ])
+
+    # TODO(torne): since there's no real java code in the library right now,
+    # leave out the build hooks and let them get compiled into each APK. Later
+    # this should probably be in the library.
+    no_build_hooks = true
+
+    alternative_android_sdk_dep = webview_framework_dep
+    if (trichrome_synchronized_proguard) {
+      # TODO(crbug.com/956839): Remove this once R8 fixes the class merging
+      # and/or inlining bugs.
+      disable_r8_outlining = true
+    } else {
+      # TODO(crbug.com/901465): Remove r_java_root_package_name once shared
+      # Java code is moved to the shared library even in debug.
+      r_java_root_package_name = "trichrome_lib"
+      app_as_shared_lib = true
+    }
+
+    # No support for this has been added, also not supported by test runner
+    # since trichrome library is used in "additional_apks" in the trichrome
+    # bundle smoke tests.
+    never_incremental = true
+
+    uncompress_shared_libraries = true
+    uncompress_dex = true
+    version_name = chrome_version_name
+
+    if (android_64bit_target_cpu) {
+      if (invoker.is_64_bit_browser) {
+        if (invoker.include_32_bit_webview) {
+          version_code = trichrome_64_32_version_code
+        } else {
+          version_code = trichrome_64_version_code
+        }
+      } else {
+        if (invoker.include_64_bit_webview) {
+          version_code = trichrome_32_64_version_code
+        } else {
+          version_code = trichrome_32_version_code
+        }
+      }
+    } else {
+      version_code = trichrome_version_code
+    }
+
+    min_sdk_version = 29
+    target_sdk_version = android_sdk_version
+    if (!enable_trichrome_synchronized_proguard) {
+      generate_buildconfig_java = false
+    } else {
+      product_version_resources_dep =
+          "//chrome/android:product_version_resources"
+    }
+
+    # TODO(torne): using icon_resources just to get a temporary icon
+    deps = [
+      "//android_webview/nonembedded:icon_resources",
+      "//third_party/icu:icu_assets",
+    ]
+
+    _native_lib_file =
+        rebase_path("$root_gen_dir/CHROME_VERSION.json", root_out_dir)
+    native_lib_version_arg = "@FileArg($_native_lib_file:full-quoted)"
+    native_lib_version_rule = "//build/util:chrome_version_json"
+
+    # Flag whether additional deps and libs should be included for each ABI.
+    _include_primary_support = false
+    _include_secondary_support = false
+
+    if (android_64bit_target_cpu) {
+      # Include the actual browser-bitness libmonochrome library, dependencies
+      # (crashpad and linker), and an opposite-bitness placeholder library to
+      # ensure that the library is treated as multiarch and gets its Java code
+      # precompiled for both architectures.
+      if (invoker.is_64_bit_browser) {
+        shared_libraries = [ "//chrome/android:libmonochrome_64" ]
+        _include_primary_support = true
+        if (invoker.include_32_bit_webview) {
+          secondary_native_lib_placeholders = [ "libdummy.so" ]
+        }
+      } else {
+        secondary_abi_shared_libraries =
+            [ "//chrome/android:monochrome_secondary_abi_lib" ]
+        _include_secondary_support = true
+        if (invoker.include_64_bit_webview) {
+          native_lib_placeholders = [ "libdummy.so" ]
+        }
+      }
+    } else {
+      shared_libraries = [ "//chrome/android:libmonochrome" ]
+      _include_primary_support = true
+    }
+
+    if (_include_primary_support) {
+      deps += [
+        "//chrome/android:chrome_public_v8_assets",
+        "//third_party/crashpad/crashpad/handler:crashpad_handler_trampoline",
+      ]
+      loadable_modules = [ "$root_out_dir/libcrashpad_handler_trampoline.so" ]
+
+      if (chromium_linker_supported) {
+        deps += [ "//base/android/linker:chromium_android_linker" ]
+        loadable_modules += [ "$root_out_dir/libchromium_android_linker.so" ]
+      }
+    }
+    if (_include_secondary_support) {
+      _trampoline =
+          "//third_party/crashpad/crashpad/handler:" +
+          "crashpad_handler_trampoline($android_secondary_abi_toolchain)"
+      deps += [
+        "//android_webview:v8_snapshot_secondary_abi_assets",
+        _trampoline,
+      ]
+      _secondary_out_dir = get_label_info(_trampoline, "root_out_dir")
+      secondary_abi_loadable_modules =
+          [ "$_secondary_out_dir/libcrashpad_handler_trampoline.so" ]
+
+      if (chromium_linker_supported) {
+        deps += [ "//base/android/linker:chromium_android_linker" +
+                  "($android_secondary_abi_toolchain)" ]
+        secondary_abi_loadable_modules +=
+            [ "$_secondary_out_dir/libchromium_android_linker.so" ]
+      }
+    }
+
+    if (!is_java_debug) {
+      proguard_enabled = true
+      proguard_configs = [
+        "//base/android/proguard/chromium_apk.flags",
+        "//base/android/proguard/chromium_code.flags",
+        "//chrome/android/java/trichrome.flags",
+      ]
+      if (trichrome_synchronized_proguard) {
+        proguard_configs += [
+          "//chrome/android/java/static_library_dex_reference_workarounds.flags",
+          "//base/android/proguard/enable_obfuscation.flags",
+        ]
+      } else {
+        # Disabling all obfuscation for the Trichrome library as a temporary
+        # workaround for crbug.com/1012842. There were naming conflicts between
+        # Library and Chrome, since each Proguard run doesn't know about the
+        # other, and thus handed out the first names (a, b, c) to both.
+        proguard_configs +=
+            [ "//base/android/proguard/disable_all_obfuscation.flags" ]
+      }
+    }
+    deps += [ "//chrome/android:trichrome_dummy_resources" ]
+  }
+}

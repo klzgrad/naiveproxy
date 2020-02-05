@@ -1,0 +1,109 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//components/viz/viz.gni")
+import("//testing/libfuzzer/fuzzer_test.gni")
+
+viz_component("host") {
+  defines = [ "VIZ_HOST_IMPLEMENTATION" ]
+
+  sources = [
+    "client_frame_sink_video_capturer.cc",
+    "client_frame_sink_video_capturer.h",
+    "gpu_client.cc",
+    "gpu_client.h",
+    "gpu_client_delegate.h",
+    "gpu_host_impl.cc",
+    "gpu_host_impl.h",
+    "hit_test/hit_test_query.cc",
+    "hit_test/hit_test_query.h",
+    "hit_test/hit_test_region_observer.h",
+    "host_display_client.cc",
+    "host_display_client.h",
+    "host_frame_sink_client.h",
+    "host_frame_sink_manager.cc",
+    "host_frame_sink_manager.h",
+    "host_gpu_memory_buffer_manager.cc",
+    "host_gpu_memory_buffer_manager.h",
+    "renderer_settings_creation.cc",
+    "renderer_settings_creation.h",
+    "viz_host_export.h",
+  ]
+
+  if (is_win) {
+    sources += [
+      "layered_window_updater_impl.cc",
+      "layered_window_updater_impl.h",
+    ]
+  }
+
+  deps = [
+    "//base",
+    "//components/ui_devtools:buildflags",
+    "//components/viz/common",
+    "//gpu/ipc/client",
+    "//gpu/ipc/common",
+    "//services/viz/privileged/mojom",
+    "//ui/base",
+    "//ui/gfx",
+
+    # TODO(kylechar): This is temporary and will be removed when all host to
+    # service communication is over Mojo.
+    "//components/viz/service",
+  ]
+
+  public_deps = [
+    "//gpu/command_buffer/client",
+    "//gpu/ipc/host",
+    "//services/viz/privileged/mojom/compositing",
+    "//services/viz/public/mojom",
+    "//ui/gfx/geometry",
+  ]
+
+  if (is_mac) {
+    deps += [ "//ui/accelerated_widget_mac" ]
+  }
+}
+
+viz_source_set("unit_tests") {
+  testonly = true
+
+  sources = [
+    "hit_test/hit_test_query_unittest.cc",
+    "host_frame_sink_manager_unittest.cc",
+    "host_gpu_memory_buffer_manager_unittest.cc",
+  ]
+
+  deps = [
+    ":host",
+    "//base",
+    "//base/test:test_support",
+    "//components/viz/test:test_support",
+    "//gpu",
+    "//gpu/ipc/host",
+    "//mojo/public/cpp/bindings",
+    "//services/viz/privileged/mojom",
+    "//services/viz/public/mojom",
+    "//testing/gmock",
+    "//testing/gtest",
+
+    # TODO(kylechar): This is temporary and will be removed when all host to
+    # service communication is over Mojo.
+    "//components/viz/service",
+  ]
+}
+
+fuzzer_test("hit_test_query_fuzzer") {
+  sources = [
+    "hit_test/hit_test_query_fuzzer.cc",
+  ]
+
+  libfuzzer_options = [ "max_len=4096" ]
+
+  deps = [
+    ":host",
+    "//base/test:test_support",
+    "//components/viz/test:test_support",
+  ]
+}

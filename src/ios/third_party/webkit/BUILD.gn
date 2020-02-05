@@ -1,0 +1,129 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/gclient_args.gni")
+import("//build/config/ios/ios_sdk.gni")
+
+# Using a locally-built WebKit is only supported for Debug simulator builds.
+_build_custom_webkit = checkout_ios_webkit && is_debug && use_ios_simulator
+
+group("webkit") {
+  if (_build_custom_webkit) {
+    deps = [
+      ":bundle_webkit_frameworks",
+    ]
+  }
+
+  all_dependent_configs = [ ":_webkit_config" ]
+}
+
+if (_build_custom_webkit) {
+  # WebKit is built from source using xcodebuild (invoked via the
+  # build_webkit.py wrapper script).  The WebKit build places its frameworks in
+  # a sub-directory named "Debug-iphonesimulator".
+  _webkit_xcodebuild_out_dir = "Debug-iphonesimulator"
+
+  action("compile_webkit") {
+    visibility = [
+      ":bundle_webkit_frameworks",
+      ":webkit",
+    ]
+
+    script = "build_webkit.py"
+
+    inputs = [
+      # Because it's difficult to list every webkit source file as an input
+      # here, use the ChangeLog files as a proxy to determine whether or not
+      # source files have changed.
+      # TODO(crbug.com/934252): This will not pick up local edits to source
+      # files, so find a way to properly rebuild when those change.
+      "src/Tools/ChangeLog",
+      "src/ChangeLog",
+      "src/Source/WebKit/ChangeLog",
+      "src/Source/JavaScriptCore/ChangeLog",
+      "src/Source/WebKitLegacy/ChangeLog",
+      "src/Source/WebKitLegacy/ios/ChangeLog",
+      "src/Source/WebKitLegacy/mac/ChangeLog",
+      "src/Source/bmalloc/ChangeLog",
+      "src/Source/WebCore/ChangeLog",
+      "src/Source/WTF/ChangeLog",
+      "src/Source/ThirdParty/ChangeLog",
+      "src/WebKitLibraries/ChangeLog",
+    ]
+
+    _framework_out_dir = "$target_out_dir/$_webkit_xcodebuild_out_dir"
+    outputs = [
+      # The frameworks themselves include many resource files, but as a first
+      # step, use just the binaries.
+      "$_framework_out_dir/JavaScriptCore.framework",
+      "$_framework_out_dir/JavaScriptCore.framework/JavaScriptCore",
+      "$_framework_out_dir/WebCore.framework",
+      "$_framework_out_dir/WebCore.framework/WebCore",
+      "$_framework_out_dir/WebKit.framework",
+      "$_framework_out_dir/WebKit.framework/WebKit",
+      "$_framework_out_dir/WebKitLegacy.framework",
+      "$_framework_out_dir/WebKitLegacy.framework/WebKitLegacy",
+      "$_framework_out_dir/com.apple.WebKit.Networking.xpc",
+      "$_framework_out_dir/com.apple.WebKit.Networking.xpc/com.apple.WebKit.Networking.Development",
+      "$_framework_out_dir/com.apple.WebKit.Plugin.64.xpc",
+      "$_framework_out_dir/com.apple.WebKit.Plugin.64.xpc/com.apple.WebKit.Plugin.64.Development",
+      "$_framework_out_dir/com.apple.WebKit.WebContent.Development.xpc",
+      "$_framework_out_dir/com.apple.WebKit.WebContent.Development.xpc/com.apple.WebKit.WebContent.Development.Development",
+      "$_framework_out_dir/com.apple.WebKit.WebContent.xpc",
+      "$_framework_out_dir/com.apple.WebKit.WebContent.xpc/com.apple.WebKit.WebContent.Development",
+    ]
+
+    # TODO(crbug.com/934252): "-j 4" restricts xcodebuild to four simultaneous
+    # jobs. This is intended to prevent overloading the machine, because ninja
+    # will already be spawning a large number of jobs in parallel with
+    # xcodebuild, but it causes the webkit build to run very slowly. Find a way
+    # to increase the parallelism here.
+    args = [
+      "--output_dir",
+      rebase_path("$target_out_dir"),
+      "-j",
+      "4",
+      "-quiet",
+    ]
+  }
+
+  bundle_data("bundle_webkit_frameworks") {
+    public_deps = [
+      ":compile_webkit",
+    ]
+
+    _framework_out_dir = "$target_out_dir/$_webkit_xcodebuild_out_dir"
+    sources = [
+      "$_framework_out_dir/JavaScriptCore.framework",
+      "$_framework_out_dir/WebCore.framework",
+      "$_framework_out_dir/WebKit.framework",
+      "$_framework_out_dir/WebKitLegacy.framework",
+      "$_framework_out_dir/com.apple.WebKit.Networking.xpc",
+      "$_framework_out_dir/com.apple.WebKit.Plugin.64.xpc",
+      "$_framework_out_dir/com.apple.WebKit.WebContent.Development.xpc",
+      "$_framework_out_dir/com.apple.WebKit.WebContent.xpc",
+    ]
+    outputs = [
+      "{{bundle_contents_dir}}/WebKitFrameworks/{{source_file_part}}",
+    ]
+  }
+}
+
+config("_webkit_config") {
+  if (_build_custom_webkit) {
+    # From the ld documentation: "Directories specified with -F are searched in
+    # the order they appear on the command line and before the default search
+    # path."
+    _framework_out_dir = "$target_out_dir/$_webkit_xcodebuild_out_dir"
+    common_flags = [
+      "-F",
+      rebase_path("$_framework_out_dir/", root_build_dir),
+    ]
+
+    cflags = common_flags
+    ldflags = common_flags
+  }
+
+  libs = [ "WebKit.framework" ]
+}

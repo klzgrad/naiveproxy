@@ -1,0 +1,465 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/features.gni")
+import("//build/config/jumbo.gni")
+import("//chrome/common/features.gni")
+import("//components/nacl/features.gni")
+import("//components/offline_pages/buildflags/features.gni")
+import("//components/spellcheck/spellcheck_build_features.gni")
+import("//extensions/buildflags/buildflags.gni")
+import("//media/media_options.gni")
+import("//ppapi/buildflags/buildflags.gni")
+import("//third_party/widevine/cdm/widevine.gni")
+import("//tools/grit/grit_rule.gni")
+
+grit("resources") {
+  source = "resources/renderer_resources.grd"
+  defines = chrome_grit_defines
+  output_dir = "$root_gen_dir/chrome"
+  output_name = "renderer_resources"
+  outputs = [
+    "grit/renderer_resources.h",
+    "renderer_resources_100_percent.pak",
+    "renderer_resources_200_percent.pak",
+    "renderer_resources_300_percent.pak",
+  ]
+  grit_flags = [
+    "-E",
+    "mojom_root=" + rebase_path(root_gen_dir, root_build_dir),
+  ]
+  deps = [
+    "//chrome/common/media_router/mojom:media_controller_js",
+    "//chrome/common/media_router/mojom:media_router_js",
+    "//services/network/public/mojom:mojom_js",
+    "//url/mojom:url_mojom_gurl_js",
+    "//url/mojom:url_mojom_origin_js",
+  ]
+  if (is_chromeos) {
+    deps += [ "//chromeos/services/ime/public/mojom:mojom_js" ]
+  }
+}
+
+jumbo_static_library("renderer") {
+  sources = [
+    "benchmarking_extension.cc",
+    "benchmarking_extension.h",
+    "browser_exposed_renderer_interfaces.cc",
+    "browser_exposed_renderer_interfaces.h",
+    "chrome_content_renderer_client.cc",
+    "chrome_content_renderer_client.h",
+    "chrome_render_frame_observer.cc",
+    "chrome_render_frame_observer.h",
+    "chrome_render_thread_observer.cc",
+    "chrome_render_thread_observer.h",
+    "content_settings_agent_impl.cc",
+    "content_settings_agent_impl.h",
+    "custom_menu_commands.h",
+    "instant_restricted_id_cache.h",
+    "loadtimes_extension_bindings.cc",
+    "loadtimes_extension_bindings.h",
+    "media/chrome_key_systems.cc",
+    "media/chrome_key_systems.h",
+    "media/chrome_key_systems_provider.cc",
+    "media/chrome_key_systems_provider.h",
+    "media/flash_embed_rewrite.cc",
+    "media/flash_embed_rewrite.h",
+    "media/webrtc_logging_agent_impl.cc",
+    "media/webrtc_logging_agent_impl.h",
+    "net/net_error_helper.cc",
+    "net/net_error_helper.h",
+    "net/net_error_helper_core.cc",
+    "net/net_error_helper_core.h",
+    "net/net_error_page_controller.cc",
+    "net/net_error_page_controller.h",
+    "net_benchmarking_extension.cc",
+    "net_benchmarking_extension.h",
+    "plugins/non_loadable_plugin_placeholder.cc",
+    "plugins/non_loadable_plugin_placeholder.h",
+    "plugins/pdf_plugin_placeholder.cc",
+    "plugins/pdf_plugin_placeholder.h",
+    "plugins/plugin_uma.cc",
+    "plugins/plugin_uma.h",
+    "prerender/prerender_dispatcher.cc",
+    "prerender/prerender_dispatcher.h",
+    "prerender/prerender_extra_data.cc",
+    "prerender/prerender_extra_data.h",
+    "prerender/prerender_helper.cc",
+    "prerender/prerender_helper.h",
+    "prerender/prerenderer_client.cc",
+    "prerender/prerenderer_client.h",
+    "previews/resource_loading_hints_agent.cc",
+    "previews/resource_loading_hints_agent.h",
+    "sandbox_status_extension_android.cc",
+    "sandbox_status_extension_android.h",
+    "subresource_redirect/subresource_redirect_experiments.cc",
+    "subresource_redirect/subresource_redirect_experiments.h",
+    "subresource_redirect/subresource_redirect_params.cc",
+    "subresource_redirect/subresource_redirect_params.h",
+    "subresource_redirect/subresource_redirect_url_loader_throttle.cc",
+    "subresource_redirect/subresource_redirect_url_loader_throttle.h",
+    "subresource_redirect/subresource_redirect_util.cc",
+    "subresource_redirect/subresource_redirect_util.h",
+    "sync_encryption_keys_extension.cc",
+    "sync_encryption_keys_extension.h",
+    "url_loader_throttle_provider_impl.cc",
+    "url_loader_throttle_provider_impl.h",
+    "v8_unwinder.cc",
+    "v8_unwinder.h",
+    "web_apps.cc",
+    "web_apps.h",
+    "websocket_handshake_throttle_provider_impl.cc",
+    "websocket_handshake_throttle_provider_impl.h",
+    "worker_content_settings_client.cc",
+    "worker_content_settings_client.h",
+  ]
+
+  if (enable_supervised_users) {
+    sources += [
+      "supervised_user/supervised_user_error_page_controller.cc",
+      "supervised_user/supervised_user_error_page_controller.h",
+      "supervised_user/supervised_user_error_page_controller_delegate.h",
+      "supervised_user/supervised_user_error_page_controller_delegate_impl.cc",
+      "supervised_user/supervised_user_error_page_controller_delegate_impl.h",
+    ]
+  }
+
+  defines = []
+
+  deps = [
+    "//chrome:resources",
+    "//chrome:strings",
+    "//chrome/common",
+    "//chrome/common:mojo_bindings",
+    "//chrome/common:search_mojom",
+    "//chrome/common/net",
+    "//components/autofill/content/renderer",
+    "//components/cdm/renderer",
+    "//components/content_capture/renderer",
+    "//components/contextual_search/content:renderer",
+    "//components/data_reduction_proxy/content/common",
+    "//components/data_reduction_proxy/content/renderer",
+    "//components/data_reduction_proxy/core/common",
+    "//components/dom_distiller/content/renderer",
+    "//components/network_hints/renderer",
+    "//components/omnibox/common",
+    "//components/page_image_annotation/content/renderer",
+    "//components/page_load_metrics/renderer",
+    "//components/plugins/renderer",
+    "//components/rappor/public/mojom",
+    "//components/resources:components_resources",
+    "//components/safe_browsing:buildflags",
+    "//components/safe_browsing/common:interfaces",
+    "//components/safe_browsing/renderer:throttles",
+    "//components/security_interstitials/content/renderer:security_interstitial_page_controller",
+    "//components/security_interstitials/core:",
+    "//components/security_interstitials/core/common/mojom:",
+    "//components/spellcheck:buildflags",
+    "//components/startup_metric_utils/common:interfaces",
+    "//components/subresource_filter/content/renderer",
+    "//components/translate/content/renderer",
+    "//components/translate/core/common",
+    "//components/translate/core/language_detection",
+    "//components/visitedlink/renderer",
+    "//components/web_cache/renderer",
+    "//content/app/resources",
+    "//content/public/common",
+    "//content/public/renderer",
+    "//extensions/buildflags",
+    "//media",
+    "//media:media_buildflags",
+    "//media/capture",
+    "//mojo/public/cpp/bindings",
+    "//net",
+    "//ppapi/buildflags",
+    "//printing/buildflags",
+    "//services/metrics/public/cpp:metrics_cpp",
+    "//services/metrics/public/mojom",
+    "//services/service_manager/public/cpp",
+    "//skia",
+    "//storage/common",
+    "//third_party/blink/public:blink",
+    "//third_party/blink/public:resources",
+    "//third_party/blink/public:scaled_resources",
+    "//third_party/blink/public/strings",
+    "//third_party/icu",
+    "//third_party/re2",
+    "//third_party/widevine/cdm:buildflags",
+    "//ui/surface",
+    "//v8",
+  ]
+
+  data_deps = [
+    "//tools/v8_context_snapshot",
+  ]
+
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
+
+  if (enable_nacl) {
+    deps += [
+      "//components/nacl/loader",
+      "//components/nacl/renderer",
+    ]
+  }
+  if (enable_plugins) {
+    sources += [
+      "pepper/chrome_renderer_pepper_host_factory.cc",
+      "pepper/chrome_renderer_pepper_host_factory.h",
+      "pepper/pepper_flash_drm_renderer_host.cc",
+      "pepper/pepper_flash_drm_renderer_host.h",
+      "pepper/pepper_flash_font_file_host.cc",
+      "pepper/pepper_flash_font_file_host.h",
+      "pepper/pepper_flash_fullscreen_host.cc",
+      "pepper/pepper_flash_fullscreen_host.h",
+      "pepper/pepper_flash_menu_host.cc",
+      "pepper/pepper_flash_menu_host.h",
+      "pepper/pepper_flash_renderer_host.cc",
+      "pepper/pepper_flash_renderer_host.h",
+      "pepper/pepper_helper.cc",
+      "pepper/pepper_helper.h",
+      "pepper/pepper_shared_memory_message_filter.cc",
+      "pepper/pepper_shared_memory_message_filter.h",
+      "pepper/pepper_uma_host.cc",
+      "pepper/pepper_uma_host.h",
+      "plugins/chrome_plugin_placeholder.cc",
+      "plugins/chrome_plugin_placeholder.h",
+      "plugins/plugin_preroller.cc",
+      "plugins/plugin_preroller.h",
+      "plugins/power_saver_info.cc",
+      "plugins/power_saver_info.h",
+    ]
+    deps += [
+      "//components/pdf/renderer",
+      "//components/strings",
+      "//media:media_buildflags",
+      "//ppapi/host",
+      "//ppapi/proxy",
+      "//ppapi/proxy:ipc",
+      "//ppapi/shared_impl",
+    ]
+
+    if (is_linux) {
+      deps += [ "//components/services/font/public/cpp" ]
+    }
+  }
+
+  if (enable_widevine_cdm_component) {
+    deps += [ "//third_party/widevine/cdm:headers" ]
+  }
+
+  if (safe_browsing_mode != 0) {
+    deps += [
+      "//components/safe_browsing/common",
+      "//components/safe_browsing/renderer",
+    ]
+    if (safe_browsing_mode == 1) {
+      sources += [
+        "safe_browsing/feature_extractor_clock.cc",
+        "safe_browsing/feature_extractor_clock.h",
+        "safe_browsing/features.cc",
+        "safe_browsing/features.h",
+        "safe_browsing/murmurhash3_util.cc",
+        "safe_browsing/murmurhash3_util.h",
+        "safe_browsing/phishing_classifier.cc",
+        "safe_browsing/phishing_classifier.h",
+        "safe_browsing/phishing_classifier_delegate.cc",
+        "safe_browsing/phishing_classifier_delegate.h",
+        "safe_browsing/phishing_dom_feature_extractor.cc",
+        "safe_browsing/phishing_dom_feature_extractor.h",
+        "safe_browsing/phishing_term_feature_extractor.cc",
+        "safe_browsing/phishing_term_feature_extractor.h",
+        "safe_browsing/phishing_url_feature_extractor.cc",
+        "safe_browsing/phishing_url_feature_extractor.h",
+        "safe_browsing/scorer.cc",
+        "safe_browsing/scorer.h",
+      ]
+      deps += [
+        "//chrome/common/safe_browsing:proto",
+        "//components/safe_browsing:csd_proto",
+        "//third_party/smhasher:murmurhash3",
+      ]
+    }
+  }
+
+  if (enable_extensions) {
+    sources += [
+      "extensions/accessibility_private_hooks_delegate.cc",
+      "extensions/accessibility_private_hooks_delegate.h",
+      "extensions/app_hooks_delegate.cc",
+      "extensions/app_hooks_delegate.h",
+      "extensions/chrome_extensions_dispatcher_delegate.cc",
+      "extensions/chrome_extensions_dispatcher_delegate.h",
+      "extensions/chrome_extensions_renderer_client.cc",
+      "extensions/chrome_extensions_renderer_client.h",
+      "extensions/chrome_v8_extension_handler.cc",
+      "extensions/chrome_v8_extension_handler.h",
+      "extensions/extension_hooks_delegate.cc",
+      "extensions/extension_hooks_delegate.h",
+      "extensions/extension_localization_peer.cc",
+      "extensions/extension_localization_peer.h",
+      "extensions/extension_process_policy.cc",
+      "extensions/extension_process_policy.h",
+      "extensions/media_galleries_custom_bindings.cc",
+      "extensions/media_galleries_custom_bindings.h",
+      "extensions/notifications_native_handler.cc",
+      "extensions/notifications_native_handler.h",
+      "extensions/page_capture_custom_bindings.cc",
+      "extensions/page_capture_custom_bindings.h",
+      "extensions/renderer_permissions_policy_delegate.cc",
+      "extensions/renderer_permissions_policy_delegate.h",
+      "extensions/resource_request_policy.cc",
+      "extensions/resource_request_policy.h",
+      "extensions/sync_file_system_custom_bindings.cc",
+      "extensions/sync_file_system_custom_bindings.h",
+      "extensions/tabs_hooks_delegate.cc",
+      "extensions/tabs_hooks_delegate.h",
+      "media/cast_ipc_dispatcher.cc",
+      "media/cast_ipc_dispatcher.h",
+      "media/cast_receiver_audio_valve.cc",
+      "media/cast_receiver_audio_valve.h",
+      "media/cast_receiver_session.cc",
+      "media/cast_receiver_session.h",
+      "media/cast_receiver_session_delegate.cc",
+      "media/cast_receiver_session_delegate.h",
+      "media/cast_rtp_stream.cc",
+      "media/cast_rtp_stream.h",
+      "media/cast_session.cc",
+      "media/cast_session.h",
+      "media/cast_session_delegate.cc",
+      "media/cast_session_delegate.h",
+      "media/cast_threads.cc",
+      "media/cast_threads.h",
+      "media/cast_transport_ipc.cc",
+      "media/cast_transport_ipc.h",
+      "media/cast_udp_transport.cc",
+      "media/cast_udp_transport.h",
+    ]
+    deps += [
+      # TODO(hclam): See crbug.com/298380 for details.
+      # We should isolate the APIs needed by the renderer.
+      "//chrome/common/extensions/api",
+      "//components/guest_view/renderer",
+      "//extensions:extensions_resources",
+      "//extensions/renderer",
+      "//media/cast:net",
+      "//media/cast:receiver",
+      "//media/cast:sender",
+      "//services/network/public/cpp",
+    ]
+    public_deps = [
+      "//ipc",
+    ]
+  }
+  if (enable_extensions) {
+    sources += [
+      "extensions/cast_streaming_native_handler.cc",
+      "extensions/cast_streaming_native_handler.h",
+    ]
+  }
+  if (enable_spellcheck) {
+    deps += [ "//components/spellcheck/renderer:renderer" ]
+  }
+
+  if (enable_basic_printing) {
+    deps += [
+      "//components/printing/renderer",
+      "//printing",
+    ]
+    sources += [
+      "printing/chrome_print_render_frame_helper_delegate.cc",
+      "printing/chrome_print_render_frame_helper_delegate.h",
+    ]
+    if (enable_print_preview) {
+      sources += [
+        "pepper/chrome_pdf_print_client.cc",
+        "pepper/chrome_pdf_print_client.h",
+      ]
+    }
+  }
+
+  if (is_win) {
+    deps += [ "//third_party/wtl" ]
+  }
+
+  if (is_chromeos) {
+    sources += [
+      "extensions/file_browser_handler_custom_bindings.cc",
+      "extensions/file_browser_handler_custom_bindings.h",
+      "extensions/file_manager_private_custom_bindings.cc",
+      "extensions/file_manager_private_custom_bindings.h",
+      "extensions/platform_keys_natives.cc",
+      "extensions/platform_keys_natives.h",
+    ]
+  }
+
+  if (!is_android) {
+    sources += [
+      "searchbox/search_bouncer.cc",
+      "searchbox/search_bouncer.h",
+      "searchbox/searchbox.cc",
+      "searchbox/searchbox.h",
+      "searchbox/searchbox_extension.cc",
+      "searchbox/searchbox_extension.h",
+    ]
+
+    deps += [ "//chrome/common/search:generate_chrome_colors_info" ]
+  }
+
+  if (is_android) {
+    sources += [
+      "net/available_offline_content_helper.cc",
+      "net/available_offline_content_helper.h",
+      "net/page_auto_fetcher_helper_android.cc",
+      "net/page_auto_fetcher_helper_android.h",
+    ]
+  }
+
+  if (is_chromeos) {
+    sources += [
+      "chromeos_delayed_callback_group.cc",
+      "chromeos_delayed_callback_group.h",
+      "chromeos_merge_session_loader_throttle.cc",
+      "chromeos_merge_session_loader_throttle.h",
+    ]
+  }
+
+  if (is_linux) {
+    sources += [
+      "performance_manager/mechanisms/tcmalloc_tunables_impl.cc",
+      "performance_manager/mechanisms/tcmalloc_tunables_impl.h",
+    ]
+
+    deps += [ "//chrome/common/performance_manager/mojom" ]
+  }
+}
+
+jumbo_static_library("test_support") {
+  testonly = true
+  visibility = [ "//chrome/test:test_support" ]
+
+  sources = [
+    "chrome_mock_render_thread.cc",
+    "chrome_mock_render_thread.h",
+    "safe_browsing/mock_feature_extractor_clock.cc",
+    "safe_browsing/mock_feature_extractor_clock.h",
+    "safe_browsing/test_utils.cc",
+    "safe_browsing/test_utils.h",
+  ]
+
+  deps = [
+    ":renderer",
+    "//chrome/common:search_mojom",
+    "//content/test:test_support",
+    "//extensions/buildflags",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+
+  if (is_android) {
+    sources -= [
+      "safe_browsing/mock_feature_extractor_clock.cc",
+      "safe_browsing/mock_feature_extractor_clock.h",
+    ]
+  }
+}

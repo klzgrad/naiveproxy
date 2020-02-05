@@ -1,0 +1,129 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/compiler/compiler.gni")
+if (is_android) {
+  # Pull in enable_chrome_android_internal and public_android_sdk
+  import("//build/config/android/config.gni")
+}
+if (is_chromeos) {
+  import("//build/config/chromeos/rules.gni")
+}
+
+group("telemetry_chrome_test") {
+  testonly = true
+
+  data_deps = [
+    ":telemetry_chrome_test_without_chrome",
+  ]
+  data = []
+
+  if (is_android) {
+    data_deps += [
+      "//android_webview/test:webview_instrumentation_apk",
+      "//chrome/android:chrome_public_apk",
+      ":telemetry_weblayer_apks",
+    ]
+
+    if (enable_chrome_android_internal) {
+      data_deps += [ "//clank:telemetry_clank_test" ]
+    }
+    if (public_android_sdk) {
+      data_deps += [
+        "//android_webview:system_webview_apk",
+        "//android_webview/tools/system_webview_shell:system_webview_shell_apk",
+        "//chrome/android:monochrome_public_apk",
+      ]
+    }
+  } else {
+    data_deps += [ "//chrome" ]
+  }
+
+  if (is_win) {
+    data_deps += [ "//chrome:reorder_imports" ]
+  }
+
+  if (is_linux) {
+    data_deps += [ "//third_party/breakpad:dump_syms($host_toolchain)" ]
+  }
+
+  if (is_mac) {
+    data_deps += [
+      "//chrome:chrome_framework",
+      "//chrome:chrome_helper_app_default",
+      "//third_party/breakpad:dump_syms",
+      "//third_party/crashpad/crashpad/tools:crashpad_database_util",
+    ]
+  }
+
+  if (is_chromeos && cros_board != "") {
+    data_deps += [
+      "//chromeos:cros_chrome_deploy",
+      "//chromeos:cros_test_wrapper",
+    ]
+  }
+
+  if (is_win && (symbol_level == 1 || symbol_level == 2)) {
+    data_deps += [
+      "//build/win:copy_cdb_to_output",
+      "//third_party/crashpad/crashpad/tools:crashpad_database_util",
+    ]
+  }
+}
+
+group("telemetry_weblayer_apks") {
+  testonly = true
+
+  data_deps = []
+  if (is_android) {
+    data_deps += [
+      # TODO(crbug.com/1022823): Remove the following two deps once our tooling
+      # is configured to use weblayer_shell_system_webview_apk.
+      "//weblayer/shell/android:weblayer_support_apk",
+      "//weblayer/shell/android:weblayer_shell_apk",
+
+      "//weblayer/shell/android:weblayer_shell_system_webview_apk",
+    ]
+  }
+}
+
+group("telemetry_chrome_test_without_chrome") {
+  testonly = true
+
+  data = [
+    "//tools/perf/core/",  # chrome_telemetry_build/ depends on core/
+    "//tools/perf/chrome_telemetry_build/",
+    "//components/crash/content/tools/generate_breakpad_symbols.py",
+  ]
+  data_deps = [
+    "//third_party/catapult:telemetry_chrome_test_support",
+  ]
+  if (is_chromeos) {
+    data_deps += [
+      "//third_party/breakpad:minidump_stackwalk",
+      "//third_party/breakpad:dump_syms",
+    ]
+  }
+  if (is_android) {
+    data += [
+      "//build/android/stacktrace/",
+      "//build/android/tombstones.py",
+
+      # TODO(httpss://crbug.com/833808): Remove this once bots always set
+      # CHROMIUM_OUTPUT_DIR correctly. Currently, this is necessary in order
+      # for //build/android/pylib/constants/__init__.py to detect the output
+      # directory, which tombstones.py depends on.
+      "$root_out_dir/build.ninja",
+    ]
+    data_deps += [
+      "//chrome/android/webapk/shell_apk:maps_go_webapk",
+      "//build/android:devil_chromium_py",
+      "//third_party/breakpad:dump_syms",
+      "//third_party/breakpad:minidump_dump",
+      "//third_party/breakpad:minidump_stackwalk",
+    ]
+  } else {
+    data_deps += [ "//third_party/catapult/telemetry:bitmaptools" ]
+  }
+}

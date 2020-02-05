@@ -1,0 +1,277 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//net/features.gni")
+import("//testing/libfuzzer/fuzzer_test.gni")
+
+source_set("network_impl") {
+  sources = [
+    "net/network_chromium.h",
+    "net/network_impl.cc",
+    "net/network_impl.h",
+  ]
+
+  deps = [
+    ":update_client",
+    "//base",
+    "//net",
+    "//services/network/public/cpp:cpp",
+    "//url",
+  ]
+}
+
+source_set("unzip_impl") {
+  sources = [
+    "unzip/unzip_impl.cc",
+    "unzip/unzip_impl.h",
+  ]
+  deps = [
+    ":update_client",
+    "//components/services/unzip/public/cpp",
+  ]
+}
+
+source_set("patch_impl") {
+  sources = [
+    "patch/patch_impl.cc",
+    "patch/patch_impl.h",
+  ]
+  deps = [
+    ":update_client",
+    "//components/services/patch/public/cpp",
+    "//components/services/patch/public/mojom",
+    "//mojo/public/cpp/bindings",
+  ]
+}
+
+group("common_impl") {
+  public_deps = [
+    ":network_impl",
+    ":patch_impl",
+    ":unzip_impl",
+  ]
+}
+
+static_library("update_client") {
+  sources = [
+    "action_runner.cc",
+    "action_runner.h",
+    "activity_data_service.h",
+    "background_downloader_win.cc",
+    "background_downloader_win.h",
+    "command_line_config_policy.cc",
+    "command_line_config_policy.h",
+    "component.cc",
+    "component.h",
+    "component_patcher.cc",
+    "component_patcher.h",
+    "component_patcher_operation.cc",
+    "component_patcher_operation.h",
+    "component_unpacker.cc",
+    "component_unpacker.h",
+    "configurator.h",
+    "crx_downloader.cc",
+    "crx_downloader.h",
+    "crx_update_item.h",
+    "network.cc",
+    "network.h",
+    "patcher.h",
+    "persisted_data.cc",
+    "persisted_data.h",
+    "ping_manager.cc",
+    "ping_manager.h",
+    "protocol_definition.cc",
+    "protocol_definition.h",
+    "protocol_handler.cc",
+    "protocol_handler.h",
+    "protocol_parser.cc",
+    "protocol_parser.h",
+    "protocol_parser_json.cc",
+    "protocol_parser_json.h",
+    "protocol_serializer.cc",
+    "protocol_serializer.h",
+    "protocol_serializer_json.cc",
+    "protocol_serializer_json.h",
+    "request_sender.cc",
+    "request_sender.h",
+    "task.h",
+    "task_send_uninstall_ping.cc",
+    "task_send_uninstall_ping.h",
+    "task_traits.h",
+    "task_update.cc",
+    "task_update.h",
+    "unzipper.h",
+    "update_checker.cc",
+    "update_checker.h",
+    "update_client.cc",
+    "update_client.h",
+    "update_client_errors.h",
+    "update_client_internal.h",
+    "update_engine.cc",
+    "update_engine.h",
+    "update_query_params.cc",
+    "update_query_params.h",
+    "update_query_params_delegate.cc",
+    "update_query_params_delegate.h",
+    "updater_state.cc",
+    "updater_state.h",
+    "updater_state_mac.mm",
+    "updater_state_win.cc",
+    "url_fetcher_downloader.cc",
+    "url_fetcher_downloader.h",
+    "utils.cc",
+    "utils.h",
+  ]
+
+  deps = [
+    "//base",
+    "//build:branding_buildflags",
+    "//components/client_update_protocol",
+    "//components/crx_file",
+    "//components/prefs",
+    "//components/version_info:version_info",
+    "//courgette:courgette_lib",
+    "//crypto",
+    "//url",
+  ]
+}
+
+static_library("test_support") {
+  testonly = true
+  sources = [
+    "net/url_loader_post_interceptor.cc",
+    "net/url_loader_post_interceptor.h",
+    "test_configurator.cc",
+    "test_configurator.h",
+    "test_installer.cc",
+    "test_installer.h",
+  ]
+
+  public_deps = [
+    ":update_client",
+  ]
+
+  deps = [
+    ":network_impl",
+    ":patch_impl",
+    ":unzip_impl",
+    "//base",
+    "//components/prefs",
+    "//components/services/patch:in_process",
+    "//components/services/unzip:in_process",
+    "//mojo/public/cpp/bindings",
+    "//net:test_support",
+    "//services/network:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//url",
+  ]
+}
+
+bundle_data("unit_tests_bundle_data") {
+  visibility = [ ":unit_tests" ]
+  testonly = true
+  sources = [
+    "//components/test/data/update_client/binary_bsdiff_patch.bin",
+    "//components/test/data/update_client/binary_courgette_patch.bin",
+    "//components/test/data/update_client/binary_input.bin",
+    "//components/test/data/update_client/binary_output.bin",
+    "//components/test/data/update_client/ihfokbkgjpifnbbojhneepfflplebdkc_1.crx",
+    "//components/test/data/update_client/ihfokbkgjpifnbbojhneepfflplebdkc_1to2.crx",
+    "//components/test/data/update_client/ihfokbkgjpifnbbojhneepfflplebdkc_2.crx",
+    "//components/test/data/update_client/jebgalgnebhfojomionfpkfelancnnkf.crx",
+    "//components/test/data/update_client/runaction_test_win.crx3",
+    "//components/test/data/update_client/updatecheck_reply_1.json",
+    "//components/test/data/update_client/updatecheck_reply_4.json",
+    "//components/test/data/update_client/updatecheck_reply_noupdate.json",
+    "//components/test/data/update_client/updatecheck_reply_parse_error.json",
+    "//components/test/data/update_client/updatecheck_reply_unknownapp.json",
+  ]
+  outputs = [
+    "{{bundle_resources_dir}}/" +
+        "{{source_root_relative_dir}}/{{source_file_part}}",
+  ]
+}
+
+bundle_data("recovery_component_tests_bundle_data") {
+  visibility = [ "//chrome/test:unit_tests" ]
+  testonly = true
+  sources = [
+    "//components/test/data/update_client/ChromeRecovery.crx3",
+  ]
+  outputs = [
+    "{{bundle_resources_dir}}/" +
+        "{{source_root_relative_dir}}/{{source_file_part}}",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "component_patcher_unittest.cc",
+    "component_patcher_unittest.h",
+    "component_unpacker_unittest.cc",
+    "persisted_data_unittest.cc",
+    "ping_manager_unittest.cc",
+    "protocol_parser_json_unittest.cc",
+    "protocol_serializer_json_unittest.cc",
+    "protocol_serializer_unittest.cc",
+    "request_sender_unittest.cc",
+    "update_checker_unittest.cc",
+    "update_client_unittest.cc",
+    "update_query_params_unittest.cc",
+    "updater_state_unittest.cc",
+    "utils_unittest.cc",
+  ]
+
+  if (!disable_file_support) {
+    sources += [ "crx_downloader_unittest.cc" ]
+  }
+
+  deps = [
+    ":network_impl",
+    ":patch_impl",
+    ":test_support",
+    ":unit_tests_bundle_data",
+    ":unzip_impl",
+    ":update_client",
+    "//base",
+    "//build:branding_buildflags",
+    "//components/crx_file",
+    "//components/prefs",
+    "//components/prefs:test_support",
+    "//components/services/patch:in_process",
+    "//components/version_info:version_info",
+    "//courgette:courgette_lib",
+    "//net:test_support",
+    "//services/network:test_support",
+    "//services/network/public/cpp:cpp",
+    "//services/network/public/cpp:cpp_base",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//third_party/re2",
+  ]
+}
+
+fuzzer_test("update_client_protocol_serializer_fuzzer") {
+  sources = [
+    "protocol_serializer_fuzzer.cc",
+  ]
+  deps = [
+    ":update_client",
+    "//base:base",
+  ]
+  seed_corpus = "fuzzer_corpuses/protocol_serializer/"
+}
+
+fuzzer_test("update_client_protocol_parser_fuzzer") {
+  sources = [
+    "protocol_parser_fuzzer.cc",
+  ]
+  deps = [
+    ":update_client",
+    "//base:base",
+  ]
+  seed_corpus = "fuzzer_corpuses/protocol_parser/"
+}

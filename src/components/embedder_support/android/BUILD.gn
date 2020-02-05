@@ -1,0 +1,129 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/android/rules.gni")
+import("//build/config/locales.gni")
+
+android_library("application_java") {
+  deps = [
+    "//base:base_java",
+  ]
+  java_files = [
+    "java/src/org/chromium/components/embedder_support/application/ClassLoaderContextWrapperFactory.java",
+    "java/src/org/chromium/components/embedder_support/application/FontPreloadingWorkaround.java",
+  ]
+}
+
+static_library("view") {
+  sources = [
+    "view/content_view_render_view.cc",
+    "view/content_view_render_view.h",
+  ]
+
+  deps = [
+    ":view_jni_headers",
+    "//base",
+    "//content/public/browser",
+    "//ui/android",
+    "//ui/base",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+  ]
+}
+
+android_library("content_view_java") {
+  deps = [
+    "//base:base_java",
+    "//content/public/android:content_java",
+    "//ui/android:ui_java",
+  ]
+  java_files = [
+    "java/src/org/chromium/components/embedder_support/view/ContentView.java",
+  ]
+}
+
+android_library("view_java") {
+  deps = [
+    "//base:base_java",
+    "//base:jni_java",
+    "//content/public/android:content_java",
+    "//ui/android:ui_java",
+  ]
+  annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
+  java_files = [ "java/src/org/chromium/components/embedder_support/view/ContentViewRenderView.java" ]
+}
+
+generate_jni("view_jni_headers") {
+  sources = [
+    "java/src/org/chromium/components/embedder_support/view/ContentViewRenderView.java",
+  ]
+}
+
+java_strings_grd("web_contents_delegate_strings_grd") {
+  grd_file = "java/strings/web_contents_delegate_android_strings.grd"
+  outputs = [ "values/web_contents_delegate_android_strings.xml" ] + process_file_template(
+                android_bundle_locales_as_resources,
+                [ "values-{{source_name_part}}/web_contents_delegate_android_strings.xml" ])
+}
+
+static_library("web_contents_delegate") {
+  sources = [
+    "delegate/color_chooser_android.cc",
+    "delegate/color_chooser_android.h",
+    "delegate/web_contents_delegate_android.cc",
+    "delegate/web_contents_delegate_android.h",
+  ]
+
+  deps = [
+    ":web_contents_delegate_jni_headers",
+    "//base",
+    "//content/public/browser",
+    "//content/public/common",
+    "//net",
+    "//skia",
+    "//ui/android",
+    "//ui/base",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+  ]
+}
+
+android_resources("web_contents_delegate_java_resources") {
+  custom_package = "org.chromium.components.embedder_support.delegate"
+  resource_dirs = [ "java/res" ]
+  deps = [
+    ":web_contents_delegate_strings_grd",
+  ]
+}
+
+android_library("web_contents_delegate_java") {
+  deps = [
+    ":web_contents_delegate_java_resources",
+    "//base:base_java",
+    "//base:jni_java",
+    "//content/public/android:content_java",
+    "//third_party/android_deps:com_android_support_support_compat_java",
+    "//ui/android:ui_java",
+  ]
+  annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
+  java_files = [
+    "java/src/org/chromium/components/embedder_support/delegate/ColorChooserAndroid.java",
+    "java/src/org/chromium/components/embedder_support/delegate/ColorPickerAdvanced.java",
+    "java/src/org/chromium/components/embedder_support/delegate/ColorPickerAdvancedComponent.java",
+    "java/src/org/chromium/components/embedder_support/delegate/ColorPickerDialog.java",
+    "java/src/org/chromium/components/embedder_support/delegate/ColorPickerMoreButton.java",
+    "java/src/org/chromium/components/embedder_support/delegate/ColorPickerSimple.java",
+    "java/src/org/chromium/components/embedder_support/delegate/ColorSuggestion.java",
+    "java/src/org/chromium/components/embedder_support/delegate/ColorSuggestionListAdapter.java",
+    "java/src/org/chromium/components/embedder_support/delegate/WebContentsDelegateAndroid.java",
+    "java/src/org/chromium/components/embedder_support/delegate/OnColorChangedListener.java",
+  ]
+}
+
+generate_jni("web_contents_delegate_jni_headers") {
+  sources = [
+    "java/src/org/chromium/components/embedder_support/delegate/ColorChooserAndroid.java",
+    "java/src/org/chromium/components/embedder_support/delegate/WebContentsDelegateAndroid.java",
+  ]
+}

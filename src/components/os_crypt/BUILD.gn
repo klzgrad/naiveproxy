@@ -1,0 +1,212 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/chromecast_build.gni")
+import("//build/config/features.gni")
+import("//build/config/linux/pkg_config.gni")
+import("//build/config/ui.gni")
+import("//components/os_crypt/features.gni")
+
+if (use_gnome_keyring) {
+  # Gnome-keyring is normally dynamically loaded. The gnome_keyring config
+  # will set this up.
+  pkg_config("gnome_keyring") {
+    packages = [ "gnome-keyring-1" ]
+    defines = [ "USE_GNOME_KEYRING" ]
+    ignore_libs = true
+  }
+
+  # If you want to link gnome-keyring directly (use only for unit tests)
+  # ADDITIONALLY add this config on top of ":gnome_keyring". pkg-config is a
+  # bit slow, so prefer not to run it again. In practice, gnome-keyring's libs
+  # are just itself and common gnome ones we link already, so we can get away
+  # with additionally just coding the library name here.
+  # TODO(cfroussios): This is only used by
+  # chrome/browser/password_manager/native_backend_gnome_x_unittest.cc
+  # We should deprecate both.
+  config("gnome_keyring_direct") {
+    libs = [ "gnome-keyring" ]
+  }
+}
+
+component("os_crypt") {
+  sources = [
+    "encryption_key_creation_util_ios.cc",
+    "encryption_key_creation_util_ios.h",
+    "encryption_key_creation_util_mac.cc",
+    "encryption_key_creation_util_mac.h",
+    "keychain_password_mac.h",
+    "keychain_password_mac.mm",
+    "os_crypt.h",
+    "os_crypt_mac.mm",
+    "os_crypt_pref_names_mac.cc",
+    "os_crypt_pref_names_mac.h",
+    "os_crypt_switches.cc",
+    "os_crypt_switches.h",
+    "os_crypt_win.cc",
+  ]
+
+  deps = [
+    "//base",
+    "//build:branding_buildflags",
+    "//components/prefs",
+    "//crypto",
+
+    # TODO(tfarina): Remove this dep when http://crbug.com/363749 is fixed.
+    "//crypto:platform",
+  ]
+
+  defines = [ "IS_OS_CRYPT_IMPL" ]
+
+  if ((is_posix || is_fuchsia) && !is_mac && !is_ios &&
+      (!is_desktop_linux || is_chromecast)) {
+    sources += [ "os_crypt_posix.cc" ]
+  }
+
+  if (is_ios) {
+    set_sources_assignment_filter([])
+    sources += [
+      "keychain_password_mac.h",
+      "keychain_password_mac.mm",
+      "os_crypt_mac.mm",
+    ]
+    set_sources_assignment_filter(sources_assignment_filter)
+  }
+
+  if (is_ios || is_mac) {
+    sources += [ "encryption_key_creation_util.h" ]
+    libs = [ "CoreFoundation.framework" ]
+  }
+
+  if (is_win) {
+    libs = [ "crypt32.lib" ]
+  }
+
+  if (is_desktop_linux && !is_chromecast) {
+    sources += [
+      "key_storage_config_linux.cc",
+      "key_storage_config_linux.h",
+      "key_storage_linux.cc",
+      "key_storage_linux.h",
+      "key_storage_util_linux.cc",
+      "key_storage_util_linux.h",
+      "os_crypt_linux.cc",
+    ]
+
+    if (use_gnome_keyring) {
+      sources += [
+        "key_storage_keyring.cc",
+        "key_storage_keyring.h",
+        "keyring_util_linux.cc",
+        "keyring_util_linux.h",
+      ]
+      configs += [ ":gnome_keyring" ]
+      defines += [ "USE_KEYRING" ]
+    }
+    if (use_glib) {
+      sources += [
+        "key_storage_libsecret.cc",
+        "key_storage_libsecret.h",
+        "libsecret_util_linux.cc",
+        "libsecret_util_linux.h",
+      ]
+      configs += [ "//build/config/linux:glib" ]
+      deps += [ "//third_party/libsecret" ]
+      defines += [ "USE_LIBSECRET" ]
+    }
+    if (use_dbus) {
+      sources += [
+        "key_storage_kwallet.cc",
+        "key_storage_kwallet.h",
+        "kwallet_dbus.cc",
+        "kwallet_dbus.h",
+      ]
+      deps += [ "//dbus" ]
+      defines += [ "USE_KWALLET" ]
+    }
+  }
+}
+
+static_library("test_support") {
+  testonly = true
+  sources = [
+    "os_crypt_mocker.cc",
+    "os_crypt_mocker.h",
+  ]
+  deps = [
+    ":os_crypt",
+    "//base",
+    "//testing/gtest",
+  ]
+  if (is_desktop_linux && !is_chromecast) {
+    sources += [
+      "os_crypt_mocker_linux.cc",
+      "os_crypt_mocker_linux.h",
+    ]
+    defines = []
+    if (use_gnome_keyring) {
+      defines += [ "USE_KEYRING" ]
+    }
+    if (use_glib) {
+      defines += [ "USE_LIBSECRET" ]
+    }
+    if (use_dbus) {
+      defines += [ "USE_KWALLET" ]
+    }
+  }
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "keychain_password_mac_unittest.mm",
+    "os_crypt_unittest.cc",
+  ]
+  deps = [
+    ":os_crypt",
+    ":test_support",
+    "//base",
+    "//base/test:test_support",
+    "//build:branding_buildflags",
+    "//components/prefs:test_support",
+    "//crypto",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+
+  if (is_ios) {
+    set_sources_assignment_filter([])
+    sources += [ "keychain_password_mac_unittest.mm" ]
+    set_sources_assignment_filter(sources_assignment_filter)
+  }
+
+  if (is_desktop_linux && !is_chromecast) {
+    sources += [
+      "key_storage_linux_unittest.cc",
+      "key_storage_util_linux_unittest.cc",
+      "os_crypt_linux_unittest.cc",
+    ]
+    defines = []
+
+    if (use_gnome_keyring) {
+      sources += [ "key_storage_keyring_unittest.cc" ]
+      configs += [ ":gnome_keyring" ]
+      deps += [ "//base/test:test_support" ]
+      defines += [ "USE_KEYRING" ]
+    }
+    if (use_glib) {
+      sources += [ "key_storage_libsecret_unittest.cc" ]
+      deps += [ "//third_party/libsecret" ]
+      defines += [ "USE_LIBSECRET" ]
+    }
+    if (use_dbus) {
+      sources += [
+        "key_storage_kwallet_unittest.cc",
+        "kwallet_dbus_unittest.cc",
+      ]
+      deps += [ "//dbus:test_support" ]
+      defines += [ "USE_KWALLET" ]
+    }
+  }
+}

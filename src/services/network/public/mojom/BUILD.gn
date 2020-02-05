@@ -1,0 +1,194 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//mojo/public/tools/bindings/mojom.gni")
+import("//net/features.gni")
+import("//services/network/public/cpp/features.gni")
+
+# These interfaces are put in their own target to avoid a circular dependency,
+# which comes from the fact that proxy_resolver service uses these interfaces,
+# and the network service uses the proxy_resolver service.
+mojom("mojom_ip_address") {
+  generate_java = true
+  sources = [
+    "address_family.mojom",
+    "address_list.mojom",
+    "ip_address.mojom",
+    "ip_endpoint.mojom",
+  ]
+
+  public_deps = [
+    "//url/mojom:url_mojom_gurl",
+  ]
+}
+
+# As with mojom_ip_address, this is a separate target to avoid a circular
+# dependency, which comes from the fact that proxy_resolver service uses
+# this interfaces, and the network service uses the proxy_resolver service.
+# Separate from |mojom_ip_address| because a bunch of other consumers are
+# depending on that and don't need this.
+mojom("mojom_network_isolation_key") {
+  generate_java = true
+  sources = [
+    "network_isolation_key.mojom",
+  ]
+
+  public_deps = [
+    "//url/mojom:url_mojom_origin",
+  ]
+
+  if (!is_ios) {
+    export_class_attribute_blink = "BLINK_PLATFORM_EXPORT"
+    export_define_blink = "BLINK_PLATFORM_IMPLEMENTATION=1"
+    export_header_blink = "third_party/blink/public/platform/web_common.h"
+  }
+}
+
+# These interfaces are put in their own target to avoid a circular dependency,
+# which comes from the fact that the typemap for url_loader.mojom
+# (ResourceRequestBody) uses these interfaces.
+mojom("data_pipe_interfaces") {
+  generate_java = true
+  sources = [
+    "chunked_data_pipe_getter.mojom",
+    "data_pipe_getter.mojom",
+  ]
+
+  # TODO(crbug/598073): When moving the service implementation to
+  # //services/network, add the correct values for export_class_attribute /
+  # export_define / export_header here. Context in https://crrev.com/2225673002.
+
+  if (!is_ios) {
+    export_class_attribute_blink = "BLINK_PLATFORM_EXPORT"
+    export_define_blink = "BLINK_PLATFORM_IMPLEMENTATION=1"
+    export_header_blink = "third_party/blink/public/platform/web_common.h"
+  }
+}
+
+mojom("mutable_network_traffic_annotation_interface") {
+  generate_java = true
+  sources = [
+    "mutable_network_traffic_annotation_tag.mojom",
+    "mutable_partial_network_traffic_annotation_tag.mojom",
+  ]
+}
+
+# This target is split from "mojom" target as the lazy serialization may
+# cause problems. See https://crbug.com/822732.
+mojom("websocket_mojom") {
+  generate_java = true
+  sources = [
+    "network_param.mojom",
+    "websocket.mojom",
+  ]
+
+  public_deps = [
+    ":mojom_ip_address",
+    "//mojo/public/mojom/base",
+    "//url/mojom:url_mojom_gurl",
+    "//url/mojom:url_mojom_origin",
+  ]
+
+  if (!is_ios) {
+    export_class_attribute_blink = "BLINK_PLATFORM_EXPORT"
+    export_define_blink = "BLINK_PLATFORM_IMPLEMENTATION=1"
+    export_header_blink = "third_party/blink/public/platform/web_common.h"
+  }
+}
+
+mojom("mojom") {
+  generate_java = true
+  sources = [
+    "content_security_policy.mojom",
+    "cookie_manager.mojom",
+    "cors.mojom",
+    "cors_origin_pattern.mojom",
+    "cross_origin_embedder_policy.mojom",
+    "default_credentials.mojom",
+    "dhcp_wpad_url_client.mojom",
+    "digitally_signed.mojom",
+    "fetch_api.mojom",
+    "host_resolver.mojom",
+    "http_raw_headers.mojom",
+    "http_raw_request_response_info.mojom",
+    "http_request_headers.mojom",
+    "ip_address_space.mojom",
+    "load_timing_info.mojom",
+    "mdns_responder.mojom",
+    "net_log.mojom",
+    "network_change_manager.mojom",
+    "network_context.mojom",
+    "network_interface.mojom",
+    "network_quality_estimator_manager.mojom",
+    "network_service.mojom",
+    "network_service_test.mojom",
+    "network_types.mojom",
+    "origin_policy_manager.mojom",
+    "p2p.mojom",
+    "p2p_trusted.mojom",
+    "proxy_config.mojom",
+    "proxy_config_with_annotation.mojom",
+    "proxy_lookup_client.mojom",
+    "proxy_resolving_socket.mojom",
+    "quic_transport.mojom",
+    "referrer_policy.mojom",
+    "restricted_cookie_manager.mojom",
+    "ssl_config.mojom",
+    "tcp_socket.mojom",
+    "tls_socket.mojom",
+    "udp_socket.mojom",
+    "url_loader.mojom",
+    "url_loader_factory.mojom",
+    "url_response_head.mojom",
+  ]
+
+  public_deps = [
+    ":data_pipe_interfaces",
+    ":mojom_ip_address",
+    ":mojom_network_isolation_key",
+    ":mutable_network_traffic_annotation_interface",
+    ":websocket_mojom",
+    "//components/content_settings/core/common:mojo_bindings",
+    "//mojo/public/mojom/base",
+    "//services/proxy_resolver/public/mojom",
+    "//url/mojom:url_mojom_gurl",
+    "//url/mojom:url_mojom_origin",
+  ]
+
+  enabled_features = []
+
+  # TODO(crbug/598073): When moving the service implementation to
+  # //services/network, add the correct values for export_class_attribute /
+  # export_define / export_header here. Context in https://crrev.com/2225673002.
+
+  if (is_ct_supported) {
+    enabled_features += [ "is_ct_supported" ]
+    sources += [ "ct_log_info.mojom" ]
+  }
+
+  if (!is_ios) {
+    export_class_attribute_blink = "BLINK_PLATFORM_EXPORT"
+    export_define_blink = "BLINK_PLATFORM_IMPLEMENTATION=1"
+    export_header_blink = "third_party/blink/public/platform/web_common.h"
+  }
+
+  # This is only needed on desktop linux, but the defines make this difficult
+  # because IS_CHROMECAST is not available in build/build_config.h.
+  if (is_linux && !is_chromeos) {
+    enabled_features += [ "needs_crypt_config" ]
+  }
+
+  if (is_android || is_chromeos) {
+    enabled_features += [ "network_change_notifier_in_browser" ]
+  }
+
+  if (trial_comparison_cert_verifier_supported) {
+    enabled_features += [ "is_trial_comparison_cert_verifier_supported" ]
+    sources += [ "trial_comparison_cert_verifier.mojom" ]
+  }
+
+  if (builtin_cert_verifier_feature_supported) {
+    enabled_features += [ "is_builtin_cert_verifier_feature_supported" ]
+  }
+}

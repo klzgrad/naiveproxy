@@ -1,0 +1,216 @@
+# Copyright (c) 2013 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/buildflag_header.gni")
+import("//testing/libfuzzer/fuzzer_test.gni")
+import("//testing/test.gni")
+import("features.gni")
+
+if (is_android) {
+  import("//build/config/android/rules.gni")
+}
+
+buildflag_header("buildflags") {
+  header = "buildflags.h"
+  flags = [ "USE_PLATFORM_ICU_ALTERNATIVES=$use_platform_icu_alternatives" ]
+}
+
+component("url") {
+  sources = [
+    "gurl.cc",
+    "gurl.h",
+    "origin.cc",
+    "origin.h",
+    "scheme_host_port.cc",
+    "scheme_host_port.h",
+    "third_party/mozilla/url_parse.cc",
+    "third_party/mozilla/url_parse.h",
+    "url_canon.cc",
+    "url_canon.h",
+    "url_canon_etc.cc",
+    "url_canon_filesystemurl.cc",
+    "url_canon_fileurl.cc",
+    "url_canon_host.cc",
+    "url_canon_internal.cc",
+    "url_canon_internal.h",
+    "url_canon_internal_file.h",
+    "url_canon_ip.cc",
+    "url_canon_ip.h",
+    "url_canon_mailtourl.cc",
+    "url_canon_path.cc",
+    "url_canon_pathurl.cc",
+    "url_canon_query.cc",
+    "url_canon_relative.cc",
+    "url_canon_stdstring.cc",
+    "url_canon_stdstring.h",
+    "url_canon_stdurl.cc",
+    "url_constants.cc",
+    "url_constants.h",
+    "url_file.h",
+    "url_parse_file.cc",
+    "url_parse_internal.h",
+    "url_util.cc",
+    "url_util.h",
+    "url_util_internal.h",
+  ]
+
+  defines = [ "IS_URL_IMPL" ]
+
+  deps = [
+    "//base",
+    "//base/third_party/dynamic_annotations",
+    "//ipc:param_traits",
+  ]
+
+  if (is_win) {
+    # Don't conflict with Windows' "url.dll".
+    output_name = "url_lib"
+  }
+
+  # ICU support.
+  if (use_platform_icu_alternatives) {
+    if (is_android) {
+      sources += [ "url_idna_icu_alternatives_android.cc" ]
+      deps += [
+        ":buildflags",
+        ":url_java",
+        ":url_jni_headers",
+        "//base",
+        "//base/third_party/dynamic_annotations",
+      ]
+    } else if (is_ios) {
+      sources += [ "url_idna_icu_alternatives_ios.mm" ]
+    } else {
+      assert(false,
+             "ICU alternative is not implemented for platform: " + target_os)
+    }
+  } else {
+    # Use ICU.
+    sources += [
+      "url_canon_icu.cc",
+      "url_canon_icu.h",
+      "url_idna_icu.cc",
+    ]
+    deps += [ "//third_party/icu" ]
+  }
+}
+
+if (is_android) {
+  static_library("origin_android") {
+    sources = [
+      "android/origin_android.cc",
+    ]
+
+    deps = [
+      ":url",
+      ":url_jni_headers",
+      "//base",
+      "//url/mojom:url_mojom_origin",
+    ]
+  }
+
+  android_library("url_java") {
+    java_files = [ "android/java/src/org/chromium/url/IDNStringUtil.java" ]
+    deps = [
+      "//base:base_java",
+    ]
+  }
+
+  android_library("origin_java") {
+    java_files = [ "android/java/src/org/chromium/url/Origin.java" ]
+    deps = [
+      "//base:base_java",
+      "//url/mojom:url_mojom_origin_java",
+    ]
+  }
+
+  generate_jni("url_jni_headers") {
+    sources = [
+      "android/java/src/org/chromium/url/IDNStringUtil.java",
+      "android/java/src/org/chromium/url/Origin.java",
+    ]
+  }
+}
+
+test("url_unittests") {
+  sources = [
+    "gurl_unittest.cc",
+    "origin_unittest.cc",
+    "run_all_unittests.cc",
+    "scheme_host_port_unittest.cc",
+    "url_canon_icu_unittest.cc",
+    "url_canon_unittest.cc",
+    "url_parse_unittest.cc",
+    "url_test_utils.h",
+    "url_util_unittest.cc",
+  ]
+
+  deps = [
+    ":url",
+    "//base",
+    "//base/test:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+
+  if (!is_ios) {
+    sources += [ "mojom/url_gurl_mojom_traits_unittest.cc" ]
+  }
+
+  if (use_platform_icu_alternatives) {
+    # Unit tests that are not supported by the current ICU alternatives on Android.
+    if (is_android) {
+      sources -= [
+        "url_canon_icu_unittest.cc",
+        "url_canon_unittest.cc",
+      ]
+      deps += [ ":url_java" ]
+    }
+
+    # Unit tests that are not supported by the current ICU alternatives on iOS.
+    if (is_ios) {
+      sources -= [
+        "origin_unittest.cc",
+        "scheme_host_port_unittest.cc",
+        "url_canon_icu_unittest.cc",
+        "url_canon_unittest.cc",
+      ]
+    }
+  } else {  # !use_platform_icu_alternatives
+    deps += [ "//third_party/icu:icuuc" ]
+  }
+
+  if (!is_ios) {
+    deps += [
+      "//mojo/core/embedder",
+      "//url/mojom:test_url_mojom_gurl",
+    ]
+  }
+}
+
+test("url_perftests") {
+  sources = [
+    "run_all_perftests.cc",
+    "url_parse_perftest.cc",
+  ]
+
+  deps = [
+    ":url",
+    "//base",
+    "//base/test:test_support",
+    "//testing/gtest",
+  ]
+}
+
+fuzzer_test("gurl_fuzzer") {
+  sources = [
+    "gurl_fuzzer.cc",
+  ]
+  deps = [
+    ":url",
+    "//base",
+    "//base:i18n",
+  ]
+  dict = "gurl_fuzzer.dict"
+}

@@ -1,0 +1,149 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+source_set("encoder") {
+  sources = [
+    "audio_encoder.h",
+    "encoder_bitrate_filter.cc",
+    "encoder_bitrate_filter.h",
+    "frame_processing_time_estimator.cc",
+    "frame_processing_time_estimator.h",
+    "video_encoder.cc",
+    "video_encoder.h",
+    "video_encoder_helper.cc",
+    "video_encoder_helper.h",
+    "video_encoder_verbatim.cc",
+    "video_encoder_verbatim.h",
+    "video_encoder_vpx.cc",
+    "video_encoder_vpx.h",
+    "webrtc_video_encoder_proxy.cc",
+    "webrtc_video_encoder_proxy.h",
+    "webrtc_video_encoder_selector.cc",
+    "webrtc_video_encoder_selector.h",
+    "webrtc_video_encoder_vpx.cc",
+    "webrtc_video_encoder_vpx.h",
+  ]
+
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
+
+  deps = [
+    ":vpx_codec",
+    "//base/third_party/dynamic_annotations",
+    "//remoting/proto",
+    "//third_party/libvpx",
+    "//third_party/libyuv",
+    "//third_party/opus",
+    "//third_party/webrtc_overrides:webrtc_component",
+    "//ui/gfx:color_space",
+    "//ui/gfx/geometry",
+  ]
+
+  # Currently, building WebrtcVideoEncoderGpu is only supported on Windows and
+  # Linux, and encoding with WebrtcVideoEncoderGpu is only supported on Windows.
+  if (is_win || is_linux) {
+    public_configs = [ "//skia:skia_config" ]
+    sources += [
+      "webrtc_video_encoder_gpu.cc",
+      "webrtc_video_encoder_gpu.h",
+    ]
+    deps += [
+      "//gpu/command_buffer/service",
+      "//media/gpu",
+    ]
+  }
+
+  # Opus depends on //media, which is not a supported include for iOS.
+  # Also disabled it on Android, to avoid dependency on //media.
+  # TODO(sergeyu): Cleanup host-only deps in client targets.
+  if (!is_ios && !is_android) {
+    sources += [
+      "audio_encoder_opus.cc",
+      "audio_encoder_opus.h",
+      "cast_software_video_encoder_adapter.cc",
+      "cast_software_video_encoder_adapter.h",
+    ]
+    deps += [
+      "//media",
+      "//media:shared_memory_support",
+      "//media/cast:sender",
+    ]
+  }
+}
+
+source_set("decoder") {
+  sources = [
+    "audio_decoder.cc",
+    "audio_decoder.h",
+    "audio_decoder_opus.cc",
+    "audio_decoder_opus.h",
+    "video_decoder.h",
+    "video_decoder_verbatim.cc",
+    "video_decoder_verbatim.h",
+    "video_decoder_vpx.cc",
+    "video_decoder_vpx.h",
+  ]
+
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
+
+  deps = [
+    ":vpx_codec",
+    "//base/third_party/dynamic_annotations",
+    "//remoting/proto",
+    "//third_party/libvpx",
+    "//third_party/libyuv",
+    "//third_party/opus",
+    "//third_party/webrtc_overrides:webrtc_component",
+  ]
+}
+
+source_set("vpx_codec") {
+  sources = [
+    "scoped_vpx_codec.cc",
+    "scoped_vpx_codec.h",
+  ]
+
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
+
+  public_deps = [
+    "//third_party/libvpx",
+  ]
+
+  deps = [
+    "//base/third_party/dynamic_annotations",
+    "//remoting/proto",
+    "//third_party/libyuv",
+    "//third_party/webrtc_overrides:webrtc_component",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+
+  sources = [
+    "audio_encoder_opus_unittest.cc",
+    "codec_test.cc",
+    "codec_test.h",
+    "encoder_bitrate_filter_unittest.cc",
+    "frame_processing_time_estimator_unittest.cc",
+    "video_decoder_vpx_unittest.cc",
+    "video_encoder_helper_unittest.cc",
+    "video_encoder_verbatim_unittest.cc",
+    "video_encoder_vpx_unittest.cc",
+    "webrtc_video_encoder_selector_unittest.cc",
+  ]
+
+  deps = [
+    ":decoder",
+    ":encoder",
+    "//base",
+    "//remoting/proto",
+    "//testing/gtest",
+    "//third_party/webrtc_overrides:webrtc_component",
+    "//ui/gfx:color_space",
+  ]
+
+  if (is_ios || is_android) {
+    sources -= [ "audio_encoder_opus_unittest.cc" ]
+  }
+}

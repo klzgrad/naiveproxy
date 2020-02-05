@@ -1,0 +1,227 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/buildflag_header.gni")
+import("//build/config/features.gni")
+import("//pdf/features.gni")
+import("//testing/test.gni")
+import("//third_party/pdfium/pdfium.gni")
+import("//v8/gni/v8.gni")
+
+# Generate a buildflag header for compile-time checking of PDF support.
+buildflag_header("buildflags") {
+  header = "buildflags.h"
+  flags = [ "ENABLE_PDF=$enable_pdf" ]
+}
+
+if (enable_pdf) {
+  pdf_engine = 0  # 0 PDFium
+
+  config("pdf_common_config") {
+    configs = [ "//build/config/compiler:noshadowing" ]
+
+    if (pdf_engine == 0) {
+      include_dirs = [ "//third_party/pdfium" ]
+    }
+  }
+
+  static_library("pdf") {
+    configs += [ ":pdf_common_config" ]
+    deps = [
+      ":features",
+      "//base",
+      "//net",
+      "//ppapi/cpp:objects",
+      "//ppapi/cpp/private:internal_module",
+      "//ui/base",
+      "//ui/gfx/range",
+    ]
+
+    public_deps = [
+      "//gin",
+    ]
+
+    public = [
+      "pdf.h",
+      "pdf_ppapi.h",
+    ]
+
+    sources = [
+      "accessibility.cc",
+      "accessibility.h",
+      "chunk_stream.h",
+      "document_layout.cc",
+      "document_layout.h",
+      "document_loader.h",
+      "document_loader_impl.cc",
+      "document_loader_impl.h",
+      "draw_utils/coordinates.cc",
+      "draw_utils/coordinates.h",
+      "draw_utils/shadow.cc",
+      "draw_utils/shadow.h",
+      "out_of_process_instance.cc",
+      "out_of_process_instance.h",
+      "page_orientation.cc",
+      "page_orientation.h",
+      "paint_aggregator.cc",
+      "paint_aggregator.h",
+      "paint_manager.cc",
+      "paint_manager.h",
+      "pdf.cc",
+      "pdf.h",
+      "pdf_engine.cc",
+      "pdf_engine.h",
+      "pdf_ppapi.cc",
+      "pdf_ppapi.h",
+      "pdf_transform.cc",
+      "pdf_transform.h",
+      "preview_mode_client.cc",
+      "preview_mode_client.h",
+      "range_set.cc",
+      "range_set.h",
+      "url_loader_wrapper.h",
+      "url_loader_wrapper_impl.cc",
+      "url_loader_wrapper_impl.h",
+    ]
+
+    if (pdf_engine == 0) {
+      deps += [
+        "//pdf/pdfium/fuzzers",
+        "//printing",
+        "//third_party/pdfium",
+      ]
+
+      sources += [
+        "pdfium/pdfium_api_string_buffer_adapter.cc",
+        "pdfium/pdfium_api_string_buffer_adapter.h",
+        "pdfium/pdfium_assert_matching_enums.cc",
+        "pdfium/pdfium_document.cc",
+        "pdfium/pdfium_document.h",
+        "pdfium/pdfium_engine.cc",
+        "pdfium/pdfium_engine.h",
+        "pdfium/pdfium_engine_exports.cc",
+        "pdfium/pdfium_engine_exports.h",
+        "pdfium/pdfium_form_filler.cc",
+        "pdfium/pdfium_form_filler.h",
+        "pdfium/pdfium_mem_buffer_file_read.cc",
+        "pdfium/pdfium_mem_buffer_file_read.h",
+        "pdfium/pdfium_mem_buffer_file_write.cc",
+        "pdfium/pdfium_mem_buffer_file_write.h",
+        "pdfium/pdfium_page.cc",
+        "pdfium/pdfium_page.h",
+        "pdfium/pdfium_permissions.cc",
+        "pdfium/pdfium_permissions.h",
+        "pdfium/pdfium_print.cc",
+        "pdfium/pdfium_print.h",
+        "pdfium/pdfium_range.cc",
+        "pdfium/pdfium_range.h",
+        "pdfium/pdfium_unsupported_features.cc",
+        "pdfium/pdfium_unsupported_features.h",
+      ]
+
+      if (is_linux) {
+        sources += [
+          "pdfium/pdfium_font_linux.cc",
+          "pdfium/pdfium_font_linux.h",
+        ]
+      }
+    }
+  }
+
+  source_set("features") {
+    configs += [ ":pdf_common_config" ]
+    deps = [
+      "//base",
+    ]
+
+    public = [
+      "pdf_features.h",
+    ]
+
+    sources = [
+      "pdf_features.cc",
+      "pdf_features.h",
+    ]
+  }
+
+  source_set("pdf_test_utils") {
+    testonly = true
+    sources = [
+      "test/test_client.cc",
+      "test/test_client.h",
+      "test/test_document_loader.cc",
+      "test/test_document_loader.h",
+      "test/test_utils.cc",
+      "test/test_utils.h",
+    ]
+
+    configs += [ "//build/config/compiler:noshadowing" ]
+
+    deps = [
+      ":pdf",
+      "//base",
+      "//testing/gtest",
+    ]
+  }
+
+  test("pdf_unittests") {
+    testonly = true
+    configs += [ ":pdf_common_config" ]
+    sources = [
+      "chunk_stream_unittest.cc",
+      "document_layout_unittest.cc",
+      "document_loader_impl_unittest.cc",
+      "draw_utils/coordinates_unittest.cc",
+      "out_of_process_instance_unittest.cc",
+      "page_orientation_unittest.cc",
+      "pdf_transform_unittest.cc",
+      "range_set_unittest.cc",
+    ]
+
+    deps = [
+      ":pdf",
+      ":pdf_test_utils",
+      "//base",
+      "//base/test:run_all_unittests",
+      "//base/test:test_support",
+      "//ppapi/c",
+      "//testing/gmock",
+      "//testing/gtest",
+      "//ui/gfx/range",
+    ]
+
+    data = [
+      "test/data/",
+    ]
+
+    if (pdf_engine == 0) {
+      configs += [ "//v8:external_startup_data" ]
+      deps += [
+        # Explicitly depend on PDFium to pick up its public configs, which are
+        # not transitive, possibly because the "pdf" target is a static_library.
+        "//third_party/pdfium",
+      ]
+      sources += [
+        "pdfium/accessibility_unittest.cc",
+        "pdfium/findtext_unittest.cc",
+        "pdfium/pdfium_engine_exports_unittest.cc",
+        "pdfium/pdfium_engine_unittest.cc",
+        "pdfium/pdfium_page_unittest.cc",
+        "pdfium/pdfium_permissions_unittest.cc",
+        "pdfium/pdfium_print_unittest.cc",
+        "pdfium/pdfium_test_base.cc",
+        "pdfium/pdfium_test_base.h",
+      ]
+
+      if (v8_use_external_startup_data) {
+        data += [ "$root_out_dir/snapshot_blob.bin" ]
+      }
+    }
+  }
+} else {
+  # Dummy group when PDF support is disabled so targets can unconditionally
+  # depend on it.
+  group("pdf") {
+  }
+}

@@ -1,0 +1,221 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/fuchsia/config.gni")
+import("//build/config/sysroot.gni")
+
+# Creates a Fuchsia .far package file containing a Fuchsia component.
+#
+# Parameters are:
+# package_name_override: Specifies the name of the package to generate,
+#     if different than |target_name|.
+# binary: The executable target which should be launched.
+# manifest: A path to the manifest that will be used.
+#     "testonly" targets default to using //build/config/fuchsia/tests-with-exec.cmx.
+#     Non-test targets must explicitly specify a |manifest|.
+# component_name_override: If set, specifies the name of the component.
+#     By default, the component name is the same as the package name.
+# deps: Additional targets to build and include in the package (optional).
+template("fuchsia_package") {
+  pkg = {
+    forward_variables_from(invoker, "*")
+
+    if (defined(package_name_override)) {
+      package_name = package_name_override
+    } else {
+      package_name = invoker.target_name
+    }
+
+    if (!defined(manifest)) {
+      assert(testonly == true)
+
+      # TODO(1019938): switch the default to tests.cmx which doesn't request
+      # the deprecated-ambient-replace-as-executable feature.
+      manifest = "//build/config/fuchsia/tests-with-exec.cmx"
+    }
+  }
+  assert(defined(pkg.binary))
+
+  _pm_tool_path = "${fuchsia_sdk}/tools/pm"
+
+  _pkg_out_dir = "${target_gen_dir}/${pkg.package_name}"
+  _runtime_deps_file = "$_pkg_out_dir/${pkg.package_name}.runtime_deps"
+  _archive_manifest = "$_pkg_out_dir/${pkg.package_name}.archive_manifest"
+  _build_ids_file = "$_pkg_out_dir/ids.txt"
+  _meta_far_file = "$_pkg_out_dir/meta.far"
+  _combined_far_file = "$_pkg_out_dir/${pkg.package_name}-0.far"
+  _final_far_file = "$_pkg_out_dir/${pkg.package_name}.far"
+  _package_info_path = "$_pkg_out_dir/package"
+
+  if (defined(pkg.component_name_override)) {
+    _generated_cmx = "$_pkg_out_dir/${pkg.component_name_override}.cmx"
+  } else {
+    _generated_cmx = "$_pkg_out_dir/${pkg.package_name}.cmx"
+  }
+
+  _write_manifest_target = "${pkg.package_name}__write_manifest"
+  _package_target = "${pkg.package_name}__pkg"
+  _bundle_target = "${pkg.package_name}__bundle"
+
+  # Generates a manifest file based on the GN runtime deps
+  # suitable for "pm" tool consumption.
+  action(_write_manifest_target) {
+    _depfile = "${target_gen_dir}/${target_name}_stamp.d"
+
+    forward_variables_from(invoker,
+                           [
+                             "deps",
+                             "testonly",
+                           ])
+
+    script = "//build/config/fuchsia/prepare_package_inputs.py"
+
+    inputs = [
+      _runtime_deps_file,
+      pkg.manifest,
+    ]
+
+    outputs = [
+      _archive_manifest,
+      _build_ids_file,
+      _generated_cmx,
+    ]
+
+    if (!defined(deps)) {
+      deps = []
+    }
+    deps += [ pkg.binary ]
+    data_deps = deps
+
+    # Use a depfile to trigger package rebuilds if any of the files (static
+    # assets, shared libraries, etc.) included by the package have changed.
+    depfile = _depfile
+
+    args = [
+      "--root-dir",
+      rebase_path("//", root_build_dir),
+      "--out-dir",
+      rebase_path(root_out_dir, root_build_dir),
+      "--app-name",
+      pkg.package_name,
+      "--app-filename",
+      get_label_info(pkg.binary, "name"),
+      "--manifest-input-path",
+      rebase_path(pkg.manifest, root_build_dir),
+      "--runtime-deps-file",
+      rebase_path(_runtime_deps_file, root_build_dir),
+      "--depfile-path",
+      rebase_path(_depfile, root_build_dir),
+      "--package-manifest-path",
+      rebase_path(_archive_manifest, root_build_dir),
+      "--component-manifest-path",
+      rebase_path(_generated_cmx, root_build_dir),
+      "--build-ids-file",
+      rebase_path(_build_ids_file, root_build_dir),
+    ]
+
+    if (defined(pkg.excluded_files)) {
+      foreach(filename, pkg.excluded_files) {
+        args += [
+          "--exclude-file",
+          filename,
+        ]
+      }
+    }
+
+    write_runtime_deps = _runtime_deps_file
+  }
+
+  # Creates a signed Fuchsia metadata package.
+  action(_package_target) {
+    forward_variables_from(invoker, [ "testonly" ])
+
+    script = "//build/gn_run_binary.py"
+
+    deps = [
+      ":$_write_manifest_target",
+    ]
+
+    inputs = [
+      # Depend on the SDK hash, to ensure rebuild if the SDK tools change.
+      "${fuchsia_sdk}/.hash",
+    ]
+
+    outputs = [
+      _meta_far_file,
+    ]
+
+    args = [
+      rebase_path(_pm_tool_path, root_build_dir),
+      "-o",
+      rebase_path(_pkg_out_dir, root_build_dir),
+      "-m",
+      rebase_path(_archive_manifest, root_build_dir),
+      "build",
+    ]
+  }
+
+  # Creates a package containing the metadata archive and blob data.
+  action(_bundle_target) {
+    forward_variables_from(invoker, [ "testonly" ])
+
+    script = "//build/gn_run_binary.py"
+
+    deps = [
+      ":$_package_target",
+      ":$_write_manifest_target",
+    ]
+
+    inputs = [
+      # Depend on the SDK hash, to ensure rebuild if the SDK tools change.
+      "${fuchsia_sdk}/.hash",
+      _meta_far_file,
+      _archive_manifest,
+    ]
+
+    outputs = [
+      _combined_far_file,
+    ]
+
+    args = [
+      rebase_path(_pm_tool_path, root_build_dir),
+      "-o",
+      rebase_path(_pkg_out_dir, root_build_dir),
+      "-m",
+      rebase_path(_archive_manifest, root_build_dir),
+      "archive",
+    ]
+  }
+
+  # Copies the archive to a well-known path.
+  # TODO(kmarshall): Use a 'pm' output flag to write directly to the desired
+  # file path instead.
+  copy(target_name) {
+    forward_variables_from(invoker, [ "testonly" ])
+
+    # Allows dependent targets to make use of "ids.txt".
+    public_deps = [
+      ":$_write_manifest_target",
+    ]
+
+    deps = [
+      ":$_bundle_target",
+    ]
+
+    data = [
+      _final_far_file,
+
+      # Files specified here so that they can be read by isolated testbots.
+      _package_info_path,
+      _build_ids_file,
+    ]
+
+    sources = [
+      _combined_far_file,
+    ]
+    outputs = [
+      _final_far_file,
+    ]
+  }
+}

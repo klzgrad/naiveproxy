@@ -1,0 +1,78 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+static_library("profiling_host") {
+  sources = [
+    "background_profiling_triggers.cc",
+    "background_profiling_triggers.h",
+    "chrome_browser_main_extra_parts_profiling.cc",
+    "chrome_browser_main_extra_parts_profiling.h",
+    "chrome_client_connection_manager.cc",
+    "chrome_client_connection_manager.h",
+    "profiling_process_host.cc",
+    "profiling_process_host.h",
+  ]
+
+  deps = [
+    "//base",
+    "//chrome/common:non_code_constants",
+    "//components/heap_profiling",
+    "//components/services/heap_profiling/public/cpp",
+    "//content/public/browser",
+    "//content/public/common",
+
+    # Added to support the dependency on //chrome/browser/metrics
+    # TODO(darin): We should instead have a way to express that dependency here.
+    "//chrome/common:mojo_bindings",
+  ]
+}
+
+if (!is_android) {
+  source_set("profiling_browsertests") {
+    testonly = true
+
+    sources = [
+      "memlog_browsertest.cc",
+    ]
+
+    defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+
+    deps = [
+      "//base",
+      "//base/allocator:buildflags",
+      "//chrome/test:test_support_ui",
+      "//components/heap_profiling:test_support",
+      "//components/services/heap_profiling/public/cpp",
+      "//testing/gmock",
+      "//testing/gtest",
+    ]
+  }
+} else {
+  import("//build/config/android/rules.gni")
+
+  # In-process browser tests aren't supported on Android. The tests are run as
+  # instrumentation tests.
+  group("profiling_browsertests") {
+  }
+
+  # This library must be included by the instrumentation_test. It must not be
+  # included by the apk_under_test, since in debug builds, java classes that
+  # appear in the apk_under_test are stripped from the instrumentation_test.
+  # This library contains dependencies that must not be stripped from the
+  # instrumentation_test.
+  android_library("profiling_host_javatests") {
+    testonly = true
+    java_files = [ "../../android/javatests/src/org/chromium/chrome/browser/profiling_host/ProfilingProcessHostAndroidTest.java" ]
+    deps = [
+      "//base:base_java",
+      "//base:base_java_test_support",
+      "//chrome/android:chrome_java",
+      "//chrome/test/android:chrome_java_test_support",
+      "//components/heap_profiling:heap_profiling_java_test_support",
+      "//third_party/android_support_test_runner:rules_java",
+      "//third_party/android_support_test_runner:runner_java",
+      "//third_party/junit",
+    ]
+  }
+}

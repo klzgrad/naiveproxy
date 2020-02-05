@@ -1,0 +1,106 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module spellcheck.mojom;
+
+import "mojo/public/mojom/base/file.mojom";
+import "mojo/public/mojom/base/string16.mojom";
+
+// Render process interface exposed to the browser for receiving process-
+// wide spellcheck control and updates from the browser process.
+//
+interface SpellChecker {
+  // Initialize the render process spellchecker. Called after startup and
+  // also in response to a renderer's spellcheck.mojom.SpellCheckHost
+  // RequestDictionary request.
+  Initialize(array<SpellCheckBDictLanguage> dictionaries,
+             array<string> custom_words,
+             bool enable);
+
+  // Custom dictionary words have been added or removed: update the local
+  // custom word list.
+  CustomDictionaryChanged(array<string> words_added,
+                          array<string> words_removed);
+};
+
+struct SpellCheckBDictLanguage {
+  mojo_base.mojom.File? file;
+  string language;
+};
+
+// Browser process interface exposed to the renderer for requesting spell-
+// check host services.
+//
+interface SpellCheckHost {
+  // Asks the browser to initialize the renderer's spellcheck system. The
+  // initialize call arrives on interface spellcheck.mojom.SpellChecker
+  // in async response to this request.
+  RequestDictionary();
+
+  // Tracks spell checking occurrences to collect histograms, where |word|
+  // was checked, and |misspelled| is true if |word| was misspelt.
+  NotifyChecked(mojo_base.mojom.String16 word, bool misspelled);
+
+  // Asks the host to spellcheck the |text| using a remote Spelling server
+  // to do the spellchecking. If the remote Spelling server is available,
+  // returns |success| true, and the spellchecked |results|.
+  [EnableIf=USE_RENDERER_SPELLCHECKER]
+  CallSpellingService(mojo_base.mojom.String16 text) =>
+      (bool success, array<SpellCheckResult> results);
+
+  // Asks the host to spellcheck the |text| using a platform-specific spell
+  // checker, and returns the spellchecked |results|.
+  // TODO(crbug.com/812959): Try not to pass |route_id|. What SpellCheckHost
+  // needs is the render frame id, which should be passed in a cleaner way.
+  [EnableIf=USE_BROWSER_SPELLCHECKER]
+  RequestTextCheck(mojo_base.mojom.String16 text, int32 route_id) =>
+      (array<SpellCheckResult> results);
+
+  // Exactly like RequestTextCheck, except the text has already been partially
+  // checked (i.e. only in some locales) by the renderer spell checker, and the
+  // native spell checker should check for the rest of the user's locales. The
+  // renderer's partial results are passed as an array of |SpellCheckResult|.
+  // The platform spell checker needs these results to combine them with the
+  // results from the native checks.
+  [EnableIf=USE_WIN_HYBRID_SPELLCHECKER]
+  RequestPartialTextCheck(mojo_base.mojom.String16 text, int32 route_id,
+      array<SpellCheckResult> partial_results, bool fill_suggestions)
+      => (array<SpellCheckResult> results);
+
+  // Disconnects the Android spell checker session bridge.
+  [EnableIf=is_android]
+  DisconnectSessionBridge();
+
+  // Checks the correctness of a word with a platform-specific spell checker.
+  // TODO(groby): This needs to originate from SpellcheckProvider.
+  // TODO(crbug.com/812959): Try not to pass |route_id|. What SpellCheckHost
+  // needs is the render frame id, which should be passed in a cleaner way.
+  [EnableIf=USE_BROWSER_SPELLCHECKER, Sync]
+  CheckSpelling(mojo_base.mojom.String16 word, int32 route_id)
+      => (bool correct);
+
+  // Returns a list of suggestions for a given word with a platform-specific
+  // spell checker.
+  [EnableIf=USE_BROWSER_SPELLCHECKER, Sync]
+  FillSuggestionList(mojo_base.mojom.String16 word) =>
+      (array<mojo_base.mojom.String16> suggestions);
+
+  // Returns a list of suggestions for each spellcheck language for a given word
+  // with a platform-specific spell checker.
+  [EnableIf=USE_WIN_HYBRID_SPELLCHECKER, Sync]
+  GetPerLanguageSuggestions(mojo_base.mojom.String16 word) =>
+      (array<array<mojo_base.mojom.String16>> suggestions);
+};
+
+enum Decoration {
+  kSpelling,
+  kGrammar,
+};
+
+struct SpellCheckResult {
+  Decoration decoration;
+  int32 location;
+  int32 length;
+  array<mojo_base.mojom.String16> replacements;
+};

@@ -1,0 +1,46 @@
+# Copyright 2019 The Chromium Authors.  All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+script_path = "//third_party/typescript"
+
+# Defines a target that compiles .ts files using TypeScript.
+# A temporary tsconfig.json is generated which uses the
+# tsconfig.json in this folder as basis.
+#
+# Variables:
+#   sources:
+#     List of TypeScript files to typecheck and generate
+# Example:
+#   ts_library("main") {
+#     sources = ["bar.ts", "foo.ts"]
+#   }
+template("ts_library") {
+  action(target_name) {
+    script = "//third_party/typescript/ts_library.py"
+
+    forward_variables_from(invoker, [ "sources", "visibility" ])
+
+    args = [
+      "--tsconfig_location",
+      rebase_path(target_gen_dir, root_build_dir) + "/tsconfig.json",
+    ]
+    args += [ "--sources" ] + rebase_path(sources, root_build_dir)
+
+    output_files = [ "$target_gen_dir/tsconfig.json" ]
+
+    foreach(src, sources) {
+      js_renamed_path =
+          get_path_info(src, "dir") + "/" + get_path_info(src, "name") + ".js"
+      output_files += [ "$target_gen_dir/$js_renamed_path" ]
+    }
+
+    outputs = output_files
+  }
+}
+
+set_defaults("ts_library") {
+  # Build output should be private and directories should export all relevant
+  # components in a group
+  visibility = [":*"]
+}

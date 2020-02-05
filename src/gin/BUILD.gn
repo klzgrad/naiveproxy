@@ -1,0 +1,181 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/allocator.gni")
+import("//testing/test.gni")
+import("//tools/v8_context_snapshot/v8_context_snapshot.gni")
+import("//v8/gni/v8.gni")
+
+component("gin") {
+  sources = [
+    "arguments.cc",
+    "arguments.h",
+    "array_buffer.cc",
+    "array_buffer.h",
+    "context_holder.cc",
+    "converter.cc",
+    "converter.h",
+    "data_object_builder.cc",
+    "data_object_builder.h",
+    "debug_impl.cc",
+    "debug_impl.h",
+    "dictionary.cc",
+    "dictionary.h",
+    "function_template.cc",
+    "function_template.h",
+    "gin_export.h",
+    "gin_features.cc",
+    "gin_features.h",
+    "handle.h",
+    "interceptor.cc",
+    "interceptor.h",
+    "isolate_holder.cc",
+    "modules/console.cc",
+    "modules/console.h",
+    "object_template_builder.cc",
+    "object_template_builder.h",
+    "per_context_data.cc",
+    "per_context_data.h",
+    "per_isolate_data.cc",
+    "per_isolate_data.h",
+    "public/context_holder.h",
+    "public/debug.h",
+    "public/gin_embedders.h",
+    "public/isolate_holder.h",
+    "public/v8_idle_task_runner.h",
+    "public/v8_platform.h",
+    "public/wrapper_info.h",
+    "runner.cc",
+    "runner.h",
+    "shell_runner.cc",
+    "shell_runner.h",
+    "try_catch.cc",
+    "try_catch.h",
+    "v8_foreground_task_runner.cc",
+    "v8_foreground_task_runner.h",
+    "v8_foreground_task_runner_base.cc",
+    "v8_foreground_task_runner_base.h",
+    "v8_foreground_task_runner_with_locker.cc",
+    "v8_foreground_task_runner_with_locker.h",
+    "v8_initializer.cc",
+    "v8_initializer.h",
+    "v8_isolate_memory_dump_provider.cc",
+    "v8_isolate_memory_dump_provider.h",
+    "v8_platform.cc",
+    "v8_shared_memory_dump_provider.cc",
+    "v8_shared_memory_dump_provider.h",
+    "wrappable.cc",
+    "wrappable.h",
+    "wrapper_info.cc",
+  ]
+
+  if (v8_use_external_startup_data) {
+    data = [
+      "$root_out_dir/snapshot_blob.bin",
+    ]
+  }
+
+  defines = [ "GIN_IMPLEMENTATION" ]
+
+  public_deps = [
+    "//base",
+    "//v8",
+  ]
+  deps = [
+    "//base/third_party/dynamic_annotations",
+  ]
+
+  if (is_mac) {
+    libs = [ "CoreFoundation.framework" ]
+  }
+
+  configs += [ "//v8:external_startup_data" ]
+}
+
+executable("gin_shell") {
+  sources = [
+    "shell/gin_main.cc",
+  ]
+
+  deps = [
+    ":gin",
+    "//base",
+    "//base:i18n",
+    "//build/win:default_exe_manifest",
+    "//v8",
+  ]
+
+  configs += [ "//v8:external_startup_data" ]
+}
+
+source_set("gin_test") {
+  testonly = true
+  sources = [
+    "test/v8_test.cc",
+    "test/v8_test.h",
+  ]
+
+  public_deps = [
+    ":gin",
+    "//testing/gtest",
+  ]
+  deps = [
+    "//base/test:test_support",
+    "//v8",
+  ]
+
+  configs += [ "//v8:external_startup_data" ]
+}
+
+test("gin_unittests") {
+  sources = [
+    "arguments_unittest.cc",
+    "array_buffer_unittest.cc",
+    "converter_unittest.cc",
+    "data_object_builder_unittest.cc",
+    "interceptor_unittest.cc",
+    "per_context_data_unittest.cc",
+    "shell_runner_unittest.cc",
+    "test/run_all_unittests.cc",
+    "v8_isolate_memory_dump_provider_unittest.cc",
+    "v8_platform_unittest.cc",
+    "v8_shared_memory_dump_provider_unittest.cc",
+    "wrappable_unittest.cc",
+  ]
+
+  deps = [
+    ":gin_test",
+    "//base/test:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//v8",
+  ]
+
+  configs += [
+    "//tools/v8_context_snapshot:use_v8_context_snapshot",
+    "//v8:external_startup_data",
+  ]
+
+  data_deps = [
+    "//tools/v8_context_snapshot:v8_context_snapshot",
+  ]
+  data = []
+
+  # gin_shell is not an Android app.
+  if (!is_android) {
+    sources += [ "shell/gin_shell_unittest.cc" ]
+    deps += [ ":gin_shell" ]
+    data_deps += [ ":gin_shell" ]
+    data += [ "shell/hello_world.js" ]
+  }
+
+  # On Android, the APK must bundle the startup data.
+  if (is_android) {
+    if (use_v8_context_snapshot) {
+      deps += [ "//tools/v8_context_snapshot:v8_context_snapshot_assets" ]
+    } else {
+      deps += [ "//v8:v8_external_startup_data_assets" ]
+    }
+  }
+}
