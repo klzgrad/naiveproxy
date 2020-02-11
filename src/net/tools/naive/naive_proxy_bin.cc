@@ -68,7 +68,6 @@ constexpr int kListenBackLog = 512;
 constexpr int kDefaultMaxSocketsPerPool = 256;
 constexpr int kDefaultMaxSocketsPerGroup = 255;
 constexpr int kExpectedMaxUsers = 8;
-constexpr char kDefaultHostName[] = "example";
 constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
     net::DefineNetworkTrafficAnnotation("naive", "");
 
@@ -327,18 +326,6 @@ bool ParseCommandLine(const CommandLine& cmdline, Params* params) {
 
   if (!cmdline.host_resolver_rules.empty()) {
     params->host_resolver_rules = cmdline.host_resolver_rules;
-  } else {
-    // SNI should only contain DNS hostnames not IP addresses per RFC 6066.
-    if (url.HostIsIPAddress()) {
-      GURL::Replacements set_host;
-      set_host.SetHostStr(kDefaultHostName);
-      params->proxy_url =
-          GetProxyFromURL(url_no_auth.ReplaceComponents(set_host));
-      LOG(INFO) << "Using '" << kDefaultHostName << "' as the hostname for "
-                << url.host();
-      params->host_resolver_rules =
-          std::string("MAP ") + kDefaultHostName + " " + url.host();
-    }
   }
 
   if (params->protocol == net::NaiveConnection::kRedir) {
