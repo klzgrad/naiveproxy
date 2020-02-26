@@ -49,7 +49,7 @@ forwardproxy {
 and `./naive` with the following `config.json`:
 ```json
 {
-  "listen": "http:/127.0.0.1:8080",
+  "listen": "http://127.0.0.1:8080",
   "padding": true
 }
 ```
