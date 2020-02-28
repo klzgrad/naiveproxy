@@ -73,7 +73,7 @@ It's possible to run Caddy without Naive server, but you need to remove `padding
 If you don't like to download binaries, you can build NaïveProxy.
 
 Prerequisites:
-* Ubuntu (apt-get install): git, python2, ninja-build (>= 1.7), pkg-config, libnss3-dev, ccache (optional)
+* Ubuntu (apt-get install): git, python2, ninja-build (>= 1.7), pkg-config, libnss3-dev, curl, unzip, ccache (optional)
 * MacOS (brew install): git, ninja, ccache (optional)
 * Windows ([choco install](https://chocolatey.org/)): git, python2, ninja, visualstudio2017community. See [Chromium's page](https://chromium.googlesource.com/chromium/src/+/master/docs/windows_build_instructions.md#Visual-Studio) for detail on Visual Studio setup requirements.
 
