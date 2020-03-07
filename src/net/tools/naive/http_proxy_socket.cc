@@ -142,6 +142,19 @@ int HttpProxySocket::Read(IOBuffer* buf,
   DCHECK(!user_callback_);
   DCHECK(callback);
 
+  if (!buffer_.empty()) {
+    int data_len = buffer_.size();
+    if (data_len <= buf_len) {
+      std::memcpy(buf->data(), buffer_.data(), data_len);
+      buffer_.clear();
+    } else {
+      std::memcpy(buf->data(), buffer_.data(), buf_len);
+      buffer_ = buffer_.substr(buf_len);
+    }
+    was_ever_used_ = true;
+    return OK;
+  }
+
   int rv = transport_->Read(
       buf, buf_len,
       base::BindOnce(&HttpProxySocket::OnReadWriteComplete,
@@ -263,9 +276,6 @@ int HttpProxySocket::DoHeaderReadComplete(int result) {
     next_state_ = STATE_HEADER_READ;
     return OK;
   }
-  if (header_end + 4 != buffer_.size()) {
-    return ERR_INVALID_ARGUMENT;
-  }
 
   // HttpProxyClientSocket uses CONNECT for all endpoints.
   auto first_line_end = buffer_.find("\r\n");
@@ -282,6 +292,8 @@ int HttpProxySocket::DoHeaderReadComplete(int result) {
   }
   request_endpoint_ = HostPortPair::FromString(
       buffer_.substr(first_space + 1, second_space - (first_space + 1)));
+
+  buffer_ = buffer_.substr(header_end + 4);
 
   next_state_ = STATE_HEADER_WRITE;
   return OK;
