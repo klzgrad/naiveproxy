@@ -23,8 +23,8 @@ for flag in ALL_NONSHARED ALL_KMODS ALL SIGNED_PACKAGES; do
 done
 make oldconfig
 make
-full_root=staging_dir/toolchain-${arch}_gcc-${gcc_ver}_musl
-cp -r staging_dir/target-${arch}_musl/usr $full_root
+full_root=staging_dir/toolchain-*_gcc-${gcc_ver}_musl
+cp -r staging_dir/target-*_musl/usr $full_root
 echo '
 ./include
 ./lib/*.o
