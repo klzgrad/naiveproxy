@@ -32,7 +32,7 @@ tar xf ./caddy_*.tar.gz
 sudo setcap cap_net_bind_service=+ep caddy
 ```
 
-Run `./caddy` with the following Caddyfile (replace the example values accordingly):
+Run `./caddy` with the following Caddyfile through the `-conf [Caddyfile]` option (replace the example values accordingly):
 ```
 domain.example
 root /var/www/html
