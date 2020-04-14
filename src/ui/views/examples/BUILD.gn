@@ -1,0 +1,200 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/jumbo.gni")
+import("//build/config/ui.gni")
+
+jumbo_component("views_examples_lib") {
+  testonly = true
+
+  sources = [
+    "ax_example.cc",
+    "ax_example.h",
+    "box_layout_example.cc",
+    "box_layout_example.h",
+    "bubble_example.cc",
+    "bubble_example.h",
+    "button_example.cc",
+    "button_example.h",
+    "button_sticker_sheet.cc",
+    "button_sticker_sheet.h",
+    "checkbox_example.cc",
+    "checkbox_example.h",
+    "combobox_example.cc",
+    "combobox_example.h",
+    "dialog_example.cc",
+    "dialog_example.h",
+    "example_base.cc",
+    "example_base.h",
+    "example_combobox_model.cc",
+    "example_combobox_model.h",
+    "examples_window.cc",
+    "examples_window.h",
+    "flex_layout_example.cc",
+    "flex_layout_example.h",
+    "label_example.cc",
+    "label_example.h",
+    "layout_example_base.cc",
+    "layout_example_base.h",
+    "link_example.cc",
+    "link_example.h",
+    "menu_example.cc",
+    "menu_example.h",
+    "message_box_example.cc",
+    "message_box_example.h",
+    "multiline_example.cc",
+    "multiline_example.h",
+    "native_theme_example.cc",
+    "native_theme_example.h",
+    "progress_bar_example.cc",
+    "progress_bar_example.h",
+    "radio_button_example.cc",
+    "radio_button_example.h",
+    "scroll_view_example.cc",
+    "scroll_view_example.h",
+    "slider_example.cc",
+    "slider_example.h",
+    "tabbed_pane_example.cc",
+    "tabbed_pane_example.h",
+    "table_example.cc",
+    "table_example.h",
+    "text_example.cc",
+    "text_example.h",
+    "textfield_example.cc",
+    "textfield_example.h",
+    "throbber_example.cc",
+    "throbber_example.h",
+    "toggle_button_example.cc",
+    "toggle_button_example.h",
+    "tree_view_example.cc",
+    "tree_view_example.h",
+    "vector_example.cc",
+    "vector_example.h",
+    "views_examples_export.h",
+    "widget_example.cc",
+    "widget_example.h",
+  ]
+
+  # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+  configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+
+  defines = [
+    "GFX_VECTOR_ICONS_UNSAFE",
+    "VIEWS_EXAMPLES_IMPLEMENTATION",
+  ]
+
+  deps = [
+    "//base",
+    "//cc/paint",
+    "//skia",
+    "//third_party/icu",
+    "//ui/base",
+    "//ui/events",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+    "//ui/native_theme",
+    "//ui/resources",
+    "//ui/resources:ui_test_pak",
+    "//ui/views",
+  ]
+
+  if (is_win) {
+    deps += [ "//third_party/wtl" ]
+  }
+
+  if (use_aura) {
+    deps += [ "//ui/aura" ]
+  }
+}
+
+executable("views_examples_exe") {
+  testonly = true
+
+  sources = [ "examples_main.cc" ]
+
+  deps = [
+    ":views_examples_lib",
+    "//base",
+    "//base:i18n",
+    "//base/test:test_support",
+    "//build/win:default_exe_manifest",
+    "//components/viz/host",
+    "//components/viz/service",
+    "//mojo/core/embedder",
+    "//ui/base",
+    "//ui/base/ime/init",
+    "//ui/compositor",
+    "//ui/compositor:test_support",
+    "//ui/gfx",
+    "//ui/gl",
+    "//ui/gl/init",
+    "//ui/resources:ui_test_pak",
+    "//ui/views",
+    "//ui/views:test_support",
+  ]
+
+  if (use_aura) {
+    deps += [
+      "//ui/aura",
+      "//ui/wm",
+    ]
+  }
+  if (use_x11) {
+    deps += [ "//ui/gfx/x" ]
+  }
+}
+
+jumbo_component("views_examples_with_content_lib") {
+  testonly = true
+  sources = [
+    "examples_window_with_content.cc",
+    "examples_window_with_content.h",
+    "views_examples_with_content_export.h",
+    "webview_example.cc",
+    "webview_example.h",
+  ]
+
+  defines = [ "VIEWS_EXAMPLES_WITH_CONTENT_IMPLEMENTATION" ]
+
+  deps = [
+    ":views_examples_lib",
+    "//base",
+    "//content",
+    "//skia",
+    "//ui/events",
+    "//ui/views",
+    "//ui/views/controls/webview",
+    "//url",
+  ]
+}
+
+executable("views_examples_with_content_exe") {
+  testonly = true
+
+  sources = [ "examples_with_content_main_exe.cc" ]
+
+  defines = [ "VIEWS_EXAMPLES_WITH_CONTENT_IMPLEMENTATION" ]
+
+  deps = [
+    ":copy_content_resources",
+    ":views_examples_with_content_lib",
+    "//base",
+    "//build/win:default_exe_manifest",
+    "//content",
+    "//content:sandbox_helper_win",
+    "//sandbox",
+    "//ui/views_content_client",
+  ]
+
+  if (is_win) {
+    configs += [ "//build/config/win:windowed" ]
+    configs -= [ "//build/config/win:console" ]
+  }
+}
+
+copy("copy_content_resources") {
+  deps = [ "//content:content_resources" ]
+  sources = [ "$root_gen_dir/content/content_resources.pak" ]
+  outputs = [ "$root_out_dir/content_resources.pak" ]
+}

@@ -1,0 +1,29 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module video_capture.mojom;
+
+import "media/capture/mojom/video_capture_types.mojom";
+import "media/capture/mojom/image_capture.mojom";
+import "services/video_capture/public/mojom/video_frame_handler.mojom";
+
+// Represents access to a video capture device available on the machine. The
+// device is stopped automatically when the message pipe corresponding to either
+// the Device or the given |handler| is closed. Note that as a response to
+// stopping the device, the service may still need to send out events such as
+// VideoFrameHandler.OnBufferRetired() to |handler|. The service will send a
+// final event VideoFrameHandler.OnStopped() to indicate that stopping has
+// completed and no further events are going to be sent to |handler|.
+interface Device {
+  Start(media.mojom.VideoCaptureParams requested_settings,
+        pending_remote<VideoFrameHandler> handler);
+  MaybeSuspend();
+  Resume();
+  GetPhotoState()
+      => (media.mojom.PhotoState? capabilities);
+  SetPhotoOptions(media.mojom.PhotoSettings settings)
+      => (bool success);
+  TakePhoto()
+      => (media.mojom.Blob? blob);
+};

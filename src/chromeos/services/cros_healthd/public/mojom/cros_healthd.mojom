@@ -1,0 +1,125 @@
+// Copyright 2019 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// API exposed by the cros_healthd daemon. This API is normally consumed by the
+// browser and the telem and diag command-line tools.
+
+// NOTE: This mojom should be kept in sync with the copy in Chromium OS's repo
+// in src/platform2/diagnostics/mojo/cros_healthd.mojom.
+
+module chromeos.cros_healthd.mojom;
+
+import "chromeos/services/cros_healthd/public/mojom/cros_healthd_diagnostics.mojom";
+import "chromeos/services/cros_healthd/public/mojom/cros_healthd_probe.mojom";
+
+// Factory interface which allows remote ends to request implementations of the
+// probe or diagnostics services.
+interface CrosHealthdServiceFactory {
+  // Returns a bound interface to the diagnostics service.
+  GetDiagnosticsService(CrosHealthdDiagnosticsService& service);
+  // Returns a bound interface to the probe service.
+  GetProbeService(CrosHealthdProbeService& service);
+};
+
+// Diagnostics interface exposed by the cros_healthd daemon.
+interface CrosHealthdDiagnosticsService {
+  // Returns an array of all diagnostic routines that the platform supports.
+  GetAvailableRoutines()
+      => (array<DiagnosticRoutineEnum> available_routines);
+
+  // Sends commands to an existing routine. Also returns status information for
+  // the routine.
+  //
+  // The request:
+  // * |id| - specifies which routine the command will be sent to. This must be
+  //          the same id that was returned from the RunSomeRoutine function
+  //          call used to create the routine.
+  // * |command| - command to send the routine.
+  // * |include_output| - whether or not the response should include any output
+  //                      accumulated from the routine.
+  //
+  // The response:
+  // * |routine_update| - status information for the specified routine. See
+  //                      cros_healthd_diagnostics.mojom for the structure.
+  GetRoutineUpdate(int32 id, DiagnosticRoutineCommandEnum command,
+                   bool include_output)
+      => (RoutineUpdate routine_update);
+
+  // Requests that the Urandom routine is created and started on the platform.
+  // This routine attempts to continually read from /dev/urandom to stress the
+  // cpu. The routine will pass iff all the reads from /dev/urandom succeed.
+  // This routine is only available if GetAvailableRoutines returned kUrandom.
+  //
+  // The request:
+  // * |length_seconds| - length of time, in seconds, to run the urandom routine
+  //                      for. If all reads from /dev/urandom for this length of
+  //                      time are successful, then the test  will pass. This
+  //                      parameter needs to be strictly greater than zero.
+  //
+  // The response:
+  // * |response| - contains a unique identifier and status for the created
+  //                routine.
+  RunUrandomRoutine(uint32 length_seconds)
+      => (RunRoutineResponse response);
+
+  // Requests that the BatteryCapacity routine is created and started on the
+  // platform. This routine checks the battery's design capacity against the
+  // inputs. The routine will pass iff the design capacity of the battery read
+  // from the platform is inclusively within these bounds. This routine is only
+  // available if GetAvailableRoutines returned kBatteryCapactity.
+  //
+  // The request:
+  // * |low_mah| - lower bound for the battery's design capacity (mAh).
+  // * |high_mah| - upper bound for the battery's design capacity (mAh).
+  //
+  // The response:
+  // * |response| - contains a unique identifier and status for the created
+  //                routine.
+  RunBatteryCapacityRoutine(uint32 low_mah, uint32 high_mah)
+      => (RunRoutineResponse response);
+
+  // Requests that the BatteryHealth routine is created and started on the
+  // platform. This routine checks the cycle count and percent wear of the
+  // battery. This routine is only available if GetAvailableRoutines returned
+  // kBatteryHealth.
+  //
+  // The request:
+  // * |maximum_cycle_count| - maximum cycle count allowed for the routine to
+  //                           pass.
+  // * |percent_battery_wear_allowed| - maximum percent battery wear allowed for
+  //                                    the routine to pass.
+  //
+  // The response:
+  // * |response| - contains a unique identifier and status for the created
+  //                routine.
+  RunBatteryHealthRoutine(uint32 maximum_cycle_count,
+                          uint32 percent_battery_wear_allowed)
+      => (RunRoutineResponse response);
+
+  // Requests that the SmartctlCheck routine is created and started on the
+  // platform. This routine checks available spare NVMe capacity against the
+  // threshold. This routine is only available if GetAvailableRoutines returned
+  // kSmartctlCheck.
+  //
+  // The response:
+  // * |response| - contains a unique identifier and status for the created
+  //                routine.
+  RunSmartctlCheckRoutine() => (RunRoutineResponse response);
+};
+
+// Probe interface exposed by the cros_healthd daemon.
+interface CrosHealthdProbeService {
+  // Returns telemetry information for the desired categories.
+  //
+  // The request:
+  // * |categories| - list of each of the categories that ProbeTelemetryInfo
+  //                  should return information for.
+  //
+  // The response:
+  // * |telemetry_info| - information for each of the requested categories. Only
+  //                      the fields corresponding to the requested categories
+  //                      will be non-null.
+  ProbeTelemetryInfo(array<ProbeCategoryEnum> categories)
+      => (TelemetryInfo telemetry_info);
+};

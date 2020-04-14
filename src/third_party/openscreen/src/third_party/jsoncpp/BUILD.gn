@@ -1,0 +1,58 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build_overrides/build.gni")
+
+if (build_with_chromium) {
+  source_set("jsoncpp") {
+    public_deps = [
+      "//third_party/jsoncpp",
+    ]
+  }
+} else {
+  config("jsoncpp_config") {
+    include_dirs = [
+      "//third_party/jsoncpp/src/include",
+      "//third_party/jsoncpp/generated",
+    ]
+
+    cflags_cc = [ "-Wno-implicit-fallthrough" ]
+
+    if (is_clang) {
+      cflags_cc += [ "-Wno-exit-time-destructors" ]
+    }
+  }
+
+  source_set("jsoncpp") {
+    sources = [
+      # Note: the generated/version.h file is a build artifact of JsonCpp's
+      # meson/CMake build toolchains. When updating the DEPS, build JsonCpp
+      # and copy the generated version.h to this location. You also need to
+      # update the include guard to match our PRESUBMIT rule, from
+      # JSON_VERSION_H_INCLUDED to THIRD_PARTY_JSONCPP_GENERATED_VERSION_H_
+      "generated/version.h",
+
+      # All of the other files are from the actual JsonCpp repository.
+      "src/include/json/assertions.h",
+      "src/include/json/autolink.h",
+      "src/include/json/config.h",
+      "src/include/json/features.h",
+      "src/include/json/forwards.h",
+      "src/include/json/json.h",
+      "src/include/json/reader.h",
+      "src/include/json/value.h",
+      "src/include/json/writer.h",
+      "src/src/lib_json/json_reader.cpp",
+      "src/src/lib_json/json_tool.h",
+      "src/src/lib_json/json_value.cpp",
+      "src/src/lib_json/json_writer.cpp",
+    ]
+
+    public_configs = [ ":jsoncpp_config" ]
+
+    defines = [ "JSON_USE_EXCEPTION=0" ]
+
+    include_dirs = [ "src/src/lib_json" ]
+  }
+}

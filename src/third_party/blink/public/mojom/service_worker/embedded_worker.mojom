@@ -1,0 +1,212 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module blink.mojom;
+
+import "mojo/public/mojom/base/string16.mojom";
+import "mojo/public/mojom/base/time.mojom";
+import "mojo/public/mojom/base/unguessable_token.mojom";
+import "services/network/public/mojom/url_loader_factory.mojom";
+import "third_party/blink/public/mojom/devtools/console_message.mojom";
+import "third_party/blink/public/mojom/devtools/devtools_agent.mojom";
+import "third_party/blink/public/mojom/worker/subresource_loader_updater.mojom";
+import "third_party/blink/public/mojom/loader/fetch_client_settings_object.mojom";
+import "third_party/blink/public/mojom/loader/url_loader_factory_bundle.mojom";
+import "third_party/blink/public/mojom/renderer_preference_watcher.mojom";
+import "third_party/blink/public/mojom/renderer_preferences.mojom";
+import "third_party/blink/public/mojom/script/script_type.mojom";
+import "third_party/blink/public/mojom/service_worker/controller_service_worker.mojom";
+import "third_party/blink/public/mojom/service_worker/service_worker.mojom";
+import "third_party/blink/public/mojom/service_worker/service_worker_installed_scripts_manager.mojom";
+import "third_party/blink/public/mojom/service_worker/service_worker_event_status.mojom";
+import "third_party/blink/public/mojom/service_worker/service_worker_provider.mojom";
+import "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom";
+import "third_party/blink/public/mojom/worker/worker_content_settings_proxy.mojom";
+import "third_party/blink/public/mojom/web_feature/web_feature.mojom";
+import "url/mojom/url.mojom";
+
+// Parameters to launch a service worker. This is passed from the browser to the
+// renderer at mojom::EmbeddedWorkerInstanceClient::StartWorker().
+struct EmbeddedWorkerStartParams {
+  // The id of the service worker being started. This remains fixed even if the
+  // worker is stopped and restarted, or even if the browser restarts.
+  int64 service_worker_version_id;
+
+  // This service worker's registration's scope:
+  // https://w3c.github.io/ServiceWorker/#service-worker-registration-scope
+  url.mojom.Url scope;
+
+  // This service worker's script url:
+  // https://w3c.github.io/ServiceWorker/#dom-serviceworker-scripturl
+  url.mojom.Url script_url;
+
+  // This service worker's script type:
+  // https://w3c.github.io/ServiceWorker/#dfn-type
+  ScriptType script_type;
+
+  // The outside fetch client settings object. This is used for top-level script
+  // fetch.
+  FetchClientSettingsObject outside_fetch_client_settings_object;
+
+  // The string used for "user-agent" HTTP header.
+  string user_agent;
+
+  // The id this service worker uses as render_frame_id in
+  // network::ResourceRequests it makes.
+  int32 service_worker_route_id;
+
+  // Unique token identifying this worker for DevTools.
+  mojo_base.mojom.UnguessableToken devtools_worker_token;
+
+  // When true, worker script evaluation is blocked until
+  // EmbeddedWorkerInstanceClient::ResumeAfterDownload() is called.
+  // This isn't used when off-the-main-thread script fetch is enabled. The
+  // browser process is responsible for delaying execution.
+  bool pause_after_download;
+
+  // The URL of the service worker script that should skip throttles when
+  // loaded, because the browser process has already started loading it and
+  // already throttled the request. For more detail, during the service worker
+  // update check, the browser process fetches the scripts of the incumbent
+  // service worker. If an update is found in a script, the browser pauses the
+  // load for that script and starts the new service worker. When this service
+  // worker requests that script, the browser will resume the load.
+  //
+  // If there is no such script, this is the empty URL.
+  url.mojom.Url script_url_to_skip_throttling;
+
+  // True if starting the worker should wait until DevTools gets ready.
+  bool wait_for_debugger;
+
+  // True if this service worker has been installed.
+  bool is_installed;
+
+  // Used to set up fetch requests.
+  RendererPreferences renderer_preferences;
+
+  // Used to talk to the service worker from the browser process.
+  pending_receiver<ServiceWorker> service_worker_receiver;
+
+  // Cloned and passed to each controllee to directly dispatch events from the
+  // controllees.
+  pending_receiver<ControllerServiceWorker> controller_receiver;
+
+  // Information to transfer installed scripts from the browser to the renderer.
+  ServiceWorkerInstalledScriptsInfo? installed_scripts_info;
+
+  // Interface for the renderer to send the status updates to the browser.
+  pending_associated_remote<EmbeddedWorkerInstanceHost> instance_host;
+
+  // Information for talking to the ServiceWorkerContainerHost, and other
+  // params.
+  ServiceWorkerProviderInfoForStartWorker provider_info;
+
+  // Interface for the renderer to query the content settings in the browser.
+  pending_remote<WorkerContentSettingsProxy> content_settings_proxy;
+
+  // Interface for keeping track of the renderer preferences.
+  pending_receiver<RendererPreferenceWatcher> preference_watcher_receiver;
+
+  // Used to load subresources in the service worker.  This allows the service
+  // worker to load chrome-extension:// URLs which the renderer's default
+  // loader factory can't load.
+  URLLoaderFactoryBundle subresource_loader_factories;
+
+  // Used for updating subresource loaders after NetworkService crash etc.
+  pending_receiver<SubresourceLoaderUpdater> subresource_loader_updater;
+};
+
+// Holds timing information about the start worker sequence for UMA.
+//
+// Keep this in sync with the validation check in
+// EmbeddedWorkerInstance::OnStarted.
+// TODO(falken): Make a typemap just for the validation check?
+struct EmbeddedWorkerStartTiming {
+  // When the start worker message was received by the renderer.
+  mojo_base.mojom.TimeTicks start_worker_received_time;
+  // When JavaScript evaluation on the worker thread started.
+  mojo_base.mojom.TimeTicks script_evaluation_start_time;
+  // When JavaScript evaluation on the worker thread finished.
+  mojo_base.mojom.TimeTicks script_evaluation_end_time;
+};
+
+// EmbeddedWorkerInstanceClient is the renderer-side ("Client") of
+// EmbeddedWorkerInstanceHost. It allows control of a renderer-side
+// embedded worker. The browser uses this interface to start, stop, and
+// issue commands to the worker.
+//
+// This interface is the master interface of a dedicated message pipe. It has
+// some interfaces associated with it, like EmbeddedWorkerInstanceHost.
+interface EmbeddedWorkerInstanceClient {
+  // Called back as various functions in EmbeddedWorkerInstanceHost, such
+  // as OnThreadStarted(), OnStarted().
+  StartWorker(EmbeddedWorkerStartParams params);
+  // The response is sent back via EmbeddedWorkerInstanceHost.OnStopped().
+  StopWorker();
+  ResumeAfterDownload();
+};
+
+// EmbeddedWorkerInstanceHost is the browser-side ("Host") of
+// EmbeddedWorkerInstanceClient. It allows control of a browser-side embedded
+// worker instance. The renderer uses this interface to report embedded worker
+// state back to the browser, or request termination of the worker. This
+// interface is associated with the master interface
+// EmbeddedWorkerInstanceClient, so it lives on the same message pipe as
+// EmbeddedWorkerInstanceClient.
+interface EmbeddedWorkerInstanceHost {
+  // Called when the worker requests to be terminated. The worker will request
+  // to be terminated when it realizes it has been idle for some time. The
+  // browser doesn't terminate the worker when there are inflight events or
+  // DevTools is attached, and in that case the callback will be called with
+  // false. Note that the browser can terminate the worker at any time even if
+  // RequestTermination() is not called. For example, if the worker thread is
+  // continuously busy and the browser's periodic ping message has been missed,
+  // the browser will terminate the service worker.
+  RequestTermination() => (bool will_be_terminated);
+
+  // Tells the browser process that this service worker used |feature|, for
+  // UseCounter purposes. The browser process propagates the feature usage bit
+  // to all clients controlled by the service worker. See
+  // https://crbug.com/376039 for background.
+  // Note: Because CountFeature() is possible to be called on the main thread
+  // during service worker startup and is also called on the worker thread after
+  // that, we put it here rather than interface ServiceWorkerHost, so that we
+  // can still keep interface ServiceWorkerHost being used solely on the worker
+  // thread in the renderer process.
+  CountFeature(WebFeature feature);
+
+  // The following are called during startup:
+  //
+  // Indicates that the worker is ready for inspection, passes a DevToolsAgent
+  // interface for this embedded worker and requests a corresponding host.
+  // See DevToolsAgent for details.
+  OnReadyForInspection(pending_remote<blink.mojom.DevToolsAgent> agent,
+                       pending_receiver<blink.mojom.DevToolsAgentHost> agent_host);
+  // Indicates that the worker has finished loading the main script.
+  //
+  // This is only called for new (non-installed) workers. It's used so the
+  // browser process knows it can resume the paused worker via
+  // ResumeAfterDownloaded().
+  OnScriptLoaded();
+  // Indicates that initial JavaScript evaluation is starting. This is useful
+  // for the browser process to start enforcing timeouts on script execution.
+  OnScriptEvaluationStart();
+  // Indicates that the worker has started. |thread_id| is the platform
+  // thread id the worker runs on.
+  OnStarted(ServiceWorkerStartStatus status,
+            int32 thread_id,
+            EmbeddedWorkerStartTiming start_timing);
+
+  // Reports that an uncaught exception occurred in the worker.
+  OnReportException(mojo_base.mojom.String16 error_message, int32 line_number,
+                    int32 column_number, url.mojom.Url source_url);
+
+  // Reports that a console message was emitted to the worker's console.
+  OnReportConsoleMessage(ConsoleMessageSource source,
+                         ConsoleMessageLevel message_level,
+                         mojo_base.mojom.String16 message, int32 line_number,
+                         url.mojom.Url source_url);
+  // Indicates that the worker has stopped.
+  OnStopped();
+};

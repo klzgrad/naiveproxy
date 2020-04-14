@@ -1,0 +1,111 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+source_set("input") {
+  sources = [
+    "client_input_injector.h",
+    "direct_touch_input_strategy.cc",
+    "direct_touch_input_strategy.h",
+    "key_event_mapper.cc",
+    "key_event_mapper.h",
+    "keyboard_input_strategy.h",
+    "keyboard_interpreter.cc",
+    "keyboard_interpreter.h",
+    "keycode_map.cc",
+    "keycode_map.h",
+    "native_device_keymap.cc",
+    "native_device_keymap.h",
+    "native_device_keymap_android.cc",
+    "native_device_keymap_ios.cc",
+    "text_keyboard_input_strategy.cc",
+    "text_keyboard_input_strategy.h",
+    "touch_input_scaler.cc",
+    "touch_input_scaler.h",
+    "touch_input_strategy.h",
+    "trackpad_input_strategy.cc",
+    "trackpad_input_strategy.h",
+  ]
+
+  deps = [
+    ":normalizing_input_filter",
+    "//remoting/base",
+    "//remoting/client/ui:ui_manipulation",
+    "//third_party/webrtc_overrides:webrtc_component",
+    "//ui/events:dom_keycode_converter",
+  ]
+
+  if (is_android || is_ios) {
+    sources -= [ "native_device_keymap.cc" ]
+  }
+}
+
+source_set("normalizing_input_filter") {
+  # Disabled the source filters because there are _mac files that need to
+  # be compiled on all platforms.
+  set_sources_assignment_filter([])
+  sources = [
+    "normalizing_input_filter_cros.cc",
+    "normalizing_input_filter_cros.h",
+    "normalizing_input_filter_mac.cc",
+    "normalizing_input_filter_mac.h",
+    "normalizing_input_filter_win.cc",
+    "normalizing_input_filter_win.h",
+  ]
+  set_sources_assignment_filter(sources_assignment_filter)
+
+  deps = [
+    "//remoting/base",
+    "//third_party/webrtc_overrides:webrtc_component",
+    "//ui/events:dom_keycode_converter",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+
+  sources = [
+    "key_event_mapper_unittest.cc",
+    "keycode_map_unittest.cc",
+    "touch_input_scaler_unittest.cc",
+  ]
+
+  configs += [
+    "//remoting/build/config:version",
+    "//remoting/build/config:enable_webrtc_remoting_client",
+  ]
+
+  deps = [
+    ":input",
+    ":normalizing_input_filter_unit_tests",
+    "//remoting/proto",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//third_party/webrtc_overrides:webrtc_component",
+  ]
+}
+
+source_set("normalizing_input_filter_unit_tests") {
+  testonly = true
+
+  set_sources_assignment_filter([])
+  sources = [
+    "normalizing_input_filter_cros_unittest.cc",
+    "normalizing_input_filter_mac_unittest.cc",
+    "normalizing_input_filter_win_unittest.cc",
+  ]
+  set_sources_assignment_filter(sources_assignment_filter)
+
+  configs += [
+    "//remoting/build/config:version",
+    "//remoting/build/config:enable_webrtc_remoting_client",
+  ]
+
+  deps = [
+    ":input",
+    "//remoting/proto",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//third_party/webrtc_overrides:webrtc_component",
+  ]
+}

@@ -1,0 +1,77 @@
+#!/usr/bin/env python
+#
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import logging
+import os
+import shutil
+import subprocess
+import sys
+import zipfile
+
+
+def _ClearDirectory(directory, skip=()):
+  for file in os.listdir(directory):
+    subpath = os.path.join(directory, file)
+    if subpath not in skip:
+      shutil.rmtree(subpath)
+
+
+def _ListFiles(directory):
+  for root, _, filenames in os.walk(directory):
+    for f in filenames:
+      yield os.path.join(root, f)
+
+
+def _ZipDir(root, jar_path, skip_empty=False):
+  subpaths = sorted(os.path.relpath(f, root) for f in _ListFiles(root))
+  if not subpaths and skip_empty:
+    return
+
+  with zipfile.ZipFile(jar_path, 'w') as z:
+    for subpath in subpaths:
+      with open(os.path.join(root, subpath)) as f:
+        data = f.read()
+      zipinfo = zipfile.ZipInfo(filename=subpath)
+      zipinfo.date_time = (2001, 1, 1, 0, 0, 0)
+      z.writestr(zipinfo, data, zipfile.ZIP_STORED)
+
+
+def main():
+  logging.basicConfig(
+      level=logging.INFO if os.environ.get('JAVAC_DEBUG') else logging.WARNING,
+      format='%(levelname).1s %(relativeCreated)6d %(message)s')
+  javac_args = sys.argv[1:]
+  errorprone_enabled = '-Xplugin:ErrorProne' in javac_args
+  classes_dir = javac_args[javac_args.index('-d') + 1]
+  annotation_processor_outputs_dir = javac_args[javac_args.index('-s') + 1]
+  jar_path = os.path.join(classes_dir, 'classes.jar')
+  srcjar_path = os.path.join(annotation_processor_outputs_dir,
+                             'output.srcjar')
+
+  if os.listdir(classes_dir):
+    raise Exception('classes_dir not empty.')
+  if os.listdir(annotation_processor_outputs_dir):
+    raise Exception('annotation_processor_outputs_dir not empty.')
+
+  ret = subprocess.call(javac_args)
+  if ret:
+    sys.exit(ret)
+
+  if errorprone_enabled:
+    # TODO(agrieve): Does goma require at least one output file?
+    open(jar_path, 'w').close()
+  else:
+    logging.info('Zipping classes')
+    _ZipDir(classes_dir, jar_path)
+    logging.info('Zipping sources')
+    _ZipDir(annotation_processor_outputs_dir, srcjar_path, skip_empty=True)
+
+  logging.info('Clearing directories')
+  _ClearDirectory(classes_dir, skip=(jar_path,))
+  _ClearDirectory(annotation_processor_outputs_dir, skip=(srcjar_path,))
+
+
+main()

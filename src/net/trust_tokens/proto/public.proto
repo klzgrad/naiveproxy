@@ -1,0 +1,58 @@
+// Copyright 2019 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+syntax = "proto2";
+
+package net;
+
+option optimize_for = LITE_RUNTIME;
+
+// A TrustTokenKeyCommitment message stores a single key received
+// from an issuer’s key commitments endpoint, along with associated
+// metadata.
+message TrustTokenKeyCommitment {
+  // The key's body. Used for comparison (when checking if
+  // stored tokens’ keys are still current) and, by BoringSSL, for
+  // cryptographic operations.
+  optional bytes key = 1;  // required
+
+  // The expiry time of the key.
+  // (Here and elsewhere, string times are serialized base::Times
+  // converted with base::CreateTimeValue.)
+  optional string expiry = 2;  // required
+
+  // The time the key was first seen. Used for enforcing key-rotation
+  // ratelimits and for comparing stored keys’ ages.
+  optional string first_seen_at = 3;  // required
+}
+
+// Message TrustToken represents a signed trust token received from
+// an issuer.
+message TrustToken {
+  // The body of the token. This is an opaque string passed to
+  // BoringSSL.
+  optional bytes body = 1;  // required
+
+  // The key with which the Token was signed. Tokens
+  // are only provided to servers while their commitment keys
+  // remain active.
+  optional bytes signing_key = 2;  // required
+}
+
+// A SignedTrustTokenRedemptionRecord message stores state associated with a
+// single Trust Tokens signed redemption record ("SRR"). The "body" field is the
+// contents of the SRR itself; when the protocol is configured to use
+// SRR-bound key pairs, "public_key" and "signing_key" are the keys associated
+// with the SRR.
+message SignedTrustTokenRedemptionRecord {
+  // The body of an SRR encodes information such as its top-level
+  // origin and its expiration time. The encoding is opaque to //net; BoringSSL
+  // provides interfaces to read data from the body that is pertinent to
+  // protocol execution.
+  optional bytes body = 1;
+  // If one of public_key or signing_key is present, the other must also be
+  // present.
+  optional bytes public_key = 2;
+  optional bytes signing_key = 3;
+}

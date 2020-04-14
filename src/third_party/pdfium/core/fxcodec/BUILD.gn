@@ -1,0 +1,160 @@
+# Copyright 2018 The PDFium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("../../pdfium.gni")
+import("../../testing/test.gni")
+
+source_set("fxcodec") {
+  sources = [
+    "basic/basicmodule.cpp",
+    "basic/basicmodule.h",
+    "cfx_codec_memory.cpp",
+    "cfx_codec_memory.h",
+    "codec_module_iface.h",
+    "fax/faxmodule.cpp",
+    "fax/faxmodule.h",
+    "flate/flatemodule.cpp",
+    "flate/flatemodule.h",
+    "fx_codec.cpp",
+    "fx_codec.h",
+    "fx_codec_def.h",
+    "icc/iccmodule.cpp",
+    "icc/iccmodule.h",
+    "jbig2/JBig2_ArithDecoder.cpp",
+    "jbig2/JBig2_ArithDecoder.h",
+    "jbig2/JBig2_ArithIntDecoder.cpp",
+    "jbig2/JBig2_ArithIntDecoder.h",
+    "jbig2/JBig2_BitStream.cpp",
+    "jbig2/JBig2_BitStream.h",
+    "jbig2/JBig2_Context.cpp",
+    "jbig2/JBig2_Context.h",
+    "jbig2/JBig2_Define.h",
+    "jbig2/JBig2_DocumentContext.cpp",
+    "jbig2/JBig2_DocumentContext.h",
+    "jbig2/JBig2_GrdProc.cpp",
+    "jbig2/JBig2_GrdProc.h",
+    "jbig2/JBig2_GrrdProc.cpp",
+    "jbig2/JBig2_GrrdProc.h",
+    "jbig2/JBig2_HtrdProc.cpp",
+    "jbig2/JBig2_HtrdProc.h",
+    "jbig2/JBig2_HuffmanDecoder.cpp",
+    "jbig2/JBig2_HuffmanDecoder.h",
+    "jbig2/JBig2_HuffmanTable.cpp",
+    "jbig2/JBig2_HuffmanTable.h",
+    "jbig2/JBig2_Image.cpp",
+    "jbig2/JBig2_Image.h",
+    "jbig2/JBig2_Page.h",
+    "jbig2/JBig2_PatternDict.cpp",
+    "jbig2/JBig2_PatternDict.h",
+    "jbig2/JBig2_PddProc.cpp",
+    "jbig2/JBig2_PddProc.h",
+    "jbig2/JBig2_SddProc.cpp",
+    "jbig2/JBig2_SddProc.h",
+    "jbig2/JBig2_Segment.cpp",
+    "jbig2/JBig2_Segment.h",
+    "jbig2/JBig2_SymbolDict.cpp",
+    "jbig2/JBig2_SymbolDict.h",
+    "jbig2/JBig2_TrdProc.cpp",
+    "jbig2/JBig2_TrdProc.h",
+    "jbig2/jbig2module.cpp",
+    "jbig2/jbig2module.h",
+    "jpeg/jpegmodule.cpp",
+    "jpeg/jpegmodule.h",
+    "jpx/cjpx_decoder.cpp",
+    "jpx/cjpx_decoder.h",
+    "jpx/jpx_decode_utils.cpp",
+    "jpx/jpx_decode_utils.h",
+    "jpx/jpxmodule.cpp",
+    "jpx/jpxmodule.h",
+    "scanlinedecoder.cpp",
+    "scanlinedecoder.h",
+  ]
+  configs += [ "../../:pdfium_core_config" ]
+  include_dirs = []
+  deps = [
+    "../../third_party:lcms2",
+    "../../third_party:libopenjpeg2",
+    "../../third_party:zlib",
+    "../fxcrt",
+    "../fxge",
+    "//third_party:jpeg",
+  ]
+
+  if (pdf_enable_xfa) {
+    sources += [
+      "progressivedecoder.cpp",
+      "progressivedecoder.h",
+    ]
+    if (pdf_enable_xfa_bmp) {
+      sources += [
+        "bmp/bmpmodule.cpp",
+        "bmp/bmpmodule.h",
+        "bmp/cfx_bmpcontext.cpp",
+        "bmp/cfx_bmpcontext.h",
+        "bmp/cfx_bmpdecompressor.cpp",
+        "bmp/cfx_bmpdecompressor.h",
+        "bmp/fx_bmp.h",
+      ]
+    }
+    if (pdf_enable_xfa_gif) {
+      sources += [
+        "gif/cfx_gif.cpp",
+        "gif/cfx_gif.h",
+        "gif/cfx_gifcontext.cpp",
+        "gif/cfx_gifcontext.h",
+        "gif/cfx_lzwdecompressor.cpp",
+        "gif/cfx_lzwdecompressor.h",
+        "gif/gifmodule.cpp",
+        "gif/gifmodule.h",
+      ]
+    }
+    if (pdf_enable_xfa_png) {
+      sources += [
+        "png/pngmodule.cpp",
+        "png/pngmodule.h",
+      ]
+      deps += [ "../../third_party:png" ]
+    }
+    if (pdf_enable_xfa_tiff) {
+      sources += [
+        "tiff/tiffmodule.cpp",
+        "tiff/tiffmodule.h",
+      ]
+      deps += [ "../../third_party:fx_tiff" ]
+    }
+  }
+
+  visibility = [ "../../*" ]
+}
+
+pdfium_unittest_source_set("unittests") {
+  sources = [
+    "basic/a85_unittest.cpp",
+    "basic/rle_unittest.cpp",
+    "jbig2/JBig2_BitStream_unittest.cpp",
+    "jbig2/JBig2_Image_unittest.cpp",
+    "jpx/jpx_unittest.cpp",
+  ]
+  deps = [
+    ":fxcodec",
+    "../fpdfapi/parser",
+  ]
+  pdfium_root_dir = "../../"
+
+  if (pdf_enable_xfa) {
+    sources += [ "progressivedecoder_unittest.cpp" ]
+    deps += [ "../fxge" ]
+    if (pdf_enable_xfa_gif) {
+      sources += [
+        "gif/cfx_gifcontext_unittest.cpp",
+        "gif/cfx_lzwdecompressor_unittest.cpp",
+      ]
+    }
+  }
+}
+
+pdfium_embeddertest_source_set("embeddertests") {
+  sources = [ "jbig2/jbig2_embeddertest.cpp" ]
+  pdfium_root_dir = "../../"
+}

@@ -1,0 +1,31 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ios/deployment_target.gni")
+
+template("storyboards") {
+  assert(defined(invoker.sources),
+         "sources must be defined for storyboard ($target_name)")
+
+  _compile_target = target_name + "_compile"
+  _compile_output =
+      "$target_out_dir/$_compile_target/{{source_name_part}}.storyboardc"
+
+  action_foreach(_compile_target) {
+    script = "//build/config/ios/scripts/compile_storyboard.py"
+    sources = invoker.sources
+    outputs = [ _compile_output ]
+    args = [
+      "{{source}}",
+      "-o=" + rebase_path(_compile_output, root_build_dir),
+      "--minimum-deployment-target=$ios_deployment_target",
+    ]
+  }
+
+  bundle_data(target_name) {
+    public_deps = [ ":$_compile_target" ]
+    sources = get_target_outputs(":$_compile_target")
+    outputs = [ "{{bundle_root_dir}}/Base.lproj/{{source_file_part}}" ]
+  }
+}

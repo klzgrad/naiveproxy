@@ -1,0 +1,74 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//third_party/closure_compiler/compile_js.gni")
+
+js_type_check("closure_compile") {
+  deps = [
+    ":system_page",
+    ":system_page_browser_proxy",
+  ]
+}
+
+js_library("system_page_browser_proxy") {
+  deps = [
+    "//ui/webui/resources/js:cr",
+    "//ui/webui/resources/js:load_time_data",
+  ]
+  externs_list = [ "$externs_path/chrome_send.js" ]
+}
+
+js_library("system_page") {
+  deps = [
+    ":system_page_browser_proxy",
+    "..:lifetime_browser_proxy",
+  ]
+  externs_list = [ "$externs_path/settings_private.js" ]
+}
+
+# TODO(crbug.com/1026426): Fix and enable.
+#js_type_check("closure_compile_module") {
+#  is_polymer3 = true
+#  deps = [
+#    ":system_page.m",
+#    ":system_page_browser_proxy.m",
+#  ]
+#}
+
+js_library("system_page.m") {
+  sources = [ "$root_gen_dir/chrome/browser/resources/settings/system_page/system_page.m.js" ]
+  deps = [
+    # TODO: Fill those in.
+  ]
+  extra_deps = [ ":system_page_module" ]
+}
+
+js_library("system_page_browser_proxy.m") {
+  sources = [ "$root_gen_dir/chrome/browser/resources/settings/system_page/system_page_browser_proxy.m.js" ]
+  deps = [
+    # TODO: Fill those in.
+  ]
+  extra_deps = [ ":modulize" ]
+}
+
+import("//tools/polymer/polymer.gni")
+
+group("polymer3_elements") {
+  deps = [
+    ":modulize",
+    ":system_page_module",
+  ]
+}
+
+polymer_modulizer("system_page") {
+  js_file = "system_page.js"
+  html_file = "system_page.html"
+  html_type = "dom-module"
+}
+
+import("//ui/webui/resources/tools/js_modulizer.gni")
+
+js_modulizer("modulize") {
+  input_files = [ "system_page_browser_proxy.js" ]
+}

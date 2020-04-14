@@ -1,0 +1,50 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# This file defines output paths for the CDM adapters and CDMs.
+
+# Naming and folder structure below are following the recommendation for Chrome
+# components. Component-updated CDMs must follow the same recommendation.
+
+# OS name for components is close to "target_os" but has some differences.
+# Explicitly define what we use to avoid confusion.
+if (is_chromeos) {
+  component_os = "cros"
+} else if (is_linux) {
+  component_os = "linux"
+} else if (is_win) {
+  component_os = "win"
+} else if (is_mac) {
+  component_os = "mac"
+} else {
+  component_os = "unsupported_platform"
+}
+
+if (current_cpu == "x86" || current_cpu == "x64" || current_cpu == "arm") {
+  component_arch = "$current_cpu"
+} else {
+  component_arch = "unsupported_arch"
+}
+
+# Enable platform specific paths. This is required when the CDMs are Chrome
+# components, but is optional for other platforms.
+# Note: |cdm_platform_specific_path| is exported as a BUILDFLAG to
+# cdm_paths.cc.
+if ((is_win || is_mac || is_desktop_linux) &&
+    (current_cpu == "x86" || current_cpu == "x64")) {
+  cdm_platform_specific_path =
+      "_platform_specific/$component_os" + "_" + "$component_arch"
+
+  # Path of Clear Key and Widevine CDMs relative to the output dir.
+  clearkey_cdm_path = "ClearKeyCdm/$cdm_platform_specific_path"
+  widevine_cdm_path = "WidevineCdm/$cdm_platform_specific_path"
+} else if (is_fuchsia) {
+  cdm_platform_specific_path = ""
+  clearkey_cdm_path = "lib"
+  widevine_cdm_path = "lib"
+} else {
+  cdm_platform_specific_path = ""
+  clearkey_cdm_path = "."
+  widevine_cdm_path = "."
+}

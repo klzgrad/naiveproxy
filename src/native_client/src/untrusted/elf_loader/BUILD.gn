@@ -1,0 +1,42 @@
+# Copyright (c) 2015 The Native Client Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+assert(current_os == "nacl", "This file contains untrusted code only.")
+
+import("//build/config/nacl/config.gni")
+
+if (current_cpu != "pnacl" && !is_nacl_glibc) {
+  executable("elf_loader") {
+    sources = [
+      "elf_loader.c",
+    ]
+
+    deps = [
+      "//build/config/nacl:nacl_base",
+    ]
+  }
+}
+
+if (is_nacl_glibc) {
+  # The elf_loader nexe can only be built with the newlib toolchain,
+  # but it's needed for things built in the glibc toolchain.  To
+  # keep things simpler for users of it, copy it into the glibc
+  # $root_out_dir and give it the name used in GYP (and expected by
+  # the SDK's create_nmf.py): elf_loader_<CPU>.nexe.
+  copy("elf_loader") {
+    here = get_label_info(".", "dir")
+    newlib_tc = "//build/toolchain/nacl:clang_newlib_" + current_cpu
+    elf_loader_label = here + ":elf_loader" + "(" + newlib_tc + ")"
+    newlib_out_dir = get_label_info(elf_loader_label, "root_out_dir")
+    deps = [
+      elf_loader_label,
+    ]
+    sources = [
+      newlib_out_dir + "/elf_loader.nexe",
+    ]
+    outputs = [
+      "$root_out_dir/elf_loader_" + current_cpu + ".nexe",
+    ]
+  }
+}

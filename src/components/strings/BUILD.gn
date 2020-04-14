@@ -1,0 +1,99 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/locales.gni")
+import("//ppapi/buildflags/buildflags.gni")
+import("//printing/buildflags/buildflags.gni")
+import("//tools/grit/grit_rule.gni")
+
+if (is_android) {
+  import("//build/config/android/rules.gni")
+  android_components_strings_java_resources =
+      [ "java/res/values/components_strings.xml" ] +
+      process_file_template(
+          android_bundle_locales_as_resources,
+          [ "java/res/values-{{source_name_part}}/components_strings.xml" ])
+}
+
+group("strings") {
+  public_deps = [
+    ":components_chromium_strings",
+    ":components_google_chrome_strings",
+    ":components_locale_settings",
+    ":components_strings",
+  ]
+}
+
+grit("components_strings") {
+  source = "../components_strings.grd"
+  defines = [
+    "enable_plugins=$enable_plugins",
+    "enable_print_preview=$enable_print_preview",
+  ]
+
+  outputs = [ "grit/components_strings.h" ]
+  foreach(locale, locales_with_fake_bidi) {
+    outputs += [ "components_strings_$locale.pak" ]
+  }
+
+  if (is_android) {
+    outputs += android_components_strings_java_resources
+  }
+}
+
+if (is_android) {
+  java_strings_grd_prebuilt("components_strings_grd") {
+    grit_output_dir = "$root_gen_dir/components/strings/java/res"
+    generated_files =
+        rebase_path(android_components_strings_java_resources, "java/res", ".")
+    deps = [ ":components_strings" ]
+  }
+}
+
+grit("components_chromium_strings") {
+  source = "../components_chromium_strings.grd"
+  outputs = [ "grit/components_chromium_strings.h" ]
+  foreach(locale, locales_with_fake_bidi) {
+    outputs += [ "components_chromium_strings_$locale.pak" ]
+  }
+}
+
+grit("components_google_chrome_strings") {
+  source = "../components_google_chrome_strings.grd"
+  outputs = [ "grit/components_google_chrome_strings.h" ]
+  foreach(locale, locales_with_fake_bidi) {
+    outputs += [ "components_google_chrome_strings_$locale.pak" ]
+  }
+}
+
+if (is_android) {
+  android_components_locale_settings_java_resources =
+      [ "java/res/values/components_locale_settings.xml" ]
+  android_components_locale_settings_java_resources += process_file_template(
+          android_bundle_locales_as_resources,
+          [ "java/res/values-{{source_name_part}}/components_locale_settings.xml" ])
+}
+
+grit("components_locale_settings") {
+  source = "../components_locale_settings.grd"
+  outputs = [ "grit/components_locale_settings.h" ]
+  foreach(locale, locales_with_fake_bidi) {
+    outputs += [ "components_locale_settings_$locale.pak" ]
+  }
+
+  if (is_android) {
+    outputs += android_components_locale_settings_java_resources
+  }
+}
+
+if (is_android) {
+  java_strings_grd_prebuilt("components_locale_settings_grd") {
+    grit_output_dir = "$root_gen_dir/components/strings/java/res"
+    generated_files =
+        rebase_path(android_components_locale_settings_java_resources,
+                    "java/res",
+                    ".")
+    deps = [ ":components_locale_settings" ]
+  }
+}

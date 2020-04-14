@@ -1,0 +1,73 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//third_party/protobuf/proto_library.gni")
+
+source_set("trust_tokens") {
+  visibility = [
+    ":tests",
+    "//net/*",
+    "//services/network/",
+  ]
+
+  public = [ "trust_token_store.h" ]
+
+  friend = [ ":tests" ]
+
+  sources = [
+    "in_memory_trust_token_persister.cc",
+    "in_memory_trust_token_persister.h",
+    "trust_token_persister.h",
+    "trust_token_store.cc",
+    "types.cc",
+    "types.h",
+  ]
+
+  deps = [
+    ":storage_proto",
+    "//base",
+    "//url",
+  ]
+
+  public_deps = [ ":public_proto" ]
+}
+
+source_set("tests") {
+  testonly = true
+
+  sources = [
+    "trust_token_persister_unittest.cc",
+    "trust_token_store_unittest.cc",
+    "types_unittest.cc",
+  ]
+
+  deps = [
+    ":public_proto",
+    ":storage_proto",
+    ":trust_tokens",
+    "//base",
+    "//base/test:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//url",
+  ]
+}
+
+# public.proto contains datatypes intended
+# to be exposed to //net consumers.
+proto_library("public_proto") {
+  sources = [ "proto/public.proto" ]
+}
+
+# storage.proto contains datatypes internal
+# to the implementation of Trust Token state
+# persistent storage.
+proto_library("storage_proto") {
+  visibility = [
+    ":trust_tokens",
+    ":tests",
+  ]
+  sources = [ "proto/storage.proto" ]
+  deps = [ ":public_proto" ]
+}

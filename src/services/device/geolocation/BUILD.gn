@@ -1,0 +1,182 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/features.gni")
+
+if (is_android) {
+  import("//build/config/android/config.gni")
+  import("//build/config/android/rules.gni")  # For generate_jni().
+}
+
+source_set("geolocation") {
+  visibility = [
+    "//services/device:*",
+    ":*",
+  ]
+
+  sources = [
+    "empty_wifi_data_provider.cc",
+    "empty_wifi_data_provider.h",
+    "geolocation_config.cc",
+    "geolocation_config.h",
+    "geolocation_context.cc",
+    "geolocation_context.h",
+    "geolocation_impl.cc",
+    "geolocation_impl.h",
+    "geolocation_provider.h",
+    "geolocation_provider_impl.cc",
+    "geolocation_provider_impl.h",
+    "location_api_adapter_android.cc",
+    "location_api_adapter_android.h",
+    "location_arbitrator.cc",
+    "location_arbitrator.h",
+    "location_provider_android.cc",
+    "location_provider_android.h",
+    "network_location_provider.cc",
+    "network_location_provider.h",
+    "network_location_request.cc",
+    "network_location_request.h",
+    "position_cache.h",
+    "position_cache_impl.cc",
+    "position_cache_impl.h",
+    "public_ip_address_geolocation_provider.cc",
+    "public_ip_address_geolocation_provider.h",
+    "public_ip_address_geolocator.cc",
+    "public_ip_address_geolocator.h",
+    "public_ip_address_location_notifier.cc",
+    "public_ip_address_location_notifier.h",
+    "wifi_data.cc",
+    "wifi_data.h",
+    "wifi_data_provider.cc",
+    "wifi_data_provider.h",
+    "wifi_data_provider_chromeos.cc",
+    "wifi_data_provider_chromeos.h",
+    "wifi_data_provider_common.cc",
+    "wifi_data_provider_common.h",
+    "wifi_data_provider_common_win.cc",
+    "wifi_data_provider_common_win.h",
+    "wifi_data_provider_linux.cc",
+    "wifi_data_provider_linux.h",
+    "wifi_data_provider_mac.h",
+    "wifi_data_provider_mac.mm",
+    "wifi_data_provider_manager.cc",
+    "wifi_data_provider_manager.h",
+    "wifi_data_provider_win.cc",
+    "wifi_data_provider_win.h",
+    "wifi_polling_policy.cc",
+    "wifi_polling_policy.h",
+  ]
+
+  deps = [
+    "//base",
+    "//mojo/core/embedder",
+    "//mojo/public/cpp/bindings",
+    "//net",
+    "//ui/gfx",
+  ]
+  public_deps = [
+    "//services/device/public/cpp/geolocation",
+    "//services/device/public/mojom",
+    "//services/network/public/cpp",
+  ]
+  if (is_android) {
+    sources -= [
+      "network_location_provider.cc",
+      "network_location_provider.h",
+    ]
+    deps += [ ":geolocation_jni_headers" ]
+  }
+
+  # TODO(mcasas): prefer adding files than removing them (see cookbook.md).
+
+  # Dealing with *wifi_data_provider_*.cc is also a bit complicated given
+  # android, chromeos, linux and use_dbus.
+  if (is_android) {
+    sources -= [ "wifi_data_provider_common.cc" ]
+  }
+  if (is_chromeos || (is_linux && !use_dbus)) {
+    sources -= [ "wifi_data_provider_linux.cc" ]
+  }
+  if (is_linux && use_dbus) {
+    sources -= [ "empty_wifi_data_provider.cc" ]
+    deps += [ "//dbus" ]
+  }
+  if (is_win || is_mac) {
+    sources -= [
+      "empty_wifi_data_provider.cc",
+      "empty_wifi_data_provider.h",
+    ]
+  }
+  if (is_chromeos) {
+    deps += [
+      "//chromeos/dbus/shill",
+      "//chromeos/network",
+    ]
+  }
+
+  if (is_mac) {
+    libs = [
+      "CoreWLAN.framework",
+      "Foundation.framework",
+    ]
+  }
+
+  if (is_win) {
+    sources += [
+      "win/location_provider_winrt.cc",
+      "win/location_provider_winrt.h",
+    ]
+
+    deps += [ "//services/device/public/cpp:device_features" ]
+  }
+}
+
+if (is_android) {
+  generate_jni("geolocation_jni_headers") {
+    sources = [
+      "android/java/src/org/chromium/device/geolocation/LocationProviderAdapter.java",
+      "android/java/src/org/chromium/device/geolocation/LocationProviderFactory.java",
+    ]
+  }
+
+  android_library("geolocation_java") {
+    sources = [
+      "android/java/src/org/chromium/device/geolocation/LocationProviderAdapter.java",
+      "android/java/src/org/chromium/device/geolocation/LocationProviderAndroid.java",
+      "android/java/src/org/chromium/device/geolocation/LocationProviderFactory.java",
+      "android/java/src/org/chromium/device/geolocation/LocationProviderGmsCore.java",
+    ]
+
+    deps = [
+      ":geolocation_jni_headers",
+      "$google_play_services_package:google_play_services_base_java",
+      "$google_play_services_package:google_play_services_basement_java",
+      "$google_play_services_package:google_play_services_location_java",
+      "//base:base_java",
+      "//base:jni_java",
+      "//components/location/android:location_java",
+      "//services/device/public/java:geolocation_java",
+    ]
+    annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
+  }
+}
+
+source_set("test_support") {
+  testonly = true
+
+  sources = [
+    "fake_location_provider.cc",
+    "fake_location_provider.h",
+    "fake_position_cache.cc",
+    "fake_position_cache.h",
+    "position_cache_test_util.cc",
+    "position_cache_test_util.h",
+  ]
+  public_deps = [ ":geolocation" ]
+  deps = [
+    "//services/device/public/cpp/geolocation",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+}

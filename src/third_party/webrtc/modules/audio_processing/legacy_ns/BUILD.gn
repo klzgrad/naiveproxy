@@ -1,0 +1,105 @@
+# Copyright (c) 2019 The WebRTC project authors. All Rights Reserved.
+#
+# Use of this source code is governed by a BSD-style license
+# that can be found in the LICENSE file in the root of the source
+# tree. An additional intellectual property rights grant can be found
+# in the file PATENTS.  All contributing project authors may
+# be found in the AUTHORS file in the root of the source tree.
+
+import("../../../webrtc.gni")
+
+rtc_library("legacy_ns") {
+  visibility = [ "*" ]  # Only targets in this file can depend on this.
+  sources = [
+    "legacy_noise_suppression.cc",
+    "legacy_noise_suppression.h",
+  ]
+
+  if (rtc_prefer_fixed_point) {
+    defines = [ "WEBRTC_NS_FIXED" ]
+  } else {
+    defines = [ "WEBRTC_NS_FLOAT" ]
+  }
+
+  deps = [
+    ":legacy_ns_c",
+    "..:audio_buffer",
+    "../../../common_audio",
+    "../../../common_audio:common_audio_c",
+    "../../../rtc_base:checks",
+    "../../../rtc_base:rtc_base_approved",
+    "../../../system_wrappers:cpu_features_api",
+  ]
+}
+
+rtc_library("legacy_ns_c") {
+  visibility = [ "*" ]  # Only targets in this file can depend on this.
+  sources = [ "windows_private.h" ]
+
+  if (rtc_prefer_fixed_point) {
+    sources += [
+      "noise_suppression_x.c",
+      "noise_suppression_x.h",
+      "nsx_core.c",
+      "nsx_core.h",
+      "nsx_core_c.c",
+      "nsx_defines.h",
+    ]
+  } else {
+    sources += [
+      "defines.h",
+      "noise_suppression.c",
+      "noise_suppression.h",
+      "ns_core.c",
+      "ns_core.h",
+    ]
+  }
+
+  if (rtc_prefer_fixed_point) {
+    defines = [ "WEBRTC_NS_FIXED" ]
+  } else {
+    defines = [ "WEBRTC_NS_FLOAT" ]
+  }
+
+  deps = [
+    "..:audio_buffer",
+    "../../../common_audio",
+    "../../../common_audio:common_audio_c",
+    "../../../common_audio/third_party/fft4g",
+    "../../../rtc_base:checks",
+    "../../../rtc_base:rtc_base_approved",
+    "../../../system_wrappers:cpu_features_api",
+  ]
+
+  if (rtc_build_with_neon) {
+    sources += [ "nsx_core_neon.c" ]
+
+    if (current_cpu != "arm64") {
+      # Enable compilation for the NEON instruction set.
+      suppressed_configs += [ "//build/config/compiler:compiler_arm_fpu" ]
+      cflags = [ "-mfpu=neon" ]
+    }
+  }
+}
+
+if (rtc_include_tests) {
+  rtc_source_set("legacy_ns_unittests") {
+    testonly = true
+
+    configs += []
+    sources = [ "legacy_noise_suppression_unittest.cc" ]
+
+    deps = [
+      "..:audio_buffer",
+      "..:audioproc_test_utils",
+      "../../../api:array_view",
+      "../../../test:test_support",
+    ]
+
+    defines = []
+
+    if (rtc_enable_protobuf) {
+      sources += []
+    }
+  }
+}

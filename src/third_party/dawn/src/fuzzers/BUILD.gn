@@ -1,0 +1,184 @@
+# Copyright 2018 The Dawn Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("//build_overrides/build.gni")
+import("../../scripts/dawn_overrides_with_defaults.gni")
+
+# We only have libfuzzer in Chromium builds but if we build fuzzer targets only
+# there, we would risk breaking fuzzer targets all the time when making changes
+# to Dawn. To avoid that, we make fuzzer targets compile in standalone builds
+# as well with a dawn_fuzzer_test target that acts like Chromium's fuzzer_test.
+#
+# The standalone fuzzer targets are able to run a single fuzzer input which
+# could help reproduce fuzzer crashes more easily because you don't need a
+# whole Chromium checkout.
+
+if (build_with_chromium) {
+  import("//testing/libfuzzer/fuzzer_test.gni")
+
+  # In Chromium build we just proxy everything to the real fuzzer_test
+  template("dawn_fuzzer_test") {
+    fuzzer_test(target_name) {
+      forward_variables_from(invoker, "*")
+    }
+  }
+} else {
+  import("//testing/test.gni")
+
+  # In standalone build we do something similar to fuzzer_test.
+  template("dawn_fuzzer_test") {
+    test(target_name) {
+      forward_variables_from(invoker,
+                             [
+                               "asan_options",
+                               "cflags",
+                               "cflags_cc",
+                               "check_includes",
+                               "defines",
+                               "deps",
+                               "include_dirs",
+                               "sources",
+                             ])
+
+      if (defined(asan_options)) {
+        not_needed([ "asan_options" ])
+      }
+
+      if (!defined(configs)) {
+        configs = []
+      }
+
+      # Weirdly fuzzer_test uses a special variable for additional configs.
+      if (defined(invoker.additional_configs)) {
+        configs += invoker.additional_configs
+      }
+
+      sources += [ "StandaloneFuzzerMain.cpp" ]
+    }
+  }
+}
+
+static_library("dawn_spirv_cross_fuzzer_common") {
+  sources = [
+    "DawnSPIRVCrossFuzzer.cpp",
+    "DawnSPIRVCrossFuzzer.h",
+  ]
+  public_deps = [
+    "${dawn_shaderc_dir}:libshaderc_spvc",
+  ]
+}
+
+static_library("dawn_wire_server_fuzzer_common") {
+  sources = [
+    "DawnWireServerFuzzer.cpp",
+    "DawnWireServerFuzzer.h",
+  ]
+  public_deps = [
+    "${dawn_root}/:libdawn_native_static",
+    "${dawn_root}/:libdawn_wire_static",
+    "${dawn_root}/src/common",
+    "${dawn_root}/src/dawn:dawncpp",
+    "${dawn_root}/src/dawn:libdawn_proc",
+  ]
+}
+
+# TODO(rharrison): Remove asan_options once signal trap is no longer
+#                  needed.
+# Uses Dawn specific options and varies input data
+dawn_fuzzer_test("dawn_spirv_cross_glsl_fast_fuzzer") {
+  sources = [
+    "DawnSPIRVCrossGLSLFastFuzzer.cpp",
+  ]
+  deps = [
+    ":dawn_spirv_cross_fuzzer_common",
+  ]
+  asan_options = [ "allow_user_segv_handler=1" ]
+}
+
+# TODO(rharrison): Remove asan_options once signal trap is no longer
+#                  needed.
+# Uses Dawn specific options and varies input data
+dawn_fuzzer_test("dawn_spirv_cross_hlsl_fast_fuzzer") {
+  sources = [
+    "DawnSPIRVCrossHLSLFastFuzzer.cpp",
+  ]
+  deps = [
+    ":dawn_spirv_cross_fuzzer_common",
+  ]
+  asan_options = [ "allow_user_segv_handler=1" ]
+}
+
+# TODO(rharrison): Remove asan_options once signal trap is no longer
+#                  needed.
+# Uses Dawn specific options and varies input data
+dawn_fuzzer_test("dawn_spirv_cross_msl_fast_fuzzer") {
+  sources = [
+    "DawnSPIRVCrossMSLFastFuzzer.cpp",
+  ]
+  deps = [
+    ":dawn_spirv_cross_fuzzer_common",
+  ]
+  asan_options = [ "allow_user_segv_handler=1" ]
+}
+
+dawn_fuzzer_test("dawn_spvc_glsl_fast_fuzzer") {
+  sources = [
+    "DawnSPVCglslFastFuzzer.cpp",
+  ]
+  deps = [
+    "${dawn_shaderc_dir}:libshaderc_spvc",
+  ]
+}
+
+dawn_fuzzer_test("dawn_spvc_hlsl_fast_fuzzer") {
+  sources = [
+    "DawnSPVChlslFastFuzzer.cpp",
+  ]
+  deps = [
+    "${dawn_shaderc_dir}:libshaderc_spvc",
+  ]
+}
+
+dawn_fuzzer_test("dawn_spvc_msl_fast_fuzzer") {
+  sources = [
+    "DawnSPVCmslFastFuzzer.cpp",
+  ]
+  deps = [
+    "${dawn_shaderc_dir}:libshaderc_spvc",
+  ]
+}
+
+dawn_fuzzer_test("dawn_wire_server_and_frontend_fuzzer") {
+  sources = [
+    "DawnWireServerAndFrontendFuzzer.cpp",
+  ]
+
+  deps = [
+    ":dawn_wire_server_fuzzer_common",
+  ]
+
+  additional_configs = [ "${dawn_root}/src/common:dawn_internal" ]
+}
+
+dawn_fuzzer_test("dawn_wire_server_and_vulkan_backend_fuzzer") {
+  sources = [
+    "DawnWireServerAndVulkanBackendFuzzer.cpp",
+  ]
+
+  deps = [
+    ":dawn_wire_server_fuzzer_common",
+  ]
+
+  additional_configs = [ "${dawn_root}/src/common:dawn_internal" ]
+}

@@ -1,0 +1,89 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/mac/rules.gni")
+
+group("mac") {
+  deps = [
+    ":updater_bundle",
+    ":updater_install_script",
+    ":updater_setup",
+  ]
+}
+
+source_set("network_fetcher_sources") {
+  sources = [
+    "net/network.h",
+    "net/network_fetcher.h",
+    "net/network_fetcher.mm",
+  ]
+
+  deps = [
+    "//base",
+    "//components/update_client",
+    "//net",
+  ]
+}
+
+source_set("updater_tests") {
+  testonly = true
+
+  sources = [ "net/network_unittest.mm" ]
+
+  deps = [
+    ":network_fetcher_sources",
+    ":updater_setup_sources",
+    "//base/test:test_support",
+    "//net:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+}
+
+mac_app_bundle("updater_bundle") {
+  info_plist = "Info.plist"
+  output_name = "GoogleUpdate"
+
+  sources = [ "main.cc" ]
+  deps = [
+    ":network_fetcher_sources",
+    ":updater_setup_sources",
+    "//chrome/updater:common",
+  ]
+}
+
+source_set("updater_setup_sources") {
+  sources = [
+    "setup/setup.h",
+    "setup/setup.mm",
+  ]
+
+  deps = [
+    ":network_fetcher_sources",
+    "//base",
+    "//chrome/common/mac:launchd",
+    "//chrome/updater:common",
+    "//mojo/public/cpp/platform",
+  ]
+
+  libs = [
+    "AppKit.framework",
+    "CoreServices.framework",
+    "ServiceManagement.framework",
+  ]
+}
+
+executable("updater_setup") {
+  sources = [ "setup/main.cc" ]
+
+  deps = [
+    ":updater_bundle",
+    ":updater_setup_sources",
+  ]
+}
+
+copy("updater_install_script") {
+  sources = [ "setup/.install.sh" ]
+  outputs = [ "$root_build_dir/chrome/updater/.install.sh" ]
+}

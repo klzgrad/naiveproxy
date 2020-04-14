@@ -1,0 +1,254 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+[JavaPackage="org.chromium.payments.mojom"]
+module payments.mojom;
+
+import "components/payments/mojom/payment_request_data.mojom";
+
+struct PaymentResponse {
+  string method_name;
+
+  // Payment method specific JSON string that is built either by the browser or
+  // a payment app, for example Android Pay. Browser ensures that the string can
+  // be successfully parsed into base::JSONParser. Renderer parses this string
+  // via v8::JSON::Parse() and hands off the result to the merchant website.
+  // There's no one format for this object, so more specific types cannot be
+  // used. A simple example:
+  //
+  // {"nameOnCard": "Jon Doe", "pan": "4111 1111 1111 1111"}
+  string stringified_details;
+
+  PaymentAddress? shipping_address;
+  string? shipping_option;
+  PayerDetail payer;
+};
+
+struct PayerDetail {
+  string? email;
+  string? name;
+  string? phone;
+};
+
+enum PaymentErrorReason {
+  UNKNOWN,
+  USER_CANCEL,
+  NOT_SUPPORTED,
+  ALREADY_SHOWING
+};
+
+enum CanMakePaymentQueryResult {
+  CAN_MAKE_PAYMENT,
+  CANNOT_MAKE_PAYMENT,
+};
+
+enum HasEnrolledInstrumentQueryResult {
+  HAS_ENROLLED_INSTRUMENT,
+  HAS_NO_ENROLLED_INSTRUMENT,
+  QUERY_QUOTA_EXCEEDED,
+
+  // Used only on localhost and file:// schemes to warn web developer that the
+  // query quota has been exceeded, but Chrome is returning an answer anyway.
+  WARNING_HAS_ENROLLED_INSTRUMENT,
+  WARNING_HAS_NO_ENROLLED_INSTRUMENT,
+};
+
+// Implemented in the renderer process. Sandboxed. Deals with untrusted data.
+//   components/payments/content/payment_request.h
+interface PaymentRequestClient {
+  OnPaymentMethodChange(string method_name, string stringified_details);
+  OnShippingAddressChange(PaymentAddress address);
+  OnShippingOptionChange(string shipping_option_id);
+  OnPayerDetailChange(PayerDetail detail);
+  OnPaymentResponse(PaymentResponse response);
+  OnError(PaymentErrorReason error, string error_message);
+  OnComplete();
+  OnAbort(bool aborted_successfully);
+  OnCanMakePayment(CanMakePaymentQueryResult result);
+  OnHasEnrolledInstrument(HasEnrolledInstrumentQueryResult result);
+  WarnNoFavicon();
+};
+
+struct PaymentItem {
+  string label;
+  PaymentCurrencyAmount amount;
+  bool pending;
+};
+
+struct PaymentShippingOption {
+  string id;
+  string label;
+  PaymentCurrencyAmount amount;
+  bool selected;
+};
+
+enum AndroidPayEnvironment {
+  PRODUCTION,
+  TEST
+};
+
+enum BasicCardNetwork {
+  AMEX,
+  DINERS,
+  DISCOVER,
+  JCB,
+  MASTERCARD,
+  MIR,
+  UNIONPAY,
+  VISA
+};
+
+struct GooglePaymentMethodData {
+  // A JSON string built by the renderer from the same merchant-provided
+  // JavaScript object used to build |stringified_data| in the containing
+  // PaymentMethodData. The renderer interprets the JavaScript object as a GPay
+  // API object and sets additional parameters to request contact and shipping
+  // information from the GPay payment app. The renderer uses
+  // blink::JSONObject::toJSONString() to generate this string from the modified
+  // JavaScript object. The browser does not parse the string and passes it
+  // as-is directly to the GPay payment app.
+  string stringified_data;
+  // Each of the following flags is true if the corresponding piece of data was
+  // not requested in |stringified_data| in the containing PaymentMethodDatabut
+  // is now set in |stringified_data| above. The Android browser process uses
+  // these flags to redact the response from the native GPay SDK before
+  // returning it to the renderer.
+  bool phone_requested;
+  bool name_requested;
+  bool email_requested;
+  bool shipping_requested;
+};
+
+struct PaymentMethodData {
+  string supported_method;
+
+  // A JSON string built by the renderer from a JavaScript object that the
+  // merchant website provides. The renderer uses
+  // blink::JSONObject::toJSONString() to generate this string. The browser does
+  // not parse the string and passes it as-is directly to payment apps. There's
+  // no one format for this object, so more specific types cannot be used. A
+  // simple example:
+  //
+  // {"gateway": "stripe"}
+  string stringified_data;
+
+  // Data specific to the skip-to-GPay experimental flow. This field is only set
+  // if |supported_method| is Google Pay and if the current request is eligible
+  // for the skip-to-GPay experimental flow.
+  [EnableIf=is_android]
+  GooglePaymentMethodData? gpay_bridge_data;
+
+  // Android Pay specific method data is parsed in the renderer.
+  // https://developers.google.com/web/fundamentals/getting-started/primers/payment-request/android-pay
+  // TODO(rouslan): Stop parsing Android Pay data. http://crbug.com/620173
+  AndroidPayEnvironment environment;
+  // Value of 0 means the merchant did not specify or it was an invalid value.
+  int32 min_google_play_services_version;
+  // Value of 0 means the merchant did not specify or it was an invalid value.
+  int32 api_version;
+
+  // Basic card specific method data is parsed in the renderer.
+  array<BasicCardNetwork> supported_networks;
+};
+
+struct PaymentDetailsModifier {
+  PaymentItem? total;
+  array<PaymentItem> additional_display_items;
+  PaymentMethodData method_data;
+};
+
+struct PaymentDetails {
+  PaymentItem? total;
+
+  // If any of these lists is null, then PaymentRequest.UpdateWith() ignores
+  // them. If any of these lists are empty, then PaymentRequest.UpdateWith()
+  // clears the corresponding lists in the browser.
+  array<PaymentItem>? display_items;
+  array<PaymentShippingOption>? shipping_options;
+  array<PaymentDetailsModifier>? modifiers;
+
+  string error = "";
+  AddressErrors? shipping_address_errors;
+  // Identifier identifying the payment request, to be exposed
+  // to payment apps. It is optional since this structure is used
+  // by PaymentDetailsUpdate (next to PaymentDetailsInit) but
+  // PaymentDetailsUpdate has no id.
+  string? id;
+
+  string? stringified_payment_method_errors;
+};
+
+enum PaymentShippingType {
+  SHIPPING,
+  DELIVERY,
+  PICKUP
+};
+
+struct PaymentOptions {
+  bool request_payer_name;
+  bool request_payer_email;
+  bool request_payer_phone;
+  bool request_shipping;
+  PaymentShippingType shipping_type;
+};
+
+enum PaymentComplete {
+  FAIL,
+  SUCCESS,
+  UNKNOWN
+};
+
+
+// Implemented in the browser process. Not sandboxed. Deals with trusted data.
+// Android implementation:
+//   chrome/android/java/src/org/chromium/chrome/browser/payments/PaymentRequestImpl.java
+// Desktop (Windows, ChromeOS, Linux, MacOS) implementation:
+//   components/payments/content/payment_request.h
+interface PaymentRequest {
+  // Instantiates the renderer-browser connection with the information from the
+  // JavaScript constructor of PaymentRequest.
+  // |google_pay_bridge_eligible| is true when the renderer process deems the
+  // current request eligible for the skip-to-GPay experimental flow. It is
+  // ultimately up to the browser process to determine whether to trigger it.
+  Init(pending_remote<PaymentRequestClient> client,
+       array<PaymentMethodData> method_data,
+       PaymentDetails details,
+       PaymentOptions options,
+       [EnableIf=is_android] bool google_pay_bridge_eligible);
+
+  // Shows the user interface with the payment details.
+  Show(bool is_user_gesture, bool wait_for_updated_details);
+
+  // Updates the payment details in response to new shipping address or shipping
+  // option.
+  UpdateWith(PaymentDetails details);
+
+  // Called when the merchant received a new shipping address or shipping
+  // option, but did not update the payment details in response.
+  OnPaymentDetailsNotUpdated();
+
+  // Requests to abort the checkout in process, for example because the item
+  // went out of stock.
+  Abort();
+
+  // Closes the payment user interface.
+  Complete(PaymentComplete result);
+
+  // Called when the merchant calls explicitly retry() method in JavaScript.
+  // The |errors| contains merchant-defined error message strings. They are
+  // used to indicate to the end-user that something is wrong with the data of
+  // the payment response.
+  Retry(PaymentValidationErrors errors);
+
+  // Queries whether support for the merchant-specified payment method is
+  // available, either because the user has a registered payment handler for
+  // that method, or because the browser can do just-in-time registration for a
+  // suitable payment handler.
+  CanMakePayment();
+
+  // Queries whether support for the merchant-specified payment method is
+  // available and the user has an enrolled instrument for that payment method
+  // that is ready to pay.
+  HasEnrolledInstrument(bool per_method_quota);
+};

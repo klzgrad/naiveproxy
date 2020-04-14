@@ -1,0 +1,34 @@
+// Copyright 2019 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module tracing.mojom;
+
+[EnableIf=is_perfetto_supported_os]
+import "services/tracing/public/mojom/perfetto_service.mojom";
+
+import "services/tracing/public/mojom/traced_process.mojom";
+
+// Represents a single client process to be traced.
+struct ClientInfo {
+  // The system PID of the process.
+  int32 pid;
+
+  // The interface used to control tracing in the process.
+  pending_remote<TracedProcess> process;
+};
+
+// The main interface to the Tracing service. This is only consumed by
+// privileged clients (e.g. browser process).
+interface TracingService {
+  // Initializes the service with the current known set of running processes.
+  Initialize(array<ClientInfo> clients);
+
+  // Adds a client process to be traced.
+  AddClient(ClientInfo client);
+
+  // Binds a ConsumerHost interface to control the state of tracing across the
+  // system.
+  [EnableIf=is_perfetto_supported_os]
+  BindConsumerHost(pending_receiver<ConsumerHost> receiver);
+};

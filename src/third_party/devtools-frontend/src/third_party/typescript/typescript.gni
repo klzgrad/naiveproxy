@@ -1,0 +1,97 @@
+# Copyright 2019 The Chromium Authors.  All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+if (defined(use_devtools_typescript) && use_devtools_typescript) {
+  devtools_location = ""
+} else {
+  devtools_location = "third_party/devtools-frontend/src"
+}
+
+# Defines a target that compiles .ts files using TypeScript.
+# A temporary tsconfig.json is generated which uses the
+# tsconfig.json in this folder as basis.
+#
+# Variables:
+#   sources:
+#     List of TypeScript files to typecheck and generate
+# Example:
+#   ts_library("main") {
+#     sources = ["bar.ts", "foo.ts"]
+#   }
+template("ts_library") {
+  action(target_name) {
+    script = "//$devtools_location/third_party/typescript/ts_library.py"
+
+    forward_variables_from(invoker,
+                           [
+                             "sources",
+                             "visibility",
+                             "deps",
+                           ])
+
+    inputs = [
+      "//$devtools_location/tsconfig.json",
+    ]
+
+    args = [
+      "--tsconfig_output_location",
+      rebase_path(target_gen_dir, root_build_dir) +
+          "/$target_name-tsconfig.json",
+    ]
+
+    assert(defined(sources), "You must specify TypeScript sources")
+
+    args += [ "--sources" ] + rebase_path(sources, root_build_dir)
+    if (defined(deps)) {
+      args += [ "--deps" ]
+      foreach(dep, deps) {
+        args += [ rebase_path(get_label_info(dep, "dir"), root_build_dir) +
+                  "/" + get_label_info(dep, "name") + "-tsconfig.json" ]
+      }
+    }
+
+    # Here we assume that all sources are in this folder listed,
+    # as there is no way of retrieving the folder the template
+    # is in with Ninja.
+    args += [
+      "--front_end_directory",
+      rebase_path(get_path_info(sources[0], "dir"), root_build_dir),
+    ]
+
+    output_files = [
+      "$target_gen_dir/$target_name-tsconfig.json",
+      "$target_gen_dir/$target_name-tsconfig.json.tsbuildinfo",
+    ]
+
+    foreach(src, sources) {
+      _extension = get_path_info(src, "extension")
+      _fileName = get_path_info(src, "dir") + "/" + get_path_info(src, "name")
+
+      # Any .d.ts file does not generate a corresponding a .js file, but we
+      # copy it over into the generated build folder instead, as tsc doesn't
+      # do that on its own
+      if (_extension == "ts" &&
+          get_path_info(get_path_info(src, "name"), "extension") == "d") {
+        output_files += [ "$target_gen_dir/$src" ]
+        # Any file checked by TypeScript that is jsdoc-typed will be also
+        # generating a js file in the gen folder
+      } else if (_extension == "js" || _extension == "ts") {
+        output_files += [ "$target_gen_dir/$_fileName.js" ]
+      } else {
+        assert(false,
+               "Incorrect extension on '$src' with extension '$_extension'")
+      }
+
+      output_files += [ "$target_gen_dir/$_fileName.d.ts" ]
+    }
+
+    outputs = output_files
+  }
+}
+
+set_defaults("ts_library") {
+  # Build output should be private and directories should export all relevant
+  # components in a group
+  visibility = [ "*" ]
+}

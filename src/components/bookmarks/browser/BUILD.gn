@@ -1,0 +1,163 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ui.gni")
+import("//testing/libfuzzer/fuzzer_test.gni")
+
+static_library("browser") {
+  public = [
+    "base_bookmark_model_observer.h",
+    "bookmark_client.h",
+    "bookmark_codec.h",
+    "bookmark_expanded_state_tracker.h",
+    "bookmark_model.h",
+    "bookmark_model_observer.h",
+    "bookmark_node.h",
+    "bookmark_node_data.h",
+    "bookmark_storage.h",
+    "bookmark_undo_delegate.h",
+    "bookmark_undo_provider.h",
+    "bookmark_utils.h",
+    "history_bookmark_model.h",
+    "model_loader.h",
+    "scoped_group_bookmark_actions.h",
+    "startup_task_runner_service.h",
+    "titled_url_index.h",
+    "titled_url_match.h",
+    "titled_url_node.h",
+    "titled_url_node_sorter.h",
+    "typed_count_sorter.h",
+    "url_and_title.h",
+  ]
+  sources = [
+    "base_bookmark_model_observer.cc",
+    "bookmark_client.cc",
+    "bookmark_codec.cc",
+    "bookmark_expanded_state_tracker.cc",
+    "bookmark_model.cc",
+    "bookmark_node.cc",
+    "bookmark_node_data.cc",
+    "bookmark_node_data_ios.cc",
+    "bookmark_storage.cc",
+    "bookmark_utils.cc",
+    "model_loader.cc",
+    "scoped_group_bookmark_actions.cc",
+    "startup_task_runner_service.cc",
+    "titled_url_index.cc",
+    "titled_url_match.cc",
+    "typed_count_sorter.cc",
+    "typed_count_sorter.h",
+    "url_index.cc",
+    "url_index.h",
+  ]
+
+  public_deps = [ "//components/bookmarks/common" ]
+
+  deps = [
+    "//base",
+    "//base:i18n",
+    "//components/favicon_base",
+    "//components/keyed_service/core",
+    "//components/pref_registry",
+    "//components/prefs",
+    "//components/query_parser",
+    "//components/strings",
+    "//components/url_formatter",
+    "//net",
+    "//third_party/icu",
+    "//ui/base",
+    "//ui/base/clipboard",
+    "//ui/gfx",
+    "//url",
+  ]
+
+  if (toolkit_views) {
+    # This code has TOOLKIT_VIEWS ifdefs, but doesn't actually rely on anything
+    # else in views.
+    all_dependent_configs = [ "//ui/views:flags" ]
+  }
+
+  if (toolkit_views && !is_mac) {
+    sources += [ "bookmark_node_data_views.cc" ]
+  }
+
+  if (is_mac) {
+    sources += [
+      "bookmark_node_data_mac.mm",
+      "bookmark_pasteboard_helper_mac.h",
+      "bookmark_pasteboard_helper_mac.mm",
+    ]
+    libs = [
+      "AppKit.framework",
+      "Foundation.framework",
+    ]
+  }
+}
+
+static_library("test_support") {
+  testonly = true
+  sources = [
+    "bookmark_test_util.cc",
+    "bookmark_test_util.h",
+  ]
+
+  deps = [ ":browser" ]
+}
+
+bundle_data("unit_tests_bundle_data") {
+  visibility = [ ":unit_tests" ]
+  testonly = true
+  sources = [
+    "//components/test/data/bookmarks/meta_info_as_string.json",
+    "//components/test/data/bookmarks/model_without_sync.json",
+  ]
+  outputs = [ "{{bundle_resources_dir}}/" +
+              "{{source_root_relative_dir}}/{{source_file_part}}" ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "bookmark_codec_unittest.cc",
+    "bookmark_expanded_state_tracker_unittest.cc",
+    "bookmark_index_unittest.cc",
+    "bookmark_model_unittest.cc",
+    "bookmark_utils_unittest.cc",
+    "titled_url_match_unittest.cc",
+  ]
+
+  if (toolkit_views) {
+    sources += [ "bookmark_node_data_unittest.cc" ]
+  }
+
+  configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+
+  deps = [
+    ":browser",
+    ":unit_tests_bundle_data",
+    "//base/test:test_support",
+    "//components/bookmarks/common",
+    "//components/bookmarks/test",
+    "//components/favicon_base",
+    "//components/pref_registry",
+    "//components/prefs",
+    "//components/prefs:test_support",
+    "//testing/gtest",
+    "//ui/base",
+    "//ui/base/clipboard",
+    "//url",
+  ]
+}
+
+# The fuzzer depends on code that is not built on Mac.
+if (!is_mac) {
+  fuzzer_test("bookmark_node_data_read_fuzzer") {
+    sources = [ "bookmark_node_data_read_fuzzer.cc" ]
+    deps = [
+      ":browser",
+      "//base",
+      "//base:i18n",
+    ]
+  }
+}

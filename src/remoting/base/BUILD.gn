@@ -1,0 +1,205 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+source_set("base") {
+  sources = [
+    "auto_thread.cc",
+    "auto_thread.h",
+    "auto_thread_task_runner.cc",
+    "auto_thread_task_runner.h",
+    "buffered_socket_writer.cc",
+    "buffered_socket_writer.h",
+    "capabilities.cc",
+    "capabilities.h",
+    "chromium_url_request.cc",
+    "chromium_url_request.h",
+    "chromoting_event.cc",
+    "chromoting_event.h",
+    "compound_buffer.cc",
+    "compound_buffer.h",
+    "constants.cc",
+    "constants.h",
+    "leaky_bucket.cc",
+    "leaky_bucket.h",
+    "name_value_map.h",
+    "rate_counter.cc",
+    "rate_counter.h",
+    "result.h",
+    "rsa_key_pair.cc",
+    "rsa_key_pair.h",
+    "running_samples.cc",
+    "running_samples.h",
+    "scoped_sc_handle_win.h",
+    "service_urls.cc",
+    "service_urls.h",
+    "session_options.cc",
+    "session_options.h",
+    "socket_reader.cc",
+    "socket_reader.h",
+    "telemetry_log_writer.cc",
+    "telemetry_log_writer.h",
+    "typed_buffer.h",
+    "url_request.h",
+    "url_request_context_getter.cc",
+    "url_request_context_getter.h",
+    "util.cc",
+    "util.h",
+    "vlog_net_log.cc",
+    "vlog_net_log.h",
+    "weighted_samples.cc",
+    "weighted_samples.h",
+  ]
+
+  configs += [
+    "//build/config/compiler:wexit_time_destructors",
+    "//remoting/build/config:version",
+  ]
+
+  public_deps = [
+    "//base",
+    "//net",
+    "//remoting/proto",
+    "//remoting/proto/remoting/v1:telemetry_grpc_library",
+    "//third_party/protobuf:protobuf_lite",
+  ]
+  deps = [
+    "//base/third_party/dynamic_annotations",
+    "//google_apis",
+    "//remoting/base/grpc_support",
+    "//third_party/libvpx",
+    "//third_party/libyuv",
+    "//third_party/webrtc_overrides:webrtc_component",
+    "//url",
+  ]
+  if (is_nacl) {
+    sources -= [
+      "chromium_url_request.cc",
+      "chromoting_event.cc",
+      "telemetry_log_writer.cc",
+      "url_request_context_getter.cc",
+    ]
+    public_deps -= [ "//remoting/proto/remoting/v1:telemetry_grpc_library" ]
+    deps -= [ "//google_apis" ]
+  }
+}
+
+source_set("authorization") {
+  sources = [
+    "gaia_oauth_client.cc",
+    "gaia_oauth_client.h",
+    "oauth_client.h",
+    "oauth_token_exchanger.cc",
+    "oauth_token_exchanger.h",
+    "oauth_token_getter.cc",
+    "oauth_token_getter.h",
+    "oauth_token_getter_impl.cc",
+    "oauth_token_getter_impl.h",
+    "oauth_token_getter_proxy.cc",
+    "oauth_token_getter_proxy.h",
+    "offline_token_exchanger.cc",
+    "offline_token_exchanger.h",
+    "passthrough_oauth_token_getter.cc",
+    "passthrough_oauth_token_getter.h",
+  ]
+
+  configs += [
+    "//build/config/compiler:wexit_time_destructors",
+    "//remoting/build/config:version",
+  ]
+
+  public_deps = [
+    "//base",
+    "//google_apis",
+    "//net",
+  ]
+
+  deps = [ "//remoting/proto/remoting/v1:directory_grpc_library" ]
+}
+
+source_set("breakpad") {
+  sources = [
+    "breakpad.h",
+    "breakpad_linux.cc",
+    "breakpad_mac.mm",
+    "breakpad_win.cc",
+  ]
+
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
+
+  deps = [ "//base" ]
+
+  if (is_mac) {
+    deps += [ "//third_party/breakpad" ]
+  } else if (is_win) {
+    deps += [ "//third_party/breakpad:breakpad_handler" ]
+  }
+}
+
+static_library("test_support") {
+  testonly = true
+
+  sources = [
+    "fake_oauth_token_getter.cc",
+    "fake_oauth_token_getter.h",
+    "mock_oauth_client.cc",
+    "mock_oauth_client.h",
+    "test_rsa_key_pair.h",
+  ]
+
+  deps = [ "//remoting/proto" ]
+  public_deps = [
+    ":authorization",
+    ":base",
+    ":breakpad",
+    "//base",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//third_party/protobuf:protobuf_lite",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+
+  sources = [
+    "auto_thread_task_runner_unittest.cc",
+    "auto_thread_unittest.cc",
+    "breakpad_win_unittest.cc",
+    "buffered_socket_writer_unittest.cc",
+    "capabilities_unittest.cc",
+    "compound_buffer_unittest.cc",
+    "leaky_bucket_unittest.cc",
+    "oauth_token_getter_proxy_unittest.cc",
+    "rate_counter_unittest.cc",
+    "result_unittest.cc",
+    "rsa_key_pair_unittest.cc",
+    "run_all_unittests.cc",
+    "running_samples_unittest.cc",
+    "session_options_unittest.cc",
+
+    # TODO(https://crbug.com/968640): Fix and reenable tests once we have some
+    # breathing room.
+    # "telemetry_log_writer_unittest.cc",
+    "typed_buffer_unittest.cc",
+    "util_unittest.cc",
+    "weighted_samples_unittest.cc",
+  ]
+
+  deps = [
+    ":test_support",
+    "//base",
+    "//mojo/core/embedder",
+    "//net:test_support",
+    "//third_party/libyuv",
+    "//third_party/webrtc_overrides:webrtc_component",
+  ]
+
+  if (is_win || is_mac || is_chromeos) {
+    deps += [ "//third_party/breakpad:client" ]
+  }
+
+  if (is_win) {
+    libs = [ "rpcrt4.lib" ]  # For UuidCreate in breakpad_win_unittest.cc.
+  }
+}
