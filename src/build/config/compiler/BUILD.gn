@@ -705,7 +705,11 @@ config("compiler") {
     # TODO(pcc): The contents of .ARM.attributes should be based on the
     # -march flag passed at compile time (see llvm.org/pr36291).
     if (current_cpu == "arm") {
-      ldflags += [ "-march=$arm_arch" ]
+      if (arm_cpu != "") {
+        ldflags += [ "-mcpu=$arm_cpu" ]
+      } else {
+        ldflags += [ "-march=$arm_arch" ]
+      }
     }
   }
 
@@ -898,9 +902,14 @@ config("compiler_cpu_abi") {
       }
       if (!is_nacl) {
         cflags += [
-          "-march=$arm_arch",
           "-mfloat-abi=$arm_float_abi",
         ]
+        if (arm_cpu != "") {
+          cflags += [ "-mcpu=$arm_cpu" ]
+        } else {
+          cflags += [ "-march=$arm_arch" ]
+        }
+        ldflags += [ "-mfloat-abi=$arm_float_abi" ]
       }
       if (arm_tune != "") {
         cflags += [ "-mtune=$arm_tune" ]
@@ -914,6 +923,9 @@ config("compiler_cpu_abi") {
       if (is_android) {
         # Outline atomics crash on Exynos 9810. http://crbug.com/1272795
         cflags += [ "-mno-outline-atomics" ]
+      }
+      if (arm_cpu != "") {
+        cflags += [ "-mcpu=$arm_cpu" ]
       }
     } else if (current_cpu == "mipsel" && !is_nacl) {
       ldflags += [ "-Wl,--hash-style=sysv" ]
