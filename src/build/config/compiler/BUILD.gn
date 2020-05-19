@@ -742,7 +742,11 @@ config("compiler") {
     # TODO(pcc): The contents of .ARM.attributes should be based on the
     # -march flag passed at compile time (see llvm.org/pr36291).
     if (current_cpu == "arm") {
-      ldflags += [ "-march=$arm_arch" ]
+      if (arm_cpu != "") {
+        ldflags += [ "-mcpu=$arm_cpu" ]
+      } else {
+        ldflags += [ "-march=$arm_arch" ]
+      }
     }
   }
 
@@ -1003,9 +1007,14 @@ config("compiler_cpu_abi") {
       }
       if (!is_nacl) {
         cflags += [
-          "-march=$arm_arch",
           "-mfloat-abi=$arm_float_abi",
         ]
+        if (arm_cpu != "") {
+          cflags += [ "-mcpu=$arm_cpu" ]
+        } else {
+          cflags += [ "-march=$arm_arch" ]
+        }
+        ldflags += [ "-mfloat-abi=$arm_float_abi" ]
       }
       if (arm_tune != "") {
         cflags += [ "-mtune=$arm_tune" ]
@@ -1015,6 +1024,9 @@ config("compiler_cpu_abi") {
           !(is_chromeos_lacros && is_chromeos_device)) {
         cflags += [ "--target=aarch64-linux-gnu" ]
         ldflags += [ "--target=aarch64-linux-gnu" ]
+      }
+      if (arm_cpu != "") {
+        cflags += [ "-mcpu=$arm_cpu" ]
       }
     } else if (current_cpu == "mipsel" && !is_nacl) {
       ldflags += [ "-Wl,--hash-style=sysv" ]
