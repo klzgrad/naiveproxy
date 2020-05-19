@@ -4,13 +4,13 @@ set -ex
 
 eval "$OPENWRT_FLAGS"
 
-sysroot=$PWD/out/sysroot-build/openwrt/$release/$arch
+sysroot=$PWD/out/sysroot-build/openwrt/$release/${arch}
 if [ -d $sysroot/lib ]; then
   exit 0
 fi
 mkdir -p $sysroot
 
-SDK_PATH=openwrt-sdk-$release-$target-${subtarget}_gcc-${gcc_ver}_musl.Linux-x86_64
+SDK_PATH=openwrt-sdk-$release-$target-${subtarget}_gcc-${gcc_ver}_${abi}.Linux-x86_64
 SDK_URL=https://downloads.openwrt.org/releases/$release/targets/$target/$subtarget/$SDK_PATH.tar.xz
 rm -rf $SDK_PATH
 curl $SDK_URL | tar xJf -
@@ -23,8 +23,8 @@ for flag in ALL_NONSHARED ALL_KMODS ALL SIGNED_PACKAGES; do
 done
 make oldconfig
 make
-full_root=staging_dir/toolchain-*_gcc-${gcc_ver}_musl
-cp -r staging_dir/target-*_musl/usr $full_root
+full_root=staging_dir/toolchain-*_gcc-${gcc_ver}_${abi}
+cp -r staging_dir/target-*_${abi}/usr $full_root
 echo '
 ./include
 ./lib/*.o
@@ -43,5 +43,5 @@ echo '
 ' >include.txt
 tar cf - -C $full_root --hard-dereference . | tar xf - -C $sysroot --wildcards --wildcards-match-slash -T include.txt
 rm include.txt
-cd $sysroot/*-openwrt-linux-musl/bin
+cd $sysroot/*-openwrt-linux-musl*/bin
 mv .ld.bin ld
