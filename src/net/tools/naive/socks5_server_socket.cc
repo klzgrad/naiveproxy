@@ -233,17 +233,17 @@ int Socks5ServerSocket::DoLoop(int last_io_result) {
         break;
       case STATE_GREET_READ_COMPLETE:
         rv = DoGreetReadComplete(rv);
-        net_log_.EndEventWithNetErrorCode(NetLogEventType::SOCKS5_GREET_WRITE,
+        net_log_.EndEventWithNetErrorCode(NetLogEventType::SOCKS5_GREET_READ,
                                           rv);
         break;
       case STATE_GREET_WRITE:
         DCHECK_EQ(OK, rv);
-        net_log_.BeginEvent(NetLogEventType::SOCKS5_GREET_READ);
+        net_log_.BeginEvent(NetLogEventType::SOCKS5_GREET_WRITE);
         rv = DoGreetWrite();
         break;
       case STATE_GREET_WRITE_COMPLETE:
         rv = DoGreetWriteComplete(rv);
-        net_log_.EndEventWithNetErrorCode(NetLogEventType::SOCKS5_GREET_READ,
+        net_log_.EndEventWithNetErrorCode(NetLogEventType::SOCKS5_GREET_WRITE,
                                           rv);
         break;
       case STATE_HANDSHAKE_READ:
