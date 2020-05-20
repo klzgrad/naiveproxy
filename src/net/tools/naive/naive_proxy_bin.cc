@@ -33,6 +33,7 @@
 #include "net/http/http_auth.h"
 #include "net/http/http_auth_cache.h"
 #include "net/http/http_network_session.h"
+#include "net/http/http_proxy_connect_job.h"
 #include "net/http/http_transaction_factory.h"
 #include "net/log/file_net_log_observer.h"
 #include "net/log/net_log.h"
@@ -75,6 +76,7 @@ struct CommandLine {
   std::string listen;
   std::string proxy;
   bool padding;
+  int concurrent;
   std::string host_resolver_rules;
   std::string resolver_range;
   bool no_log;
@@ -88,6 +90,7 @@ struct Params {
   std::string listen_addr;
   int listen_port;
   bool use_padding;
+  int concurrent;
   std::string proxy_url;
   std::string proxy_user;
   std::string proxy_pass;
@@ -180,6 +183,7 @@ void GetCommandLine(const base::CommandLine& proc, CommandLine* cmdline) {
                  "--proxy=<proto>://[<user>:<pass>@]<hostname>[:<port>]\n"
                  "                           proto: https, quic\n"
                  "--padding                  Use padding\n"
+                 "--concurrent=<N>           Use N h2 connections (1<=N<=10)\n"
                  "--host-resolver-rules=...  Resolver rules\n"
                  "--resolver-range=...       Redirect resolver range\n"
                  "--log[=<path>]             Log to stderr, or file\n"
@@ -197,6 +201,8 @@ void GetCommandLine(const base::CommandLine& proc, CommandLine* cmdline) {
   cmdline->listen = proc.GetSwitchValueASCII("listen");
   cmdline->proxy = proc.GetSwitchValueASCII("proxy");
   cmdline->padding = proc.HasSwitch("padding");
+  base::StringToInt(proc.GetSwitchValueASCII("concurrent"),
+                    &cmdline->concurrent);
   cmdline->host_resolver_rules =
       proc.GetSwitchValueASCII("host-resolver-rules");
   cmdline->resolver_range = proc.GetSwitchValueASCII("resolver-range");
@@ -221,36 +227,30 @@ void GetCommandLineFromConfig(const base::FilePath& config_path,
     std::cerr << "Invalid config format" << std::endl;
     exit(EXIT_FAILURE);
   }
-  if (value->FindKeyOfType("listen", base::Value::Type::STRING)) {
-    cmdline->listen = value->FindKey("listen")->GetString();
+  if (auto* v = value->FindStringKey("listen")) {
+    cmdline->listen = *v;
   }
-  if (value->FindKeyOfType("proxy", base::Value::Type::STRING)) {
-    cmdline->proxy = value->FindKey("proxy")->GetString();
+  if (auto* v = value->FindStringKey("proxy")) {
+    cmdline->proxy = *v;
   }
-  cmdline->padding = false;
-  if (value->FindKeyOfType("padding", base::Value::Type::BOOLEAN)) {
-    cmdline->padding = value->FindKey("padding")->GetBool();
+  cmdline->padding = value->FindBoolKey("padding").value_or(false);
+  cmdline->concurrent = value->FindIntKey("concurrent").value_or(1);
+  if (auto* v = value->FindStringKey("host-resolver-rules")) {
+    cmdline->host_resolver_rules = *v;
   }
-  if (value->FindKeyOfType("host-resolver-rules", base::Value::Type::STRING)) {
-    cmdline->host_resolver_rules =
-        value->FindKey("host-resolver-rules")->GetString();
-  }
-  if (value->FindKeyOfType("resolver-range", base::Value::Type::STRING)) {
-    cmdline->resolver_range = value->FindKey("resolver-range")->GetString();
+  if (auto* v = value->FindStringKey("resolver-range")) {
+    cmdline->resolver_range = *v;
   }
   cmdline->no_log = true;
-  if (value->FindKeyOfType("log", base::Value::Type::STRING)) {
+  if (auto* v = value->FindStringKey("log")) {
     cmdline->no_log = false;
-    cmdline->log =
-        base::FilePath::FromUTF8Unsafe(value->FindKey("log")->GetString());
+    cmdline->log = base::FilePath::FromUTF8Unsafe(*v);
   }
-  if (value->FindKeyOfType("log-net-log", base::Value::Type::STRING)) {
-    cmdline->log_net_log = base::FilePath::FromUTF8Unsafe(
-        value->FindKey("log-net-log")->GetString());
+  if (auto* v = value->FindStringKey("log-net-log")) {
+    cmdline->log_net_log = base::FilePath::FromUTF8Unsafe(*v);
   }
-  if (value->FindKeyOfType("ssl-key-log-file", base::Value::Type::STRING)) {
-    cmdline->ssl_key_log_file = base::FilePath::FromUTF8Unsafe(
-        value->FindKey("ssl-key-log-file")->GetString());
+  if (auto* v = value->FindStringKey("ssl-key-log-file")) {
+    cmdline->ssl_key_log_file = base::FilePath::FromUTF8Unsafe(*v);
   }
 }
 
@@ -323,7 +323,7 @@ bool ParseCommandLine(const CommandLine& cmdline, Params* params) {
   }
 
   params->use_padding = cmdline.padding;
-
+  params->concurrent = cmdline.concurrent;
   params->host_resolver_rules = cmdline.host_resolver_rules;
 
   if (params->protocol == net::NaiveConnection::kRedir) {
@@ -435,6 +435,8 @@ int main(int argc, char* argv[]) {
   if (!ParseCommandLine(cmdline, &params)) {
     return EXIT_FAILURE;
   }
+
+  net::HttpProxyConnectJob::SetSpdySessionCount(params.concurrent);
 
   net::ClientSocketPoolManager::set_max_sockets_per_pool(
       net::HttpNetworkSession::NORMAL_SOCKET_POOL,

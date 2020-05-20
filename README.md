@@ -59,7 +59,8 @@ Locally run `./naive` with `config.json`:
 {
   "listen": "socks://127.0.0.1:1080",
   "proxy": "https://user:pass@domain.example",
-  "padding": true
+  "padding": true,
+  "concurrent": 6
 }
 ```
 to get a SOCKS5 proxy at local port 1080.
