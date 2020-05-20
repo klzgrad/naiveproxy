@@ -343,7 +343,7 @@ bool ParseCommandLine(const CommandLine& cmdline, Params* params) {
   }
 
   if (!cmdline.no_log) {
-    if (!params->log_path.empty()) {
+    if (!cmdline.log.empty()) {
       params->log_settings.logging_dest = logging::LOG_TO_FILE;
       params->log_path = cmdline.log;
     } else {
