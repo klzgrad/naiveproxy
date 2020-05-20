@@ -138,6 +138,8 @@ class NET_EXPORT_PRIVATE HttpProxyConnectJob : public ConnectJob,
   // Updates the field trial parameters used in calculating timeouts.
   static void UpdateFieldTrialParametersForTesting();
 
+  static void SetSpdySessionCount(int count);
+
  private:
   enum State {
     STATE_BEGIN_CONNECT,
@@ -242,6 +244,9 @@ class NET_EXPORT_PRIVATE HttpProxyConnectJob : public ConnectJob,
 
   // Time when the connection to the proxy was started.
   base::TimeTicks connect_start_time_;
+
+  static int spdy_session_count_;
+  static int spdy_session_id_;
 
   base::WeakPtrFactory<HttpProxyConnectJob> weak_ptr_factory_{this};
 

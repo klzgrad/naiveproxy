@@ -158,6 +158,12 @@ HttpProxySocketParams::HttpProxySocketParams(
 
 HttpProxySocketParams::~HttpProxySocketParams() = default;
 
+static constexpr int kMinSpdySessionCount = 1;
+static constexpr int kMaxSpdySessionCount = 10;
+
+int HttpProxyConnectJob::spdy_session_count_ = 1;
+int HttpProxyConnectJob::spdy_session_id_ = 0;
+
 HttpProxyConnectJob::HttpProxyConnectJob(
     RequestPriority priority,
     const SocketTag& socket_tag,
@@ -308,6 +314,11 @@ base::TimeDelta HttpProxyConnectJob::TunnelTimeoutForTesting() {
 
 void HttpProxyConnectJob::UpdateFieldTrialParametersForTesting() {
   GetProxyTimeoutExperiments()->Init();
+}
+
+void HttpProxyConnectJob::SetSpdySessionCount(int count) {
+  spdy_session_count_ =
+      std::min(kMaxSpdySessionCount, std::max(kMinSpdySessionCount, count));
 }
 
 int HttpProxyConnectJob::ConnectInternal() {
@@ -610,6 +621,8 @@ int HttpProxyConnectJob::DoSpdyProxyCreateStream() {
     nested_connect_job_.reset();
   }
 
+  spdy_session_id_ = (spdy_session_id_ + 1) % spdy_session_count_;
+
   next_state_ = STATE_SPDY_PROXY_CREATE_STREAM_COMPLETE;
   spdy_stream_request_ = std::make_unique<SpdyStreamRequest>();
   return spdy_stream_request_->StartRequest(
@@ -829,7 +842,8 @@ SpdySessionKey HttpProxyConnectJob::CreateSpdySessionKey() const {
       ProxyServer::Direct(), PRIVACY_MODE_DISABLED,
       SpdySessionKey::IsProxySession::kTrue, socket_tag(),
       params_->network_isolation_key(),
-      params_->ssl_params()->GetDirectConnectionParams()->disable_secure_dns());
+      params_->ssl_params()->GetDirectConnectionParams()->disable_secure_dns(),
+      spdy_session_id_);
 }
 
 }  // namespace net

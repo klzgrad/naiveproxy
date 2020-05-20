@@ -34,7 +34,8 @@ class NET_EXPORT_PRIVATE SpdySessionKey {
                  IsProxySession is_proxy_session,
                  const SocketTag& socket_tag,
                  const NetworkIsolationKey& network_isolation_key,
-                 bool disable_secure_dns);
+                 bool disable_secure_dns,
+                 int proxy_session_id = 0);
 
   SpdySessionKey(const SpdySessionKey& other);
 
@@ -85,6 +86,7 @@ class NET_EXPORT_PRIVATE SpdySessionKey {
   // Used to separate requests made in different contexts.
   NetworkIsolationKey network_isolation_key_;
   bool disable_secure_dns_;
+  int proxy_session_id_;
 };
 
 }  // namespace net
