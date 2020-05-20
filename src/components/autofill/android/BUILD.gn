@@ -1,0 +1,99 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/android/rules.gni")
+import("//build/config/locales.gni")
+
+java_strings_grd("autofill_strings_grd") {
+  grd_file = "java/strings/autofill_strings.grd"
+  outputs = [ "values/autofill_strings.xml" ] +
+            process_file_template(
+                android_bundle_locales_as_resources,
+                [ "values-{{source_name_part}}/autofill_strings.xml" ])
+}
+
+android_resources("autofill_java_resources") {
+  custom_package = "org.chromium.components.autofill"
+  sources = [
+    "java/res/layout/autofill_dropdown_footer_item_refresh.xml",
+    "java/res/layout/autofill_dropdown_item.xml",
+    "java/res/layout/autofill_dropdown_item_refresh.xml",
+    "java/res/values/colors.xml",
+    "java/res/values/dimens.xml",
+  ]
+  deps = [
+    ":autofill_strings_grd",
+    "//ui/android:ui_java_resources",
+  ]
+}
+
+java_cpp_enum("autofill_core_browser_java_enums") {
+  sources = [
+    "../core/browser/ui/accessory_sheet_enums.h",
+    "../core/browser/ui/popup_item_ids.h",
+  ]
+}
+
+android_library("autofill_java") {
+  deps = [
+    ":autofill_java_resources",
+    "//base:base_java",
+    "//content/public/android:content_java",
+    "//third_party/android_deps:android_support_v7_appcompat_java",
+    "//ui/android:ui_java",
+  ]
+  sources = [
+    "java/src/org/chromium/components/autofill/AutofillDelegate.java",
+    "java/src/org/chromium/components/autofill/AutofillDropdownAdapter.java",
+    "java/src/org/chromium/components/autofill/AutofillDropdownFooter.java",
+    "java/src/org/chromium/components/autofill/AutofillPopup.java",
+    "java/src/org/chromium/components/autofill/AutofillSuggestion.java",
+  ]
+  srcjar_deps = [ ":autofill_core_browser_java_enums" ]
+}
+
+android_library("provider_java") {
+  deps = [
+    "//base:base_java",
+    "//base:jni_java",
+    "//components/autofill/core/common/mojom:mojo_types_java",
+    "//content/public/android:content_java",
+    "//third_party/android_deps:androidx_annotation_annotation_java",
+    "//ui/android:ui_java",
+  ]
+  annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
+  sources = [
+    "java/src/org/chromium/components/autofill/AutofillActionModeCallback.java",
+    "java/src/org/chromium/components/autofill/AutofillManagerWrapper.java",
+    "java/src/org/chromium/components/autofill/AutofillProvider.java",
+    "java/src/org/chromium/components/autofill/AutofillProviderImpl.java",
+    "java/src/org/chromium/components/autofill/AutofillProviderUMA.java",
+    "java/src/org/chromium/components/autofill/FormData.java",
+    "java/src/org/chromium/components/autofill/FormFieldData.java",
+  ]
+}
+
+generate_jni("jni_headers") {
+  sources = [
+    "java/src/org/chromium/components/autofill/AutofillProvider.java",
+    "java/src/org/chromium/components/autofill/FormData.java",
+    "java/src/org/chromium/components/autofill/FormFieldData.java",
+  ]
+}
+
+static_library("provider") {
+  sources = [
+    "autofill_provider_android.cc",
+    "autofill_provider_android.h",
+    "form_data_android.cc",
+    "form_data_android.h",
+    "form_field_data_android.cc",
+    "form_field_data_android.h",
+  ]
+  deps = [
+    ":jni_headers",
+    "//components/autofill/core/browser:browser",
+    "//content/public/browser",
+  ]
+}

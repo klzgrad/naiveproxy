@@ -1,0 +1,161 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//third_party/closure_compiler/compile_js.gni")
+import("//tools/polymer/polymer.gni")
+import("//ui/webui/resources/tools/js_modulizer.gni")
+import("../settings.gni")
+
+js_type_check("closure_compile") {
+  deps = [
+    ":reset_browser_proxy",
+    ":reset_page",
+    ":reset_profile_banner",
+    ":reset_profile_dialog",
+  ]
+}
+
+js_library("reset_page") {
+  deps = [
+    ":reset_profile_dialog",
+    "..:route",
+    "..:router",
+    "//ui/webui/resources/cr_elements/cr_lazy_render:cr_lazy_render",
+    "//ui/webui/resources/js:assert",
+    "//ui/webui/resources/js:cr",
+    "//ui/webui/resources/js:load_time_data",
+    "//ui/webui/resources/js/cr/ui:focus_without_ink",
+  ]
+}
+
+js_library("reset_browser_proxy") {
+  deps = [ "//ui/webui/resources/js:cr" ]
+  externs_list = [ "$externs_path/chrome_send.js" ]
+}
+
+js_library("reset_profile_dialog") {
+  deps = [
+    ":reset_browser_proxy",
+    "..:route",
+    "//ui/webui/resources/js:load_time_data",
+    "//ui/webui/resources/js:web_ui_listener_behavior",
+  ]
+}
+
+js_library("reset_profile_banner") {
+  deps = [
+    ":reset_browser_proxy",
+    "..:route",
+    "..:router",
+    "//ui/webui/resources/cr_elements/cr_dialog",
+    "//ui/webui/resources/js:load_time_data",
+    "//ui/webui/resources/js:web_ui_listener_behavior",
+  ]
+}
+
+js_type_check("closure_compile_module") {
+  is_polymer3 = true
+  deps = [
+    ":reset_browser_proxy.m",
+    ":reset_page.m",
+    ":reset_profile_banner.m",
+    ":reset_profile_dialog.m",
+  ]
+}
+
+js_library("reset_browser_proxy.m") {
+  sources = [ "$root_gen_dir/chrome/browser/resources/settings/reset_page/reset_browser_proxy.m.js" ]
+  deps = [ "//ui/webui/resources/js:cr.m" ]
+  extra_deps = [ ":modulize" ]
+}
+
+js_library("reset_page.m") {
+  sources = [ "$root_gen_dir/chrome/browser/resources/settings/reset_page/reset_page.m.js" ]
+  deps = [
+    ":reset_profile_dialog.m",
+    "..:route.m",
+    "..:router.m",
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+    "//ui/webui/resources/cr_elements/cr_lazy_render:cr_lazy_render.m",
+    "//ui/webui/resources/js:assert",
+    "//ui/webui/resources/js:load_time_data.m",
+  ]
+  extra_deps = [ ":reset_page_module" ]
+}
+
+js_library("reset_profile_banner.m") {
+  sources = [ "$root_gen_dir/chrome/browser/resources/settings/reset_page/reset_profile_banner.m.js" ]
+  deps = [
+    ":reset_browser_proxy.m",
+    "..:route.m",
+    "..:router.m",
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+    "//ui/webui/resources/cr_elements/cr_dialog:cr_dialog.m",
+  ]
+  extra_deps = [ ":reset_profile_banner_module" ]
+}
+
+js_library("reset_profile_dialog.m") {
+  sources = [ "$root_gen_dir/chrome/browser/resources/settings/reset_page/reset_profile_dialog.m.js" ]
+  deps = [
+    ":reset_browser_proxy.m",
+    "..:route.m",
+    "..:router.m",
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+    "//ui/webui/resources/js:load_time_data.m",
+    "//ui/webui/resources/js:web_ui_listener_behavior.m",
+  ]
+  extra_deps = [ ":reset_profile_dialog_module" ]
+}
+
+group("polymer3_elements") {
+  public_deps = [
+    ":modulize",
+    ":reset_page_module",
+    ":reset_profile_banner_module",
+    ":reset_profile_dialog_module",
+  ]
+}
+
+polymer_modulizer("reset_page") {
+  js_file = "reset_page.js"
+  html_file = "reset_page.html"
+  html_type = "dom-module"
+  namespace_rewrites = settings_namespace_rewrites
+  auto_imports = settings_auto_imports + [
+                   "ui/webui/resources/html/assert.html|assert",
+                   "chrome/browser/resources/settings/reset_page/reset_browser_proxy.html|ResetBrowserProxyImpl",
+                   "chrome/browser/resources/settings/router.html|Router,Route,RouteObserverBehavior",
+                   "chrome/browser/resources/settings/route.html|routes",
+                 ]
+}
+
+polymer_modulizer("reset_profile_banner") {
+  js_file = "reset_profile_banner.js"
+  html_file = "reset_profile_banner.html"
+  html_type = "dom-module"
+  namespace_rewrites = settings_namespace_rewrites
+  auto_imports = settings_auto_imports + [
+                   "chrome/browser/resources/settings/reset_page/reset_browser_proxy.html|ResetBrowserProxyImpl",
+                   "chrome/browser/resources/settings/router.html|Router",
+                   "chrome/browser/resources/settings/route.html|routes",
+                 ]
+}
+
+polymer_modulizer("reset_profile_dialog") {
+  js_file = "reset_profile_dialog.js"
+  html_file = "reset_profile_dialog.html"
+  html_type = "dom-module"
+  namespace_rewrites = settings_namespace_rewrites
+  auto_imports = settings_auto_imports + [
+                   "chrome/browser/resources/settings/reset_page/reset_browser_proxy.html|ResetBrowserProxyImpl,ResetBrowserProxy",
+                   "chrome/browser/resources/settings/router.html|Router",
+                   "chrome/browser/resources/settings/route.html|routes",
+                 ]
+}
+
+js_modulizer("modulize") {
+  input_files = [ "reset_browser_proxy.js" ]
+  namespace_rewrites = settings_namespace_rewrites
+}

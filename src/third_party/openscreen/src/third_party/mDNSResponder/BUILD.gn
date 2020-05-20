@@ -1,0 +1,42 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+config("mdnsresponder_config") {
+  cflags = [ "-w" ]  # Disable all warnings.
+
+  cflags_c = [
+    # We need to rename some linked symbols in order to avoid multiple
+    # definitions.
+    "-DMD5_Update=MD5_Update_mDNS",
+    "-DMD5_Init=MD5_Init_mDNS",
+    "-DMD5_Final=MD5_Final_mDNS",
+    "-DMD5_Transform=MD5_Transform_mDNS",
+  ]
+
+  if (target_cpu == "arm" || target_cpu == "arm64") {
+    cflags_c += [ "-Dmd5_block_data_order=md5_block_data_order" ]
+  }
+}
+
+source_set("core") {
+  sources = [
+    "src/mDNSCore/DNSCommon.c",
+    "src/mDNSCore/DNSCommon.h",
+    "src/mDNSCore/DNSDigest.c",
+    "src/mDNSCore/mDNS.c",
+    "src/mDNSCore/mDNSDebug.h",
+    "src/mDNSCore/mDNSEmbeddedAPI.h",
+    "src/mDNSCore/uDNS.c",
+    "src/mDNSCore/uDNS.h",
+    "src/mDNSShared/mDNSDebug.c",
+  ]
+
+  configs += [ ":mdnsresponder_config" ]
+
+  if (is_debug) {
+    defines = [ "MDNS_DEBUGMSGS=2" ]
+  }
+
+  include_dirs = [ "src/mDNSCore" ]
+}

@@ -1,0 +1,146 @@
+# Copyright 2019 The Chromium Authors.  All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+if (!defined(devtools_location)) {
+  if (defined(use_devtools_typescript) && use_devtools_typescript) {
+    devtools_location = ""
+  } else {
+    devtools_location = "third_party/devtools-frontend/src"
+  }
+}
+
+# Defines a target that compiles .ts files using TypeScript.
+# A temporary tsconfig.json is generated which uses the
+# tsconfig.json in this folder as basis.
+#
+# Either `sources` or `deps` must be listed (or both).
+#
+# For tests, you must specify the `testonly = true` argument:
+#
+# Variables:
+#   sources (optional):
+#     List of TypeScript files to typecheck and generate
+#   deps (optional):
+#     List of dependencies that are ts_libraries or export a tsconfig.json
+# Example:
+#   ts_library("main") {
+#     sources = ["bar.js", "foo.ts"]
+#     deps = ["../common"]
+#   }
+#
+#   ts_library("unittest") {
+#     testonly = true
+#     sources = [ "bar_test.ts" ]
+#     deps = [ "../../../../front_end/common" ]
+#   }
+#
+template("ts_library") {
+  action(target_name) {
+    script = "//$devtools_location/third_party/typescript/ts_library.py"
+
+    forward_variables_from(invoker,
+                           [
+                             "sources",
+                             "visibility",
+                             "deps",
+                           ])
+
+    inputs = [
+      "//$devtools_location/tsconfig.base.json",
+      "//$devtools_location/node_modules/typescript/lib/tsc.js",
+      "//$devtools_location/front_end/legacy/legacy-defs.d.ts",
+      "//$devtools_location/front_end/generated/protocol.d.ts",
+      "//$devtools_location/node_modules/@types/filesystem/index.d.ts",
+    ]
+
+    args = [
+      "--tsconfig_output_location",
+      rebase_path(target_gen_dir, root_build_dir) +
+          "/$target_name-tsconfig.json",
+    ]
+
+    assert(
+        defined(sources) || defined(deps),
+        "You must either specify an array of 'sources' or 'deps' for $target_name")
+
+    _test_only = defined(invoker.testonly) && invoker.testonly
+
+    if (defined(deps)) {
+      args += [ "--deps" ]
+      foreach(dep, deps) {
+        args += [ rebase_path(get_label_info(dep, "dir"), ".") + "/" +
+                  get_label_info(dep, "name") + "-tsconfig.json" ]
+      }
+
+      # We need to expose our deps in the Ninja chain, to allow `generate_devtools_grd`
+      # to eventually roll up all files. If these are not public, Ninja complains that
+      # the files are not reachable.
+      public_deps = deps
+    }
+
+    # Here we assume that all sources are in this folder listed,
+    # as there is no way of retrieving the folder the template
+    # is in with Ninja.
+    args += [
+      "--front_end_directory",
+      rebase_path(".", root_build_dir),
+    ]
+
+    if (_test_only) {
+      args += [ "--test-only" ]
+    }
+
+    output_files = [
+      "$target_gen_dir/$target_name-tsconfig.json",
+      "$target_gen_dir/$target_name-tsconfig.json.tsbuildinfo",
+    ]
+
+    if (defined(sources)) {
+      args += [ "--sources" ] + rebase_path(sources, root_build_dir)
+
+      foreach(src, sources) {
+        _extension = get_path_info(src, "extension")
+        _fileName = get_path_info(src, "dir") + "/" + get_path_info(src, "name")
+
+        # Any .d.ts file does not generate a corresponding a .js file, but we
+        # copy it over into the generated build folder instead, as tsc doesn't
+        # do that on its own
+        if (_extension == "ts" &&
+            get_path_info(get_path_info(src, "name"), "extension") == "d") {
+          output_files += [ "$target_gen_dir/$src" ]
+          # Any file checked by TypeScript that is jsdoc-typed will be also
+          # generating a js file in the gen folder
+        } else if (_extension == "js" || _extension == "ts") {
+          output_files += [
+            "$target_gen_dir/$_fileName.js",
+            "$target_gen_dir/$_fileName.js.map",
+          ]
+
+          # check that the file is TypeScript and not a unittest file
+          # add it to the outputs
+          if (_extension == "ts" && !_test_only) {
+            _front_end_module_name = get_path_info(target_gen_dir, "name")
+
+            # Generate JavaScript files are temporarily copied into the old
+            # resources/inspector directory. See ts_library.py for more info
+            output_files += [ "$root_build_dir/resources/inspector/$_front_end_module_name/$_fileName.js" ]
+          }
+        } else {
+          assert(false,
+                 "Incorrect extension on '$src' with extension '$_extension'")
+        }
+
+        output_files += [ "$target_gen_dir/$_fileName.d.ts" ]
+      }
+    }
+
+    outputs = output_files
+  }
+}
+
+set_defaults("ts_library") {
+  # Build output should be private and directories should export all relevant
+  # components in a group
+  visibility = [ "*" ]
+}

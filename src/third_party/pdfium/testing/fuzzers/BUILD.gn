@@ -1,0 +1,514 @@
+# Copyright 2016 The PDFium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("../../pdfium.gni")
+
+config("fuzzer_config") {
+  configs = [ "../..:pdfium_core_config" ]
+
+  defines = [
+    "PNG_PREFIX",
+    "PNG_USE_READ_MACROS",
+  ]
+  include_dirs = [ "../.." ]
+}
+
+# All possible "pdfium_fuzzer"s.
+fuzzer_list = [
+  "pdf_cmap_fuzzer",
+  "pdf_codec_a85_fuzzer",
+  "pdf_codec_fax_fuzzer",
+  "pdf_codec_icc_fuzzer",
+  "pdf_codec_jbig2_fuzzer",
+  "pdf_codec_rle_fuzzer",
+  "pdf_font_fuzzer",
+  "pdf_hint_table_fuzzer",
+  "pdf_jpx_fuzzer",
+  "pdf_psengine_fuzzer",
+  "pdf_scanlinecompositor_fuzzer",
+  "pdf_streamparser_fuzzer",
+  "pdf_xml_fuzzer",
+  "pdfium_fuzzer",
+]
+if (pdf_enable_v8) {
+  fuzzer_list += [
+    "pdf_cjs_util_fuzzer",
+    "pdf_fx_date_helpers_fuzzer",
+  ]
+  if (pdf_enable_xfa) {
+    fuzzer_list += [
+      "pdf_bidi_fuzzer",
+      "pdf_cfgas_stringformatter_fuzzer",
+      "pdf_cfx_barcode_fuzzer",
+      "pdf_codec_jpeg_fuzzer",
+      "pdf_css_fuzzer",
+      "pdf_fm2js_fuzzer",
+      "pdf_formcalc_context_fuzzer",
+      "pdf_formcalc_fuzzer",
+      "pdfium_xfa_fuzzer",
+      "pdfium_xfa_lpm_fuzzer",
+    ]
+    if (pdf_enable_xfa_bmp) {
+      fuzzer_list += [ "pdf_codec_bmp_fuzzer" ]
+    }
+    if (pdf_enable_xfa_gif) {
+      fuzzer_list += [
+        "pdf_codec_gif_fuzzer",
+        "pdf_lzw_fuzzer",
+      ]
+    }
+    if (pdf_enable_xfa_png) {
+      fuzzer_list += [ "pdf_codec_png_fuzzer" ]
+    }
+    if (pdf_enable_xfa_tiff) {
+      fuzzer_list += [ "pdf_codec_tiff_fuzzer" ]
+    }
+  }
+}
+if (is_clang) {
+  # Fuzzers that use FuzzedDataProvider can only be built with Clang.
+  fuzzer_list += [ "pdf_nametree_fuzzer" ]
+}
+
+group("fuzzers") {
+  testonly = true
+  deps = []
+  foreach(fuzzer, fuzzer_list) {
+    deps += [ ":${fuzzer}_src" ]
+  }
+}
+
+source_set("fuzzer_init") {
+  testonly = true
+  sources = [ "pdf_fuzzer_init.cc" ]
+  include_dirs = [ "../.." ]
+  deps = [ "../../:pdfium_public_headers" ]
+}
+
+source_set("fuzzer_init_public") {
+  testonly = true
+  sources = [ "pdf_fuzzer_init_public.cc" ]
+  include_dirs = [ "../.." ]
+  deps = [ "../../:pdfium_public_headers" ]
+  if (pdf_enable_v8) {
+    configs += [ "//v8:external_startup_data" ]
+    deps += [
+      "../:test_support",
+      "//v8",
+      "//v8:v8_libplatform",
+    ]
+  }
+}
+
+if (is_component_build) {
+  group("fuzzer_impls") {
+    deps = []
+    foreach(fuzzer, fuzzer_list) {
+      deps += [ ":${fuzzer}_impl" ]
+    }
+  }
+}
+
+source_set("fuzzer_helper") {
+  testonly = !is_component_build
+  sources = [
+    "pdfium_fuzzer_helper.cc",
+    "pdfium_fuzzer_helper.h",
+  ]
+  configs += [ ":fuzzer_config" ]
+  deps = [
+    "../../:pdfium_public_headers",
+    "../../third_party:pdfium_base",
+  ]
+}
+
+source_set("fuzzer_utils") {
+  # In component builds, the pdfium target (which is not testonly) depends on
+  # the fuzzer sources, which may depend on this target, so add testonly only in
+  # non-component builds.
+  testonly = !is_component_build
+  sources = [
+    "pdfium_fuzzer_util.cc",
+    "pdfium_fuzzer_util.h",
+  ]
+  deps = [ "../../:pdfium_public_headers" ]
+  include_dirs = [ "../.." ]
+}
+
+template("pdfium_fuzzer") {
+  if (defined(invoker.public_fuzzer) && invoker.public_fuzzer) {
+    init_dep = ":fuzzer_init_public"
+  } else {
+    init_dep = ":fuzzer_init"
+  }
+  if (is_component_build) {
+    # In component builds, fuzzers are split into "_impl" and "_src" targets.
+    # The "_impl" target exports the fuzzer implementation and gets statically
+    # linked into the PDFium shared library.  The "_src" target is a thin
+    # wrapper that imports the fuzzer from PDFium; this gets linked into the
+    # real fuzzer executable.  In static builds, there's only a single "_src"
+    # target that contains the implementation and statically links in PDFium.
+
+    impl_name = target_name + "_impl"
+    template_target_name = target_name
+    source_set("${target_name}_src") {
+      testonly = true
+      sources = [ "component_fuzzer_template.cc" ]
+      deps = [
+        "../../:pdfium",
+        init_dep,
+      ]
+      configs += [ ":fuzzer_config" ]
+      defines = [ "FUZZER_IMPL=${template_target_name}" ]
+    }
+  } else {
+    impl_name = target_name + "_src"
+  }
+  source_set(impl_name) {
+    sources = invoker.sources
+    deps = []
+    if (defined(invoker.deps)) {
+      deps += invoker.deps
+    }
+    configs -= [ "//build/config/compiler:chromium_code" ]
+    configs += [
+      "//build/config/compiler:no_chromium_code",
+      ":fuzzer_config",
+    ]
+    if (is_component_build) {
+      # |export| should be consistent with FPDF_EXPORT In public/fpdfview.h.
+      if (is_win) {
+        export = "__declspec(dllexport)"
+      } else {
+        export = "__attribute__((visibility(\"default\")))"
+      }
+      defines = [ "LLVMFuzzerTestOneInput=${export} ${template_target_name}" ]
+      deps += [ "../../:pdfium_public_headers" ]
+    } else {
+      testonly = true
+      deps += [
+        "../../:pdfium",
+        init_dep,
+      ]
+    }
+  }
+}
+
+if (pdf_enable_v8) {
+  pdfium_fuzzer("pdf_cjs_util_fuzzer") {
+    sources = [ "pdf_cjs_util_fuzzer.cc" ]
+    deps = [
+      "../../core/fxcrt",
+      "../../fxjs",
+    ]
+  }
+  pdfium_fuzzer("pdf_fx_date_helpers_fuzzer") {
+    sources = [ "pdf_fx_date_helpers_fuzzer.cc" ]
+    deps = [
+      "../../core/fxcrt",
+      "../../fxjs",
+    ]
+  }
+
+  if (pdf_enable_xfa) {
+    pdfium_fuzzer("pdf_bidi_fuzzer") {
+      sources = [ "pdf_bidi_fuzzer.cc" ]
+      deps = [
+        "../../:freetype_common",
+        "../../core/fxcrt",
+        "../../core/fxge",
+        "../../xfa/fgas",
+        "../../xfa/fgas/layout",
+        "//third_party/icu:icuuc",
+      ]
+    }
+
+    pdfium_fuzzer("pdf_cfgas_stringformatter_fuzzer") {
+      sources = [ "pdf_cfgas_stringformatter_fuzzer.cc" ]
+      deps = [
+        "../../core/fxcrt",
+        "../../xfa/fgas",
+        "../../xfa/fxfa/parser",
+      ]
+    }
+
+    pdfium_fuzzer("pdf_cfx_barcode_fuzzer") {
+      sources = [ "pdf_cfx_barcode_fuzzer.cc" ]
+      deps = [
+        "../../core/fxcrt",
+        "../../fxbarcode",
+        "//third_party/icu:icuuc",
+      ]
+    }
+
+    if (pdf_enable_xfa_bmp) {
+      pdfium_fuzzer("pdf_codec_bmp_fuzzer") {
+        sources = [
+          "pdf_codec_bmp_fuzzer.cc",
+          "xfa_codec_fuzzer.h",
+        ]
+        deps = [
+          "../../core/fxcodec",
+          "../../core/fxcrt",
+          "../../core/fxge",
+          "../../third_party:pdfium_base",
+        ]
+      }
+    }
+
+    if (pdf_enable_xfa_gif) {
+      pdfium_fuzzer("pdf_codec_gif_fuzzer") {
+        sources = [
+          "pdf_codec_gif_fuzzer.cc",
+          "xfa_codec_fuzzer.h",
+        ]
+        deps = [
+          "../../core/fxcodec",
+          "../../core/fxcrt",
+          "../../core/fxge",
+          "../../third_party:pdfium_base",
+        ]
+      }
+
+      pdfium_fuzzer("pdf_lzw_fuzzer") {
+        sources = [ "pdf_lzw_fuzzer.cc" ]
+        deps = [
+          "../../core/fxcodec",
+          "../../third_party:pdfium_base",
+        ]
+      }
+    }
+
+    pdfium_fuzzer("pdf_codec_jpeg_fuzzer") {
+      sources = [
+        "pdf_codec_jpeg_fuzzer.cc",
+        "xfa_codec_fuzzer.h",
+      ]
+      deps = [
+        "../../core/fxcodec",
+        "../../core/fxcrt",
+        "../../core/fxge",
+        "../../third_party:pdfium_base",
+      ]
+    }
+
+    if (pdf_enable_xfa_png) {
+      pdfium_fuzzer("pdf_codec_png_fuzzer") {
+        sources = [
+          "pdf_codec_png_fuzzer.cc",
+          "xfa_codec_fuzzer.h",
+        ]
+        deps = [
+          "../../core/fxcodec",
+          "../../core/fxcrt",
+          "../../core/fxge",
+          "../../third_party:pdfium_base",
+        ]
+      }
+    }
+
+    if (pdf_enable_xfa_tiff) {
+      pdfium_fuzzer("pdf_codec_tiff_fuzzer") {
+        sources = [
+          "pdf_codec_tiff_fuzzer.cc",
+          "xfa_codec_fuzzer.h",
+        ]
+        deps = [
+          "../../core/fxcodec",
+          "../../core/fxcrt",
+          "../../core/fxge",
+          "../../third_party:pdfium_base",
+        ]
+      }
+    }
+
+    pdfium_fuzzer("pdf_css_fuzzer") {
+      sources = [ "pdf_css_fuzzer.cc" ]
+      deps = [
+        "../../core/fxcrt",
+        "../../core/fxcrt/css",
+      ]
+    }
+
+    pdfium_fuzzer("pdf_fm2js_fuzzer") {
+      sources = [ "pdf_fm2js_fuzzer.cc" ]
+      deps = [
+        "../../core/fxcrt",
+        "../../fxjs",
+      ]
+    }
+
+    pdfium_fuzzer("pdf_formcalc_context_fuzzer") {
+      sources = [ "pdf_formcalc_context_fuzzer.cc" ]
+      deps = [
+        ":fuzzer_helper",
+        "../../:pdfium_public_headers",
+        "../../core/fxcrt",
+        "../../fpdfsdk",
+        "../../fpdfsdk/fpdfxfa",
+        "../../fxjs",
+        "../../xfa/fxfa",
+      ]
+      public_fuzzer = true
+    }
+
+    pdfium_fuzzer("pdf_formcalc_fuzzer") {
+      sources = [ "pdf_formcalc_fuzzer.cc" ]
+      deps = [
+        "../../core/fxcrt",
+        "../../xfa/fxfa/fm2js",
+      ]
+    }
+
+    pdfium_fuzzer("pdfium_xfa_fuzzer") {
+      sources = [ "pdfium_xfa_fuzzer.cc" ]
+      deps = [
+        ":fuzzer_helper",
+        "../../:pdfium_public_headers",
+      ]
+      public_fuzzer = true
+    }
+
+    pdfium_fuzzer("pdfium_xfa_lpm_fuzzer") {
+      sources = [
+        "pdfium_xfa_lpm_fuzz_stub.cc",
+        "pdfium_xfa_lpm_fuzz_stub.h",
+      ]
+      deps = [
+        ":fuzzer_helper",
+        "../../:pdfium_public_headers",
+      ]
+      public_fuzzer = true
+    }
+  }
+}
+
+if (is_clang) {
+  pdfium_fuzzer("pdf_nametree_fuzzer") {
+    sources = [ "pdf_nametree_fuzzer.cc" ]
+    deps = [
+      "../../core/fpdfapi/page",
+      "../../core/fpdfapi/parser",
+      "../../core/fpdfdoc",
+      "../../third_party:pdfium_base",
+    ]
+  }
+}
+
+pdfium_fuzzer("pdf_cmap_fuzzer") {
+  sources = [ "pdf_cmap_fuzzer.cc" ]
+  deps = [
+    "../../:freetype_common",
+    "../../core/fpdfapi/font",
+    "../../third_party:pdfium_base",
+  ]
+}
+
+pdfium_fuzzer("pdf_codec_a85_fuzzer") {
+  sources = [ "pdf_codec_a85_fuzzer.cc" ]
+  deps = [
+    "../../core/fxcodec",
+    "../../core/fxcrt",
+  ]
+}
+
+pdfium_fuzzer("pdf_codec_fax_fuzzer") {
+  sources = [ "pdf_codec_fax_fuzzer.cc" ]
+  deps = [
+    ":fuzzer_utils",
+    "../../core/fxcodec",
+  ]
+}
+
+pdfium_fuzzer("pdf_codec_icc_fuzzer") {
+  sources = [ "pdf_codec_icc_fuzzer.cc" ]
+  deps = [
+    "../../core/fxcodec",
+    "../../third_party:pdfium_base",
+    "../../third_party/:lcms2",
+  ]
+}
+
+pdfium_fuzzer("pdf_codec_jbig2_fuzzer") {
+  sources = [ "pdf_codec_jbig2_fuzzer.cc" ]
+  deps = [
+    ":fuzzer_utils",
+    "../../core/fpdfapi/parser",
+    "../../core/fxcodec",
+    "../../core/fxcrt",
+    "../../core/fxge",
+  ]
+}
+
+pdfium_fuzzer("pdf_codec_rle_fuzzer") {
+  sources = [ "pdf_codec_rle_fuzzer.cc" ]
+  deps = [
+    "../../core/fxcodec",
+    "../../core/fxcrt",
+  ]
+}
+
+pdfium_fuzzer("pdf_font_fuzzer") {
+  sources = [ "pdf_font_fuzzer.cc" ]
+  deps = [ "../../:pdfium_public_headers" ]
+}
+
+pdfium_fuzzer("pdf_hint_table_fuzzer") {
+  sources = [ "pdf_hint_table_fuzzer.cc" ]
+  deps = [
+    "../../core/fpdfapi/parser",
+    "../../core/fxcrt",
+    "../../third_party:pdfium_base",
+  ]
+}
+
+pdfium_fuzzer("pdf_jpx_fuzzer") {
+  sources = [ "pdf_jpx_fuzzer.cc" ]
+  deps = [
+    "../../core/fpdfapi/page",
+    "../../core/fxcodec",
+    "../../core/fxcrt",
+    "../../core/fxge",
+  ]
+}
+
+pdfium_fuzzer("pdf_psengine_fuzzer") {
+  sources = [ "pdf_psengine_fuzzer.cc" ]
+  deps = [
+    "../../core/fpdfapi/page",
+    "../../third_party:pdfium_base",
+  ]
+}
+
+pdfium_fuzzer("pdf_scanlinecompositor_fuzzer") {
+  sources = [ "pdf_scanlinecompositor_fuzzer.cc" ]
+  deps = [
+    ":fuzzer_utils",
+    "../../core/fxge",
+    "../../third_party:pdfium_base",
+  ]
+}
+
+pdfium_fuzzer("pdf_streamparser_fuzzer") {
+  sources = [ "pdf_streamparser_fuzzer.cc" ]
+  deps = [
+    "../../core/fpdfapi/page",
+    "../../core/fpdfapi/parser",
+    "../../third_party:pdfium_base",
+  ]
+}
+
+pdfium_fuzzer("pdf_xml_fuzzer") {
+  sources = [ "pdf_xml_fuzzer.cc" ]
+  deps = [
+    "../../core/fxcrt",
+    "../../third_party:pdfium_base",
+  ]
+}
+
+pdfium_fuzzer("pdfium_fuzzer") {
+  sources = [ "pdfium_fuzzer.cc" ]
+  deps = [ ":fuzzer_helper" ]
+  public_fuzzer = true
+}

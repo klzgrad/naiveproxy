@@ -1,0 +1,117 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//third_party/closure_compiler/compile_js.gni")
+import("//tools/polymer/polymer.gni")
+import("//ui/webui/resources/tools/js_modulizer.gni")
+import("../settings.gni")
+
+js_type_check("closure_compile") {
+  deps = [
+    ":chrome_cleanup_page",
+    ":chrome_cleanup_proxy",
+    ":items_to_remove_list",
+  ]
+}
+
+js_library("chrome_cleanup_proxy") {
+  deps = [
+    "//ui/webui/resources/js:assert",
+    "//ui/webui/resources/js:cr",
+  ]
+}
+
+js_library("chrome_cleanup_page") {
+  deps = [
+    ":chrome_cleanup_proxy",
+    "//ui/webui/resources/cr_elements/cr_expand_button:cr_expand_button",
+    "//ui/webui/resources/js:cr",
+    "//ui/webui/resources/js:i18n_behavior",
+    "//ui/webui/resources/js:load_time_data",
+    "//ui/webui/resources/js:util",
+    "//ui/webui/resources/js:web_ui_listener_behavior",
+  ]
+  externs_list = [ "$externs_path/settings_private.js" ]
+}
+
+js_library("items_to_remove_list") {
+  deps = [
+    ":chrome_cleanup_proxy",
+    "//ui/webui/resources/js:cr",
+  ]
+}
+
+js_type_check("closure_compile_module") {
+  is_polymer3 = true
+  deps = [
+    ":chrome_cleanup_page.m",
+    ":chrome_cleanup_proxy.m",
+    ":items_to_remove_list.m",
+  ]
+}
+
+js_library("chrome_cleanup_page.m") {
+  sources = [ "$root_gen_dir/chrome/browser/resources/settings/chrome_cleanup_page/chrome_cleanup_page.m.js" ]
+  deps = [
+    ":chrome_cleanup_proxy.m",
+    ":items_to_remove_list.m",
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+    "//ui/webui/resources/js:assert.m",
+    "//ui/webui/resources/js:i18n_behavior.m",
+    "//ui/webui/resources/js:web_ui_listener_behavior.m",
+  ]
+  extra_deps = [ ":chrome_cleanup_page_module" ]
+  externs_list = [ "$externs_path/settings_private.js" ]
+}
+
+js_library("chrome_cleanup_proxy.m") {
+  sources = [ "$root_gen_dir/chrome/browser/resources/settings/chrome_cleanup_page/chrome_cleanup_proxy.m.js" ]
+  deps = [ "//ui/webui/resources/js:cr.m" ]
+  extra_deps = [ ":modulize" ]
+}
+
+js_library("items_to_remove_list.m") {
+  sources = [ "$root_gen_dir/chrome/browser/resources/settings/chrome_cleanup_page/items_to_remove_list.m.js" ]
+  deps = [
+    ":chrome_cleanup_proxy.m",
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+  ]
+  extra_deps = [ ":items_to_remove_list_module" ]
+}
+
+group("polymer3_elements") {
+  public_deps = [
+    ":chrome_cleanup_page_module",
+    ":items_to_remove_list_module",
+    ":modulize",
+  ]
+}
+
+polymer_modulizer("chrome_cleanup_page") {
+  js_file = "chrome_cleanup_page.js"
+  html_file = "chrome_cleanup_page.html"
+  html_type = "dom-module"
+  namespace_rewrites = settings_namespace_rewrites + [
+                         "settings.ChromeCleaner|ChromeCleaner",
+                         "settings.ChromeCleanup|ChromeCleanup",
+                       ]
+  auto_imports = [
+    "ui/webui/resources/html/assert.html|assert",
+    "chrome/browser/resources/settings/chrome_cleanup_page/chrome_cleanup_proxy.html|ChromeCleanupProxyImpl,ChromeCleanupProxy",
+    "chrome/browser/resources/settings/chrome_cleanup_page/items_to_remove_list.html|ChromeCleanupRemovalListItem",
+  ]
+}
+
+polymer_modulizer("items_to_remove_list") {
+  js_file = "items_to_remove_list.js"
+  html_file = "items_to_remove_list.html"
+  html_type = "dom-module"
+  namespace_rewrites = settings_namespace_rewrites
+  auto_imports = [ "chrome/browser/resources/settings/chrome_cleanup_page/chrome_cleanup_proxy.html|ChromeCleanupProxyImpl" ]
+}
+
+js_modulizer("modulize") {
+  input_files = [ "chrome_cleanup_proxy.js" ]
+  namespace_rewrites = settings_namespace_rewrites
+}

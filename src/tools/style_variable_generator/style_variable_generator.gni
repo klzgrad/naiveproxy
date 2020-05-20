@@ -1,0 +1,43 @@
+# Copyright 2020 The Chromium Authors.  All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# Generates cross-language style definitions from json5 files. The output files
+# will go under the generated file directory tree with the same path as each
+# input file.
+#
+# For input format examples, see the *_test.json5 files which contain
+# illustrations of each feature, as well as expected outputs in the
+# corresponding *_test_expected.* files.
+#
+# Other targets should depend on one of these generated targets (where "foo"
+# is the target name):
+#
+#    foo_css
+#      CSS Variables
+template("style_variable_generator") {
+  original_target_name = target_name
+  action("${target_name}_css") {
+    script = "//tools/style_variable_generator/style_variable_generator.py"
+
+    forward_variables_from(invoker,
+                           [
+                             "deps",
+                             "sources",
+                           ])
+
+    inputs = [
+      "//tools/style_variable_generator/base_generator.py",
+      "//tools/style_variable_generator/css_generator.py",
+      "//tools/style_variable_generator/css_generator.tmpl",
+    ]
+    out_file = "$target_gen_dir/${original_target_name}.generated.css"
+    outputs = [ out_file ]
+
+    args = [
+             "--generator=CSS",
+             "--out-file",
+             rebase_path("$out_file", root_build_dir),
+           ] + rebase_path(sources, root_build_dir)
+  }
+}

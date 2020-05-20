@@ -1,0 +1,101 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/android/rules.gni")
+import("//build/config/locales.gni")
+import("//chrome/common/features.gni")
+import("//components/feed/features.gni")
+
+java_strings_grd("java_strings_grd") {
+  defines = chrome_grit_defines
+  grd_file = "java/strings/android_chrome_start_surface_strings.grd"
+  outputs = [ "values/android_chrome_start_surface_strings.xml" ] + process_file_template(
+                android_bundle_locales_as_resources,
+                [ "values-{{source_name_part}}/android_chrome_start_surface_strings.xml" ])
+}
+
+android_resources("java_resources") {
+  sources = [
+    "java/res/drawable-hdpi/ic_explore.png",
+    "java/res/drawable-hdpi/ic_home.png",
+    "java/res/drawable-mdpi/ic_explore.png",
+    "java/res/drawable-mdpi/ic_home.png",
+    "java/res/drawable-xhdpi/ic_explore.png",
+    "java/res/drawable-xhdpi/ic_home.png",
+    "java/res/drawable-xxhdpi/ic_explore.png",
+    "java/res/drawable-xxhdpi/ic_home.png",
+    "java/res/drawable-xxxhdpi/ic_explore.png",
+    "java/res/drawable-xxxhdpi/ic_home.png",
+    "java/res/layout/ss_bottom_bar_layout.xml",
+    "java/res/layout/ss_explore_button.xml",
+    "java/res/layout/ss_home_button.xml",
+    "java/res/values/dimens.xml",
+    "java/res/values/ids.xml",
+  ]
+  if (enable_feed_in_chrome) {
+    sources += [ "java/explore_res/layout/ss_feed_header.xml" ]
+  }
+  deps = [
+    ":java_strings_grd",
+    "//chrome/android:chrome_app_java_resources",
+  ]
+  custom_package = "org.chromium.chrome.start_surface"
+}
+
+android_library("java") {
+  sources = [
+    "java/src/org/chromium/chrome/features/start_surface/BottomBarCoordinator.java",
+    "java/src/org/chromium/chrome/features/start_surface/BottomBarView.java",
+    "java/src/org/chromium/chrome/features/start_surface/BottomBarViewBinder.java",
+    "java/src/org/chromium/chrome/features/start_surface/ReturnToStartSurfaceUtil.java",
+    "java/src/org/chromium/chrome/features/start_surface/SecondaryTasksSurfaceViewBinder.java",
+    "java/src/org/chromium/chrome/features/start_surface/StartSurfaceCoordinator.java",
+    "java/src/org/chromium/chrome/features/start_surface/StartSurfaceDelegate.java",
+    "java/src/org/chromium/chrome/features/start_surface/StartSurfaceLayout.java",
+    "java/src/org/chromium/chrome/features/start_surface/StartSurfaceMediator.java",
+    "java/src/org/chromium/chrome/features/start_surface/StartSurfaceProperties.java",
+    "java/src/org/chromium/chrome/features/start_surface/TasksSurfaceViewBinder.java",
+  ]
+
+  deps = [
+    ":java_resources",
+    "//base:base_java",
+    "//chrome/android:chrome_java",
+    "//chrome/android/third_party/compositor_animator:compositor_animator_java",
+    "//chrome/browser/flags:java",
+    "//chrome/browser/preferences:java",
+    "//chrome/browser/ui/messages/android:java",
+    "//components/browser_ui/widget/android:java",
+    "//third_party/android_deps:android_support_v7_appcompat_java",
+    "//third_party/android_deps:com_google_android_material_material_java",
+    "//ui/android:ui_full_java",
+  ]
+
+  if (enable_feed_in_chrome) {
+    sources += [
+      "java/src/org/chromium/chrome/features/start_surface/ExploreSurfaceActionHandler.java",
+      "java/src/org/chromium/chrome/features/start_surface/ExploreSurfaceCoordinator.java",
+      "java/src/org/chromium/chrome/features/start_surface/ExploreSurfaceNavigationDelegate.java",
+      "java/src/org/chromium/chrome/features/start_surface/ExploreSurfaceStreamLifecycleManager.java",
+      "java/src/org/chromium/chrome/features/start_surface/ExploreSurfaceViewBinder.java",
+    ]
+
+    deps += [
+      "//chrome/browser/profiles/android:java",
+      "//content/public/android:content_java",
+      "//third_party/android_sdk/androidx_browser:androidx_browser_java",
+      "//ui/android:ui_utils_java",
+      "//ui/base/mojom:mojom_java",
+    ]
+  } else {
+    sources += [ "dummy/java/src/org/chromium/chrome/features/start_surface/ExploreSurfaceCoordinator.java" ]
+  }
+
+  if (!is_java_debug) {
+    if (!defined(proguard_configs)) {
+      proguard_configs = []
+    }
+    proguard_configs += [ "proguard.flags" ]
+  }
+}

@@ -1,0 +1,286 @@
+// Copyright 2020 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module media_feeds.mojom;
+
+import "services/media_session/public/mojom/media_session.mojom";
+import "mojo/public/mojom/base/string16.mojom";
+import "mojo/public/mojom/base/time.mojom";
+import "url/mojom/url.mojom";
+
+struct MediaFeed {
+  // The ID of the field in storage.
+  int64 id;
+
+  // The URL for the discovered feed.
+  url.mojom.Url url;
+
+  // The last time this feed was discovered.
+  mojo_base.mojom.Time last_discovery_time;
+
+  // The last time this feed was fetched.
+  mojo_base.mojom.Time? last_fetch_time;
+
+  // Whether the user has forcibly opted out of the feed.
+  FeedUserStatus user_status;
+
+  // The result of the last fetch of this feed.
+  FetchResult last_fetch_result;
+
+  // The number of times in a row the feed has failed to be fetched.
+  int64 fetch_failed_count;
+
+  // The time the previously fetched feed should expire in the cache.
+  mojo_base.mojom.Time? cache_expiry_time;
+
+  // The number of items in the last feed fetch.
+  int64 last_fetch_item_count;
+
+  // The number of items in the last feed fetch that are eligible for play next.
+  int64 last_fetch_play_next_count;
+
+  // A field mask of the content types in the last feed fetch.
+  int64 last_fetch_content_types;
+
+  // The logos for the feed.
+  array<media_session.mojom.MediaImage> logos;
+
+  // A display name for the feed.
+  string display_name;
+};
+
+// The result of fetching the feed. This enum is committed to storage so do not
+// change the numbering.
+enum FetchResult {
+  // The feed has never been fetched.
+  kNone = 0,
+
+  // The feed was fetched successfully.
+  kSuccess = 1,
+
+  // The feed failed to fetch because of a backend server error.
+  kFailedBackendError = 2,
+
+  // The feed failed to fetch because of a network error.
+  kFailedNetworkError = 3,
+};
+
+// Whether the user has forcibly opted out of the feed. This enum is committed
+// to storage so do not change the numbering.
+enum FeedUserStatus {
+  // The browser should determine whether to fetch the feed based on metrics.
+  kAuto = 0,
+
+  // The user has opted out of seeing the feed.
+  kDisabled = 1,
+};
+
+// The type of the feed item. This enum is committed to storage so do not
+// change the numbering.
+enum MediaFeedItemType {
+  // 1 << 0. Any video. https://schema.org/VideoObject
+  kVideo = 1,
+
+  // 1 << 1. A TV series. https://schema.org/TVSeries
+  kTVSeries = 2,
+
+  // 1 << 2. A movie. https://schema.org/Movie
+  kMovie = 4,
+};
+
+// The action status for the feed item. This enum is committed to storage so
+// do not change the numbering.
+// https://schema.org/actionStatus
+enum MediaFeedItemActionStatus {
+  kUnknown = 0,
+
+  // The user is currently watching this media.
+  // https://schema.org/ActiveActionStatus
+  kActive = 1,
+
+  // The user has not started watching this media.
+  // https://schema.org/PotentialActionStatus
+  kPotential = 2,
+
+  // The user has finished watching this media.
+  // https://schema.org/CompletedActionStatus
+  kCompleted = 3,
+};
+
+// Official rating for a piece of content (e.g. MPAA PG-13).
+// https://schema.org/contentRating
+struct ContentRating {
+  // The rating agency (e.g. MPAA).
+  string agency;
+
+  // The content rating.
+  string value;
+};
+
+// A counter for a type of interaction e.g. how many likes or dislikes.
+// https://schema.org/InteractionCounter
+enum InteractionCounterType {
+  kWatch,
+  kLike,
+  kDislike,
+};
+
+// The author of the content.
+// https://schema.org/author
+struct Author {
+  // A displayable name for the author.
+  string name;
+
+  // The URL of the author.
+  url.mojom.Url url;
+};
+
+// A third party identifier for a piece of content.
+// https://schema.org/identifier
+struct Identifier {
+  enum Type {
+    kTMSRootId,
+    kTMSId,
+    kPartnerId,
+  };
+
+  Type type;
+  string value;
+};
+
+// An action to start watching a piece of content.
+// https://schema.org/WatchAction
+struct Action {
+  // The URL to watch the content.
+  url.mojom.Url url;
+
+  // The time the content will start playing.
+  mojo_base.mojom.TimeDelta? start_time;
+};
+
+// The content that should be suggested to play next if the user has finished
+// watching the current content.
+struct PlayNextCandidate {
+  // A displayable name of the play next content.
+  string name;
+
+  // The season and episode number of the content.
+  int64 season_number;
+  int64 episode_number;
+
+  // The action to launch the content.
+  Action action;
+
+  // The duration of the content.
+  mojo_base.mojom.TimeDelta duration;
+
+  // The identifiers for the content. We will store up to one of each type.
+  array<Identifier> identifiers;
+};
+
+// https://schema.org/TVEpisode
+struct TVEpisode {
+  // The displayable name of the episode.
+  string name;
+
+  // The season and episode number of the episode.
+  int64 episode_number;
+  int64 season_number;
+
+  // The identifiers for the episode. We will store up to one of each type.
+  array<Identifier> identifiers;
+};
+
+// Details specific to live content.
+struct LiveDetails {
+  // The date/time the feed item became live.
+  mojo_base.mojom.Time? start_time;
+
+  // The date/time the feed item finished becoming live.
+  mojo_base.mojom.Time? end_time;
+};
+
+// The result of checking an item against the Safe Search API.
+enum SafeSearchResult {
+  // We haven't checked this item against the API.
+  kUnknown,
+
+  // We checked this item and it was classified as safe.
+  kSafe,
+
+  // We checked this item and it was classified as unsafe (e.g. adult).
+  kUnsafe,
+};
+
+// The Media Feed Item is an individual item stored in a Media Feed. It
+// represents a single recommendation such as a video or TV show.
+// https://wicg.github.io/media-feeds/index.html#media-feed-item
+struct MediaFeedItem {
+  // The type of this feed item such as a video or TV show.
+  MediaFeedItemType type;
+
+  // The name of the feed item to be displayed to the user.
+  mojo_base.mojom.String16 name;
+
+  // The author that created the content.
+  Author author;
+
+  // The date/time this feed item was published.
+  mojo_base.mojom.Time date_published;
+
+  // Whether the media item is considered "family friendly".
+  bool is_family_friendly;
+
+  // The action status for this feed item.
+  MediaFeedItemActionStatus action_status;
+
+  // The action to be taken on the content.
+  Action action;
+
+  // The interaction counters for this content (e.g. number of likes).
+  map<InteractionCounterType, uint64> interaction_counters;
+
+  // The content ratings for this content.
+  array<ContentRating> content_ratings;
+
+  // The genre of this feed item.
+  array<string> genre;
+
+  // The duration of this feed item.
+  mojo_base.mojom.TimeDelta? duration;
+
+  // Whether the feed item is live.
+  LiveDetails? live;
+
+  // The TV episode data associated with the content.
+  TVEpisode? tv_episode;
+
+  // The content that should be played after this.
+  PlayNextCandidate? play_next_candidate;
+
+  // The identifiers for the content. We will store up to one of each type.
+  array<Identifier> identifiers;
+
+  // How many times this feed item has been displayed in the Chrome UI.
+  uint64 shown_count;
+
+  // Whether the user has previously clicked on this feed item.
+  bool clicked;
+
+  // The images for the feed item.
+  array<media_session.mojom.MediaImage> images;
+
+  // The result of safe search checking this media item.
+  SafeSearchResult safe_search_result;
+};
+
+// MediaFeedStore allows the Media Feeds WebUI to access data from the Media
+// Feeds backend in the browser process for diagnostic purposes.
+interface MediaFeedsStore {
+  // Gets all the discovered media feeds.
+  GetMediaFeeds() => (array<MediaFeed> feeds);
+
+  // Gets the items for the media feed.
+  GetItemsForMediaFeed(int64 feed_id) => (array<MediaFeedItem> items);
+};

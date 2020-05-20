@@ -1,0 +1,112 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//third_party/closure_compiler/compile_js.gni")
+import("//tools/polymer/polymer.gni")
+import("//ui/webui/resources/tools/js_modulizer.gni")
+import("../settings.gni")
+
+js_type_check("closure_compile") {
+  deps = [
+    ":incompatible_application_item",
+    ":incompatible_applications_browser_proxy",
+    ":incompatible_applications_page",
+  ]
+}
+
+js_library("incompatible_applications_browser_proxy") {
+  deps = [ "//ui/webui/resources/js:cr" ]
+}
+
+js_library("incompatible_applications_page") {
+  deps = [
+    ":incompatible_applications_browser_proxy",
+    "//ui/webui/resources/js:assert",
+    "//ui/webui/resources/js:i18n_behavior",
+    "//ui/webui/resources/js:web_ui_listener_behavior",
+  ]
+}
+
+js_library("incompatible_application_item") {
+  deps = [
+    ":incompatible_applications_browser_proxy",
+    "//ui/webui/resources/js:assert",
+    "//ui/webui/resources/js:i18n_behavior",
+  ]
+}
+
+js_type_check("closure_compile_module") {
+  is_polymer3 = true
+  deps = [
+    ":incompatible_application_item.m",
+    ":incompatible_applications_browser_proxy.m",
+    ":incompatible_applications_page.m",
+  ]
+}
+
+js_library("incompatible_application_item.m") {
+  sources = [ "$root_gen_dir/chrome/browser/resources/settings/incompatible_applications_page/incompatible_application_item.m.js" ]
+  deps = [
+    ":incompatible_applications_browser_proxy.m",
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+    "//ui/webui/resources/js:assert.m",
+    "//ui/webui/resources/js:i18n_behavior.m",
+  ]
+  extra_deps = [ ":incompatible_application_item_module" ]
+}
+
+js_library("incompatible_applications_browser_proxy.m") {
+  sources = [ "$root_gen_dir/chrome/browser/resources/settings/incompatible_applications_page/incompatible_applications_browser_proxy.m.js" ]
+  deps = [ "//ui/webui/resources/js:cr.m" ]
+  externs_list = [ "$externs_path/chrome_send.js" ]
+  extra_deps = [ ":modulize" ]
+}
+
+js_library("incompatible_applications_page.m") {
+  sources = [ "$root_gen_dir/chrome/browser/resources/settings/incompatible_applications_page/incompatible_applications_page.m.js" ]
+  deps = [
+    ":incompatible_applications_browser_proxy.m",
+    "..:i18n_setup.m",
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+    "//ui/webui/resources/js:i18n_behavior.m",
+    "//ui/webui/resources/js:web_ui_listener_behavior.m",
+  ]
+  extra_deps = [ ":incompatible_applications_page_module" ]
+}
+
+group("polymer3_elements") {
+  public_deps = [
+    ":incompatible_application_item_module",
+    ":incompatible_applications_page_module",
+    ":modulize",
+  ]
+}
+
+polymer_modulizer("incompatible_application_item") {
+  js_file = "incompatible_application_item.js"
+  html_file = "incompatible_application_item.html"
+  html_type = "dom-module"
+  namespace_rewrites =
+      settings_namespace_rewrites + [ "settings.ActionTypes|ActionTypes" ]
+  auto_imports = [
+    "ui/webui/resources/html/assert.html|assertNotReached",
+    "chrome/browser/resources/settings/incompatible_applications_page/incompatible_applications_browser_proxy.html|ActionTypes,IncompatibleApplicationsBrowserProxyImpl,IncompatibleApplicationsBrowserProxy",
+  ]
+}
+
+polymer_modulizer("incompatible_applications_page") {
+  js_file = "incompatible_applications_page.js"
+  html_file = "incompatible_applications_page.html"
+  html_type = "dom-module"
+  namespace_rewrites = settings_namespace_rewrites
+  auto_imports = settings_auto_imports + [
+                   "ui/webui/resources/html/assert.html|assert",
+                   "chrome/browser/resources/settings/incompatible_applications_page/incompatible_applications_browser_proxy.html|IncompatibleApplicationsBrowserProxyImpl, IncompatibleApplication",
+                 ]
+}
+
+js_modulizer("modulize") {
+  input_files = [ "incompatible_applications_browser_proxy.js" ]
+  namespace_rewrites = settings_namespace_rewrites
+}

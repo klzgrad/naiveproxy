@@ -1,0 +1,137 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//third_party/closure_compiler/compile_js.gni")
+import("//tools/polymer/polymer.gni")
+import("//ui/webui/resources/tools/js_modulizer.gni")
+import("../settings.gni")
+
+js_type_check("closure_compile") {
+  deps = [
+    ":clear_browsing_data_browser_proxy",
+    ":clear_browsing_data_dialog",
+    ":installed_app_checkbox",
+  ]
+}
+
+js_library("clear_browsing_data_browser_proxy") {
+  deps = [
+    "//ui/webui/resources/cr_elements/cr_dialog:cr_dialog",
+    "//ui/webui/resources/js:cr",
+  ]
+}
+
+js_library("clear_browsing_data_dialog") {
+  deps = [
+    ":clear_browsing_data_browser_proxy",
+    "..:route",
+    "..:router",
+    "../controls:settings_checkbox",
+    "../controls:settings_dropdown_menu",
+    "../people_page:sync_browser_proxy",
+    "//third_party/polymer/v1_0/components-chromium/iron-pages:iron-pages-extracted",
+    "//third_party/polymer/v1_0/components-chromium/iron-resizable-behavior:iron-resizable-behavior-extracted",
+    "//ui/webui/resources/js:cr",
+    "//ui/webui/resources/js:load_time_data",
+    "//ui/webui/resources/js:web_ui_listener_behavior",
+  ]
+}
+
+js_library("installed_app_checkbox") {
+  deps = [
+    ":clear_browsing_data_browser_proxy",
+    "../controls:settings_boolean_control_behavior",
+  ]
+}
+
+js_type_check("closure_compile_module") {
+  is_polymer3 = true
+  deps = [
+    ":clear_browsing_data_browser_proxy.m",
+    ":clear_browsing_data_dialog.m",
+    ":history_deletion_dialog.m",
+    ":installed_app_checkbox.m",
+  ]
+}
+
+js_library("clear_browsing_data_browser_proxy.m") {
+  sources = [ "$root_gen_dir/chrome/browser/resources/settings/clear_browsing_data_dialog/clear_browsing_data_browser_proxy.m.js" ]
+  deps = [ "//ui/webui/resources/js:cr.m" ]
+  extra_deps = [ ":modulize" ]
+}
+
+js_library("clear_browsing_data_dialog.m") {
+  sources = [ "$root_gen_dir/chrome/browser/resources/settings/clear_browsing_data_dialog/clear_browsing_data_dialog.m.js" ]
+  deps = [
+    ":clear_browsing_data_browser_proxy.m",
+    "..:route.m",
+    "..:router.m",
+    "../controls:settings_checkbox.m",
+    "../controls:settings_dropdown_menu.m",
+    "../people_page:sync_browser_proxy.m",
+    "//ui/webui/resources/js:load_time_data.m",
+    "//ui/webui/resources/js:web_ui_listener_behavior.m",
+  ]
+  extra_deps = [ ":clear_browsing_data_dialog_module" ]
+}
+
+js_library("history_deletion_dialog.m") {
+  sources = [ "$root_gen_dir/chrome/browser/resources/settings/clear_browsing_data_dialog/history_deletion_dialog.m.js" ]
+  deps = [
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+    "//ui/webui/resources/cr_elements/cr_dialog:cr_dialog.m",
+  ]
+  extra_deps = [ ":history_deletion_dialog_module" ]
+}
+
+js_library("installed_app_checkbox.m") {
+  sources = [ "$root_gen_dir/chrome/browser/resources/settings/clear_browsing_data_dialog/installed_app_checkbox.m.js" ]
+  deps = [
+    ":clear_browsing_data_browser_proxy.m",
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+  ]
+  extra_deps = [ ":installed_app_checkbox_module" ]
+}
+
+group("polymer3_elements") {
+  public_deps = [
+    ":clear_browsing_data_dialog_module",
+    ":history_deletion_dialog_module",
+    ":installed_app_checkbox_module",
+    ":modulize",
+  ]
+}
+
+polymer_modulizer("clear_browsing_data_dialog") {
+  js_file = "clear_browsing_data_dialog.js"
+  html_file = "clear_browsing_data_dialog.html"
+  html_type = "dom-module"
+  auto_imports = settings_auto_imports + [
+                   "chrome/browser/resources/settings/route.html|routes",
+                   "chrome/browser/resources/settings/router.html|Route, Router, RouteObserverBehavior",
+                   "chrome/browser/resources/settings/clear_browsing_data_dialog/clear_browsing_data_browser_proxy.html|ClearBrowsingDataBrowserProxy, ClearBrowsingDataBrowserProxyImpl, InstalledApp",
+                   "chrome/browser/resources/settings/controls/settings_dropdown_menu.html|DropdownMenuOptionList",
+                   "chrome/browser/resources/settings/people_page/sync_browser_proxy.html|StatusAction, SyncBrowserProxy, SyncBrowserProxyImpl, SyncStatus",
+                   "ui/webui/resources/html/assert.html|assert",
+                 ]
+  namespace_rewrites = settings_namespace_rewrites
+}
+
+polymer_modulizer("history_deletion_dialog") {
+  js_file = "history_deletion_dialog.js"
+  html_file = "history_deletion_dialog.html"
+  html_type = "dom-module"
+}
+
+polymer_modulizer("installed_app_checkbox") {
+  js_file = "installed_app_checkbox.js"
+  html_file = "installed_app_checkbox.html"
+  html_type = "dom-module"
+  auto_imports = [ "chrome/browser/resources/settings/clear_browsing_data_dialog/clear_browsing_data_browser_proxy.html|InstalledApp" ]
+}
+
+js_modulizer("modulize") {
+  input_files = [ "clear_browsing_data_browser_proxy.js" ]
+  namespace_rewrites = settings_namespace_rewrites
+}

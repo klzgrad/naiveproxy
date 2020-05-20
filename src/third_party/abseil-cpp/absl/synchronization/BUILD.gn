@@ -1,0 +1,91 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//third_party/abseil-cpp/absl.gni")
+
+absl_source_set("graphcycles_internal") {
+  sources = [ "internal/graphcycles.cc" ]
+  public = [ "internal/graphcycles.h" ]
+  deps = [
+    "../base",
+    "../base:base_internal",
+    "../base:config",
+    "../base:core_headers",
+    "../base:malloc_internal",
+    "../base:raw_logging_internal",
+  ]
+  visibility = []
+  visibility += [ "../*" ]
+}
+
+absl_source_set("kernel_timeout_internal") {
+  public = [ "internal/kernel_timeout.h" ]
+  deps = [
+    "../base:core_headers",
+    "../base:raw_logging_internal",
+    "../time",
+  ]
+  visibility = []
+  visibility += [ ":*" ]
+}
+
+absl_source_set("synchronization") {
+  sources = [
+    "barrier.cc",
+    "blocking_counter.cc",
+    "internal/create_thread_identity.cc",
+    "internal/per_thread_sem.cc",
+    "internal/waiter.cc",
+    "mutex.cc",
+    "notification.cc",
+  ]
+  public = [
+    "barrier.h",
+    "blocking_counter.h",
+    "internal/create_thread_identity.h",
+    "internal/mutex_nonprod.inc",
+    "internal/per_thread_sem.h",
+    "internal/waiter.h",
+    "mutex.h",
+    "notification.h",
+  ]
+  deps = [
+    ":graphcycles_internal",
+    ":kernel_timeout_internal",
+    "../base",
+    "../base:atomic_hook",
+    "../base:base_internal",
+    "../base:config",
+    "../base:core_headers",
+    "../base:dynamic_annotations",
+    "../base:malloc_internal",
+    "../base:raw_logging_internal",
+    "../debugging:stacktrace",
+    "../debugging:symbolize",
+    "../time",
+  ]
+}
+
+absl_source_set("thread_pool") {
+  testonly = true
+  public = [ "internal/thread_pool.h" ]
+  deps = [
+    ":synchronization",
+    "../base:core_headers",
+  ]
+  visibility = []
+  visibility += [ "../*" ]
+}
+
+absl_source_set("per_thread_sem_test_common") {
+  testonly = true
+  sources = [ "internal/per_thread_sem_test.cc" ]
+  deps = [
+    ":synchronization",
+    "../base",
+    "../strings",
+    "../time",
+    "//testing/gtest",
+  ]
+}

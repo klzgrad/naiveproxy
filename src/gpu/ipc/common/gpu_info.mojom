@@ -1,0 +1,186 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// gpu/config/gpu_info.h
+module gpu.mojom;
+
+import "gpu/ipc/common/dx_diag_node.mojom";
+import "mojo/public/mojom/base/time.mojom";
+import "ui/gfx/geometry/mojom/geometry.mojom";
+
+[EnableIf=supports_vulkan]
+import "gpu/ipc/common/vulkan_info.mojom";
+
+// gpu::GPUInfo::GPUDevice
+struct GpuDevice {
+  uint32 vendor_id;
+  uint32 device_id;
+  [EnableIf=is_win]
+  uint32 sub_sys_id;
+  [EnableIf=is_win]
+  uint32 revision;
+  bool active;
+  string vendor_string;
+  string device_string;
+  string driver_vendor;
+  string driver_version;
+  int32 cuda_compute_capability_major;
+};
+
+// gpu::VideoCodecProfile
+enum VideoCodecProfile {
+  VIDEO_CODEC_PROFILE_UNKNOWN = -1,
+  H264PROFILE_BASELINE = 0,
+  H264PROFILE_MAIN,
+  H264PROFILE_EXTENDED,
+  H264PROFILE_HIGH,
+  H264PROFILE_HIGH10PROFILE,
+  H264PROFILE_HIGH422PROFILE,
+  H264PROFILE_HIGH444PREDICTIVEPROFILE,
+  H264PROFILE_SCALABLEBASELINE,
+  H264PROFILE_SCALABLEHIGH,
+  H264PROFILE_STEREOHIGH,
+  H264PROFILE_MULTIVIEWHIGH,
+  VP8PROFILE_ANY,
+  VP9PROFILE_PROFILE0,
+  VP9PROFILE_PROFILE1,
+  VP9PROFILE_PROFILE2,
+  VP9PROFILE_PROFILE3,
+  HEVCPROFILE_MAIN,
+  HEVCPROFILE_MAIN10,
+  HEVCPROFILE_MAIN_STILL_PICTURE,
+  DOLBYVISION_PROFILE0,
+  DOLBYVISION_PROFILE4,
+  DOLBYVISION_PROFILE5,
+  DOLBYVISION_PROFILE7,
+  THEORAPROFILE_ANY,
+  AV1PROFILE_PROFILE_MAIN,
+  AV1PROFILE_PROFILE_HIGH,
+  AV1PROFILE_PROFILE_PRO,
+  DOLBYVISION_PROFILE8,
+  DOLBYVISION_PROFILE9,
+};
+
+// gpu::VideoDecodeAcceleratorSupportedProfile
+struct VideoDecodeAcceleratorSupportedProfile {
+  VideoCodecProfile profile;
+  gfx.mojom.Size max_resolution;
+  gfx.mojom.Size min_resolution;
+  bool encrypted_only;
+};
+
+// gpu::VideoDecodeAcceleratorCapabilities
+struct VideoDecodeAcceleratorCapabilities {
+  array<VideoDecodeAcceleratorSupportedProfile> supported_profiles;
+  uint32 flags;
+};
+
+// gpu::VideoEncodeAcceleratorSupportedProfile
+struct VideoEncodeAcceleratorSupportedProfile {
+  VideoCodecProfile profile;
+  gfx.mojom.Size min_resolution;
+  gfx.mojom.Size max_resolution;
+  uint32 max_framerate_numerator;
+  uint32 max_framerate_denominator;
+};
+
+// gpu::ImageDecodeAcceleratorType
+enum ImageDecodeAcceleratorType {
+  kJpeg,
+  kWebP,
+  kUnknown,
+};
+
+// gpu::ImageDecodeAcceleratorSubsampling
+enum ImageDecodeAcceleratorSubsampling {
+  k420,
+  k422,
+  k444,
+};
+
+// gpu::ImageDecodeAcceleratorSupportedProfile
+struct ImageDecodeAcceleratorSupportedProfile {
+  ImageDecodeAcceleratorType image_type;
+  gfx.mojom.Size min_encoded_dimensions;
+  gfx.mojom.Size max_encoded_dimensions;
+  array<ImageDecodeAcceleratorSubsampling> subsamplings;
+};
+
+// gpu::OverlaySupport
+[EnableIf=is_win]
+enum OverlaySupport {
+  NONE,
+  DIRECT,
+  SCALING,
+};
+
+// gpu::Dx12VulkanVersionInfo
+[EnableIf=is_win]
+struct Dx12VulkanVersionInfo {
+  bool supports_dx12;
+  bool supports_vulkan;
+  uint32 d3d12_feature_level;
+  uint32 vulkan_version;
+};
+
+// gpu::OverlayInfo
+[EnableIf=is_win]
+struct OverlayInfo {
+  bool direct_composition;
+  bool supports_overlays;
+  OverlaySupport yuy2_overlay_support;
+  OverlaySupport nv12_overlay_support;
+};
+
+// Corresponds to |gpu::GPUInfo| in gpu/config/gpu_info.h
+struct GpuInfo {
+  mojo_base.mojom.TimeDelta initialization_time;
+  bool optimus;
+  bool amd_switchable;
+  GpuDevice gpu;
+  array<GpuDevice> secondary_gpus;
+  string pixel_shader_version;
+  string vertex_shader_version;
+  string max_msaa_samples;
+  string machine_model_name;
+  string machine_model_version;
+  string gl_version;
+  string gl_vendor;
+  string gl_renderer;
+  string gl_extensions;
+  string gl_ws_vendor;
+  string gl_ws_version;
+  string gl_ws_extensions;
+  uint32 gl_reset_notification_strategy;
+  bool software_rendering;
+  string direct_rendering_version;
+  bool sandboxed;
+  bool in_process_gpu;
+  bool passthrough_cmd_decoder;
+  bool can_support_threaded_texture_mailbox;
+
+  [EnableIf=is_mac]
+  uint32 macos_specific_texture_target;
+
+  [EnableIf=is_win]
+  DxDiagNode dx_diagnostics;
+  [EnableIf=is_win]
+  Dx12VulkanVersionInfo dx12_vulkan_version_info;
+  [EnableIf=is_win]
+  OverlayInfo overlay_info;
+
+  VideoDecodeAcceleratorCapabilities video_decode_accelerator_capabilities;
+  array<VideoEncodeAcceleratorSupportedProfile>
+    video_encode_accelerator_supported_profiles;
+  bool jpeg_decode_accelerator_supported;
+
+  array<ImageDecodeAcceleratorSupportedProfile>
+    image_decode_accelerator_supported_profiles;
+
+  bool oop_rasterization_supported;
+  bool subpixel_font_rendering;
+
+  [EnableIf=supports_vulkan]
+  VulkanInfo? vulkan_info;
+};

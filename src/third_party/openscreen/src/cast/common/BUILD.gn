@@ -1,0 +1,169 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build_overrides/build.gni")
+import("//third_party/protobuf/proto_library.gni")
+import("../../testing/libfuzzer/fuzzer_test.gni")
+
+source_set("certificate") {
+  sources = [
+    "certificate/cast_cert_validator.cc",
+    "certificate/cast_cert_validator.h",
+    "certificate/cast_cert_validator_internal.cc",
+    "certificate/cast_cert_validator_internal.h",
+    "certificate/cast_crl.cc",
+    "certificate/cast_crl.h",
+    "certificate/cast_trust_store.cc",
+    "certificate/cast_trust_store.h",
+    "certificate/types.cc",
+    "certificate/types.h",
+  ]
+  public_deps = [
+    "../../third_party/boringssl",
+  ]
+
+  deps = [
+    "../../platform",
+    "../../third_party/abseil",
+    "../../util",
+    "certificate/proto:certificate_proto",
+  ]
+}
+
+source_set("channel") {
+  sources = [
+    "channel/cast_socket.cc",
+    "channel/cast_socket.h",
+    "channel/connection_namespace_handler.cc",
+    "channel/connection_namespace_handler.h",
+    "channel/message_framer.cc",
+    "channel/message_framer.h",
+    "channel/message_util.cc",
+    "channel/message_util.h",
+    "channel/namespace_router.cc",
+    "channel/namespace_router.h",
+    "channel/virtual_connection.h",
+    "channel/virtual_connection_manager.cc",
+    "channel/virtual_connection_manager.h",
+    "channel/virtual_connection_router.cc",
+    "channel/virtual_connection_router.h",
+  ]
+
+  deps = [
+    "certificate/proto:certificate_proto",
+  ]
+
+  public_deps = [
+    "../../platform",
+    "../../third_party/abseil",
+    "../../util",
+    "channel/proto:channel_proto",
+  ]
+}
+
+source_set("public") {
+  sources = [
+    "public/service_info.cc",
+    "public/service_info.h",
+  ]
+
+  deps = [
+    "../../discovery:dnssd",
+    "../../discovery:public",
+    "../../platform",
+    "../../third_party/abseil",
+  ]
+}
+
+if (!build_with_chromium) {
+  source_set("discovery_e2e_test") {
+    testonly = true
+
+    sources = [
+      "discovery/e2e_test/tests.cc",
+    ]
+
+    deps = [
+      ":public",
+      "../../discovery:dnssd",
+      "../../discovery:public",
+      "../../third_party/googletest:gtest",
+    ]
+  }
+}
+
+source_set("test_helpers") {
+  testonly = true
+
+  sources = [
+    "certificate/testing/test_helpers.cc",
+    "certificate/testing/test_helpers.h",
+    "channel/testing/fake_cast_socket.h",
+    "channel/testing/mock_cast_message_handler.h",
+    "channel/testing/mock_socket_error_handler.h",
+    "public/testing/discovery_utils.cc",
+    "public/testing/discovery_utils.h",
+  ]
+  public_deps = [
+    ":certificate",
+    ":channel",
+    ":public",
+    "../../platform:test",
+    "../../third_party/abseil",
+    "../../third_party/boringssl",
+    "../../third_party/googletest:gmock",
+  ]
+  deps = [
+    "../../platform",
+    "../../platform:test",
+  ]
+}
+
+source_set("unittests") {
+  testonly = true
+  sources = [
+    "certificate/cast_cert_validator_unittest.cc",
+    "certificate/cast_crl_unittest.cc",
+    "channel/cast_socket_unittest.cc",
+    "channel/connection_namespace_handler_unittest.cc",
+    "channel/message_framer_unittest.cc",
+    "channel/namespace_router_unittest.cc",
+    "channel/virtual_connection_manager_unittest.cc",
+    "channel/virtual_connection_router_unittest.cc",
+    "public/service_info_unittest.cc",
+  ]
+
+  deps = [
+    ":certificate",
+    ":channel",
+    ":public",
+    ":test_helpers",
+    "../../platform",
+    "../../testing/util",
+    "../../third_party/boringssl",
+    "../../third_party/googletest:gmock",
+    "../../third_party/googletest:gtest",
+    "../../util",
+    "certificate/proto:certificate_unittest_proto",
+    "channel/proto:channel_proto",
+  ]
+
+  data = [
+    "../../test/data/cast/common/certificate",
+  ]
+}
+
+openscreen_fuzzer_test("message_framer_fuzzer") {
+  sources = [
+    "channel/message_framer_fuzzer.cc",
+  ]
+  deps = [
+    ":channel",
+  ]
+
+  seed_corpus = "channel/message_framer_fuzzer_seeds"
+
+  # NOTE: 65536 is max _body_ size.
+  libfuzzer_options = [ "max_len=65600" ]
+}

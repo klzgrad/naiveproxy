@@ -1,0 +1,145 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//mojo/public/tools/bindings/mojom.gni")
+
+mojom("mojom") {
+  generate_java = true
+  sources = [
+    "accelerated_widget.mojom",
+    "buffer_types.mojom",
+    "ca_layer_params.mojom",
+    "color_space.mojom",
+    "display_color_spaces.mojom",
+    "font_render_params.mojom",
+    "gpu_fence_handle.mojom",
+    "overlay_transform.mojom",
+    "presentation_feedback.mojom",
+    "rrect_f.mojom",
+    "selection_bound.mojom",
+    "swap_result.mojom",
+    "swap_timings.mojom",
+    "transform.mojom",
+  ]
+
+  public_deps = [
+    ":native_handle_types",
+    "//mojo/public/mojom/base",
+    "//ui/gfx/geometry/mojom",
+  ]
+
+  buffer_types_shared_cpp_typemap = {
+    types = [
+      {
+        mojom = "gfx.mojom.BufferFormat"
+        cpp = "::gfx::BufferFormat"
+      },
+      {
+        mojom = "gfx.mojom.BufferUsage"
+        cpp = "::gfx::BufferUsage"
+      },
+      {
+        mojom = "gfx.mojom.BufferUsageAndFormat"
+        cpp = "::gfx::BufferUsageAndFormat"
+      },
+      {
+        mojom = "gfx.mojom.GpuMemoryBufferHandle"
+        cpp = "::gfx::GpuMemoryBufferHandle"
+        move_only = true
+        nullable_is_same_type = true
+      },
+      {
+        mojom = "gfx.mojom.GpuMemoryBufferId"
+        cpp = "::gfx::GpuMemoryBufferId"
+        copyable_pass_by_value = true
+      },
+      {
+        mojom = "gfx.mojom.GpuMemoryBufferType"
+        cpp = "::gfx::GpuMemoryBufferType"
+      },
+    ]
+
+    traits_headers = [ "buffer_types_mojom_traits.h" ]
+    traits_public_deps = [ ":shared_mojom_traits" ]
+  }
+
+  cpp_typemaps = [ buffer_types_shared_cpp_typemap ]
+  blink_cpp_typemaps = [ buffer_types_shared_cpp_typemap ]
+}
+
+mojom("native_handle_types") {
+  sources = [ "native_handle_types.mojom" ]
+  if (is_linux || use_ozone) {
+    enabled_features = [ "supports_native_pixmap" ]
+  }
+  public_deps = [ "//mojo/public/mojom/base" ]
+  generate_java = true
+
+  shared_cpp_typemap = {
+    types = [
+      {
+        mojom = "gfx.mojom.NativePixmapHandle"
+        cpp = "::gfx::NativePixmapHandle"
+        move_only = true
+      },
+      {
+        mojom = "gfx.mojom.NativePixmapPlane"
+        cpp = "::gfx::NativePixmapPlane"
+        move_only = true
+      },
+    ]
+    traits_headers = [ "native_handle_types_mojom_traits.h" ]
+    traits_public_deps = [ ":native_handle_types_mojom_traits" ]
+  }
+  cpp_typemaps = [ shared_cpp_typemap ]
+  blink_cpp_typemaps = [ shared_cpp_typemap ]
+}
+
+mojom("test_interfaces") {
+  sources = [ "traits_test_service.mojom" ]
+
+  public_deps = [ ":mojom" ]
+}
+
+component("color_space_mojom_support") {
+  sources = [
+    "color_space_mojom_traits.cc",
+    "color_space_mojom_traits.h",
+  ]
+  public_deps = [
+    ":mojom_shared_cpp_sources",
+    "//ui/gfx",
+  ]
+  defines = [ "IS_UI_GFX_MOJOM_TRAITS_IMPL" ]
+}
+
+component("native_handle_types_mojom_traits") {
+  output_name = "gfx_native_types_shared_mojom_traits"
+  defines = [ "IS_GFX_NATIVE_HANDLE_TYPES_SHARED_MOJOM_TRAITS_IMPL" ]
+  sources = [
+    "native_handle_types_mojom_traits.cc",
+    "native_handle_types_mojom_traits.h",
+  ]
+
+  public_deps = [
+    ":native_handle_types_shared",
+    "//base",
+    "//mojo/public/mojom/base",
+    "//ui/gfx",
+  ]
+}
+
+component("shared_mojom_traits") {
+  output_name = "gfx_shared_mojom_traits"
+  defines = [ "IS_GFX_SHARED_MOJOM_TRAITS_IMPL" ]
+  sources = [
+    "buffer_types_mojom_traits.cc",
+    "buffer_types_mojom_traits.h",
+  ]
+  public_deps = [
+    ":mojom_shared",
+    ":native_handle_types",
+    "//ui/gfx",
+  ]
+}

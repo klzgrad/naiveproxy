@@ -1,0 +1,80 @@
+# Copyright 2018 The Dawn Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("//build_overrides/build.gni")
+
+if (build_with_chromium) {
+  import("//build/config/sanitizers/sanitizers.gni")
+}
+
+declare_args() {
+  # Enables usage of swiftshader on the Vulkan backend.
+  # Note that this will only work in standalone and in projects that set the
+  # dawn_swiftshader_dir variable in build_overrides/dawn.gni
+  # Because of how the Vulkan loader works, setting this makes Dawn only able
+  # to find the Swiftshader ICD and not the others.
+  # Enabled by default when fuzzing.
+  dawn_use_swiftshader = build_with_chromium && use_fuzzing_engine
+}
+
+declare_args() {
+  # Enable Dawn's ASSERTs even in release builds
+  dawn_always_assert = false
+
+  # Should the Dawn static libraries be fully linked vs. GN's default of
+  # treating them as source sets. This is useful for people using Dawn
+  # standalone to produce static libraries to use in their projects.
+  dawn_complete_static_libs = false
+
+  # Enables the compilation of Dawn's D3D12 backend
+  dawn_enable_d3d12 = is_win
+
+  # Enables the compilation of Dawn's Metal backend
+  dawn_enable_metal = is_mac
+
+  # Enables the compilation of Dawn's Null backend
+  # (required for unittests, obviously non-conformant)
+  dawn_enable_null = true
+
+  # Enables the compilation of Dawn's OpenGL backend
+  # (best effort, non-conformant)
+  dawn_enable_opengl = is_linux && !is_chromeos
+
+  # Enables the compilation of Dawn's Vulkan backend
+  dawn_enable_vulkan =
+      is_linux || is_win || is_fuchsia || is_android || dawn_use_swiftshader
+
+  # Enable use of reflection compiler in spirv-cross. This is needed
+  # if performing reflection on systems that the platform language
+  # shader is SPIR-V, since there isn't an instance of the
+  # GLSL/HLSL/MSL compiler. This implicitly pulls in the GLSL
+  # compiler, since it is a sub-class of if.
+  dawn_enable_cross_reflection = false
+
+  # Enables error injection for faking failures to native API calls
+  dawn_enable_error_injection =
+      is_debug || (build_with_chromium && use_fuzzing_engine)
+
+  # Whether Dawn should enable X11 support.
+  dawn_use_x11 = is_linux && !is_chromeos
+}
+
+# GN does not allow reading a variable defined in the same declare_args().
+# Put them in two separate declare_args() when setting the value of one
+# argument based on another.
+declare_args() {
+  # Uses our built version of Vulkan validation layers
+  dawn_enable_vulkan_validation_layers =
+      dawn_enable_vulkan && ((is_linux && !is_chromeos) || is_win)
+}

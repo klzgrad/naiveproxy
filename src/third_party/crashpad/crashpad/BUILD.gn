@@ -1,0 +1,236 @@
+# Copyright 2017 The Crashpad Authors. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("build/crashpad_buildconfig.gni")
+import("build/test.gni")
+import("util/net/tls.gni")
+
+config("crashpad_config") {
+  include_dirs = [ "." ]
+}
+
+# TODO(fuchsia:46805): Remove this once instances of UB have been cleaned up.
+config("disable_ubsan") {
+  if (crashpad_is_in_fuchsia) {
+    cflags = [ "-fno-sanitize=undefined" ]
+  }
+  visibility = [
+    "snapshot:snapshot",
+    "minidump:minidump_test",
+    "third_party/gtest:gtest",
+    "util:util",
+  ]
+}
+
+if (crashpad_is_in_chromium || crashpad_is_in_fuchsia) {
+  test("crashpad_tests") {
+    deps = [
+      "client:client_test",
+      "test:gmock_main",
+      "test:test_test",
+    ]
+    if (!crashpad_is_ios) {
+      deps += [
+        "handler:handler_test",
+        "minidump:minidump_test",
+        "snapshot:snapshot_test",
+        "util:util_test",
+      ]
+    }
+    if (crashpad_is_in_fuchsia) {
+      # TODO(fuchsia:46559): Fix the leaks and remove this.
+      deps += [ "//build/config/sanitizers:suppress-lsan.DO-NOT-USE-THIS" ]
+    }
+    if (crashpad_is_android) {
+      use_raw_android_executable = true
+
+      copy("crashpad_test_data") {
+        testonly = true
+        sources = [
+          "test/test_paths_test_data_root.txt",
+          "util/net/testdata/ascii_http_body.txt",
+          "util/net/testdata/binary_http_body.dat",
+        ]
+
+        outputs = [
+          "$root_out_dir/crashpad_test_data/{{source}}",
+        ]
+      }
+
+      deps += [ ":crashpad_test_data" ]
+
+      extra_dist_files = [
+        "$root_out_dir/crashpad_handler",
+        "$root_out_dir/crashpad_test_test_multiprocess_exec_test_child",
+        "$root_out_dir/crashpad_test_data",
+      ]
+    }
+  }
+
+  if (crashpad_is_in_fuchsia) {
+    import("//build/package.gni")
+    package("crashpad_test") {
+      testonly = true
+
+      deps = [
+        ":crashpad_tests",
+        "snapshot:crashpad_snapshot_test_both_dt_hash_styles",
+        "snapshot:crashpad_snapshot_test_module",
+        "snapshot:crashpad_snapshot_test_module_large",
+        "snapshot:crashpad_snapshot_test_module_small",
+        "test:crashpad_test_test_multiprocess_exec_test_child",
+        "util:http_transport_test_server",
+      ]
+
+      tests = [
+        {
+          name = "crashpad_tests"
+        },
+      ]
+
+      meta = [
+        {
+          path = "test/fuchsia_crashpad_tests.cmx"
+          dest = "crashpad_tests.cmx"
+        },
+      ]
+
+      binaries = [
+        {
+          name = "crashpad_test_test_multiprocess_exec_test_child"
+          dest = "crashpad_test_test_multiprocess_exec_test_child"
+        },
+        {
+          name = "http_transport_test_server"
+          dest = "http_transport_test_server"
+        },
+      ]
+
+      loadable_modules = [
+        {
+          name = "crashpad_snapshot_test_both_dt_hash_styles.so"
+        },
+        {
+          name = "crashpad_snapshot_test_module.so"
+        },
+        {
+          name = "crashpad_snapshot_test_module_large.so"
+        },
+        {
+          name = "crashpad_snapshot_test_module_small.so"
+        },
+      ]
+
+      resources = [
+        {
+          path = "util/net/testdata/ascii_http_body.txt"
+          dest = "util/net/testdata/ascii_http_body.txt"
+        },
+        {
+          path = "util/net/testdata/binary_http_body.dat"
+          dest = "util/net/testdata/binary_http_body.dat"
+        },
+        {
+          path = "test/test_paths_test_data_root.txt"
+          dest = "test/test_paths_test_data_root.txt"
+        },
+      ]
+
+      if (crashpad_use_boringssl_for_http_transport_socket) {
+        resources += [
+          {
+            path = "util/net/testdata/crashpad_util_test_cert.pem"
+            dest = "util/net/testdata/crashpad_util_test_cert.pem"
+          },
+          {
+            path = "util/net/testdata/crashpad_util_test_key.pem"
+            dest = "util/net/testdata/crashpad_util_test_key.pem"
+          },
+        ]
+      }
+    }
+
+    package("crashpad_database_util") {
+      deps = [ "tools:crashpad_database_util" ]
+
+      binaries = [
+        {
+          name = "crashpad_database_util"
+          shell = true
+        },
+      ]
+    }
+  }
+} else if (crashpad_is_standalone) {
+  test("crashpad_client_test") {
+    deps = [
+      "client:client_test",
+      "test:gmock_main",
+    ]
+  }
+
+  test("crashpad_handler_test") {
+    deps = [
+      "handler:handler_test",
+      "test:gtest_main",
+    ]
+    if (crashpad_is_ios) {
+      deps -= [ "handler:handler_test" ]
+    }
+  }
+
+  test("crashpad_minidump_test") {
+    deps = [
+      "minidump:minidump_test",
+      "test:gtest_main",
+    ]
+    if (crashpad_is_ios) {
+      deps -= [ "minidump:minidump_test" ]
+    }
+  }
+
+  test("crashpad_snapshot_test") {
+    deps = [
+      "snapshot:snapshot_test",
+      "test:gtest_main",
+    ]
+    if (crashpad_is_ios) {
+      deps -= [ "snapshot:snapshot_test" ]
+    }
+  }
+
+  test("crashpad_test_test") {
+    deps = [
+      "test:gmock_main",
+      "test:test_test",
+    ]
+  }
+
+  test("crashpad_util_test") {
+    deps = [
+      "test:gmock_main",
+      "util:util_test",
+    ]
+    if (crashpad_is_ios) {
+      deps -= [ "util:util_test" ]
+    }
+  }
+}
+
+if (crashpad_is_ios) {
+  group("ios_xcuitests") {
+    testonly = true
+    deps = [ "test/ios:all_tests" ]
+  }
+}

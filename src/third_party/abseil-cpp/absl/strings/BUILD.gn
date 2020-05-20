@@ -1,0 +1,174 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build_overrides/build.gni")
+import("//third_party/abseil-cpp/absl.gni")
+
+# Usage of Abseil in Chromium is guarded by an explicit opt-in list, before
+# adding projects to this list please reach out to cxx@chromium.org and CC:
+# - https://cs.chromium.org/chromium/src/third_party/abseil-cpp/OWNERS
+#
+# More information can be found at:
+# https://docs.google.com/document/d/1DgS1-A3rzboTLjpf4m1sqkJgWjnY_Ru2dokk1X1vBDU
+if (build_with_chromium) {
+  default_visibility = absl_visibility
+  default_visibility += [ "//third_party/openscreen/*" ]
+} else {
+  default_visibility = [ "*" ]
+}
+
+absl_source_set("strings") {
+  sources = [
+    "ascii.cc",
+    "charconv.cc",
+    "escaping.cc",
+    "internal/charconv_bigint.cc",
+    "internal/charconv_bigint.h",
+    "internal/charconv_parse.cc",
+    "internal/charconv_parse.h",
+    "internal/memutil.cc",
+    "internal/memutil.h",
+    "internal/stl_type_traits.h",
+    "internal/str_join_internal.h",
+    "internal/str_split_internal.h",
+    "match.cc",
+    "numbers.cc",
+    "str_cat.cc",
+    "str_replace.cc",
+    "str_split.cc",
+    "string_view.cc",
+    "substitute.cc",
+  ]
+  public = [
+    "ascii.h",
+    "charconv.h",
+    "escaping.h",
+    "match.h",
+    "numbers.h",
+    "str_cat.h",
+    "str_join.h",
+    "str_replace.h",
+    "str_split.h",
+    "string_view.h",
+    "strip.h",
+    "substitute.h",
+  ]
+  deps = [
+    ":internal",
+    "../base",
+    "../base:bits",
+    "../base:config",
+    "../base:core_headers",
+    "../base:endian",
+    "../base:raw_logging_internal",
+    "../base:throw_delegate",
+    "../memory",
+    "../meta:type_traits",
+    "../numeric:int128",
+  ]
+  visibility = default_visibility
+}
+
+absl_source_set("internal") {
+  sources = [
+    "internal/escaping.cc",
+    "internal/ostringstream.cc",
+    "internal/utf8.cc",
+  ]
+  public = [
+    "internal/char_map.h",
+    "internal/escaping.h",
+    "internal/ostringstream.h",
+    "internal/resize_uninitialized.h",
+    "internal/utf8.h",
+  ]
+  deps = [
+    "../base:config",
+    "../base:core_headers",
+    "../base:endian",
+    "../base:raw_logging_internal",
+    "../meta:type_traits",
+  ]
+}
+
+absl_source_set("str_format") {
+  public = [ "str_format.h" ]
+  deps = [ ":str_format_internal" ]
+}
+
+absl_source_set("str_format_internal") {
+  sources = [
+    "internal/str_format/arg.cc",
+    "internal/str_format/bind.cc",
+    "internal/str_format/extension.cc",
+    "internal/str_format/float_conversion.cc",
+    "internal/str_format/output.cc",
+    "internal/str_format/parser.cc",
+  ]
+  public = [
+    "internal/str_format/arg.h",
+    "internal/str_format/bind.h",
+    "internal/str_format/checker.h",
+    "internal/str_format/extension.h",
+    "internal/str_format/float_conversion.h",
+    "internal/str_format/output.h",
+    "internal/str_format/parser.h",
+  ]
+  visibility = []
+  visibility += [ ":*" ]
+  deps = [
+    ":strings",
+    "../base:config",
+    "../base:core_headers",
+    "../meta:type_traits",
+    "../numeric:int128",
+    "../types:span",
+  ]
+}
+
+absl_source_set("cord_internal") {
+  public = [ "internal/cord_internal.h" ]
+  visibility = []
+  visibility += [ ":*" ]
+  deps = [
+    ":strings",
+    "../meta:type_traits",
+  ]
+}
+
+absl_source_set("cord") {
+  sources = [ "cord.cc" ]
+  public = [ "cord.h" ]
+  deps = [
+    ":cord_internal",
+    ":internal",
+    ":str_format",
+    ":strings",
+    "../base",
+    "../base:base_internal",
+    "../base:core_headers",
+    "../base:endian",
+    "../base:raw_logging_internal",
+    "../container:fixed_array",
+    "../container:inlined_vector",
+    "../functional:function_ref",
+    "../meta:type_traits",
+    "../types:optional",
+  ]
+}
+
+absl_source_set("cord_test_helpers") {
+  testonly = true
+  public = [ "cord_test_helpers.h" ]
+  deps = [ ":cord" ]
+}
+
+absl_source_set("pow10_helper") {
+  testonly = true
+  sources = [ "internal/pow10_helper.cc" ]
+  public = [ "internal/pow10_helper.h" ]
+  visibility = []
+  visibility += [ ":*" ]
+  deps = [ "../base:config" ]
+}

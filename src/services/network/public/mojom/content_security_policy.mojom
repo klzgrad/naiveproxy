@@ -1,0 +1,135 @@
+// Copyright 2019 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module network.mojom;
+
+import "url/mojom/url.mojom";
+import "services/network/public/mojom/source_location.mojom";
+
+// The HTTP Content-Security-Policy-Report-Only response header allows web
+// developers to experiment with policies by monitoring (but not enforcing)
+// their effects. These violation reports consist of JSON documents sent via an
+// HTTP POST request to the specified URI.
+enum ContentSecurityPolicyType {
+  kReport,
+  kEnforce
+};
+
+// The source from which the CSP header is coming from.
+enum ContentSecurityPolicySource {
+  // From the HTTP response's headers.
+  kHTTP,
+
+  // From the <meta> HTML tag with the "http-equiv" attribute.
+  kMeta,
+
+  // From an origin-policy file.
+  // Origin Policy spec: https://wicg.github.io/origin-policy/
+  kOriginPolicy
+};
+
+// Represents a single Content Security Policy header (i.e. coming from a single
+// Content-Security-Policy header in an HTTP response, or from a single <meta
+// http-equiv="Content-Security-Policy"...> element).
+struct ContentSecurityPolicyHeader {
+  string header_value;
+  ContentSecurityPolicyType type = kEnforce;
+  ContentSecurityPolicySource source = kHTTP;
+};
+
+enum CSPDisposition {
+  CHECK,
+  DO_NOT_CHECK,
+};
+
+// A CSPSource represents an expression that matches a set of urls.
+// Examples of CSPSource:
+// - domain.example.com
+// - *.example.com
+// - https://cdn.com
+// - data:
+// - 'none'
+// - 'self'
+// - *
+struct CSPSource {
+  string scheme;
+  string host;
+  int32 port = -1;
+  string path;
+  bool is_host_wildcard = false;
+  bool is_port_wildcard = false;
+};
+
+struct CSPSourceList {
+  array<CSPSource> sources;
+
+  // Wildcard hosts and 'self' aren't stored in |sources|, but as attributes
+  // on the source list itself.
+  bool allow_self = false;
+  bool allow_star = false;
+  bool allow_response_redirects = false;
+};
+
+enum CSPDirectiveName {
+  Unknown,
+
+  DefaultSrc,
+  ChildSrc,
+  FrameSrc,
+  FormAction,
+  UpgradeInsecureRequests,
+  NavigateTo,
+  FrameAncestors,
+};
+
+struct ContentSecurityPolicy {
+  map<CSPDirectiveName, CSPSourceList> directives;
+
+  ContentSecurityPolicyHeader header;
+
+  // Whether this CSP policy uses the new reporting API.
+  // https://w3c.github.io/reporting/
+  bool use_reporting_api = false;
+
+  // Set of reporting endpoints to which violation reports are sent.
+  array<string> report_endpoints;
+};
+
+// Data to report Content-Security-Policy violations.
+struct CSPViolation {
+  // The name of the directive that violates the policy. |directive| might be a
+  // directive that serves as a fallback to the |effective_directive|.
+  string directive;
+
+  // The name the effective directive that was checked against.
+  string effective_directive;
+
+  // The console message to be displayed to the user.
+  string console_message;
+
+  // The URL that was blocked by the policy.
+  url.mojom.Url blocked_url;
+
+  // The set of endpoints where a report of the violation should be sent.
+  // Based on 'use_reporting_api' it can be either a set of group_names (when
+  // 'use_reporting_api' = true) or a set of URLs. This means that it's not
+  // possible to use both methods of reporting. This is by design.
+  array<string> report_endpoints;
+
+  // Whether to use the reporting api or not.
+  bool use_reporting_api;
+
+  // The raw content security policy header that was violated.
+  string header;
+
+  // Each policy has an associated disposition, which is either "enforce" or
+  // "report".
+  ContentSecurityPolicyType type;
+
+  // Whether or not the violation happens after a redirect.
+  bool after_redirect;
+
+  // The source code location that triggered the blocked navigation.
+  SourceLocation source_location;
+};

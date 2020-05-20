@@ -1,0 +1,120 @@
+# Copyright 2019 The Dawn Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../scripts/dawn_overrides_with_defaults.gni")
+
+import("${dawn_root}/generator/dawn_generator.gni")
+import("${dawn_root}/scripts/dawn_component.gni")
+
+# Temporary group to not break Chromium `gn check` on Dawn CQ.
+group("libdawn") {
+  deps = [
+    ":dawncpp",
+    ":libdawn_proc",
+  ]
+}
+
+###############################################################################
+# Dawn headers
+###############################################################################
+
+dawn_json_generator("dawn_headers_gen") {
+  target = "dawn_headers"
+  outputs = [
+    "src/include/dawn/dawn_proc_table.h",
+    "src/include/dawn/webgpu.h",
+  ]
+}
+
+dawn_json_generator("emscripten_bits_gen") {
+  target = "emscripten_bits"
+  outputs = [
+    "src/dawn/webgpu_struct_info.json",
+    "src/dawn/library_webgpu_enum_tables.js",
+  ]
+}
+
+source_set("dawn_headers") {
+  all_dependent_configs = [ "${dawn_root}/src/common:dawn_public_include_dirs" ]
+  public_deps = [
+    ":dawn_headers_gen",
+  ]
+
+  sources = get_target_outputs(":dawn_headers_gen")
+  sources += [ "${dawn_root}/src/include/dawn/dawn_wsi.h" ]
+}
+
+###############################################################################
+# Dawn C++ headers
+###############################################################################
+
+dawn_json_generator("dawncpp_headers_gen") {
+  target = "dawncpp_headers"
+  outputs = [
+    "src/include/dawn/webgpu_cpp.h",
+  ]
+}
+
+source_set("dawncpp_headers") {
+  public_deps = [
+    ":dawn_headers",
+    ":dawncpp_headers_gen",
+  ]
+
+  sources = get_target_outputs(":dawncpp_headers_gen")
+  sources += [ "${dawn_root}/src/include/dawn/EnumClassBitmasks.h" ]
+}
+
+###############################################################################
+# Dawn C++ wrapper
+###############################################################################
+
+dawn_json_generator("dawncpp_gen") {
+  target = "dawncpp"
+  outputs = [
+    "src/dawn/webgpu_cpp.cpp",
+  ]
+}
+
+source_set("dawncpp") {
+  deps = [
+    ":dawncpp_gen",
+    ":dawncpp_headers",
+  ]
+  sources = get_target_outputs(":dawncpp_gen")
+}
+
+###############################################################################
+# libdawn_proc
+###############################################################################
+
+dawn_json_generator("libdawn_proc_gen") {
+  target = "dawn_proc"
+  outputs = [
+    "src/dawn/dawn_proc.c",
+  ]
+}
+
+dawn_component("libdawn_proc") {
+  DEFINE_PREFIX = "WGPU"
+
+  public_deps = [
+    ":dawn_headers",
+  ]
+  deps = [
+    ":libdawn_proc_gen",
+  ]
+  sources = get_target_outputs(":libdawn_proc_gen")
+  sources += [ "${dawn_root}/src/include/dawn/dawn_proc.h" ]
+}

@@ -1,0 +1,50 @@
+# Copyright (c) 2014 The Native ClientAuthors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# These objects are included in both dfa_validate_x86_xx and rdfa_validator
+# libraries, so we have to introduce intermediate scons nodes.
+validator32 = "gen/validator_x86_32.c"
+validator64 = "gen/validator_x86_64.c"
+
+if (current_cpu == "x86" || current_cpu == "x64") {
+  static_library("dfa_validate") {
+    sources = [
+      "validator_features_all.c",
+      "validator_features_validator.c",
+      "dfa_validate_common.c",
+    ]
+    if (current_cpu == "x86") {
+      sources += [
+        validator32,
+        "dfa_validate_32.c",
+      ]
+    } else {
+      sources += [
+        validator64,
+        "dfa_validate_64.c",
+      ]
+    }
+    deps = [
+      "//build/config/nacl:nacl_base",
+      "//native_client/src/trusted/cpu_features:cpu_features",
+      "//native_client/src/trusted/validator:validation_cache",
+      "//native_client/src/trusted/validator_x86:nccopy",
+    ]
+  }
+}
+
+# Low-level platform-independent interface supporting both 32 and 64 bit,
+# used in ncval and in validator_benchmark.
+static_library("rdfa_validator") {
+  sources = [
+    validator32,
+    validator64,
+    "validator_features_all.c",
+    "validator_features_validator.c",
+  ]
+  defines = [ "VALIDATOR_EXPORT=DLLEXPORT" ]
+  deps = [
+    "//build/config/nacl:nacl_base",
+  ]
+}

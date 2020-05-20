@@ -1,0 +1,90 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module blink.mojom;
+
+import "mojo/public/mojom/base/string16.mojom";
+import "mojo/public/mojom/base/big_buffer.mojom";
+import "skia/public/mojom/bitmap.mojom";
+import "url/mojom/url.mojom";
+
+enum ClipboardFormat {
+  kPlaintext,
+  kHtml,
+  kSmartPaste,
+  kBookmark,
+};
+
+enum ClipboardBuffer {
+  kStandard,
+  // Used on platforms like the X Window System that treat selection
+  // as a type of clipboard.
+  // TODO(crbug.com/676224): When preprocessing of mojom is available only
+  // define this value for USE_X11.
+  kSelection,
+};
+
+// Allows communication with the system clipboard.
+// Individual operations are atomic, but successive operations are not.
+// Therefore, it's possible that one may see text available from
+// ReadAvailableTypes(), but that a subsequent ReadText() may then fail.
+interface ClipboardHost {
+  [Sync]
+  GetSequenceNumber(ClipboardBuffer buffer) => (uint64 result);
+
+  [Sync]
+  IsFormatAvailable(ClipboardFormat format,
+                    ClipboardBuffer buffer) => (bool result);
+
+  // Reads sanitized platform-neutral types.
+  [Sync]
+  ReadAvailableTypes(ClipboardBuffer buffer) =>
+      (array<mojo_base.mojom.String16> types, bool result);
+
+  [Sync]
+  ReadText(ClipboardBuffer buffer) => (mojo_base.mojom.BigString16 result);
+
+  [Sync]
+  ReadHtml(ClipboardBuffer buffer) => (mojo_base.mojom.BigString16 markup,
+                                      url.mojom.Url url,
+                                      uint32 fragment_start,
+                                      uint32 fragment_end);
+
+  [Sync]
+  ReadRtf(ClipboardBuffer buffer) => (string result);
+
+  [Sync]
+  ReadImage(ClipboardBuffer buffer) => (skia.mojom.Bitmap? image);
+
+  [Sync]
+  ReadCustomData(ClipboardBuffer buffer, mojo_base.mojom.String16 type) =>
+      (mojo_base.mojom.BigString16 result);
+
+  // Writing to the clipboard via mojo is a two-phase operation. First, the
+  // sender sends the different types of data it'd like to write to the
+  // receiver. Then, it sends a commit message to commit the data to the system
+  // clipboard.
+  WriteText(mojo_base.mojom.BigString16 text);
+
+  WriteHtml(mojo_base.mojom.BigString16 markup, url.mojom.Url url);
+
+  WriteSmartPasteMarker();
+
+  // Chrome-specific pickled data.
+  WriteCustomData(map<mojo_base.mojom.String16, mojo_base.mojom.BigString16> data);
+
+  // TODO(dcheng): The |url| parameter should really be a GURL, but <canvas>'s
+  // copy as image tries to set very long data: URLs on the clipboard. Using
+  // GURL causes the browser to kill the renderer for sending a bad IPC (GURLs
+  // bigger than 2 megabytes are considered to be bad). https://crbug.com/459822
+  WriteBookmark(string url,
+                mojo_base.mojom.String16 title);
+
+  WriteImage(skia.mojom.Bitmap image);
+
+  CommitWrite();
+
+  [EnableIf=is_mac]
+  WriteStringToFindPboard(mojo_base.mojom.String16 text);
+};

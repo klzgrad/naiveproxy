@@ -1,0 +1,274 @@
+# Copyright 2018 The Dawn Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("//build_overrides/build.gni")
+import("../scripts/dawn_features.gni")
+import("../scripts/dawn_overrides_with_defaults.gni")
+
+###############################################################################
+# Third-party dependencies needed by libdawn_native
+###############################################################################
+
+# Empty targets to add the include dirs and list the sources of Khronos headers for header inclusion check.
+config("khronos_headers_public") {
+  include_dirs = [ "khronos" ]
+}
+
+config("vulkan_headers_config") {
+  include_dirs = [ "khronos" ]
+}
+
+source_set("vulkan_headers") {
+  sources = [
+    "khronos/vulkan/vk_icd.h",
+    "khronos/vulkan/vk_layer.h",
+    "khronos/vulkan/vk_platform.h",
+    "khronos/vulkan/vk_sdk_platform.h",
+    "khronos/vulkan/vulkan.h",
+    "khronos/vulkan/vulkan_core.h",
+  ]
+
+  if (is_fuchsia) {
+    sources += [ "khronos/vulkan/vulkan_fuchsia_extras.h" ]
+  }
+
+  public_configs = [ ":vulkan_headers_config" ]
+}
+
+source_set("khronos_platform") {
+  sources = [
+    "khronos/KHR/khrplatform.h",
+  ]
+
+  public_configs = [ ":khronos_headers_public" ]
+}
+
+###############################################################################
+# Gtest Gmock - Handle building inside and outside of Chromium.
+###############################################################################
+
+# When building outside of Chromium we need to define our own targets for GTest
+# and GMock. However when compiling inside of Chromium we need to reuse the
+# existing targets, both because Chromium has a special harness for swarming
+# and because otherwise the "gn check" fails.
+
+if (!build_with_chromium) {
+  # When we aren't in Chromium we define out own targets based on the location
+  # of the googletest repo.
+  googletest_dir = dawn_googletest_dir
+
+  config("gtest_config") {
+    include_dirs = [
+      "${googletest_dir}/googletest",
+      "${googletest_dir}/googletest/include",
+    ]
+  }
+
+  static_library("gtest") {
+    testonly = true
+    sources = [
+      "${googletest_dir}/googletest/src/gtest-all.cc",
+    ]
+    public_configs = [ ":gtest_config" ]
+  }
+
+  config("gmock_config") {
+    include_dirs = [
+      "${googletest_dir}/googlemock",
+      "${googletest_dir}/googlemock/include",
+      "${googletest_dir}/googletest/include",
+    ]
+  }
+
+  static_library("gmock") {
+    testonly = true
+    sources = [
+      "${googletest_dir}/googlemock/src/gmock-all.cc",
+    ]
+    public_configs = [ ":gmock_config" ]
+  }
+
+  group("gmock_and_gtest") {
+    testonly = true
+    public_deps = [
+      ":gmock",
+      ":gtest",
+    ]
+  }
+} else {
+  # When we are in Chromium we reuse its targets, and also add some deps that
+  # are needed to launch the test in swarming mode.
+  group("gmock_and_gtest") {
+    testonly = true
+    public_deps = [
+      "//base",
+      "//base/test:test_support",
+      "//testing/gmock",
+      "//testing/gtest",
+    ]
+  }
+}
+
+###############################################################################
+# GLFW - good enough build targets
+###############################################################################
+
+# Only expose GLFW targets on platforms where GLFW is supported: otherwise they
+# might get discovered by GN when another target in this file is referenced,
+# and GLFW will bbe built as part of "all" builds, causing compilation failures.
+if (is_win || (is_linux && !is_chromeos) || is_mac) {
+  glfw_dir = dawn_glfw_dir
+
+  config("glfw_public") {
+    include_dirs = [ "${glfw_dir}/include" ]
+
+    if (is_win) {
+      defines = [ "_GLFW_WIN32" ]
+    }
+
+    if (is_mac) {
+      defines = [ "_GLFW_COCOA" ]
+    }
+
+    if (is_linux) {
+      defines = [ "_GLFW_X11" ]
+    }
+  }
+
+  static_library("glfw") {
+    public_configs = [ ":glfw_public" ]
+
+    configs -= [ "//build/config/compiler:chromium_code" ]
+    configs += [ "//build/config/compiler:no_chromium_code" ]
+
+    if (is_win && !is_clang) {
+      # nonstandard extension, function/data pointer conversion in expression
+      cflags_c = [ "/wd4152" ]
+    } else {
+      cflags_c = [
+        "-Wno-sign-compare",
+        "-Wno-missing-field-initializers",
+      ]
+    }
+
+    sources = [
+      "${glfw_dir}/include/GLFW/glfw3.h",
+      "${glfw_dir}/include/GLFW/glfw3native.h",
+      "${glfw_dir}/src/context.c",
+      "${glfw_dir}/src/egl_context.c",
+      "${glfw_dir}/src/egl_context.h",
+      "${glfw_dir}/src/init.c",
+      "${glfw_dir}/src/input.c",
+      "${glfw_dir}/src/internal.h",
+      "${glfw_dir}/src/monitor.c",
+      "${glfw_dir}/src/osmesa_context.c",
+      "${glfw_dir}/src/osmesa_context.h",
+      "${glfw_dir}/src/vulkan.c",
+      "${glfw_dir}/src/window.c",
+    ]
+    libs = []
+
+    if (is_win) {
+      sources += [
+        "${glfw_dir}/src/wgl_context.c",
+        "${glfw_dir}/src/wgl_context.h",
+        "${glfw_dir}/src/win32_init.c",
+        "${glfw_dir}/src/win32_joystick.c",
+        "${glfw_dir}/src/win32_joystick.h",
+        "${glfw_dir}/src/win32_monitor.c",
+        "${glfw_dir}/src/win32_platform.h",
+        "${glfw_dir}/src/win32_thread.c",
+        "${glfw_dir}/src/win32_time.c",
+        "${glfw_dir}/src/win32_window.c",
+      ]
+    }
+
+    if (is_linux || is_mac) {
+      sources += [
+        "${glfw_dir}/src/posix_thread.c",
+        "${glfw_dir}/src/posix_thread.h",
+      ]
+    }
+
+    if (is_linux) {
+      sources += [
+        "${glfw_dir}/src/glx_context.c",
+        "${glfw_dir}/src/glx_context.h",
+        "${glfw_dir}/src/linux_joystick.c",
+        "${glfw_dir}/src/linux_joystick.h",
+        "${glfw_dir}/src/posix_time.c",
+        "${glfw_dir}/src/posix_time.h",
+        "${glfw_dir}/src/x11_init.c",
+        "${glfw_dir}/src/x11_monitor.c",
+        "${glfw_dir}/src/x11_platform.h",
+        "${glfw_dir}/src/x11_window.c",
+        "${glfw_dir}/src/xkb_unicode.c",
+        "${glfw_dir}/src/xkb_unicode.h",
+      ]
+
+      libs += [
+        "rt",
+        "dl",
+        "X11",
+        "Xcursor",
+        "Xinerama",
+        "Xrandr",
+      ]
+    }
+
+    if (is_mac) {
+      sources += [
+        "${glfw_dir}/src/cocoa_init.m",
+        "${glfw_dir}/src/cocoa_joystick.h",
+        "${glfw_dir}/src/cocoa_joystick.m",
+        "${glfw_dir}/src/cocoa_monitor.m",
+        "${glfw_dir}/src/cocoa_platform.h",
+        "${glfw_dir}/src/cocoa_time.c",
+        "${glfw_dir}/src/cocoa_window.m",
+        "${glfw_dir}/src/nsgl_context.h",
+        "${glfw_dir}/src/nsgl_context.m",
+      ]
+      libs += [
+        "Cocoa.framework",
+        "IOKit.framework",
+        "CoreFoundation.framework",
+        "CoreVideo.framework",
+      ]
+      cflags_objc = [
+        "-Wno-sign-compare",
+        "-Wno-unguarded-availability",
+        "-Wno-objc-multiple-method-names",
+      ]
+    }
+  }
+}
+
+###############################################################################
+# Header-only dependencies for samples
+###############################################################################
+
+if (dawn_standalone) {
+  # GLM
+  config("glm_public_config") {
+    include_dirs = [ "glm" ]
+  }
+  source_set("glm") {
+    configs -= [ "//build/config/compiler:chromium_code" ]
+    configs += [ "//build/config/compiler:no_chromium_code" ]
+
+    public_configs = [ ":glm_public_config" ]
+
+    # GLM is header only but has too many files to list them.
+  }
+}

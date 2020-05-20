@@ -1,0 +1,88 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/features.gni")
+import("//build/config/jumbo.gni")
+
+jumbo_source_set("browser") {
+  sources = [
+    "safe_browsing_url_checker_impl.cc",
+    "safe_browsing_url_checker_impl.h",
+    "url_checker_delegate.h",
+  ]
+  deps = [
+    "//components/safe_browsing/core:csd_proto",
+    "//components/safe_browsing/core:features",
+    "//components/safe_browsing/core:realtimeapi_proto",
+    "//components/safe_browsing/core/common:common",
+    "//components/safe_browsing/core/common:thread_utils",
+    "//components/safe_browsing/core/db:database_manager",
+    "//components/safe_browsing/core/db:util",
+    "//components/safe_browsing/core/realtime:policy_engine",
+    "//components/safe_browsing/core/realtime:url_lookup_service",
+    "//components/safe_browsing/core/web_ui:constants",
+    "//components/security_interstitials/core:unsafe_resource",
+    "//net:extras",
+    "//services/network/public/cpp",
+  ]
+  if (is_ios) {
+    sources += [ "//components/safe_browsing/ios/browser/safe_browsing_url_checker_impl_ios.cc" ]
+  } else {
+    sources += [ "//components/safe_browsing/content/browser/safe_browsing_url_checker_impl_content.cc" ]
+    deps += [ "//components/safe_browsing/content/web_ui" ]
+  }
+}
+
+# TODO(crbug.com/1028755): Remove this condition once there are no longer any
+# dependencies on content/.
+if (!is_ios) {
+  source_set("network_context") {
+    sources = [
+      "safe_browsing_network_context.cc",
+      "safe_browsing_network_context.h",
+    ]
+
+    deps = [
+      "//components/safe_browsing/core/common:common",
+      "//components/safe_browsing/core/common:thread_utils",
+      "//content/public/browser:browser",
+      "//net:extras",
+    ]
+  }
+}
+
+source_set("referrer_chain_provider") {
+  sources = [ "referrer_chain_provider.h" ]
+  deps = [
+    "//components/safe_browsing/core:csd_proto",
+    "//components/sessions",
+  ]
+}
+
+source_set("token_fetcher") {
+  sources = [
+    "safe_browsing_token_fetcher.cc",
+    "safe_browsing_token_fetcher.h",
+  ]
+
+  deps = [
+    "//base",
+    "//components/safe_browsing/core/common:thread_utils",
+    "//components/signin/public/identity_manager",
+    "//google_apis",
+  ]
+}
+
+source_set("token_fetcher_unittest") {
+  testonly = true
+  sources = [ "safe_browsing_token_fetcher_unittest.cc" ]
+
+  deps = [
+    ":token_fetcher",
+    "//base/test:test_support",
+    "//components/safe_browsing/core/common:test_support",
+    "//components/signin/public/identity_manager:test_support",
+    "//testing/gtest",
+  ]
+}

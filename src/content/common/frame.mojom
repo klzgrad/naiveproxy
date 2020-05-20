@@ -1,0 +1,525 @@
+// Copyright 2014 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module content.mojom;
+
+import "content/common/ax_content_tree_update.mojom";
+import "content/common/document_scoped_interface_bundle.mojom";
+import "content/common/frame_messages.mojom";
+import "content/common/native_types.mojom";
+import "content/common/navigation_client.mojom";
+import "content/common/navigation_params.mojom";
+import "content/common/widget.mojom";
+import "content/public/common/browser_controls_state.mojom";
+import "content/public/common/transferrable_url_loader.mojom";
+import "content/public/common/window_container_type.mojom";
+import "mojo/public/mojom/base/string16.mojom";
+import "mojo/public/mojom/base/unguessable_token.mojom";
+import "mojo/public/mojom/base/values.mojom";
+import "services/network/public/mojom/content_security_policy.mojom";
+import "services/network/public/mojom/url_loader.mojom";
+import "services/network/public/mojom/url_loader_factory.mojom";
+import "services/network/public/mojom/url_response_head.mojom";
+import "services/service_manager/public/mojom/interface_provider.mojom";
+import "services/viz/public/mojom/compositing/frame_sink_id.mojom";
+import "services/viz/public/mojom/compositing/surface_id.mojom";
+import "third_party/blink/public/mojom/blob/blob_url_store.mojom";
+import "third_party/blink/public/mojom/commit_result/commit_result.mojom";
+import "third_party/blink/public/mojom/devtools/console_message.mojom";
+import "third_party/blink/public/mojom/devtools/devtools_agent.mojom";
+import "third_party/blink/public/mojom/feature_policy/document_policy_feature.mojom";
+import "third_party/blink/public/mojom/feature_policy/feature_policy.mojom";
+import "third_party/blink/public/mojom/feature_policy/feature_policy_feature.mojom";
+import "third_party/blink/public/mojom/feature_policy/policy_value.mojom";
+import "third_party/blink/public/mojom/frame/lifecycle.mojom";
+import "third_party/blink/public/mojom/frame/navigation_initiator.mojom";
+import "third_party/blink/public/mojom/loader/resource_load_info.mojom";
+import "third_party/blink/public/mojom/loader/url_loader_factory_bundle.mojom";
+import "third_party/blink/public/mojom/messaging/transferable_message.mojom";
+import "third_party/blink/public/mojom/page/widget.mojom";
+import "third_party/blink/public/mojom/portal/portal.mojom";
+import "third_party/blink/public/mojom/referrer.mojom";
+import "third_party/blink/public/mojom/service_worker/controller_service_worker.mojom";
+import "third_party/blink/public/mojom/service_worker/service_worker_provider.mojom";
+import "third_party/blink/public/mojom/window_features/window_features.mojom";
+import "ui/base/mojom/window_open_disposition.mojom";
+import "ui/gfx/geometry/mojom/geometry.mojom";
+import "url/mojom/origin.mojom";
+import "url/mojom/url.mojom";
+
+// The name of the InterfaceProviderSpec in service manifests used by the
+// frame tree to expose frame-specific interfaces between renderer and browser.
+const string kNavigation_FrameSpec = "navigation:frame";
+
+// Implemented by the frame provider (e.g. renderer processes).
+interface Frame {
+  GetInterfaceProvider(
+      pending_receiver<service_manager.mojom.InterfaceProvider> interfaces);
+  GetCanonicalUrlForSharing() => (url.mojom.Url? canonical_url);
+
+  // Causes all new subresource requests to be blocked (not being started) until
+  // ResumeBlockedRequests is called.
+  BlockRequests();
+
+  // Resumes blocked requests.
+  // It is safe to call this without calling BlockRequests.
+  ResumeBlockedRequests();
+
+  // Cancels blocked requests. BlockRequests must have been called before.
+  CancelBlockedRequests();
+
+  // Set the lifecycle state.
+  SetLifecycleState(blink.mojom.FrameLifecycleState state);
+
+  // Samsung Galaxy Note-specific "smart clip" stylus text getter.
+  // Extracts the data at the given rect.
+  [EnableIf=is_android]
+  ExtractSmartClipData(gfx.mojom.Rect rect)
+      => (mojo_base.mojom.String16 text, mojo_base.mojom.String16 html,
+              gfx.mojom.Rect clip_rect);
+
+  // Notifies the renderer whether hiding/showing the browser controls is
+  // enabled, what the current state should be, and whether or not to
+  // animate to the proper state.
+  UpdateBrowserControlsState(BrowserControlsState constraints,
+                             BrowserControlsState current,
+                             bool animate);
+
+  // Requests a one-time snapshot of the accessibility tree without enabling
+  // accessibility if it wasn't already enabled.
+  // See ui/accessibility/ax_mode.h for valid values of |ax_mode|.
+  SnapshotAccessibilityTree(uint32 ax_mode)
+      => (ax.mojom.AXContentTreeUpdate snapshot);
+};
+
+// Implemented by the frame provider and currently must be associated with the
+// legacy IPC channel.
+// KEEP THE COMMIT FUNCTIONS IN SYNC in content/common/navigation_client.mojom.
+// These will eventually be removed from FrameNavigationControl.
+interface FrameNavigationControl {
+  // Tells the renderer that a navigation is ready to commit.
+  //
+  // The renderer should bind the |url_loader_client_endpoints| to an
+  // URLLoaderClient implementation to continue loading the document that will
+  // be the result of the committed navigation.
+  //
+  // Note: |url_loader_client_endpoints| will be empty iff the navigation URL
+  // wasn't handled by the network stack (i.e. about:blank, ...)
+  //
+  // When the Network Service is enabled, |subresource_loader_factories| may
+  // also be provided by the browser as a a means for the renderer to load
+  // subresources where applicable.
+  //
+  // |controller_service_worker_info| may also be provided by the browser if the
+  // frame that is being navigated is supposed to be controlled by a Service
+  // Worker.
+  // |provider_info| may also be provided if the browser has created a
+  // ServiceWorkerProviderHost for this navigation.
+  // |prefetch_loader_factory| is populated only when Network Service is
+  // enabled. The pointer is used to start a prefetch loading via the browser
+  // process.
+  //
+  // For automation driver-initiated navigations over the devtools protocol,
+  // |devtools_navigation_token_| is used to tag the navigation. This navigation
+  // token is then sent into the renderer and lands on the DocumentLoader. That
+  // way subsequent Blink-level frame lifecycle events can be associated with
+  // the concrete navigation.
+  // - The value should not be sent back to the browser.
+  // - The value on DocumentLoader may be generated in the renderer in some
+  // cases, and thus shouldn't be trusted.
+  // TODO(crbug.com/783506): Replace devtools navigation token with the generic
+  // navigation token that can be passed from renderer to the browser.
+  CommitNavigation(
+      CommonNavigationParams common_params,
+      CommitNavigationParams request_params,
+      network.mojom.URLResponseHead response_head,
+      handle<data_pipe_consumer>? response_body,
+      network.mojom.URLLoaderClientEndpoints? url_loader_client_endpoints,
+      blink.mojom.URLLoaderFactoryBundle? subresource_loader_factories,
+      array<TransferrableURLLoader>? subresource_overrides,
+      blink.mojom.ControllerServiceWorkerInfo? controller_service_worker_info,
+      blink.mojom.ServiceWorkerProviderInfoForClient? provider_info,
+      pending_remote<network.mojom.URLLoaderFactory>? prefetch_loader_factory,
+      mojo_base.mojom.UnguessableToken devtools_navigation_token)
+      => (blink.mojom.CommitResult commit_result);
+
+  // Tells the renderer that a same-document navigation should be committed.
+  // The renderer will return a status value indicating whether the commit
+  // could proceed as expected or not. In particular, it might be necessary to
+  // restart the navigation if it is no-longer same-document, which can happen
+  // if the renderer committed another navigation in the meantime.
+  CommitSameDocumentNavigation(
+      CommonNavigationParams common_params,
+      CommitNavigationParams request_params)
+      => (blink.mojom.CommitResult commit_result);
+
+  // Asks the renderer to handle a renderer-debug URL.
+  HandleRendererDebugURL(url.mojom.Url url);
+
+  // Provides the renderer an updated |subresource_loader_factories|.
+  //
+  // This method is intended to fix broken loaders after a Network Service
+  // crash, and is only used when Network Service is enabled.
+  //
+  // The new bundle contains replacement factories for a subset of the
+  // receiver's existing bundle.
+  UpdateSubresourceLoaderFactories(
+      blink.mojom.URLLoaderFactoryBundle subresource_loader_factories);
+
+  // Returns a DevToolsAgent interface for this frame, used for
+  // remote debugging. See DevToolsAgent for details.
+  // Returned DevToolsAgent must be associated with navigation control,
+  // due to various ordering dependencies between DevTools protocol and
+  // navigation.
+  BindDevToolsAgent(
+      pending_associated_remote<blink.mojom.DevToolsAgentHost> agent_host,
+      pending_associated_receiver<blink.mojom.DevToolsAgent> agent);
+
+  // Request for the renderer to execute JavaScript in the frame's context.
+  //
+  // |javascript| is the string containing the JavaScript to be executed in the
+  // target frame's context.
+  //
+  // |wants_result| is true if the result of this execution is required by the
+  // caller. If it is false, a reply is still required by Mojo, but a null value
+  // should be returned to avoid issues serializing a large, unwanted reply.
+  //
+  // TODO(hajimehoshi): This requires navigate association to keep the message
+  // order with other navigation-related messages. Fix this and move this to a
+  // non-navigate-related interface if possible.
+  JavaScriptExecuteRequest(
+      mojo_base.mojom.String16 javascript,
+      bool wants_result) => (mojo_base.mojom.Value result);
+
+  // ONLY FOR TESTS: Same as above but this can optionally trigger a fake user
+  // activation notification to test functionalities that are gated by user
+  // activation.
+  JavaScriptExecuteRequestForTests(
+      mojo_base.mojom.String16 javascript,
+      bool wants_result,
+      bool has_user_gesture,
+      int32 world_id)
+      => (mojo_base.mojom.Value result);
+
+  // Same as JavaScriptExecuteRequest above except the script is run in the
+  // isolated world specified by the fourth parameter.
+  JavaScriptExecuteRequestInIsolatedWorld(
+      mojo_base.mojom.String16 javascript,
+      bool wants_result,
+      int32 world_id) => (mojo_base.mojom.Value result);
+
+  // Posts a message from a frame in another process to the current renderer.
+  // |source_routing_id| is the routing ID of the source frame in the source
+  // process when sent to the browser. The browser replaces it with the routing
+  // ID of the equivalent frame proxy in the destination process.
+  // |source_origin| is the origin of the source frame when the message was
+  // sent, and |target_origin| specifies what the origin of the target frame
+  // must be for the message to be dispatched. An empty string allows the
+  // message to be dispatched to any origin.
+  // |message| is the encoded data, and any extra properties such as
+  // transferred ports or blobs.
+  PostMessageEvent(int32 source_routing_id,
+                   mojo_base.mojom.String16 source_origin,
+                   mojo_base.mojom.String16 target_origin,
+                   blink.mojom.TransferableMessage message);
+
+  // Forwards a message from a portal's host to the main frame in the portal's
+  // guest contents.
+  ForwardMessageFromHost(blink.mojom.TransferableMessage message,
+                         url.mojom.Origin source_origin,
+                         url.mojom.Origin? target_origin);
+
+  // Called on the main frame of a page embedded in a Portal when it is
+  // activated. The frame has the option to adopt the previous page as a portal
+  // identified by |portal_token| with the interface |portal|. The activation
+  // can optionally include a message |data| dispatched with the
+  // PortalActivateEvent. The return value |was_adopted| indicates if the portal
+  // for the predecessor (identified by |portal_token|) was adopted by the
+  // current frame.
+  OnPortalActivated(
+      mojo_base.mojom.UnguessableToken portal_token,
+      pending_associated_remote<blink.mojom.Portal> portal,
+      pending_associated_receiver<blink.mojom.PortalClient> portal_client,
+      blink.mojom.TransferableMessage data)
+      => (blink.mojom.PortalActivateResult result);
+};
+
+// Implemented by the frame (e.g. renderer processes).
+// Instances of this interface must be associated with (i.e., FIFO with) the
+// legacy IPC channel.
+interface FrameBindingsControl {
+  // Used to tell a render frame whether it should expose various bindings
+  // that allow JS content extended privileges. See BindingsPolicy for valid
+  // flag values.
+  AllowBindings(int32 enabled_bindings_flags);
+
+  // Used to tell the RenderFrame to enable Mojo JS bindings, which allows
+  // JS code running in the renderer process to connect to Mojo interfaces
+  // and make method calls on them.
+  // This is used for WebUI only at this time.
+  EnableMojoJsBindings();
+};
+
+// Implemented by a service that provides implementations of the Frame
+// interface. (e.g. renderer processes).
+interface FrameFactory {
+  CreateFrame(int32 frame_routing_id, pending_receiver<Frame> frame);
+};
+
+struct CreateNewWindowParams {
+  // True if ContentRendererClient allows popups.  This is the case only for
+  // extensions.
+  bool allow_popup;
+
+  // Type of window requested.
+  WindowContainerType window_container_type;
+
+  // The session storage namespace ID this window should use.
+  string session_storage_namespace_id;
+
+  // The session storage namespace ID this window should clone from.
+  // TODO(dmurph): Remove this once session storage is fully mojo'd, as the
+  // clone call happens on a different interface. https://crbug.com/716490
+  string clone_from_session_storage_namespace_id;
+
+  // The name of the resulting frame that should be created (empty if none
+  // has been specified). UTF8 encoded string.
+  string frame_name;
+
+  // Whether the opener will be suppressed in the new window, in which case
+  // scripting the new window is not allowed.
+  bool opener_suppressed;
+
+  // Whether the window should be opened in the foreground, background, etc.
+  ui.mojom.WindowOpenDisposition disposition;
+
+  // The URL that will be loaded in the new window (empty if none has been
+  // specified).
+  url.mojom.Url target_url;
+
+  // The referrer that will be used to load |target_url| (empty if none has
+  // been specified).
+  blink.mojom.Referrer referrer;
+
+  // The window features to use for the new window.
+  blink.mojom.WindowFeatures features;
+};
+
+// Operation result when the renderer asks the browser to create a new window.
+enum CreateNewWindowStatus {
+  // Ignore creation of the new window. This can happen because creation is
+  // blocked or because the new window should have no opener relationship.
+  kIgnore,
+  // Reuse the current window rather than creating a new window.
+  kReuse,
+  // Create a new window using the corresponding params in |reply|.
+  kSuccess,
+};
+
+// All routing IDs in this struct must be set to a valid routing ID.
+struct CreateNewWindowReply {
+  // The ID of the view to be created.
+  int32 route_id;
+
+  // The ID of the main frame hosted in the view.
+  int32 main_frame_route_id;
+
+  // The ID of the widget for the main frame.
+  int32 main_frame_widget_route_id;
+
+  // Initial properties for the main frame RenderWidget.
+  VisualProperties visual_properties;
+
+  // The communication interfaces for the WebFrameWidget in blink.
+  pending_associated_remote<blink.mojom.FrameWidgetHost> frame_widget_host;
+  pending_associated_receiver<blink.mojom.FrameWidget> frame_widget;
+  pending_associated_remote<blink.mojom.WidgetHost> widget_host;
+  pending_associated_receiver<blink.mojom.Widget> widget;
+
+  DocumentScopedInterfaceBundle main_frame_interface_bundle;
+
+  // Duplicated from CreateNewWindowParams because legacy code.
+  string cloned_session_storage_namespace_id;
+
+  // Used for devtools instrumentation and trace-ability. The token is
+  // propagated to Blink's LocalFrame and both Blink and content/
+  // can tag calls and requests with this instrumentation token in order to
+  // attribute them to the context frame.
+  // |devtools_frame_token| is only defined by the browser and is never
+  // sent back from the renderer in the control calls.
+  mojo_base.mojom.UnguessableToken devtools_main_frame_token;
+
+  // Used by devtools instrumentation to tell devtools agent in the renderer
+  // that it should pause created window and wait for an explicit resume command
+  // from the client.
+  bool wait_for_debugger;
+};
+
+// An opaque handle that keeps alive the associated render process even after
+// the frame is detached. Used by resource requests with "keepalive" specified.
+interface KeepAliveHandle {};
+
+// Implemented by the frame server (i.e. the browser process). For messages that
+// must be associated with the IPC channel.
+interface FrameHost {
+  // Sent by the renderer to request the browser to create a new window. |reply|
+  // is only non-null on when status == CreateNewWindowStatus::kSuccess.
+  [Sync] CreateNewWindow(CreateNewWindowParams params)
+      => (CreateNewWindowStatus status, CreateNewWindowReply? reply);
+
+  // Sent by the renderer process to request the creation of a new portal.
+  // |portal| is the pipe to be used for the Portal object, |client| is the pipe
+  // used to communicate back with the caller. Returns |proxy_routing_id|, which
+  // is the routing id of the RenderFrameProxy, |initial_replicated_state|, the
+  // replicated state associated with that RenderFrameProxy, and |portal_token|,
+  // which is the unique identifier for the portal.
+  [Sync] CreatePortal(
+      pending_associated_receiver<blink.mojom.Portal> portal,
+      pending_associated_remote<blink.mojom.PortalClient> client)
+      => (int32 proxy_routing_id,
+          FrameReplicationState initial_replicated_state,
+          mojo_base.mojom.UnguessableToken portal_token,
+          mojo_base.mojom.UnguessableToken devtools_frame_token);
+
+  // Requests that this frame adopts the portal identified by |portal_token|.
+  // Returns |proxy_routing_id|, which is the routing id of the portal's
+  // RenderFrameProxy, |replicated_state|, the replicated state associated with
+  // that RFP, and the |devtools_frame_token|.
+  [Sync] AdoptPortal(mojo_base.mojom.UnguessableToken portal_token)
+      => (int32 proxy_routing_id,
+          viz.mojom.FrameSinkId frame_sink_id,
+          FrameReplicationState replicated_state,
+          mojo_base.mojom.UnguessableToken devtools_frame_token);
+
+
+  // Similar to CreateNewWindow, except used for sub-widgets, like <select>
+  // dropdowns.
+  [Sync] CreateNewWidget(pending_remote<Widget> widget,
+         pending_associated_receiver<blink.mojom.WidgetHost> blink_widget_host,
+         pending_associated_remote<blink.mojom.Widget> blink_widget)
+      => (int32 routing_id);
+
+  // Similar to CreateNewWidget except the widget is a full screen window.
+  [Sync] CreateNewFullscreenWidget(pending_remote<Widget> widget,
+         pending_associated_receiver<blink.mojom.WidgetHost> blink_widget_host,
+         pending_associated_remote<blink.mojom.Widget> blink_widget)
+      => (int32 routing_id);
+
+  // Creates and returns a KeepAliveHandle.
+  IssueKeepAliveHandle(pending_receiver<KeepAliveHandle> keep_alive_handle);
+
+  // Sent by the renderer when a navigation commits in the frame.
+
+  // If |interface_params| is non-empty, the FrameHost implementation
+  // must unbind the old InterfaceProvider and BrowserInterfaceBroker
+  // connections, and drop any interface requests pending on them.
+  // Then it should bind the appropriate requests and start servicing
+  // GetInterface messages coming in on these new connections
+  // in a security context that is appropriate for the committed navigation.
+  //
+  // The FrameHost implementation must enforce that |interface_params|
+  // is set for cross-document navigations. This prevents origin confusion by
+  // ensuring that interface requests racing with navigation commit will be
+  // either ignored, or serviced correctly in the security context of the
+  // document they originated from (based on which InterfaceProvider or
+  // BrowserInterfaceBroker connection the GetInterface messages arrive on).
+  DidCommitProvisionalLoad(
+      DidCommitProvisionalLoadParams params,
+      DidCommitProvisionalLoadInterfaceParams? interface_params);
+
+  // Sent by the renderer to indicate that a same document navigation
+  // committed in the renderer process.
+  DidCommitSameDocumentNavigation(
+      DidCommitProvisionalLoadParams params);
+
+  // Sent by the renderer to request a navigation.
+  // |blob_url_token| should be non-null when this is a navigation to a blob:
+  // URL. The token will then be used to look up the blob associated with the
+  // blob URL. Without this by the time the navigation code starts fetching
+  // the URL the blob URL might no longer be valid. |blob_url_token| is
+  // not part of BeginNavigationParams because that struct needs to be
+  // cloneable, and thus can't contain mojo interfaces.
+  // If an invalid BlobURLToken is passed in, or if the token doesn't match the
+  // url in |common_params|, the navigation will result in a network error.
+  // |navigation_client| is passed to the renderer to allow for further control
+  // of the navigation. Allows for Commit and Cancels/Aborts. It is only valid
+  // when PerNavigationMojoInterface is enabled.
+  // TODO(ahemery): |navigation_client| should not be optional. Make it
+  // mandatory when removing PerNavigationMojoInterface feature flag.
+  BeginNavigation(
+      CommonNavigationParams common_params,
+      BeginNavigationParams begin_params,
+      pending_remote<blink.mojom.BlobURLToken>? blob_url_token,
+      pending_associated_remote<NavigationClient>? navigation_client,
+      pending_remote<blink.mojom.NavigationInitiator>? navigation_initiator);
+
+  // Sent when a subresource response has started.
+  // |cert_status| is the bitmask of status info of the SSL certificate. (see
+  // net/cert/cert_status_flags.h).
+  SubresourceResponseStarted(url.mojom.Url url, uint32 cert_status);
+
+  // Sent when a resource load finished, successfully or not.
+  ResourceLoadComplete(blink.mojom.ResourceLoadInfo url_load_info);
+
+  // Sent when the frame changes its window.name.
+  DidChangeName(string name, string unique_name);
+
+  // Notifies the browser process that HTTP headers which affect the frame
+  // polices were delivered with the document being loaded into the frame. This
+  // can be any or all of 'Feature-Policy' or 'Content-Security-Policy' (
+  // which can set sandbox flags) or 'Document-Policy'.
+  //
+  // |feature_policy_header| is a list of an origin whitelist for each feature
+  // in the policy.
+  DidSetFramePolicyHeaders(
+      blink.mojom.WebSandboxFlags sandbox_flags,
+      array<blink.mojom.ParsedFeaturePolicyDeclaration> feature_policy_header,
+      map<blink.mojom.DocumentPolicyFeature, blink.mojom.PolicyValue>
+        document_policy_header);
+
+  // If a cross-process navigation was started for the initial history load in
+  // this subframe, this tries to cancel it to allow a client redirect to happen
+  // instead.
+  CancelInitialHistoryLoad();
+
+  // Change the encoding name of the page in UI when the page has detected
+  // proper encoding name. Sent for top-level frames.
+  UpdateEncoding(string encoding_name);
+
+  // The frame's size is replicated in the browser so that the browser can
+  // correctly set the initial size of the frame in case of a cross-process
+  // navigation.
+  FrameSizeChanged(gfx.mojom.Size size);
+
+  // Updates information to determine whether a user gesture should carryover to
+  // future navigations. This is needed so navigations within a certain
+  // timeframe of a request initiated by a gesture will be treated as if they
+  // were initiated by a gesture too, otherwise the navigation may be blocked.
+  [EnableIf=is_android]
+  UpdateUserGestureCarryoverInfo();
+
+  // Blink and JavaScript error messages to log to the console or debugger UI.
+  DidAddMessageToConsole(
+      blink.mojom.ConsoleMessageLevel log_level,
+      mojo_base.mojom.BigString16 msg,
+      int32 line_number,
+      mojo_base.mojom.String16 source_id);
+
+  // Sent to the browser process to transfer the user activation state from the
+  // source frame to the frame sending this IPC. The browser will update the
+  // user activation state of the frames in the frame tree in the non-source and
+  // non-target renderer processes.
+  TransferUserActivationFrom(int32 source_routing_id);
+
+  // Causes a window previously opened via RenderMessageFilter::CreateNewWindow
+  // to be shown on the screen. This message is routed to the preexisting frame
+  // that opened the window, and |pending_widget_routing_id| corresponds to the
+  // widget routing id from the CreateNewWindow reply.
+  ShowCreatedWindow(int32 pending_widget_routing_id,
+                    ui.mojom.WindowOpenDisposition disposition,
+                    gfx.mojom.Rect rect, bool opened_by_user_gesture);
+
+  // Requests an overlay routing token.
+  RequestOverlayRoutingToken() => (mojo_base.mojom.UnguessableToken token);
+};

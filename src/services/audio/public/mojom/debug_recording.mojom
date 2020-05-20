@@ -1,0 +1,35 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module audio.mojom;
+
+import "mojo/public/mojom/base/file.mojom";
+import "mojo/public/mojom/base/file_path.mojom";
+
+enum DebugRecordingStreamType {
+  kInput = 0,
+  kOutput = 1,
+};
+
+// Creates audio debug recording files. Requires a base file path at binding.
+// All files are created in the path defined in implementation, to which
+// ".output" or ".input" (depending on |stream_type|), ".|id|" and ".wav"
+// extension are appended. E.g.: from base file path "/path/base_name", stream
+// type kOutput and id = 1, "/path/base_name.output.1.wav" will be created.
+// This interface is called by audio service from implementation of
+// DebugRecording interface defined below.
+interface DebugRecordingFileProvider {
+  // Returns invalid file in case of failure.
+  CreateWavFile(DebugRecordingStreamType stream_type, uint32 id)
+  => (mojo_base.mojom.File? file);
+};
+
+// Controls audio debug recording. To enable, bind interface and call Enable
+// with a bound DebugRecordingFileProvider interface pointer. To disable, close
+// debug recording message pipe. Note: only the instance that enabled debug
+// recording can disable it, i.e. closing debug recording message pipe without
+// priorly enabling debug recording will not change debug recording state.
+interface DebugRecording {
+  Enable(pending_remote<DebugRecordingFileProvider> file_provider);
+};

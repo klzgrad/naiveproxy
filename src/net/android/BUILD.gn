@@ -1,0 +1,227 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/android/config.gni")
+import("//build/config/android/rules.gni")
+
+android_library("net_java") {
+  sources = [
+    "java/src/org/chromium/net/AndroidCellularSignalStrength.java",
+    "java/src/org/chromium/net/AndroidCertVerifyResult.java",
+    "java/src/org/chromium/net/AndroidKeyStore.java",
+    "java/src/org/chromium/net/AndroidNetworkLibrary.java",
+    "java/src/org/chromium/net/AndroidTelephonyManagerBridge.java",
+    "java/src/org/chromium/net/AndroidTrafficStats.java",
+    "java/src/org/chromium/net/DnsStatus.java",
+    "java/src/org/chromium/net/GURLUtils.java",
+    "java/src/org/chromium/net/HttpNegotiateAuthenticator.java",
+    "java/src/org/chromium/net/HttpNegotiateConstants.java",
+    "java/src/org/chromium/net/HttpUtil.java",
+    "java/src/org/chromium/net/MimeTypeFilter.java",
+    "java/src/org/chromium/net/NetStringUtil.java",
+    "java/src/org/chromium/net/NetworkChangeNotifier.java",
+    "java/src/org/chromium/net/NetworkChangeNotifierAutoDetect.java",
+    "java/src/org/chromium/net/ProxyBroadcastReceiver.java",
+    "java/src/org/chromium/net/ProxyChangeListener.java",
+    "java/src/org/chromium/net/RegistrationPolicyAlwaysRegister.java",
+    "java/src/org/chromium/net/RegistrationPolicyApplicationStatus.java",
+    "java/src/org/chromium/net/X509Util.java",
+  ]
+  deps = [
+    ":net_thread_stats_uid_java",
+    "//base:base_java",
+    "//base:jni_java",
+    "//third_party/android_deps:androidx_annotation_annotation_java",
+    "//third_party/jsr-305:jsr_305_javalib",
+  ]
+  annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
+  srcjar_deps = [
+    ":net_android_java_enums_srcjar",
+    ":net_errors_java",
+  ]
+}
+
+android_library("net_thread_stats_uid_java") {
+  sources = [ "java/src/org/chromium/net/ThreadStatsUid.java" ]
+}
+
+android_aidl("embedded_test_server_aidl") {
+  interface_file = "../test/android/javatests/src/org/chromium/net/test/IEmbeddedTestServerInterface.aidl"
+  sources = [
+    "../test/android/javatests/src/org/chromium/net/test/IConnectionListener.aidl",
+    "../test/android/javatests/src/org/chromium/net/test/IEmbeddedTestServerImpl.aidl",
+  ]
+}
+
+android_library("embedded_test_server_aidl_java") {
+  testonly = true
+  deps = [ "//third_party/android_deps:androidx_annotation_annotation_java" ]
+  srcjar_deps = [ ":embedded_test_server_aidl" ]
+}
+
+android_library("net_java_test_support") {
+  testonly = true
+  sources = [
+    "../test/android/javatests/src/org/chromium/net/test/EmbeddedTestServer.java",
+    "../test/android/javatests/src/org/chromium/net/test/EmbeddedTestServerRule.java",
+    "../test/android/javatests/src/org/chromium/net/test/util/CertTestUtil.java",
+    "../test/android/javatests/src/org/chromium/net/test/util/NetworkChangeNotifierTestUtil.java",
+    "../test/android/javatests/src/org/chromium/net/test/util/TestWebServer.java",
+    "../test/android/javatests/src/org/chromium/net/test/util/WebServer.java",
+  ]
+  deps = [
+    ":embedded_test_server_aidl_java",
+    ":net_java",
+    "//base:base_java",
+    "//base:base_java_test_support",
+    "//third_party/android_deps:androidx_annotation_annotation_java",
+    "//third_party/android_deps:androidx_test_monitor_java",
+    "//third_party/android_deps:androidx_test_uiautomator_uiautomator_java",
+    "//third_party/android_support_test_runner:rules_java",
+    "//third_party/android_support_test_runner:runner_java",
+    "//third_party/junit",
+  ]
+  srcjar_deps = [ ":net_java_test_support_enums_srcjar" ]
+}
+
+android_library("net_java_test_support_provider") {
+  testonly = true
+  sources = [
+    "../test/android/javatests/src/org/chromium/net/test/DummySpnegoAuthenticator.java",
+    "../test/android/javatests/src/org/chromium/net/test/DummySpnegoAuthenticatorService.java",
+    "../test/android/javatests/src/org/chromium/net/test/EmbeddedTestServerImpl.java",
+    "../test/android/javatests/src/org/chromium/net/test/EmbeddedTestServerService.java",
+  ]
+
+  deps = [
+    ":embedded_test_server_aidl_java",
+    ":net_java",
+    "//base:base_java",
+    "//base:base_java_test_support",
+  ]
+
+  data_deps = [ "//net:test_support" ]
+}
+
+source_set("java_test_native_support") {
+  testonly = true
+  sources = [
+    "../test/android/net_test_entry_point.cc",
+    "../test/android/net_test_jni_onload.cc",
+    "../test/android/net_test_jni_onload.h",
+    "../test/embedded_test_server/android/embedded_test_server_android.cc",
+    "../test/embedded_test_server/android/embedded_test_server_android.h",
+  ]
+
+  deps = [ "//net:test_support" ]
+  public_deps = [ "//net:net_test_jni_headers" ]
+}
+
+shared_library("net_java_test_native_support") {
+  testonly = true
+  deps = [
+    ":java_test_native_support",
+    "//net:test_support",
+  ]
+
+  configs -= [ "//build/config/android:hide_all_but_jni_onload" ]
+  configs += [ "//build/config/android:hide_all_but_jni" ]
+}
+
+android_apk("net_test_support_apk") {
+  testonly = true
+
+  # Used as an additional_apk in test scripts.
+  never_incremental = true
+
+  # Multidex requires a custom Application class to initialize it. Simpler to
+  # just disable it.
+  enable_multidex = false
+
+  deps = [
+    ":net_java_test_support",
+    ":net_java_test_support_provider",
+    "//base:base_java",
+  ]
+  android_manifest = "../test/android/javatests/AndroidManifest.xml"
+  apk_name = "ChromiumNetTestSupport"
+  shared_libraries = [ ":net_java_test_native_support" ]
+}
+
+android_resources("net_unittests_apk_resources") {
+  sources = [
+    "unittest_support/res/mipmap-hdpi/app_icon.png",
+    "unittest_support/res/mipmap-mdpi/app_icon.png",
+    "unittest_support/res/mipmap-xhdpi/app_icon.png",
+    "unittest_support/res/mipmap-xxhdpi/app_icon.png",
+    "unittest_support/res/mipmap-xxxhdpi/app_icon.png",
+    "unittest_support/res/xml/dummy_spnego_account_preferences.xml",
+    "unittest_support/res/xml/dummy_spnego_authenticator.xml",
+  ]
+  custom_package = "org.chromium.native_test"
+}
+
+android_library("net_javatests") {
+  testonly = true
+  sources = [
+    "javatests/src/org/chromium/net/AndroidKeyStoreTestUtil.java",
+    "javatests/src/org/chromium/net/AndroidNetworkLibraryTestUtil.java",
+    "javatests/src/org/chromium/net/AndroidProxyConfigServiceTestUtil.java",
+    "javatests/src/org/chromium/net/AndroidProxySelectorTest.java",
+    "javatests/src/org/chromium/net/HttpUtilTest.java",
+    "javatests/src/org/chromium/net/MimeTypeFilterTest.java",
+    "javatests/src/org/chromium/net/NetErrorsTest.java",
+    "javatests/src/org/chromium/net/NetworkChangeNotifierNoNativeTest.java",
+    "javatests/src/org/chromium/net/NetworkChangeNotifierTest.java",
+    "javatests/src/org/chromium/net/ProxyChangeListenerTest.java",
+    "javatests/src/org/chromium/net/X509UtilTest.java",
+  ]
+  deps = [
+    ":net_java",
+    ":net_java_test_support",
+    "//base:base_java",
+    "//base:base_java_test_support",
+    "//third_party/android_sdk:android_test_mock_java",
+    "//third_party/android_support_test_runner:rules_java",
+    "//third_party/android_support_test_runner:runner_java",
+    "//third_party/junit",
+    "//third_party/mockito:mockito_java",
+  ]
+}
+
+java_cpp_template("net_errors_java") {
+  package_path = "org/chromium/net"
+  sources = [ "java/NetError.template" ]
+  inputs = [ "../base/net_error_list.h" ]
+}
+
+java_cpp_enum("net_java_test_support_enums_srcjar") {
+  sources = [
+    "../test/embedded_test_server/embedded_test_server.h",
+    "../test/url_request/url_request_failed_job.h",
+  ]
+}
+
+java_cpp_enum("net_android_java_enums_srcjar") {
+  sources = [
+    "../base/network_change_notifier.h",
+    "../socket/socket_tag.cc",
+    "cellular_signal_strength.cc",
+    "cert_verify_result_android.h",
+    "keystore.h",
+    "network_change_notifier_android.cc",
+    "traffic_stats.cc",
+  ]
+}
+
+junit_binary("net_junit_tests") {
+  sources = [ "junit/src/org/chromium/net/HttpNegotiateAuthenticatorTest.java" ]
+  deps = [
+    ":net_java",
+    "//base:base_java",
+    "//base:base_java_test_support",
+    "//base:base_junit_test_support",
+    "//third_party/hamcrest:hamcrest_java",
+  ]
+}

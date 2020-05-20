@@ -1,0 +1,147 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ios/bundle_identifier_prefix.gni")
+import("//build/config/ios/sdk_info.gni")
+import("//build/config/ios/templates/ios_binary_bundle.gni")
+import("//build/config/ios/templates/merge_plist.gni")
+
+# Template to generate an app bundle.
+#
+# All the other parameters are forwarded to a shared_library target that will
+# generate the bundle binary. In general, you want to pass at least "sources"
+# or "deps" to have some binary objects included in your shared library.
+#
+# Arguments
+#
+#   - info_plist (optional)
+#
+#       path to additional Info.plist to merge into the final bundle Info.plist
+#
+#   - bundle_identifier_prefix (optional)
+#
+#       prefix for the bundle identifier (the full identifier will be defined
+#       to $bundle_identifier_prefix.$output_name); if unset will defaults to
+#       default_bundle_identifier_prefix
+#
+#   - output_name (optional)
+#
+#       name of the bundle without the extension; defaults to $target_name
+#
+template("ios_app_bundle") {
+  _output_name = target_name
+  if (defined(invoker.output_name)) {
+    _output_name = invoker.output_name
+  }
+
+  _bundle_identifier_prefix = default_bundle_identifier_prefix
+  if (defined(invoker.bundle_identifier_prefix)) {
+    _bundle_identifier_prefix = invoker.bundle_identifier_prefix
+  }
+
+  _bundle_identifier = "$_bundle_identifier_prefix.$_output_name"
+
+  _app_prefix_target = target_name + "_app_prefix"
+  _app_prefix_output = "$target_out_dir/$_app_prefix_target/app_prefix.json"
+
+  action(_app_prefix_target) {
+    script = "//build/config/ios/scripts/find_app_identifier_prefix.py"
+    sources = []
+    outputs = [ _app_prefix_output ]
+    args = [
+      "-b=" + _bundle_identifier,
+      "-o=" + rebase_path(_app_prefix_output, root_build_dir),
+    ]
+  }
+
+  if (sdk_info.is_simulator) {
+    _simu_xcent_target = target_name + "_simu_xcent"
+    _simu_xcent_output =
+        "$target_out_dir/$_simu_xcent_target/" + "Entitlements-Simulated.plist"
+
+    merge_plist(_simu_xcent_target) {
+      format = "xml1"
+      output = _simu_xcent_output
+      plists = [ "//build/config/ios/resources/Entitlements-Simulated.plist" ]
+      substitutions_json = _app_prefix_output
+      deps = [ ":$_app_prefix_target" ]
+    }
+  }
+
+  _executable_target = target_name + "_executable"
+  _executable_bundle = target_name + "_executable_bundle"
+
+  executable(_executable_target) {
+    forward_variables_from(invoker,
+                           "*",
+                           [
+                             "bundle_extension",
+                             "bundle_identifier_prefix",
+                             "bundle_type",
+                             "display_name",
+                             "info_plist",
+                             "output_name",
+                             "public_headers",
+                           ])
+
+    output_extension = ""
+    output_name = _output_name
+    output_prefix_override = true
+    output_dir = "$target_out_dir/$_executable_target"
+
+    if (sdk_info.is_simulator) {
+      if (!defined(deps)) {
+        deps = []
+      }
+      if (!defined(inputs)) {
+        inputs = []
+      }
+      if (!defined(ldflags)) {
+        ldflags = []
+      }
+
+      deps += [ ":$_simu_xcent_target" ]
+      inputs += [ _simu_xcent_output ]
+      ldflags += [
+        "-Xlinker",
+        "-sectcreate",
+        "-Xlinker",
+        "__TEXT",
+        "-Xlinker",
+        "__entitlements",
+        "-Xlinker",
+        rebase_path(_simu_xcent_output, root_build_dir),
+      ]
+    }
+  }
+
+  bundle_data(_executable_bundle) {
+    public_deps = [ ":$_executable_target" ]
+    sources = [ "$target_out_dir/$_executable_target/$_output_name" ]
+    outputs = [ "{{bundle_executable_dir}}/{{source_file_part}}" ]
+  }
+
+  ios_binary_bundle(target_name) {
+    forward_variables_from(invoker,
+                           "*",
+                           [
+                             "bundle_extension",
+                             "bundle_identifier_prefix",
+                             "bundle_type",
+                             "deps",
+                             "output_name",
+                             "public_deps",
+                             "public_headers",
+                           ])
+
+    output_name = _output_name
+    product_type = "com.apple.product-type.application"
+
+    bundle_identifier = _bundle_identifier
+    bundle_extension = "app"
+    bundle_type = "AAPL"
+
+    public_deps = [ ":$_executable_bundle" ]
+  }
+}

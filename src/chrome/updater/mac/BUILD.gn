@@ -1,0 +1,161 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/mac/rules.gni")
+import("//build/util/version.gni")
+import("//chrome/updater/branding.gni")
+
+group("mac") {
+  deps = [
+    ":install_app",
+    ":updater_bundle",
+    ":updater_install_script",
+    "//chrome/updater/mac/signing",
+  ]
+}
+
+source_set("network_fetcher_sources") {
+  sources = [
+    "net/network.h",
+    "net/network_fetcher.h",
+    "net/network_fetcher.mm",
+  ]
+
+  deps = [
+    "//base",
+    "//components/crash/core/common:crash_key_lib",
+    "//components/update_client",
+    "//net",
+  ]
+}
+
+source_set("updater_tests") {
+  testonly = true
+
+  sources = [ "net/network_unittest.mm" ]
+
+  deps = [
+    ":network_fetcher_sources",
+    ":updater_setup_sources",
+    "//base/test:test_support",
+    "//net:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+}
+
+mac_app_bundle("updater_bundle") {
+  info_plist = "Info.plist"
+  output_name = updater_product_full_name
+  extra_substitutions =
+      [ "MAC_BUNDLE_IDENTIFIER=$mac_updater_bundle_identifier" ]
+
+  sources = [ "main.cc" ]
+  deps = [
+    ":install_app",
+    ":network_fetcher_sources",
+    ":updater_setup_sources",
+    "//chrome/updater:lib",
+  ]
+}
+
+source_set("xpc_names") {
+  sources = [
+    "xpc_service_names.h",
+    "xpc_service_names.mm",
+  ]
+
+  deps = [
+    "//base",
+    "//chrome/updater:version_header",
+  ]
+}
+
+source_set("updater_setup_sources") {
+  sources = [
+    "setup/setup.h",
+    "setup/setup.mm",
+  ]
+
+  deps = [
+    ":network_fetcher_sources",
+    ":xpc_names",
+    "//base",
+    "//chrome/common/mac:launchd",
+    "//chrome/updater:base",
+    "//chrome/updater:version_header",
+    "//components/crash/core/common:crash_key_lib",
+    "//mojo/public/cpp/platform",
+  ]
+
+  allow_circular_includes_from = [ "//chrome/updater:base" ]
+
+  libs = [
+    "AppKit.framework",
+    "CoreServices.framework",
+    "ServiceManagement.framework",
+  ]
+}
+
+source_set("install_app") {
+  sources = [
+    "setup/install_app.cc",
+    "setup/install_app.h",
+  ]
+
+  deps = [
+    ":updater_setup_sources",
+    "//base",
+    "//chrome/updater:lib",
+  ]
+
+  allow_circular_includes_from = [ "//chrome/updater:lib" ]
+}
+
+action("updater_install_script") {
+  script = "setup/embed_version.py"
+
+  inputs = [
+    script,
+    "setup/.install.sh",
+  ]
+
+  outputs = [ "$root_out_dir/chrome/updater/.install" ]
+
+  args = [
+    "-i",
+    rebase_path("setup/.install.sh"),
+    "-o",
+    rebase_path(root_out_dir + "/chrome/updater/.install"),
+    "-v",
+    chrome_version_full,
+  ]
+}
+
+source_set("installer_sources") {
+  sources = [
+    "installer.h",
+    "installer.mm",
+  ]
+
+  deps = [ "//base" ]
+}
+
+source_set("updater_setup_tests") {
+  testonly = true
+
+  sources = [ "setup/setup_unittest.mm" ]
+
+  data = [ "//chrome/test/data/updater/updater_setup_test_dmg.dmg" ]
+
+  deps = [
+    ":install_app",
+    ":installer_sources",
+    ":updater_setup_sources",
+    "//base",
+    "//base/test:test_support",
+    "//chrome/common:constants",
+    "//testing/gtest",
+  ]
+}

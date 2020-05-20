@@ -1,0 +1,35 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file
+
+# This header file defines the "sysroot" variable which is the absolute path
+# of the sysroot. If no sysroot applies, the variable will be an empty string.
+
+declare_args() {
+  sysroot = ""
+
+  # The relative path to directory containing sysroot images
+  target_sysroot_dir = "../"
+
+  use_sysroot = current_cpu == "arm" || current_cpu == "arm64"
+}
+
+if (use_sysroot) {
+  # By default build against a sysroot image downloaded from Cloud Storage
+  # during gclient runhooks.
+  if (current_cpu == "arm") {
+    sysroot = "$target_sysroot_dir/debian_sid_arm-sysroot"
+  } else if (current_cpu == "arm64") {
+    sysroot = "$target_sysroot_dir/debian_sid_arm64-sysroot"
+  } else {
+    assert(false, "No linux sysroot for cpu: $target_cpu")
+  }
+  _script_arch = current_cpu
+
+  if (exec_script("//build/scripts/dir_exists.py",
+                  [ rebase_path(sysroot) ],
+                  "string") != "True") {
+    print("Missing sysroot for $current_cpu, downloading...")
+    exec_script("//build/scripts/install-sysroot.py", [ "$current_cpu" ])
+  }
+}

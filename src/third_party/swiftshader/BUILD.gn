@@ -1,0 +1,205 @@
+# Copyright 2016 The SwiftShader Authors. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("//build/config/c++/c++.gni")
+import("//build/config/compiler/compiler.gni")
+import("//build/config/mips.gni")
+
+config("swiftshader_config") {
+  defines = []
+
+  if (is_win) {
+    cflags = [
+      "/GS",  # Detects some buffer overruns
+      "/Zc:wchar_t",
+      "/EHs-c-",  # Disable C++ exceptions
+      "/nologo",
+      "/Gd",  # Default calling convention
+      # Disable MSVC warnings about std::aligned_storage being broken before VS 2017 15.8
+      "/D_ENABLE_EXTENDED_ALIGNED_STORAGE",
+    ]
+
+    if (!use_custom_libcxx) {
+      # Disable EH usage in STL headers.
+      # libc++ uses a predefined macro to control whether to use exceptions, so
+      # defining this macro is unnecessary. Defining _HAS_EXCEPTIONS to 0 also
+      # breaks libc++ because it depends on MSVC headers that only provide
+      # certain declarations if _HAS_EXCEPTIONS is 1.
+      defines += [
+        "_HAS_EXCEPTIONS=0",
+      ]
+    }
+
+    defines += [
+      "_CRT_SECURE_NO_DEPRECATE",
+      "NOMINMAX",
+      "_WINDLL",
+      "NO_SANITIZE_FUNCTION=",
+    ]
+
+    if (!is_debug) {
+      defines += [ "ANGLE_DISABLE_TRACE" ]
+    }
+
+    # Diable some MSVC warnings.
+    if (!is_clang) {
+      cflags += [
+        "/wd4065", # switch statement contains 'default' but no 'case' labels
+        "/wd4309", # Truncation of constant value. See PixelRoutine.cpp casts of signed shorts.
+      ]
+    }
+  } else {
+    cflags = [
+      "-std=c++14",
+      "-fno-exceptions",
+      "-fno-operator-names",
+    ]
+
+    defines += [
+      "__STDC_CONSTANT_MACROS",
+      "__STDC_LIMIT_MACROS",
+      "NO_SANITIZE_FUNCTION=__attribute__((no_sanitize(\"function\")))",
+    ]
+
+    if (is_debug) {
+      cflags += [
+        "-g",
+        "-g3",
+      ]
+    } else {  # Release
+      # All Release builds use function/data sections to make the shared libraries smaller
+      cflags += [
+        "-ffunction-sections",
+        "-fdata-sections",
+        "-fomit-frame-pointer",
+        "-Os",
+      ]
+
+      defines += [
+        "ANGLE_DISABLE_TRACE",
+        "NDEBUG",
+      ]
+    }
+
+    if (current_cpu == "x64") {  # 64 bit version
+      cflags += [
+        "-m64",
+        "-fPIC",
+        "-march=x86-64",
+        "-mtune=generic",
+      ]
+    } else if (current_cpu == "x86") {  # 32 bit version
+      cflags += [
+        "-m32",
+        "-msse2",
+        "-mfpmath=sse",
+        "-march=pentium4",
+        "-mtune=generic",
+      ]
+    } else if (target_cpu == "mipsel" && current_cpu == target_cpu) {
+      cflags += [
+        "-EL",
+        "-fPIC",
+        "-mhard-float",
+        "-mfp32",
+        "-mxgot",
+      ]
+      if (mips_arch_variant == "r1") {
+        cflags += [
+          "-march=mips32",
+        ]
+      } else {
+        cflags += [
+          "-march=mips32r2",
+        ]
+      }
+    } else if (target_cpu == "mips64el" && current_cpu == target_cpu) {
+      cflags += [
+        "-EL",
+        "-arch=mips64r2",
+        "-mabi=64",
+        "-fPIC",
+        "-mxgot",
+      ]
+    }
+
+    if (is_linux) {
+      ldflags = [ "-Wl,--gc-sections" ]
+
+      if (current_cpu == "mipsel") {
+        ldflags += [
+          "-Wl,--hash-style=sysv",
+        ]
+        if (mips_arch_variant == "r1") {
+          ldflags += [
+            "-mips32",
+          ]
+        } else {
+          ldflags += [
+            "-mips32r2",
+          ]
+        }
+      } else if (current_cpu == "mips64el") {
+        ldflags += [
+          "-Wl,--hash-style=sysv",
+          "-mips64r2",
+        ]
+      } else {
+        ldflags += [ "-Wl,--hash-style=both" ]
+      }
+
+      # A bug in the gold linker prevents using ICF on 32-bit (crbug.com/729532)
+      if (use_gold && (current_cpu == "x86" || current_cpu == "mipsel")) {
+        ldflags += [ "-Wl,--icf=none" ]
+      }
+    }
+  }
+}
+
+source_set("vertex_routine_fuzzer") {
+  sources = [
+    "tests/fuzzers/VertexRoutineFuzzer.cpp"
+  ]
+  if (is_win) {
+    cflags = [
+      "/wd4201",  # nameless struct/union
+      "/wd4065",  # switch statement contains 'default' but no 'case' labels
+      "/wd5030",  # attribute is not recognized
+    ]
+  }
+  include_dirs = [
+    "src/",
+  ]
+  deps = [
+    "src/OpenGL/libGLESv2:swiftshader_libGLESv2_static",
+  ]
+}
+
+group("swiftshader") {
+  data_deps = [
+    "src/OpenGL/libGLESv2:swiftshader_libGLESv2",
+    "src/OpenGL/libEGL:swiftshader_libEGL",
+  ]
+}
+
+if (build_with_chromium) {
+    group("swiftshader_tests") {
+      testonly = true
+
+      data_deps = [
+        "tests/GLESUnitTests:swiftshader_unittests",
+        "tests/SystemUnitTests:swiftshader_system_unittests",
+      ]
+    }
+}

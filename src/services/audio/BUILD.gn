@@ -1,0 +1,182 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/chromecast_build.gni")
+import("//media/webrtc/audio_processing.gni")
+import("//testing/test.gni")
+
+source_set("audio") {
+  sources = [
+    "debug_recording.cc",
+    "debug_recording.h",
+    "delay_buffer.cc",
+    "delay_buffer.h",
+    "device_notifier.cc",
+    "device_notifier.h",
+    "group_coordinator-impl.h",
+    "group_coordinator.h",
+    "in_process_audio_manager_accessor.cc",
+    "in_process_audio_manager_accessor.h",
+    "input_controller.cc",
+    "input_controller.h",
+    "input_stream.cc",
+    "input_stream.h",
+    "input_sync_writer.cc",
+    "input_sync_writer.h",
+    "local_muter.cc",
+    "local_muter.h",
+    "log_adapter.cc",
+    "log_adapter.h",
+    "log_factory_adapter.cc",
+    "log_factory_adapter.h",
+    "log_factory_manager.cc",
+    "log_factory_manager.h",
+    "loopback_coordinator.cc",
+    "loopback_coordinator.h",
+    "loopback_group_member.h",
+    "loopback_stream.cc",
+    "loopback_stream.h",
+    "output_controller.cc",
+    "output_controller.h",
+    "output_stream.cc",
+    "output_stream.h",
+    "owning_audio_manager_accessor.cc",
+    "owning_audio_manager_accessor.h",
+    "service.cc",
+    "service.h",
+    "service_factory.cc",
+    "service_factory.h",
+    "service_metrics.cc",
+    "service_metrics.h",
+    "snooper_node.cc",
+    "snooper_node.h",
+    "stream_factory.cc",
+    "stream_factory.h",
+    "stream_monitor.h",
+    "stream_monitor_coordinator.cc",
+    "stream_monitor_coordinator.h",
+    "sync_reader.cc",
+    "sync_reader.h",
+    "system_info.cc",
+    "system_info.h",
+    "user_input_monitor.cc",
+    "user_input_monitor.h",
+  ]
+
+  deps = [
+    ":testing_api_support",
+    "//build:chromecast_buildflags",
+    "//components/crash/core/common:crash_key",  # Temporary: crbug.com/888478
+  ]
+
+  if (audio_processing_in_audio_service_supported) {
+    deps += [ "//media/webrtc" ]
+  }
+
+  public_deps = [
+    "//base",
+    "//media",
+    "//media/webrtc",
+    "//services/audio/public/mojom",
+    "//services/service_manager/sandbox",
+  ]
+
+  if (is_linux) {
+    sources += [
+      "audio_sandbox_hook_linux.cc",
+      "audio_sandbox_hook_linux.h",
+    ]
+    public_deps += [ "//sandbox/linux:sandbox_services" ]
+  }
+
+  if (is_win) {
+    sources += [
+      "audio_sandbox_win.cc",
+      "audio_sandbox_win.h",
+    ]
+    public_deps += [ "//sandbox/win:sandbox" ]
+  }
+  configs += [
+    "//build/config/compiler:wexit_time_destructors",
+    "//media:media_config",
+    "//media/audio:platform_config",
+  ]
+}
+
+# NOTE: This is its own component target because it exposes static storage
+# consumed by multiple binary targets that get linked together (e.g.
+# content/utility and content_browsertests in a component build). Consider
+# making the entire ":audio" target a component library and merging this in.
+component("testing_api_support") {
+  visibility = [ ":audio" ]
+
+  sources = [
+    "testing_api_binder.cc",
+    "testing_api_binder.h",
+  ]
+
+  public_deps = [
+    "//base",
+    "//services/audio/public/mojom",
+  ]
+
+  defines = [ "IS_AUDIO_SERVICE_TESTING_API_SUPPORT_IMPL" ]
+}
+
+source_set("tests") {
+  testonly = true
+
+  sources = [
+    "debug_recording_unittest.cc",
+    "delay_buffer_unittest.cc",
+    "device_notifier_unittest.cc",
+    "group_coordinator_unittest.cc",
+    "input_controller_unittest.cc",
+    "input_stream_unittest.cc",
+    "input_sync_writer_unittest.cc",
+    "local_muter_unittest.cc",
+    "log_factory_manager_unittest.cc",
+    "loopback_stream_unittest.cc",
+    "output_controller_unittest.cc",
+    "output_stream_unittest.cc",
+    "public/cpp/input_ipc_unittest.cc",
+    "public/cpp/output_device_unittest.cc",
+    "service_metrics_unittest.cc",
+    "snooper_node_unittest.cc",
+    "sync_reader_unittest.cc",
+    "test/audio_system_to_service_adapter_test.cc",
+    "test/debug_recording_session_unittest.cc",
+    "test/fake_consumer.cc",
+    "test/fake_consumer.h",
+    "test/fake_loopback_group_member.cc",
+    "test/fake_loopback_group_member.h",
+    "test/in_process_service_test.cc",
+    "test/mock_group_coordinator.cc",
+    "test/mock_group_coordinator.h",
+    "test/mock_group_member.cc",
+    "test/mock_group_member.h",
+    "test/mock_log.cc",
+    "test/mock_log.h",
+    "user_input_monitor_unittest.cc",
+  ]
+
+  deps = [
+    ":audio",
+    "//base/test:test_support",
+    "//media:test_support",
+    "//mojo/core/embedder",
+    "//services/audio/public/cpp",
+    "//services/audio/public/cpp:test_support",
+    "//services/audio/public/mojom",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+
+  if (is_chromeos || is_chromecast) {
+    sources += [
+      "public/cpp/sounds/audio_stream_handler_unittest.cc",
+      "public/cpp/sounds/sounds_manager_unittest.cc",
+    ]
+  }
+}

@@ -1,0 +1,249 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//base/win/embedded_i18n/generate_embedded_i18n.gni")
+import("//build/config/allocator.gni")
+import("//build/config/clang/clang.gni")
+import("//build/config/compiler/compiler.gni")
+import("//build/config/dcheck_always_on.gni")
+import("//build/nocompile.gni")
+import("//build/toolchain/win/midl.gni")
+import("//chrome/process_version_rc_template.gni")
+import("//testing/libfuzzer/fuzzer_test.gni")
+import("//testing/test.gni")
+import("//tools/grit/grit_rule.gni")
+
+# This static library is shared with the setup program.
+source_set("common") {
+  sources = [
+    "gcp_crash_reporter_client.cc",
+    "gcp_crash_reporter_client.h",
+    "gcp_crash_reporting_utils.cc",
+    "gcp_crash_reporting_utils.h",
+    "gcp_utils.cc",
+    "gcp_utils.h",
+    "gcpw_strings.cc",
+    "gcpw_strings.h",
+    "logging.cc",
+    "logging.h",
+    "mdm_utils.cc",
+    "mdm_utils.h",
+    "reg_utils.cc",
+    "reg_utils.h",
+  ]
+  public_configs = [ ":common_config" ]
+  public_deps = [ "//chrome/credential_provider/common:common_constants" ]
+  deps = [
+    ":gaia_credential_provider_idl",
+    ":string_resources",
+    "//base",
+    "//build:branding_buildflags",
+    "//chrome/common:version_header",
+    "//chrome/installer/launcher_support",
+    "//components/crash/core/common",
+    "//components/version_info",
+    "//google_apis:google_apis",
+  ]
+}
+
+config("common_config") {
+  defines = [
+    # Needed in order to include the win32 header security.h.
+    "SECURITY_WIN32",
+  ]
+  libs = [
+    "secur32.lib",  # For LsaXXX functions
+    "wbemuuid.lib",  # For CLSID_WbemLocator
+    "iphlpapi.lib",  # For GetAdaptersInfo
+  ]
+}
+
+# This static library is shared with the test code.
+
+source_set("gaiacp_lib") {
+  sources = [
+    "associated_user_validator.cc",
+    "associated_user_validator.h",
+    "auth_utils.cc",
+    "auth_utils.h",
+    "chrome_availability_checker.cc",
+    "chrome_availability_checker.h",
+    "event_logging_api_manager.cc",
+    "event_logging_api_manager.h",
+    "event_logs_upload_manager.cc",
+    "event_logs_upload_manager.h",
+    "gaia_credential.cc",
+    "gaia_credential.h",
+    "gaia_credential_base.cc",
+    "gaia_credential_base.h",
+    "gaia_credential_other_user.cc",
+    "gaia_credential_other_user.h",
+    "gaia_credential_provider.cc",
+    "gaia_credential_provider.h",
+    "gaia_credential_provider_filter.cc",
+    "gaia_credential_provider_filter.h",
+    "gaia_credential_provider_module.cc",
+    "gaia_credential_provider_module.h",
+    "gcp_crash_reporting.cc",
+    "gcp_crash_reporting.h",
+    "gem_device_details_manager.cc",
+    "gem_device_details_manager.h",
+    "initguid.cc",
+    "internet_availability_checker.cc",
+    "internet_availability_checker.h",
+    "os_process_manager.cc",
+    "os_process_manager.h",
+    "os_user_manager.cc",
+    "os_user_manager.h",
+    "password_recovery_manager.cc",
+    "password_recovery_manager.h",
+    "reauth_credential.cc",
+    "reauth_credential.h",
+    "scoped_handle.h",
+    "scoped_lsa_policy.cc",
+    "scoped_lsa_policy.h",
+    "scoped_user_profile.cc",
+    "scoped_user_profile.h",
+    "stdafx.h",
+    "win_http_url_fetcher.cc",
+    "win_http_url_fetcher.h",
+  ]
+  public_configs = [ ":gaiacp_config" ]
+  public_deps = [ ":common" ]
+  deps = [
+    ":gaia_credential_provider_idl",
+    ":static_resources",
+    "../eventlog:gcp_eventlog_messages",
+    "//build:branding_buildflags",
+    "//chrome/common:non_code_constants",
+    "//chrome/common:version_header",
+    "//chrome/installer/launcher_support",
+    "//components/crash/core/app:app",
+    "//components/crash/core/app:crash_export_thunks",
+    "//components/crash/core/app:run_as_crashpad_handler",
+    "//third_party/boringssl",
+    "//third_party/re2",
+  ]
+  if (is_component_build) {
+    deps += [ "//content/public/common" ]
+  } else {
+    deps += [ "//content/public/common:static_switches" ]
+  }
+  libs = [ "wevtapi.lib" ]
+}
+
+config("gaiacp_config") {
+  defines = [
+    # Needed to build COM objects that will be hosted in a DLL.
+    "_WINDLL",
+  ]
+  cflags = [
+    # C4245: 'conversion' : conversion from 'type1' to 'type2',
+    #                       signed/unsigned mismatch
+    # Disabling because this Level 4 warning is causing ATL code to not compile,
+    # warnings are errors:
+    #     c:\src\depot_tools\win_toolchain\vs_files\
+    #         d3cb0e37bdd120ad0ac4650b674b09e81be45616\vc\atlmfc\include\
+    #         atlexcept.h(102): warning C4245: '=':
+    #         conversion from 'NTSTATUS' to 'DWORD', signed/unsigned mismatch
+    "/wd4245",
+  ]
+  libs = [
+    "advapi32.lib",  # For LookupAccountSid()
+    "credui.lib",  # For CredPackAuthenticationBufferW()
+    "crypt32.lib",  # For CryptProtectData()
+    "netapi32.lib",  # For NetUserXXX()
+    "userenv.lib",  # For GetUserProfileDirectoryW()
+    "winhttp.lib",  # For WinHttpXXX()
+  ]
+}
+
+# Targets for the credential provider dll.
+
+process_version_rc_template("version") {
+  template_file = "gaia_credential_provider.rc.version"
+  output = "$root_out_dir/gaia_credential_provider.rc"
+}
+
+if (is_chrome_branded) {
+  gaia_credential_provider_clsid = "0b5bfdf0-4594-47ac-940a-cfc69abc561c"
+} else {
+  gaia_credential_provider_clsid = "89adae71-aee5-4ee2-bffb-e8424e06f519"
+}
+
+action("generate_credential_provider_idl_file") {
+  script = "//build/util/version.py"
+
+  inputs = [ "gaia_credential_provider_idl.templ" ]
+  outputs = [ "$target_gen_dir/gaia_credential_provider.idl" ]
+
+  args = [
+    "-e",
+    "GAIA_CREDENTIAL_PROVIDER_CLSID='$gaia_credential_provider_clsid'",
+    rebase_path(inputs[0], root_build_dir),
+    rebase_path(outputs[0], root_build_dir),
+  ]
+}
+
+midl("gaia_credential_provider_idl") {
+  dynamic_guid = gaia_credential_provider_clsid
+  deps = [ ":generate_credential_provider_idl_file" ]
+  header_file = "gaia_credential_provider_i.h"
+  sources = get_target_outputs(":generate_credential_provider_idl_file")
+}
+
+grit("static_resources") {
+  source = "gaia_static_resources.grd"
+  inputs = [
+    "gaia_credential_provider.rgs",
+    "google_logo_small.bmp",
+  ]
+  outputs = [
+    "grit/gaia_static_resources.h",
+    "grit/gaia_static_resources.rc",
+  ]
+  resource_ids = ""
+  grit_flags = [
+    "-E",
+    "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
+  ]
+}
+
+shared_library("gaia1_0") {
+  sources = [
+    "dllmain.cc",
+    "dllmain.h",
+    "gaia_credential_provider.def",
+  ]
+  deps = [
+    ":common",
+    ":gaiacp_lib",
+    ":version",
+    "//build:branding_buildflags",
+    "//chrome/common:version_header",
+  ]
+  configs += [ "//build/config/win:windowed" ]
+}
+
+# String Resource targets for the credential provider dll.
+
+generate_embedded_i18n("generate_strings") {
+  grdfile_folder = "./"
+  grdfile_name = "gaia_resources"
+  xtb_relative_path = "strings"
+  grd_files_info = [ [
+        grdfile_folder,
+        grdfile_name,
+        xtb_relative_path,
+        default_embedded_i18_locales,
+      ] ]
+
+  output_file_name_base = grdfile_name
+}
+
+# Compile the generated .rc file.
+source_set("string_resources") {
+  sources = get_target_outputs(":generate_strings")
+  public_deps = [ ":generate_strings" ]
+}

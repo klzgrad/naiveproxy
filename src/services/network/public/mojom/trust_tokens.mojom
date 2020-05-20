@@ -1,0 +1,181 @@
+// Copyright 2020 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module network.mojom;
+
+import "url/mojom/origin.mojom";
+import "mojo/public/mojom/base/time.mojom";
+
+// TrustTokenOperationStatus enumerates (an incomplete collection of) outcomes
+// for a Trust Tokens protocol operation.
+//
+// Each status may be returned in similar cases beyond those listed in its
+// comment.
+enum TrustTokenOperationStatus {
+  kOk,
+
+  // A client-provided argument was malformed or otherwise invalid.
+  kInvalidArgument,
+
+  // A precondition failed (for instance, no verification key was available for
+  // an issuer when executing an operation required such a key to be present).
+  kFailedPrecondition,
+
+  // No inputs for the given operation available, or a quota on the operation's
+  // output would be exceeded.
+  kResourceExhausted,
+
+  // The operation's result already exists (for instance, a cache was hit).
+  kAlreadyExists,
+
+  // Internal storage has not yet initialized, or the system is unavailable in
+  // some other general, probably transient, manner.
+  kUnavailable,
+
+  // The server response was malformed or otherwise invalid.
+  kBadResponse,
+
+  // A, usually severe, internal error occurred.
+  kInternalError,
+
+  // The operation failed for some other reason.
+  kUnknownError,
+};
+
+// Trust Tokens operation parameterization
+//
+// This file specifies Mojo objects related to Trust Tokens protocol operations
+// (https://github.com/wicg/trust-token-api). The operations generally involve
+// checking stored state, attaching a request header, and processing a
+// corresponding response header. Operation parameters are provided via Fetch
+// and other Web Platform APIs.
+enum TrustTokenOperationType {
+  // In "issuance," clients send locally-generated blinded tokens and receive
+  // tokens signed by an issuing server.
+  kIssuance,
+  // In "redemption", clients exchange single-use server-signed tokens for
+  // multi-use Signed Redemption Records.
+  kRedemption,
+  // The "signing" operation involves attaching Signed Redemption Records to
+  // outgoing requests, and potentially signing the requests with a key bound to
+  // the attached SRR, to represent trust from the issuer.
+  kSigning,
+};
+
+// TrustTokenRefreshPolicy specifies, during redemption, whether to respect or
+// ignore cached Signed Redemption Records.
+enum TrustTokenRefreshPolicy {
+  // If there's a valid SRR already stored, return early and don't attempt to
+  // redeem a token for a new SRR.
+  kUseCached,
+  // Even there's a valid SRR already stored, attempt to redeem a token for a
+  // new SRR, overwriting the stored SRR.
+  kRefresh,
+};
+
+// TrustTokenSignRequestData specifies how to construct a request signature (or
+// none) during the "signed redemption record attachment and request signing"
+// protocol step.
+enum TrustTokenSignRequestData {
+  // Just attach a Signed Redemption Record (SRR), not an additional signature
+  // over request data.
+  kOmit,
+  // In addition to an SRR, attach a signature over a canonical request data
+  // structure comprising  a collection of request headers and some additional
+  // metadata (see the explainer).
+  kHeadersOnly,
+  // In addition to an SRR, attach a signature over a canonical request data
+  // structure comprising a collection of request headers, some additional
+  // contents of the request, and some additional metadata (see the explainer).
+  kInclude,
+};
+
+// Struct TrustTokenParams specifies a requested Trust Tokens protocol
+// operation.
+struct TrustTokenParams {
+  // Required.
+  TrustTokenOperationType type;
+
+  // Required exactly when "type" is "kRedemption"; specifies whether the
+  // caller wishes to use a cached Signed Redemption Record (SRR) if available
+  // or redeem a new token, evicting the SRR currently stored.
+  TrustTokenRefreshPolicy refresh_policy = kUseCached;
+
+  // "sign_request_data", "include_timestamp_header", "issuer", and
+  // "additional_signed_headers" are used only when "type" is "kSigning":
+  // these parameters specify the manner in which the outgoing request should
+  // be signed.
+  TrustTokenSignRequestData sign_request_data = kOmit;
+  bool include_timestamp_header = false;
+  url.mojom.Origin? issuer;
+  array<string> additional_signed_headers;
+};
+
+// Result struct for a HasTrustTokens (see below) call:
+struct HasTrustTokensResult {
+  // See HasTrustTokens's method comment for the possible values.
+  TrustTokenOperationStatus status;
+  bool has_trust_tokens;
+};
+
+// This interface is implicitly scoped to a top-level origin that is
+// (1) potentially trustworthy and (2) either HTTP or HTTPS. (All Trust Tokens
+// state is keyed by origins satisfying those two conditions.)
+interface HasTrustTokensAnswerer {
+  // Returns whether the user has any trust tokens issued by |issuer|. While
+  // these tokens' storage is globally- (or, at least, NetworkContext-) scoped,
+  // the method will only return a yes/no result if |issuer| is associated with
+  // the top-level origin implicit in this instance of HasTrustTokensAnswerer.
+  //
+  // Concretely, this method:
+  //
+  // - verifies that |issuer| is HTTP(S) and potentially trustworthy, which are
+  // preconditions for a Trust Tokens issuer origin, returning kInvalidArgument
+  // if not;
+  // - checks if internal storage is initialized, returning kUnavailable if not;
+  // - attempts to associate |issuer| with the top-level origin to which this
+  // HasTrustTokensAnswerer is scoped, returning kResourceExhausted on failure;
+  // and
+  // - if all of these conditions pass, returns kOk alongside a boolean
+  // denoting whether the user possesses any trust tokens issued by |issuer|.
+  HasTrustTokens(url.mojom.Origin issuer) => (HasTrustTokensResult result);
+};
+
+// Struct TrustTokenKeyCommitmentResult represents a trust token issuer's
+// current key commitments and associated information. These are published via
+// the issuer's key commitment endpoint, obtained out of band, and provided to
+// the network service through periodic updates (see
+// NetworkService::SetTrustTokenKeyCommitments).
+struct TrustTokenVerificationKey {
+  string body;
+  mojo_base.mojom.Time expiry;
+  // Key labels are opaque values provided by the trust token issuer,
+  // constrained to be in the representable range of uint32. We keep track of
+  // them in order to provide them in Trust Tokens redemption requests, at which
+  // point the label of a token's verification key becomes bound to the token's
+  // redemption.
+  uint32 label;
+};
+
+// This is a wrapper struct that exists in order to make the batch size
+// nullable.
+struct TrustTokenKeyCommitmentBatchSize {
+  int32 value;
+};
+
+struct TrustTokenKeyCommitmentResult {
+  // |batch_size| is the issuer's optional number of tokens it wishes the client
+  // to request per Trust Tokens issuance operation.
+  TrustTokenKeyCommitmentBatchSize? batch_size;
+
+  // |keys| is the collection of the issuer's current trust token verification
+  // keys.
+  array<TrustTokenVerificationKey> keys;
+
+  // |signed_redemption_record_verification_key| is an Ed25519 public key that
+  // can be used to verify Signed Redemption Record (SRR) signatures
+  // subsequently provided by the issuer.
+  string signed_redemption_record_verification_key;
+};
+

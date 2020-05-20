@@ -1,0 +1,122 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//chrome/test/base/js2gtest.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
+import("//third_party/closure_compiler/compile_js.gni")
+
+assert(is_chromeos, "Help App is Chrome OS only")
+
+static_library("help_app_ui") {
+  sources = [
+    "help_app_page_handler.cc",
+    "help_app_page_handler.h",
+    "help_app_ui.cc",
+    "help_app_ui.h",
+    "help_app_ui_delegate.h",
+    "help_app_untrusted_ui.cc",
+    "help_app_untrusted_ui.h",
+    "url_constants.cc",
+    "url_constants.h",
+  ]
+
+  deps = [
+    ":mojo_bindings",
+    ":mojo_bindings_js",
+    "//chromeos/components/web_applications",
+    "//chromeos/constants",
+    "//chromeos/resources:help_app_bundle_resources",
+    "//chromeos/resources:help_app_resources",
+    "//chromeos/strings",
+    "//chromeos/system",
+    "//content/public/browser",
+    "//content/public/common",
+    "//mojo/public/cpp/bindings",
+    "//mojo/public/cpp/platform",
+    "//ui/resources:webui_resources_grd_grit",
+    "//ui/webui",
+  ]
+}
+
+mojom("mojo_bindings") {
+  sources = [ "help_app_ui.mojom" ]
+}
+
+group("closure_compile") {
+  testonly = true
+  deps = [
+    ":closure_compile_tests",
+    "resources:closure_compile",
+  ]
+}
+
+js2gtest("browser_tests_js") {
+  test_type = "mojo_lite_webui"
+
+  sources = [ "test/help_app_ui_browsertest.js" ]
+
+  defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+
+  deps = [
+    ":browser_test_support",
+    "//chromeos/constants",
+  ]
+}
+
+source_set("browser_test_support") {
+  testonly = true
+  sources = [
+    "test/help_app_ui_browsertest.cc",
+    "test/help_app_ui_browsertest.h",
+  ]
+
+  defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+
+  deps = [
+    ":help_app_ui",
+    "//chrome/test:test_support_ui",
+    "//chromeos/components/web_applications/test:test_support",
+  ]
+
+  data = [
+    "test/driver.js",
+    "test/driver_api.js",
+    "test/guest_query_receiver.js",
+  ]
+}
+
+# Note we compile with reportUnknownTypes while it works, but if dependencies
+# get more complex, we should remove it and only enable in developer builds.
+js_type_check("closure_compile_tests") {
+  testonly = true
+  closure_flags = default_closure_args + [
+                    "jscomp_error=strictCheckTypes",
+                    "jscomp_error=reportUnknownTypes",
+                  ]
+  deps = [
+    ":test_driver_api_js",
+    ":test_driver_js",
+    ":test_guest_query_receiver_js",
+  ]
+}
+
+js_library("test_driver_api_js") {
+  testonly = true
+  sources = [ "test/driver_api.js" ]
+}
+
+js_library("test_guest_query_receiver_js") {
+  testonly = true
+  sources = [ "test/guest_query_receiver.js" ]
+  deps = [ ":test_driver_api_js" ]
+}
+
+js_library("test_driver_js") {
+  testonly = true
+  sources = [ "test/driver.js" ]
+  deps = [
+    ":test_driver_api_js",
+    "//ui/webui/resources/js:assert",
+  ]
+}

@@ -1,0 +1,134 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build_overrides/build.gni")
+import("osp/build/config/services.gni")
+
+declare_args() {
+  # Set to true to force building the standalone receiver on Mac. It's currently
+  # disabled due to build bot struggles, but works fine on local, recent clang
+  # installations.
+  # TODO(crbug.com/openscreen/86): Remove when the Mac bots have been upgraded.
+  force_build_standalone_receiver = false
+}
+
+# All compilable non-test targets in the repository (both executables and
+# source_sets).
+group("gn_all") {
+  testonly = true
+
+  deps = [
+    "cast/common:certificate",
+    "cast/common:channel",
+    "cast/common:public",
+    "cast/receiver:channel",
+    "cast/sender:channel",
+    "cast/streaming:receiver",
+    "cast/streaming:sender",
+    "discovery:common",
+    "discovery:dnssd",
+    "discovery:mdns",
+    "discovery:public",
+    "osp",
+    "osp/msgs",
+    "platform",
+    "third_party/abseil",
+    "third_party/boringssl",
+    "third_party/jsoncpp",
+    "third_party/mozilla",
+    "third_party/tinycbor",
+    "tools/cddl($host_toolchain)",
+    "util",
+  ]
+
+  if (use_mdns_responder) {
+    deps += [ "osp/impl/discovery/mdns:mdns_demo" ]
+  }
+
+  if (use_chromium_quic) {
+    deps += [
+      "third_party/chromium_quic",
+      "third_party/chromium_quic:quic_demo_server",
+      "third_party/chromium_quic:quic_streaming_playback_controller",
+    ]
+  }
+
+  if (use_chromium_quic && use_mdns_responder) {
+    deps += [ "osp:osp_demo" ]
+  }
+
+  if (!build_with_chromium) {
+    deps += [
+      "third_party/protobuf:protoc($host_toolchain)",
+      "third_party/zlib",
+    ]
+
+    if (is_posix) {
+      deps += [ "cast/test:make_crl_tests($host_toolchain)" ]
+    }
+
+    # TODO(crbug.com/openscreen/86): Build for Mac too once the mac buildbot
+    # compiler is upgraded.
+    if (!is_mac || force_build_standalone_receiver) {
+      deps += [
+        "cast/standalone_receiver:cast_receiver",
+        "cast/standalone_sender:cast_sender",
+      ]
+    }
+  }
+}
+
+source_set("openscreen_unittests_all") {
+  testonly = true
+  public_deps = [
+    "cast/common:unittests",
+    "cast/receiver:unittests",
+    "cast/sender:unittests",
+    "cast/streaming:unittests",
+    "cast/test:unittests",
+    "discovery:unittests",
+    "osp:unittests",
+    "osp/msgs:unittests",
+    "platform:unittests",
+    "third_party/abseil",
+    "third_party/googletest:gtest_main",
+    "util:unittests",
+  ]
+
+  if (use_mdns_responder) {
+    public_deps += [
+      "osp/impl/discovery/mdns:unittests",
+
+      # Currently this target only includes mDNS tests.
+      "osp/impl/testing:unittests",
+    ]
+  }
+}
+
+if (!build_with_chromium) {
+  executable("openscreen_unittests") {
+    testonly = true
+    deps = [
+      ":openscreen_unittests_all",
+    ]
+  }
+}
+
+if (!build_with_chromium && is_posix) {
+  source_set("e2e_tests_all") {
+    testonly = true
+    public_deps = [
+      "cast/common:discovery_e2e_test",
+      "cast/test:e2e_tests",
+      "third_party/googletest:gtest_main",
+    ]
+  }
+
+  executable("e2e_tests") {
+    testonly = true
+    deps = [
+      ":e2e_tests_all",
+    ]
+  }
+}

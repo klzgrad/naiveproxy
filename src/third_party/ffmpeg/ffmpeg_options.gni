@@ -1,0 +1,73 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/arm.gni")
+import("//build/config/chrome_build.gni")
+import("//build/config/chromecast_build.gni")
+import("//build/config/sanitizers/sanitizers.gni")
+
+if (is_chrome_branded) {
+  _default_ffmpeg_branding = "Chrome"
+} else {
+  _default_ffmpeg_branding = "Chromium"
+}
+
+if (is_chromeos && is_chrome_branded) {
+  _default_ffmpeg_branding = "ChromeOS"
+}
+
+if (is_chromecast) {
+  if (is_android) {
+    _default_ffmpeg_branding = "Chrome"
+  } else {
+    # TODO(alokp): What audio codecs does Chromecast want here?  Sort
+    # out and add configs if necessary.  http://crbug.com/570754
+    _default_ffmpeg_branding = "ChromeOS"
+  }
+}
+
+declare_args() {
+  # Controls whether we build the Chromium or Google Chrome version of FFmpeg.
+  # The Google Chrome version contains additional codecs. Typical values are
+  # Chromium, Chrome, and ChromeOS.
+  ffmpeg_branding = _default_ffmpeg_branding
+
+  # Set true to build ffmpeg as a shared library. NOTE: this means we should
+  # always consult is_component_ffmpeg instead of is_component_build for
+  # ffmpeg targets. This helps linux chromium packagers that swap out our
+  # ffmpeg.so with their own. See discussion here
+  # https://groups.google.com/a/chromium.org/forum/#!msg/chromium-packagers/R5rcZXWxBEQ/B6k0zzmJbvcJ
+  is_component_ffmpeg = is_component_build
+
+  # Set to true to force the use of ffmpeg's stdatomic fallback code.
+  #
+  # Windows and GCC prior to 4.9 lack stdatomic.h.
+  #
+  # This is also useful for developers who use icecc, which relies upon
+  # clang's -frewrite-includes flag which is broken with #include_next
+  # directives as used in chromium's clang stdatomic.h.
+  # Some background: https://bugs.llvm.org/show_bug.cgi?id=26828
+  ffmpeg_use_atomics_fallback = !is_clang
+}
+
+assert(ffmpeg_branding == "Chromium" ||
+       ffmpeg_branding == "Chrome" ||
+       ffmpeg_branding == "ChromeOS")
+
+if (current_cpu == "x86") {
+  ffmpeg_arch = "ia32"
+} else if (current_cpu == "arm" && arm_version >= 7 && arm_use_neon) {
+  ffmpeg_arch = "arm-neon"
+} else {
+  ffmpeg_arch = current_cpu
+}
+
+os_config = current_os
+if ((is_linux || is_chromeos) && is_msan) {
+  os_config = "linux-noasm"
+} else if (is_chromeos || is_fuchsia) {
+  os_config = "linux"
+} else if (is_win && !is_clang) {
+  os_config = "win-msvc"
+}

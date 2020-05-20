@@ -1,0 +1,82 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//third_party/closure_compiler/compile_js.gni")
+import("//tools/polymer/polymer.gni")
+import("//ui/webui/resources/tools/js_modulizer.gni")
+import("../settings.gni")
+
+js_type_check("closure_compile") {
+  deps = [
+    ":system_page",
+    ":system_page_browser_proxy",
+  ]
+}
+
+js_library("system_page_browser_proxy") {
+  deps = [
+    "//ui/webui/resources/js:cr",
+    "//ui/webui/resources/js:load_time_data",
+  ]
+  externs_list = [ "$externs_path/chrome_send.js" ]
+}
+
+js_library("system_page") {
+  deps = [
+    ":system_page_browser_proxy",
+    "..:lifetime_browser_proxy",
+  ]
+  externs_list = [ "$externs_path/settings_private.js" ]
+}
+
+js_type_check("closure_compile_module") {
+  is_polymer3 = true
+  deps = [
+    ":system_page.m",
+    ":system_page_browser_proxy.m",
+  ]
+}
+
+js_library("system_page.m") {
+  sources = [ "$root_gen_dir/chrome/browser/resources/settings/system_page/system_page.m.js" ]
+  deps = [
+    ":system_page_browser_proxy.m",
+    "..:lifetime_browser_proxy.m",
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+  ]
+  externs_list = [ "$externs_path/settings_private.js" ]
+  extra_deps = [ ":system_page_module" ]
+}
+
+js_library("system_page_browser_proxy.m") {
+  sources = [ "$root_gen_dir/chrome/browser/resources/settings/system_page/system_page_browser_proxy.m.js" ]
+  deps = [
+    "//ui/webui/resources/js:cr.m",
+    "//ui/webui/resources/js:load_time_data.m",
+  ]
+  extra_deps = [ ":modulize" ]
+}
+
+group("polymer3_elements") {
+  public_deps = [
+    ":modulize",
+    ":system_page_module",
+  ]
+}
+
+polymer_modulizer("system_page") {
+  js_file = "system_page.js"
+  html_file = "system_page.html"
+  html_type = "dom-module"
+  namespace_rewrites = settings_namespace_rewrites
+  auto_imports = [
+    "chrome/browser/resources/settings/lifetime_browser_proxy.html|LifetimeBrowserProxyImpl",
+    "chrome/browser/resources/settings/system_page/system_page_browser_proxy.html|SystemPageBrowserProxyImpl",
+  ]
+}
+
+js_modulizer("modulize") {
+  input_files = [ "system_page_browser_proxy.js" ]
+  namespace_rewrites = settings_namespace_rewrites
+}

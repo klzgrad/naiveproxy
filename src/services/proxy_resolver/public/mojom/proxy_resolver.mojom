@@ -1,0 +1,104 @@
+// Copyright 2015 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// Put Mojo definitions into their own namespace to avoid collisions with C++
+// definitions.
+// TODO(amistry): Resolve the conflict between these two sets of definitions.
+module proxy_resolver.mojom;
+
+import "services/network/public/mojom/ip_address.mojom";
+import "services/network/public/mojom/network_isolation_key.mojom";
+import "url/mojom/url.mojom";
+
+// Mirror of net::ProxyResolveDnsOperation.
+enum HostResolveOperation {
+  DNS_RESOLVE,
+  DNS_RESOLVE_EX,
+  MY_IP_ADDRESS,
+  MY_IP_ADDRESS_EX,
+};
+
+// Interface for waiting for the result of a HostResolver query.
+// TODO(mmenke): Remove this interface, in favor of callbacks.
+interface HostResolverRequestClient {
+  // |error| is a value in net::Error.
+  ReportResult(int32 error, array<network.mojom.IPAddress> result);
+};
+
+// Mirror of net::ProxyServer::Scheme.
+enum ProxyScheme {
+  INVALID,
+  DIRECT,
+  HTTP,
+  SOCKS4,
+  SOCKS5,
+  HTTPS,
+  QUIC,
+};
+
+// Mirror of net::ProxyServer.
+struct ProxyServer {
+  ProxyScheme scheme;
+
+  // |host| and |port| are only valid if |scheme| is not INVALID or DIRECT.
+  string host;
+  uint16 port;
+};
+
+struct ProxyInfo {
+  array<ProxyServer> proxy_servers;
+};
+
+interface ProxyResolver {
+  // Use a ProxyResolverRequestClient instead of returning a result so we can
+  // cancel in-flight requests by destroying the client.
+  //
+  // |network_isolation_key| is the NetworkIsolationKey used by the DNS cache
+  // to separate requests made in different contexts.
+  GetProxyForUrl(url.mojom.Url url,
+                 network.mojom.NetworkIsolationKey network_isolation_key,
+                 pending_remote<ProxyResolverRequestClient> client);
+};
+
+interface ProxyResolverRequestClient {
+  ReportResult(int32 error, ProxyInfo proxy_info);
+
+  Alert(string error);
+  OnError(int32 line_number, string error);
+
+  // Does a DNS lookup for |host|, and invokes |client|'s ReportResult() method
+  // with the result.
+  //
+  // |network_isolation_key| is the NetworkIsolationKey used by the DNS cache
+  // to separate requests made in different contexts. An IP address received
+  // from a resolution using one NetworkIsolationKey must not be used for a
+  // request made with a different NetworkIsolationKey.
+  ResolveDns(string host,
+             HostResolveOperation operation,
+             network.mojom.NetworkIsolationKey network_isolation_key,
+             pending_remote<HostResolverRequestClient> client);
+};
+
+// Creates a ProxyResolver that uses the provided PAC script. The ProxyResolver
+// will remain valid even after the ProxyResolverFactory has been destroyed.
+//
+// Destroying |client| before its ReportResult method is invoked may cancel
+// creation of the ProxyResolverFactory.
+interface ProxyResolverFactory {
+  CreateResolver(string pac_script,
+                 pending_receiver<ProxyResolver> receiver,
+                 pending_remote<ProxyResolverFactoryRequestClient> client);
+};
+
+interface ProxyResolverFactoryRequestClient {
+  ReportResult(int32 error);
+
+  Alert(string error);
+  OnError(int32 line_number, string error);
+
+  ResolveDns(string host,
+             HostResolveOperation operation,
+             network.mojom.NetworkIsolationKey network_isolation_key,
+             pending_remote<HostResolverRequestClient> client);
+};

@@ -1,0 +1,46 @@
+# Copyright (c) 2016 The Native ClientAuthors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+
+static_library("mips_validator_core") {
+  sources = [
+    "address_set.cc",
+    "validator.cc",
+    "$target_gen_dir/decode.cc",
+  ]
+  deps = [
+    "//build/config/nacl:nacl_base",
+    "//native_client/src/trusted/cpu_features:cpu_features",
+    ":decode_gen"
+  ]
+}
+
+action("decode_gen") {
+  script = "dgen/generate_decoder.py"
+  outputs = [
+    "$target_gen_dir/decode.cc",
+  ]
+  sources = [
+    "mips-opt.table",
+  ]
+  inputs = [
+    "dgen/generate_decoder.py",
+    "dgen/dgen_core.py",
+    "dgen/dgen_input.py",
+    "dgen/dgen_opt.py",
+    "dgen/dgen_output.py",
+  ]
+  args = rebase_path(sources, root_build_dir) +
+         rebase_path(outputs, root_build_dir)
+}
+
+static_library("ncvalidate_mips") {
+  sources = [
+    "ncvalidate.cc",
+  ]
+  deps = [
+    "//build/config/nacl:nacl_base",
+    ":mips_validator_core",
+  ]
+}

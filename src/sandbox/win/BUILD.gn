@@ -1,0 +1,387 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//testing/libfuzzer/fuzzer_test.gni")
+import("//testing/test.gni")
+
+# This needs to be a static library rather than a sources set because small
+# portions of this are used in some contexts (like chrome_elf), and it
+# doesn't seem to dead-code strip very well. This saves 12K on chrome_elf.dll,
+# over a source set, for example.
+static_library("sandbox") {
+  sources = [
+    "src/acl.cc",
+    "src/acl.h",
+    "src/app_container_profile.h",
+    "src/app_container_profile_base.cc",
+    "src/app_container_profile_base.h",
+    "src/broker_services.cc",
+    "src/broker_services.h",
+    "src/crosscall_client.h",
+    "src/crosscall_params.h",
+    "src/crosscall_server.cc",
+    "src/crosscall_server.h",
+    "src/eat_resolver.cc",
+    "src/eat_resolver.h",
+    "src/filesystem_dispatcher.cc",
+    "src/filesystem_dispatcher.h",
+    "src/filesystem_interception.cc",
+    "src/filesystem_interception.h",
+    "src/filesystem_policy.cc",
+    "src/filesystem_policy.h",
+    "src/handle_closer.cc",
+    "src/handle_closer.h",
+    "src/handle_closer_agent.cc",
+    "src/handle_closer_agent.h",
+    "src/heap_helper.cc",
+    "src/heap_helper.h",
+    "src/interception.cc",
+    "src/interception.h",
+    "src/interception_agent.cc",
+    "src/interception_agent.h",
+    "src/interception_internal.h",
+    "src/interceptors.h",
+    "src/internal_types.h",
+    "src/ipc_args.cc",
+    "src/ipc_args.h",
+    "src/ipc_tags.h",
+    "src/job.cc",
+    "src/job.h",
+    "src/named_pipe_dispatcher.cc",
+    "src/named_pipe_dispatcher.h",
+    "src/named_pipe_interception.cc",
+    "src/named_pipe_interception.h",
+    "src/named_pipe_policy.cc",
+    "src/named_pipe_policy.h",
+    "src/nt_internals.h",
+    "src/policy_broker.cc",
+    "src/policy_broker.h",
+    "src/policy_engine_opcodes.cc",
+    "src/policy_engine_opcodes.h",
+    "src/policy_engine_params.h",
+    "src/policy_engine_processor.cc",
+    "src/policy_engine_processor.h",
+    "src/policy_low_level.cc",
+    "src/policy_low_level.h",
+    "src/policy_params.h",
+    "src/policy_target.cc",
+    "src/policy_target.h",
+    "src/process_mitigations.cc",
+    "src/process_mitigations.h",
+    "src/process_mitigations_win32k_dispatcher.cc",
+    "src/process_mitigations_win32k_dispatcher.h",
+    "src/process_mitigations_win32k_interception.cc",
+    "src/process_mitigations_win32k_interception.h",
+    "src/process_mitigations_win32k_policy.cc",
+    "src/process_mitigations_win32k_policy.h",
+    "src/process_thread_dispatcher.cc",
+    "src/process_thread_dispatcher.h",
+    "src/process_thread_interception.cc",
+    "src/process_thread_interception.h",
+    "src/process_thread_policy.cc",
+    "src/process_thread_policy.h",
+    "src/registry_dispatcher.cc",
+    "src/registry_dispatcher.h",
+    "src/registry_interception.cc",
+    "src/registry_interception.h",
+    "src/registry_policy.cc",
+    "src/registry_policy.h",
+    "src/resolver.cc",
+    "src/resolver.h",
+    "src/restricted_token.cc",
+    "src/restricted_token.h",
+    "src/restricted_token_utils.cc",
+    "src/restricted_token_utils.h",
+    "src/sandbox.cc",
+    "src/sandbox.h",
+    "src/sandbox_constants.cc",
+    "src/sandbox_constants.h",
+    "src/sandbox_factory.h",
+    "src/sandbox_globals.cc",
+    "src/sandbox_nt_types.h",
+    "src/sandbox_nt_util.cc",
+    "src/sandbox_nt_util.h",
+    "src/sandbox_policy.h",
+    "src/sandbox_policy_base.cc",
+    "src/sandbox_policy_base.h",
+    "src/sandbox_policy_diagnostic.cc",
+    "src/sandbox_policy_diagnostic.h",
+    "src/sandbox_rand.cc",
+    "src/sandbox_rand.h",
+    "src/sandbox_types.h",
+    "src/sandbox_utils.cc",
+    "src/sandbox_utils.h",
+    "src/security_capabilities.cc",
+    "src/security_capabilities.h",
+    "src/security_level.h",
+    "src/service_resolver.cc",
+    "src/service_resolver.h",
+    "src/sharedmem_ipc_client.cc",
+    "src/sharedmem_ipc_client.h",
+    "src/sharedmem_ipc_server.cc",
+    "src/sharedmem_ipc_server.h",
+    "src/sid.cc",
+    "src/sid.h",
+    "src/signed_dispatcher.cc",
+    "src/signed_dispatcher.h",
+    "src/signed_interception.cc",
+    "src/signed_interception.h",
+    "src/signed_policy.cc",
+    "src/signed_policy.h",
+    "src/sync_dispatcher.cc",
+    "src/sync_dispatcher.h",
+    "src/sync_interception.cc",
+    "src/sync_interception.h",
+    "src/sync_policy.cc",
+    "src/sync_policy.h",
+    "src/target_interceptions.cc",
+    "src/target_interceptions.h",
+    "src/target_process.cc",
+    "src/target_process.h",
+    "src/target_services.cc",
+    "src/target_services.h",
+    "src/top_level_dispatcher.cc",
+    "src/top_level_dispatcher.h",
+    "src/win2k_threadpool.cc",
+    "src/win2k_threadpool.h",
+    "src/win_utils.cc",
+    "src/win_utils.h",
+    "src/window.cc",
+    "src/window.h",
+  ]
+
+  if (current_cpu == "x64" || current_cpu == "arm64") {
+    sources += [
+      "src/interceptors_64.cc",
+      "src/interceptors_64.h",
+      "src/resolver_64.cc",
+      "src/service_resolver_64.cc",
+    ]
+  } else if (current_cpu == "x86") {
+    sources += [
+      "src/resolver_32.cc",
+      "src/service_resolver_32.cc",
+      "src/sidestep/ia32_modrm_map.cpp",
+      "src/sidestep/ia32_opcode_map.cpp",
+      "src/sidestep/mini_disassembler.cpp",
+      "src/sidestep/mini_disassembler.h",
+      "src/sidestep/mini_disassembler_types.h",
+      "src/sidestep/preamble_patcher.h",
+      "src/sidestep/preamble_patcher_with_stub.cpp",
+      "src/sidestep_resolver.cc",
+      "src/sidestep_resolver.h",
+    ]
+  }
+
+  # Disable sanitizer coverage in the sandbox code. The sandbox code runs before
+  # sanitizer coverage can initialize. http://crbug.com/484711
+  configs -= [ "//build/config/sanitizers:default_sanitizer_flags" ]
+  configs +=
+      [ "//build/config/sanitizers:default_sanitizer_flags_but_coverage" ]
+
+  configs += [ "//build/config:precompiled_headers" ]
+
+  deps = [
+    "//base",
+    "//base:base_static",
+    "//sandbox:common",
+  ]
+}
+
+test("sbox_integration_tests") {
+  sources = [
+    "src/address_sanitizer_test.cc",
+    "src/app_container_test.cc",
+    "src/file_policy_test.cc",
+    "src/handle_closer_test.cc",
+    "src/handle_inheritance_test.cc",
+    "src/integrity_level_test.cc",
+    "src/ipc_leak_test.cc",
+    "src/ipc_ping_test.cc",
+    "src/lpc_policy_test.cc",
+    "src/named_pipe_policy_test.cc",
+    "src/policy_target_test.cc",
+    "src/process_mitigations_dyncode_unittest.cc",
+    "src/process_mitigations_extensionpoints_unittest.cc",
+    "src/process_mitigations_imageload_unittest.cc",
+    "src/process_mitigations_unittest.cc",
+    "src/process_mitigations_win32k_unittest.cc",
+    "src/process_policy_test.cc",
+    "src/registry_policy_test.cc",
+    "src/restricted_token_test.cc",
+    "src/sync_policy_test.cc",
+    "src/sync_policy_test.h",
+    "src/unload_dll_test.cc",
+    "tests/common/controller.cc",
+    "tests/common/controller.h",
+    "tests/common/test_utils.cc",
+    "tests/common/test_utils.h",
+    "tests/integration_tests/cfi_unittest.cc",
+    "tests/integration_tests/integration_tests.cc",
+    "tests/integration_tests/integration_tests_common.h",
+    "tests/integration_tests/integration_tests_test.cc",
+  ]
+
+  deps = [
+    ":sandbox",
+    "//base/test:test_support",
+    "//testing/gtest",
+  ]
+
+  data_deps = [
+    ":cfi_unittest_exe",
+    ":sbox_integration_test_hijack_dll",
+    ":sbox_integration_test_hijack_shim_dll",
+    ":sbox_integration_test_hooking_dll",
+    ":sbox_integration_test_win_proc",
+  ]
+
+  libs = [ "dxva2.lib" ]
+}
+
+executable("cfi_unittest_exe") {
+  sources = [ "tests/integration_tests/cfi_unittest_exe.cc" ]
+  deps = [
+    "//base",
+    "//build/win:default_exe_manifest",
+  ]
+}
+
+shared_library("sbox_integration_test_hijack_dll") {
+  sources = [
+    "tests/integration_tests/hijack_dll.cc",
+    "tests/integration_tests/hijack_dll.def",
+  ]
+}
+
+loadable_module("sbox_integration_test_hijack_shim_dll") {
+  sources = [
+    "tests/integration_tests/hijack_shim_dll.cc",
+    "tests/integration_tests/hijack_shim_dll.def",
+    "tests/integration_tests/hijack_shim_dll.h",
+  ]
+
+  # Implicitly linking hijack_dll as loader import resolution required.
+  deps = [
+    ":sbox_integration_test_hijack_dll",
+    "//base",
+  ]
+}
+
+loadable_module("sbox_integration_test_hooking_dll") {
+  sources = [
+    "tests/integration_tests/hooking_dll.cc",
+    "tests/integration_tests/hooking_dll.h",
+  ]
+}
+
+executable("sbox_integration_test_win_proc") {
+  sources = [
+    "tests/integration_tests/hooking_win_proc.cc",
+    "tests/integration_tests/hooking_win_proc.h",
+  ]
+
+  configs -= [ "//build/config/win:console" ]
+  configs += [ "//build/config/win:windowed" ]
+}
+
+test("sbox_validation_tests") {
+  sources = [
+    "tests/common/controller.cc",
+    "tests/common/controller.h",
+    "tests/validation_tests/commands.cc",
+    "tests/validation_tests/commands.h",
+    "tests/validation_tests/suite.cc",
+    "tests/validation_tests/unit_tests.cc",
+  ]
+
+  deps = [
+    ":sandbox",
+    "//base/test:test_support",
+    "//testing/gtest",
+  ]
+
+  libs = [ "shlwapi.lib" ]
+}
+
+test("sbox_unittests") {
+  sources = [
+    "src/app_container_unittest.cc",
+    "src/interception_unittest.cc",
+    "src/ipc_unittest.cc",
+    "src/job_unittest.cc",
+    "src/policy_engine_unittest.cc",
+    "src/policy_low_level_unittest.cc",
+    "src/policy_opcodes_unittest.cc",
+    "src/restricted_token_unittest.cc",
+    "src/sandbox_nt_util_unittest.cc",
+    "src/service_resolver_unittest.cc",
+    "src/sid_unittest.cc",
+    "src/threadpool_unittest.cc",
+    "src/win_utils_unittest.cc",
+    "tests/common/test_utils.cc",
+    "tests/common/test_utils.h",
+    "tests/unit_tests/unit_tests.cc",
+  ]
+
+  deps = [
+    ":sandbox",
+    "//base/test:test_support",
+    "//testing/gtest",
+  ]
+}
+
+test("sandbox_poc") {
+  sources = [
+    "sandbox_poc/main_ui_window.cc",
+    "sandbox_poc/main_ui_window.h",
+    "sandbox_poc/resource.h",
+    "sandbox_poc/sandbox.cc",
+    "sandbox_poc/sandbox.h",
+    "sandbox_poc/sandbox.rc",
+  ]
+
+  configs -= [ "//build/config/win:console" ]
+  configs += [ "//build/config/win:windowed" ]
+
+  libs = [ "comctl32.lib" ]
+
+  deps = [
+    ":pocdll",
+    ":sandbox",
+  ]
+}
+
+shared_library("pocdll") {
+  sources = [
+    "sandbox_poc/pocdll/exports.h",
+    "sandbox_poc/pocdll/fs.cc",
+    "sandbox_poc/pocdll/handles.cc",
+    "sandbox_poc/pocdll/invasive.cc",
+    "sandbox_poc/pocdll/network.cc",
+    "sandbox_poc/pocdll/ntundoc.h",
+    "sandbox_poc/pocdll/pocdll.cc",
+    "sandbox_poc/pocdll/processes_and_threads.cc",
+    "sandbox_poc/pocdll/registry.cc",
+    "sandbox_poc/pocdll/spyware.cc",
+    "sandbox_poc/pocdll/utils.h",
+  ]
+
+  defines = [ "POCDLL_EXPORTS" ]
+}
+
+# This fuzzer will only work on Windows, add fuzz targets which could run on Linux
+# to //sandbox/ directly.
+fuzzer_test("sandbox_policy_rule_fuzzer") {
+  set_sources_assignment_filter([])
+  sources = [
+    "fuzzer/fuzzer_types.h",
+    "fuzzer/sandbox_policy_rule_fuzzer.cc",
+  ]
+  dict = "fuzzer/sandbox_policy_rule.dict"
+  deps = [
+    "//base",
+    "//sandbox",
+  ]
+}

@@ -1,0 +1,193 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# Defines fuzzer_test.
+#
+import("//build_overrides/build.gni")
+
+# fuzzer_test is used to define individual libfuzzer tests.
+#
+# Supported attributes:
+# - (required) sources - fuzzer test source files
+# - deps - test dependencies
+# - libs - Additional libraries to link.
+# - additional_configs - additional configs to be used for compilation
+# - dict - a dictionary file for the fuzzer.
+# - environment_variables - certain whitelisted environment variables for the
+# fuzzer (AFL_DRIVER_DONT_DEFER is the only one allowed currently).
+# - libfuzzer_options - options for the fuzzer (e.g. -close_fd_mask=N).
+# - asan_options - AddressSanitizer options (e.g. allow_user_segv_handler=1).
+# - msan_options - MemorySanitizer options.
+# - ubsan_options - UndefinedBehaviorSanitizer options.
+# - seed_corpus - a directory with seed corpus.
+# - seed_corpus_deps - dependencies for generating the seed corpus.
+#
+# If use_libfuzzer gn flag is defined, then proper fuzzer would be build.
+# Without use_libfuzzer or use_afl a unit-test style binary would be built on
+# linux and the whole target is a no-op otherwise.
+#
+# The template wraps test() target with appropriate dependencies.
+# If any test run-time options are present (dict or libfuzzer_options), then a
+# config (.options file) file would be generated or modified in root output
+# dir (next to test).
+template("openscreen_fuzzer_test") {
+  if (is_clang && !build_with_chromium) {
+    assert(defined(invoker.sources), "Need sources in $target_name.")
+
+    test_deps = [ "//testing/libfuzzer:fuzzing_engine_main" ]
+    test_data_deps = []
+
+    if (defined(invoker.deps)) {
+      test_deps += invoker.deps
+    }
+    if (defined(invoker.data_deps)) {
+      test_data_deps += invoker.data_deps
+    }
+
+    if (defined(invoker.seed_corpus) || defined(invoker.seed_corpuses)) {
+      assert(!(defined(invoker.seed_corpus) && defined(invoker.seed_corpuses)),
+             "Do not use both seed_corpus and seed_corpuses for $target_name.")
+
+      out = "$root_build_dir/$target_name" + "_seed_corpus.zip"
+
+      seed_corpus_deps = []
+
+      if (defined(invoker.seed_corpus_deps)) {
+        seed_corpus_deps += invoker.seed_corpus_deps
+      }
+
+      action(target_name + "_seed_corpus") {
+        script = "//testing/libfuzzer/archive_corpus.py"
+
+        args = [
+          "--output",
+          rebase_path(out, root_build_dir),
+        ]
+
+        if (defined(invoker.seed_corpus)) {
+          args += [ rebase_path(invoker.seed_corpus, root_build_dir) ]
+        }
+
+        if (defined(invoker.seed_corpuses)) {
+          foreach(seed_corpus_path, invoker.seed_corpuses) {
+            args += [ rebase_path(seed_corpus_path, root_build_dir) ]
+          }
+        }
+
+        outputs = [
+          out,
+        ]
+
+        deps = [ "//testing/libfuzzer:seed_corpus" ] + seed_corpus_deps
+      }
+
+      test_deps += [ ":" + target_name + "_seed_corpus" ]
+    }
+
+    if (defined(invoker.dict) || defined(invoker.libfuzzer_options) ||
+        defined(invoker.asan_options) || defined(invoker.msan_options) ||
+        defined(invoker.ubsan_options) ||
+        defined(invoker.environment_variables)) {
+      if (defined(invoker.dict)) {
+        # Copy dictionary to output.
+        copy(target_name + "_dict_copy") {
+          sources = [
+            invoker.dict,
+          ]
+          outputs = [
+            "$root_build_dir/" + target_name + ".dict",
+          ]
+        }
+        test_deps += [ ":" + target_name + "_dict_copy" ]
+      }
+
+      # Generate .options file.
+      config_file_name = target_name + ".options"
+      action(config_file_name) {
+        script = "//testing/libfuzzer/gen_fuzzer_config.py"
+        args = [
+          "--config",
+          rebase_path("$root_build_dir/" + config_file_name, root_build_dir),
+        ]
+
+        if (defined(invoker.dict)) {
+          args += [
+            "--dict",
+            rebase_path("$root_build_dir/" + invoker.target_name + ".dict",
+                        root_build_dir),
+          ]
+        }
+
+        if (defined(invoker.libfuzzer_options)) {
+          args += [ "--libfuzzer_options" ]
+          args += invoker.libfuzzer_options
+        }
+
+        if (defined(invoker.asan_options)) {
+          args += [ "--asan_options" ]
+          args += invoker.asan_options
+        }
+
+        if (defined(invoker.msan_options)) {
+          args += [ "--msan_options" ]
+          args += invoker.msan_options
+        }
+
+        if (defined(invoker.ubsan_options)) {
+          args += [ "--ubsan_options" ]
+          args += invoker.ubsan_options
+        }
+
+        if (defined(invoker.environment_variables)) {
+          args += [ "--environment_variables" ]
+          args += invoker.environment_variables
+        }
+
+        outputs = [
+          "$root_build_dir/$config_file_name",
+        ]
+      }
+      test_deps += [ ":" + config_file_name ]
+    }
+
+    executable(target_name) {
+      forward_variables_from(invoker,
+                             [
+                               "cflags",
+                               "cflags_cc",
+                               "check_includes",
+                               "defines",
+                               "include_dirs",
+                               "sources",
+                               "libs",
+                             ])
+      deps = test_deps
+      data_deps = test_data_deps
+
+      if (defined(invoker.additional_configs)) {
+        configs += invoker.additional_configs
+      }
+      configs += [ "//testing/libfuzzer:fuzzer_test_config" ]
+
+      if (defined(invoker.suppressed_configs)) {
+        configs -= invoker.suppressed_configs
+      }
+
+      if (defined(invoker.generated_sources)) {
+        sources += invoker.generated_sources
+      }
+
+      if (is_mac) {
+        sources += [ "//testing/libfuzzer/libfuzzer_exports.h" ]
+      }
+    }
+  } else {
+    # noop on unsupported platforms.
+    # mark attributes as used.
+    not_needed(invoker, "*")
+
+    group(target_name) {
+    }
+  }
+}

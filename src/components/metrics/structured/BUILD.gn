@@ -1,0 +1,95 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//testing/test.gni")
+
+# Structured metrics is subcomponent of UMA that gathers and reports structured
+# events with several attached metrics.
+static_library("structured") {
+  sources = [
+    "event_base.cc",
+    "event_base.h",
+    "histogram_util.cc",
+    "histogram_util.h",
+    "key_data.cc",
+    "key_data.h",
+    "recorder.cc",
+    "recorder.h",
+    "structured_metrics_provider.cc",
+    "structured_metrics_provider.h",
+  ]
+
+  public_deps = [ "//third_party/metrics_proto" ]
+
+  deps = [
+    ":structured_events",
+    "//base",
+    "//components/metrics",
+    "//components/prefs",
+    "//crypto",
+  ]
+}
+
+action("gen_structured_events") {
+  script = "//tools/metrics/structured/gen_events.py"
+
+  # Re-generate the outputs if the codegen code changes:
+  inputs = [
+    "//tools/metrics/structured/codegen.py",
+    "//tools/metrics/structured/compile_time_validation.py",
+    "//tools/metrics/structured/events_template.py",
+    "//tools/metrics/structured/gen_events.py",
+  ]
+  sources = [ "//tools/metrics/structured/structured.xml" ]
+
+  outdir = "$target_gen_dir"
+
+  outputs = [
+    outdir + "/structured_events.cc",
+    outdir + "/structured_events.h",
+  ]
+
+  args = [
+    "--input",
+    rebase_path(sources[0], root_build_dir),
+    "--output",
+    rebase_path(outdir, root_build_dir),
+  ]
+}
+
+static_library("structured_events") {
+  sources = get_target_outputs(":gen_structured_events")
+
+  deps = [
+    ":gen_structured_events",
+    "//base",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "key_data_unittest.cc",
+    "structured_metrics_provider_unittest.cc",
+  ]
+
+  deps = [
+    ":structured",
+    ":structured_events",
+    "//base",
+    "//base/test:test_support",
+    "//components/prefs",
+    "//testing/gtest",
+  ]
+}
+
+# Convenience testing target
+test("structured_metrics_unittests") {
+  deps = [
+    ":unit_tests",
+    "//base",
+    "//base/test:test_support",
+    "//components/test:run_all_unittests",
+  ]
+}

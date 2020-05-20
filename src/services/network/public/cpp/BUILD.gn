@@ -1,0 +1,291 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/buildflag_header.gni")
+import("//build/config/jumbo.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
+import("//services/network/public/cpp/features.gni")
+import("//testing/libfuzzer/fuzzer_test.gni")
+
+buildflag_header("buildflags") {
+  header = "network_service_buildflags.h"
+  flags = [ "IS_CT_SUPPORTED=$is_ct_supported" ]
+}
+
+jumbo_component("cpp") {
+  output_name = "network_cpp"
+
+  sources = [
+    "constants.cc",
+    "constants.h",
+    "content_security_policy/content_security_policy.cc",
+    "content_security_policy/content_security_policy.h",
+    "content_security_policy/csp_context.cc",
+    "content_security_policy/csp_context.h",
+    "content_security_policy/csp_source.cc",
+    "content_security_policy/csp_source.h",
+    "content_security_policy/csp_source_list.cc",
+    "content_security_policy/csp_source_list.h",
+    "cors/cors.cc",
+    "cors/cors.h",
+    "cors/origin_access_entry.cc",
+    "cors/origin_access_entry.h",
+    "cors/origin_access_list.cc",
+    "cors/origin_access_list.h",
+    "cors/preflight_cache.cc",
+    "cors/preflight_cache.h",
+    "cors/preflight_result.cc",
+    "cors/preflight_result.h",
+    "cross_origin_opener_policy_parser.cc",
+    "cross_origin_opener_policy_parser.h",
+    "cross_origin_resource_policy.cc",
+    "cross_origin_resource_policy.h",
+    "cross_thread_pending_shared_url_loader_factory.cc",
+    "cross_thread_pending_shared_url_loader_factory.h",
+    "data_pipe_to_source_stream.cc",
+    "data_pipe_to_source_stream.h",
+    "features.cc",
+    "features.h",
+    "header_util.cc",
+    "header_util.h",
+    "initiator_lock_compatibility.cc",
+    "initiator_lock_compatibility.h",
+    "is_potentially_trustworthy.cc",
+    "is_potentially_trustworthy.h",
+    "load_info_util.cc",
+    "load_info_util.h",
+    "net_adapters.cc",
+    "net_adapters.h",
+    "network_connection_tracker.cc",
+    "network_connection_tracker.h",
+    "network_quality_tracker.cc",
+    "network_quality_tracker.h",
+    "network_switches.cc",
+    "network_switches.h",
+    "request_destination.cc",
+    "request_destination.h",
+    "request_mode.cc",
+    "request_mode.h",
+    "resolve_host_client_base.cc",
+    "resolve_host_client_base.h",
+    "shared_url_loader_factory.cc",
+    "shared_url_loader_factory.h",
+    "simple_url_loader.cc",
+    "simple_url_loader.h",
+    "simple_url_loader_stream_consumer.h",
+    "source_stream_to_data_pipe.cc",
+    "source_stream_to_data_pipe.h",
+    "weak_wrapper_shared_url_loader_factory.cc",
+    "weak_wrapper_shared_url_loader_factory.h",
+    "wrapper_shared_url_loader_factory.cc",
+    "wrapper_shared_url_loader_factory.h",
+  ]
+
+  if (!is_ios) {
+    sources += [
+      "server/http_connection.cc",
+      "server/http_connection.h",
+      "server/http_server.cc",
+      "server/http_server.h",
+      "server/http_server_request_info.cc",
+      "server/http_server_request_info.h",
+      "server/http_server_response_info.cc",
+      "server/http_server_response_info.h",
+      "server/web_socket.cc",
+      "server/web_socket.h",
+      "server/web_socket_encoder.cc",
+      "server/web_socket_encoder.h",
+    ]
+  }
+
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
+
+  public_deps = [
+    ":cpp_base",
+    "//net",
+    "//services/network/public/mojom",
+    "//url",
+    "//url/ipc:url_ipc",
+  ]
+
+  deps = [
+    "//base",
+    "//components/prefs",
+    "//ipc",
+    "//services/proxy_resolver/public/mojom",
+  ]
+
+  defines = [ "IS_NETWORK_CPP_IMPL" ]
+}
+
+# These interfaces are put in their own target so that modules that only
+# need to depend on mojom_ip_address does not depend on the entire cpp_base.
+component("ip_address_mojom_support") {
+  sources = [
+    "address_list_mojom_traits.cc",
+    "address_list_mojom_traits.h",
+    "ip_address_mojom_traits.cc",
+    "ip_address_mojom_traits.h",
+    "ip_endpoint_mojom_traits.cc",
+    "ip_endpoint_mojom_traits.h",
+  ]
+  deps = [
+    "//net",
+    "//services/network/public/mojom:mojom_ip_address_shared",
+  ]
+  defines = [ "IS_NETWORK_CPP_BASE_IMPL" ]
+}
+
+jumbo_component("cpp_base") {
+  output_name = "network_cpp_base"
+
+  sources = [
+    "blocked_by_response_reason.h",
+    "cors/cors_error_status.cc",
+    "cors/cors_error_status.h",
+    "cross_origin_embedder_policy.cc",
+    "cross_origin_embedder_policy.h",
+    "cross_origin_embedder_policy_mojom_traits.cc",
+    "cross_origin_embedder_policy_mojom_traits.h",
+    "data_element.cc",
+    "data_element.h",
+    "http_raw_request_response_info.cc",
+    "http_raw_request_response_info.h",
+    "http_request_headers_mojom_traits.cc",
+    "http_request_headers_mojom_traits.h",
+    "isolation_opt_in_hints.cc",
+    "isolation_opt_in_hints.h",
+    "mutable_network_traffic_annotation_tag_mojom_traits.h",
+    "mutable_partial_network_traffic_annotation_tag_mojom_traits.h",
+    "net_ipc_param_traits.cc",
+    "net_ipc_param_traits.h",
+    "network_interface_mojom_traits.cc",
+    "network_interface_mojom_traits.h",
+    "network_ipc_param_traits.cc",
+    "network_ipc_param_traits.h",
+    "network_isolation_key_mojom_traits.cc",
+    "network_isolation_key_mojom_traits.h",
+    "optional_trust_token_params.cc",
+    "optional_trust_token_params.h",
+    "origin_policy.cc",
+    "origin_policy.h",
+    "p2p_param_traits.cc",
+    "p2p_param_traits.h",
+    "p2p_socket_type.h",
+    "proxy_config_mojom_traits.cc",
+    "proxy_config_mojom_traits.h",
+    "proxy_config_with_annotation_mojom_traits.cc",
+    "proxy_config_with_annotation_mojom_traits.h",
+    "resource_request.cc",
+    "resource_request.h",
+    "resource_request_body.cc",
+    "resource_request_body.h",
+    "site_for_cookies_mojom_traits.cc",
+    "site_for_cookies_mojom_traits.h",
+    "url_loader_completion_status.cc",
+    "url_loader_completion_status.h",
+    "url_request_mojom_traits.cc",
+    "url_request_mojom_traits.h",
+  ]
+  jumbo_excluded_sources = [
+    # IPC/Params code generators are based on macros and multiple
+    # inclusion of headers using those macros. That is not
+    # compatible with jumbo compiling all source, generators and
+    # users, together, so exclude those files from jumbo compilation.
+    "network_ipc_param_traits.cc",
+    "p2p_param_traits.cc",
+    "url_request_mojom_traits.cc",
+  ]
+
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
+
+  public_deps = [
+    ":ip_address_mojom_support",
+    "//services/network/public/mojom:data_pipe_interfaces",
+    "//services/network/public/mojom:mutable_network_traffic_annotation_interface",
+    "//services/network/public/mojom:trust_tokens_interface",
+    "//url/ipc:url_ipc",
+    "//url/mojom:url_mojom_gurl",
+    "//url/mojom:url_mojom_origin",
+  ]
+  deps = [
+    "//base",
+    "//ipc",
+    "//mojo/public/mojom/base",
+    "//net",
+    "//services/network/public/mojom:mojom_shared",
+    "//third_party/webrtc_overrides:webrtc_component",
+  ]
+  defines = [ "IS_NETWORK_CPP_BASE_IMPL" ]
+}
+
+mojom("test_interfaces") {
+  sources = [ "network_traits_test_service.mojom" ]
+  public_deps = [ "//services/network/public/mojom" ]
+}
+
+source_set("tests") {
+  testonly = true
+
+  sources = [
+    "content_security_policy/content_security_policy_unittest.cc",
+    "content_security_policy/csp_context_unittest.cc",
+    "content_security_policy/csp_source_list_unittest.cc",
+    "cookie_manager_mojom_traits_unittest.cc",
+    "cors/cors_unittest.cc",
+    "cors/origin_access_entry_unittest.cc",
+    "cors/origin_access_list_unittest.cc",
+    "cors/preflight_cache_unittest.cc",
+    "cors/preflight_result_unittest.cc",
+    "cross_origin_opener_policy_parser_unittest.cc",
+    "cross_origin_resource_policy_unittest.cc",
+    "cross_thread_pending_shared_url_loader_factory_unittest.cc",
+    "data_pipe_to_source_stream_unittest.cc",
+    "default_credentials_mojom_traits_unittest.cc",
+    "digitally_signed_mojom_traits_unittest.cc",
+    "header_util_unittest.cc",
+    "host_resolver_mojom_traits_unittest.cc",
+    "initiator_lock_compatibility_unittest.cc",
+    "ip_address_mojom_traits_unittest.cc",
+    "is_potentially_trustworthy_unittest.cc",
+    "mutable_network_traffic_annotation_tag_mojom_traits_unittest.cc",
+    "mutable_partial_network_traffic_annotation_tag_mojom_traits_unittest.cc",
+    "net_log_mojom_traits_unittest.cc",
+    "network_connection_tracker_unittest.cc",
+    "network_isolation_key_mojom_traits_unittest.cc",
+    "network_mojom_traits_unittest.cc",
+    "network_quality_tracker_unittest.cc",
+    "optional_trust_token_params_unittest.cc",
+    "proxy_config_mojom_traits_unittest.cc",
+    "simple_url_loader_unittest.cc",
+    "site_for_cookies_mojom_traits_unittest.cc",
+    "source_stream_to_data_pipe_unittest.cc",
+    "url_request_mojom_traits_unittest.cc",
+  ]
+
+  if (!is_ios) {
+    sources += [ "server/http_server_unittest.cc" ]
+  }
+
+  deps = [
+    ":cpp",
+    ":test_interfaces",
+    "//base",
+    "//mojo/public/cpp/bindings",
+    "//mojo/public/cpp/test_support:test_utils",
+    "//net",
+    "//net:test_support",
+    "//services/network:network_service",
+    "//services/network:test_support",
+    "//services/network/public/cpp/cert_verifier:tests",
+    "//testing/gtest",
+  ]
+
+  public_deps = [ ":buildflags" ]
+}
+
+fuzzer_test("cors_fuzzer") {
+  sources = [ "cors/cors_fuzzer.cc" ]
+  deps = [ ":cpp" ]
+}

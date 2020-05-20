@@ -1,0 +1,318 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module media.mojom;
+
+import "gpu/ipc/common/mailbox_holder.mojom";
+import "mojo/public/mojom/base/shared_memory.mojom";
+import "mojo/public/mojom/base/time.mojom";
+import "mojo/public/mojom/base/values.mojom";
+import "ui/gfx/geometry/mojom/geometry.mojom";
+import "ui/gfx/mojom/buffer_types.mojom";
+import "ui/gfx/mojom/color_space.mojom";
+
+enum VideoCapturePixelFormat {
+  UNKNOWN,
+  I420,
+  YV12,
+  I422,
+  I420A,
+  I444,
+  NV12,
+  NV21,
+  UYVY,
+  YUY2,
+  ARGB,
+  XRGB,
+  RGB24,
+  MJPEG,
+  YUV420P9,
+  YUV420P10,
+  YUV422P9,
+  YUV422P10,
+  YUV444P9,
+  YUV444P10,
+  YUV420P12,
+  YUV422P12,
+  YUV444P12,
+  Y16,
+  ABGR,
+  XBGR,
+  P016LE,
+  XR30,
+  XB30,
+  BGRA,
+};
+
+enum ResolutionChangePolicy {
+  FIXED_RESOLUTION,
+  FIXED_ASPECT_RATIO,
+  ANY_WITHIN_LIMIT,
+};
+
+enum PowerLineFrequency {
+  DEFAULT,
+  HZ_50,
+  HZ_60
+};
+
+enum VideoFacingMode {
+  NONE,
+  USER,
+  ENVIRONMENT
+};
+
+enum VideoCaptureApi {
+  LINUX_V4L2_SINGLE_PLANE,
+  WIN_MEDIA_FOUNDATION,
+  WIN_MEDIA_FOUNDATION_SENSOR,
+  WIN_DIRECT_SHOW,
+  MACOSX_AVFOUNDATION,
+  MACOSX_DECKLINK,
+  ANDROID_API1,
+  ANDROID_API2_LEGACY,
+  ANDROID_API2_FULL,
+  ANDROID_API2_LIMITED,
+  VIRTUAL_DEVICE,
+  UNKNOWN
+};
+
+enum VideoCaptureTransportType {
+  // For MACOSX_AVFOUNDATION Api, identifies devices that are built-in or USB.
+  MACOSX_USB_OR_BUILT_IN,
+  OTHER_TRANSPORT
+};
+
+enum VideoCaptureBufferType {
+  kSharedMemory,
+
+  // Warning: This case is a workaround for compatibility with an older version
+  // of Mojo only and will be deleted as soon as the Mojo version of ChromiumOS
+  // becomes compatible with the |kSharedMemory|.
+  // TODO(chfremer): Remove this when https://crbug.com/857537 is resolved.
+  kSharedMemoryViaRawFileDescriptor,
+
+  kMailboxHolder,
+
+  kGpuMemoryBuffer
+};
+
+enum VideoCaptureError {
+  kNone,
+  kVideoCaptureControllerInvalidOrUnsupportedVideoCaptureParametersRequested,
+  kVideoCaptureControllerIsAlreadyInErrorState,
+  kVideoCaptureManagerDeviceConnectionLost,
+  kFrameSinkVideoCaptureDeviceAleradyEndedOnFatalError,
+  kFrameSinkVideoCaptureDeviceEncounteredFatalError,
+  kV4L2FailedToOpenV4L2DeviceDriverFile,
+  kV4L2ThisIsNotAV4L2VideoCaptureDevice,
+  kV4L2FailedToFindASupportedCameraFormat,
+  kV4L2FailedToSetVideoCaptureFormat,
+  kV4L2UnsupportedPixelFormat,
+  kV4L2FailedToSetCameraFramerate,
+  kV4L2ErrorRequestingMmapBuffers,
+  kV4L2AllocateBufferFailed,
+  kV4L2VidiocStreamonFailed,
+  kV4L2VidiocStreamoffFailed,
+  kV4L2FailedToVidiocReqbufsWithCount0,
+  kV4L2PollFailed,
+  kV4L2MultipleContinuousTimeoutsWhileReadPolling,
+  kV4L2FailedToDequeueCaptureBuffer,
+  kV4L2FailedToEnqueueCaptureBuffer,
+  kSingleClientVideoCaptureHostLostConnectionToDevice,
+  kSingleClientVideoCaptureDeviceLaunchAborted,
+  kDesktopCaptureDeviceWebrtcDesktopCapturerHasFailed,
+  kFileVideoCaptureDeviceCouldNotOpenVideoFile,
+  kDeviceCaptureLinuxFailedToCreateVideoCaptureDelegate,
+  kErrorFakeDeviceIntentionallyEmittingErrorEvent,
+  kDeviceClientTooManyFramesDroppedY16,
+  kDeviceMediaToMojoAdapterEncounteredUnsupportedBufferType,
+  kVideoCaptureManagerProcessDeviceStartQueueDeviceInfoNotFound,
+  kInProcessDeviceLauncherFailedToCreateDeviceInstance,
+  kServiceDeviceLauncherLostConnectionToDeviceFactoryDuringDeviceStart,
+  kServiceDeviceLauncherServiceRespondedWithDeviceNotFound,
+  kServiceDeviceLauncherConnectionLostWhileWaitingForCallback,
+  kIntentionalErrorRaisedByUnitTest,
+  kCrosHalV3FailedToStartDeviceThread,
+  kCrosHalV3DeviceDelegateMojoConnectionError,
+  kCrosHalV3DeviceDelegateFailedToGetCameraInfo,
+  kCrosHalV3DeviceDelegateMissingSensorOrientationInfo,
+  kCrosHalV3DeviceDelegateFailedToOpenCameraDevice,
+  kCrosHalV3DeviceDelegateFailedToInitializeCameraDevice,
+  kCrosHalV3DeviceDelegateFailedToConfigureStreams,
+  kCrosHalV3DeviceDelegateWrongNumberOfStreamsConfigured,
+  kCrosHalV3DeviceDelegateFailedToGetDefaultRequestSettings,
+  kCrosHalV3BufferManagerHalRequestedTooManyBuffers,
+  kCrosHalV3BufferManagerFailedToCreateGpuMemoryBuffer,
+  kCrosHalV3BufferManagerFailedToMapGpuMemoryBuffer,
+  kCrosHalV3BufferManagerUnsupportedVideoPixelFormat,
+  kCrosHalV3BufferManagerFailedToDupFd,
+  kCrosHalV3BufferManagerFailedToWrapGpuMemoryHandle,
+  kCrosHalV3BufferManagerFailedToRegisterBuffer,
+  kCrosHalV3BufferManagerProcessCaptureRequestFailed,
+  kCrosHalV3BufferManagerInvalidPendingResultId,
+  kCrosHalV3BufferManagerReceivedDuplicatedPartialMetadata,
+  kCrosHalV3BufferManagerIncorrectNumberOfOutputBuffersReceived,
+  kCrosHalV3BufferManagerInvalidTypeOfOutputBuffersReceived,
+  kCrosHalV3BufferManagerReceivedMultipleResultBuffersForFrame,
+  kCrosHalV3BufferManagerUnknownStreamInCamera3NotifyMsg,
+  kCrosHalV3BufferManagerReceivedInvalidShutterTime,
+  kCrosHalV3BufferManagerFatalDeviceError,
+  kCrosHalV3BufferManagerReceivedFrameIsOutOfOrder,
+  kCrosHalV3BufferManagerFailedToUnwrapReleaseFenceFd,
+  kCrosHalV3BufferManagerSyncWaitOnReleaseFenceTimedOut,
+  kCrosHalV3BufferManagerInvalidJpegBlob,
+  kAndroidFailedToAllocate,
+  kAndroidFailedToStartCapture,
+  kAndroidFailedToStopCapture,
+  kAndroidApi1CameraErrorCallbackReceived,
+  kAndroidApi2CameraDeviceErrorReceived,
+  kAndroidApi2CaptureSessionConfigureFailed,
+  kAndroidApi2ImageReaderUnexpectedImageFormat,
+  kAndroidApi2ImageReaderSizeDidNotMatchImageSize,
+  kAndroidApi2ErrorRestartingPreview,
+  kAndroidScreenCaptureUnsupportedFormat,
+  kAndroidScreenCaptureFailedToStartCaptureMachine,
+  kAndroidScreenCaptureTheUserDeniedScreenCapture,
+  kAndroidScreenCaptureFailedToStartScreenCapture,
+  kWinDirectShowCantGetCaptureFormatSettings,
+  kWinDirectShowFailedToGetNumberOfCapabilities,
+  kWinDirectShowFailedToGetCaptureDeviceCapabilities,
+  kWinDirectShowFailedToSetCaptureDeviceOutputFormat,
+  kWinDirectShowFailedToConnectTheCaptureGraph,
+  kWinDirectShowFailedToPauseTheCaptureDevice,
+  kWinDirectShowFailedToStartTheCaptureDevice,
+  kWinDirectShowFailedToStopTheCaptureGraph,
+  kWinMediaFoundationEngineIsNull,
+  kWinMediaFoundationEngineGetSourceFailed ,
+  kWinMediaFoundationFillPhotoCapabilitiesFailed ,
+  kWinMediaFoundationFillVideoCapabilitiesFailed,
+  kWinMediaFoundationNoVideoCapabilityFound,
+  kWinMediaFoundationGetAvailableDeviceMediaTypeFailed,
+  kWinMediaFoundationSetCurrentDeviceMediaTypeFailed,
+  kWinMediaFoundationEngineGetSinkFailed,
+  kWinMediaFoundationSinkQueryCapturePreviewInterfaceFailed,
+  kWinMediaFoundationSinkRemoveAllStreamsFailed,
+  kWinMediaFoundationCreateSinkVideoMediaTypeFailed,
+  kWinMediaFoundationConvertToVideoSinkMediaTypeFailed,
+  kWinMediaFoundationSinkAddStreamFailed,
+  kWinMediaFoundationSinkSetSampleCallbackFailed,
+  kWinMediaFoundationEngineStartPreviewFailed,
+  kWinMediaFoundationGetMediaEventStatusFailed,
+  kMacSetCaptureDeviceFailed,
+  kMacCouldNotStartCaptureDevice,
+  kMacReceivedFrameWithUnexpectedResolution,
+  kMacUpdateCaptureResolutionFailed,
+  kMacDeckLinkDeviceIdNotFoundInTheSystem,
+  kMacDeckLinkErrorQueryingInputInterface,
+  kMacDeckLinkErrorCreatingDisplayModeIterator,
+  kMacDeckLinkCouldNotFindADisplayMode,
+  kMacDeckLinkCouldNotSelectTheVideoFormatWeLike,
+  kMacDeckLinkCouldNotStartCapturing,
+  kMacDeckLinkUnsupportedPixelFormat,
+  kMacAvFoundationReceivedAVCaptureSessionRuntimeErrorNotification,
+  kAndroidApi2ErrorConfiguringCamera,
+  kCrosHalV3DeviceDelegateFailedToFlush
+};
+
+enum VideoCaptureFrameDropReason {
+  kNone,
+  kDeviceClientFrameHasInvalidFormat,
+  kDeviceClientLibyuvConvertToI420Failed,
+  kV4L2BufferErrorFlagWasSet,
+  kV4L2InvalidNumberOfBytesInBuffer,
+  kAndroidThrottling,
+  kAndroidGetByteArrayElementsFailed,
+  kAndroidApi1UnexpectedDataLength,
+  kAndroidApi2AcquiredImageIsNull,
+  kWinDirectShowUnexpectedSampleLength,
+  kWinDirectShowFailedToGetMemoryPointerFromMediaSample,
+  kWinMediaFoundationReceivedSampleIsNull,
+  kWinMediaFoundationLockingBufferDelieveredNullptr,
+  kWinMediaFoundationGetBufferByIndexReturnedNull,
+  kBufferPoolMaxBufferCountExceeded,
+  kBufferPoolBufferAllocationFailed,
+  kVideoCaptureImplNotInStartedState,
+  kVideoCaptureImplFailedToWrapDataAsMediaVideoFrame,
+  kVideoTrackAdapterHasNoResolutionAdapters,
+  kResolutionAdapterFrameIsNotValid,
+  kResolutionAdapterWrappingFrameForCroppingFailed,
+  kResolutionAdapterTimestampTooCloseToPrevious,
+  kResolutionAdapterFrameRateIsHigherThanRequested,
+  kResolutionAdapterHasNoCallbacks,
+  kVideoTrackFrameDelivererNotEnabledReplacingWithBlackFrame,
+  kRendererSinkFrameDelivererIsNotStarted
+};
+
+struct VideoCaptureFormat {
+  gfx.mojom.Size frame_size;
+  float frame_rate;
+  VideoCapturePixelFormat pixel_format;
+};
+
+struct VideoCaptureParams {
+  VideoCaptureFormat requested_format;
+  VideoCaptureBufferType buffer_type;
+  ResolutionChangePolicy resolution_change_policy;
+  PowerLineFrequency power_line_frequency;
+  bool enable_face_detection;
+};
+
+// Contains one stride value per image plane. Stride means the number of bytes
+// per row. If the image format uses fewer than kMaxPlanes planes, the values
+// for higher plane indices are ignored. For example, for a YUV format, plane
+// index 0 corresponds to the Y plane, index 1 to the U plane, and index 2 to
+// the V plane.
+struct PlaneStrides {
+  // Size must be kept in sync with media::VideoFrame::kMaxPlanes.
+  array<uint32, 4> stride_by_plane;
+};
+
+struct VideoFrameInfo{
+  mojo_base.mojom.TimeDelta timestamp;
+  mojo_base.mojom.DictionaryValue metadata;
+  VideoCapturePixelFormat pixel_format;
+  gfx.mojom.Size coded_size;
+  gfx.mojom.Rect visible_rect;
+  // This field is only optional to work around the issue of native enums
+  // not being usable for non-Chromium Mojo clients.
+  // TODO(chfremer): Make this non-optional once gfx.mojom.ColorSpace has been
+  // migrated to a full Mojo struct. See https://crbug.com/893203.
+  gfx.mojom.ColorSpace? color_space;
+  // Optionally, stride information can be provided.
+  // If not provided, it is assumed that frame data is tightly packed.
+  PlaneStrides? strides;
+};
+
+struct VideoCaptureDeviceDescriptor {
+  string display_name;
+  string device_id;
+  string model_id;
+  VideoFacingMode facing_mode;
+  VideoCaptureApi capture_api;
+  VideoCaptureTransportType transport_type;
+};
+
+struct VideoCaptureDeviceInfo {
+  VideoCaptureDeviceDescriptor descriptor;
+  array<VideoCaptureFormat> supported_formats;
+};
+
+struct MailboxBufferHandleSet {
+  // Size must be kept in sync with media::VideoFrame::kMaxPlanes.
+  array<gpu.mojom.MailboxHolder, 4> mailbox_holder;
+};
+
+struct SharedMemoryViaRawFileDescriptor {
+  handle<platform> file_descriptor_handle;
+  uint32 shared_memory_size_in_bytes;
+};
+
+union VideoBufferHandle {
+  handle<shared_buffer> shared_buffer_handle;
+  mojo_base.mojom.ReadOnlySharedMemoryRegion read_only_shmem_region;
+  SharedMemoryViaRawFileDescriptor shared_memory_via_raw_file_descriptor;
+  MailboxBufferHandleSet mailbox_handles;
+  gfx.mojom.GpuMemoryBufferHandle gpu_memory_buffer_handle;
+};

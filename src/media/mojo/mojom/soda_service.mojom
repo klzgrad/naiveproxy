@@ -1,0 +1,42 @@
+// Copyright 2020 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module media.mojom;
+
+import "media/mojo/mojom/media_types.mojom";
+
+// The main interface a client uses to interact with a SODA service
+// process. Every renderer can own one or more Remote<SodaContext>,
+// with the receiver bound through the BrowserInterfaceBroker.
+interface SodaContext {
+  // Bind the recognizers to the SODA service.
+  BindRecognizer(pending_receiver<SodaRecognizer> receiver,
+                 pending_remote<SodaRecognizerClient> client);
+};
+
+// The main interface to a Speech On-Device API (SODA) service process.
+// Used by the browser to issue top-level control requests to the service,
+// acquired during process launch.
+interface SodaService {
+  // Bind the SODA context to a new instance of SODA.
+  BindContext(pending_receiver<SodaContext> context);
+};
+
+// The interface used to pass raw audio from the renderer to the SODA
+// service. The remote lives in the renderer process and the receiver
+// lives in the SODA process.
+interface SodaRecognizer {
+  // Initialize the SODA instance. SODA will use the SODA recognition client
+  // to return the recognition events containing the transcribed audio back
+  // to the originating media.
+  SendAudioToSoda(AudioDataS16 buffer);
+};
+
+// The interface used to return speech recognition events from the SODA
+// service back to the originating media. The remote lives in the SODA
+// process and the receiver lives in the renderer process.
+interface SodaRecognizerClient {
+  // Triggered by SODA on a speech recognition event.
+  OnSodaRecognitionEvent(string transcription);
+};

@@ -1,0 +1,511 @@
+# Copyright (c) 2013 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/features.gni")
+import("//build/config/ui.gni")
+import("//testing/test.gni")
+import("//third_party/skia/gn/shared_sources.gni")
+import("//third_party/skia/third_party/skcms/skcms.gni")
+import("features.gni")
+
+if (current_cpu == "arm") {
+  import("//build/config/arm.gni")
+}
+if (current_cpu == "mipsel" || current_cpu == "mips64el") {
+  import("//build/config/mips.gni")
+}
+
+skia_support_gpu = !is_ios
+skia_support_pdf = false
+
+# External-facing config for dependent code.
+config("skia_config") {
+  include_dirs = [ "//third_party/skia" ]
+
+  defines = [ "SK_USER_CONFIG_HEADER=\"../../skia/config/SkUserConfig.h\"" ]
+
+  if (is_win) {
+    defines += [ "SK_FREETYPE_MINIMUM_RUNTIME_VERSION=(((FREETYPE_MAJOR) * 0x01000000) | ((FREETYPE_MINOR) * 0x00010000) | ((FREETYPE_PATCH) * 0x00000100))" ]
+  }
+
+  if (is_component_build) {
+    defines += [
+      "SKIA_DLL",
+      "GR_GL_IGNORE_ES3_MSAA=0",
+    ]
+  }
+
+  if (skia_support_gpu) {
+    defines += [ "SK_SUPPORT_GPU=1" ]
+  } else {
+    defines += [ "SK_SUPPORT_GPU=0" ]
+  }
+
+  if (skia_use_gl) {
+    defines += [ "SK_GL" ]
+  }
+
+  if (is_android) {
+    defines += [
+      "SK_BUILD_FOR_ANDROID",
+      "USE_CHROMIUM_SKIA",
+    ]
+  }
+
+  if (is_mac) {
+    defines += [ "SK_BUILD_FOR_MAC" ]
+  }
+
+  if (is_win) {
+    defines += [ "GR_GL_FUNCTION_TYPE=__stdcall" ]
+  }
+}
+
+# Internal-facing config for Skia library code.
+config("skia_library_config") {
+  defines = []
+
+  if (is_component_build) {
+    defines += [ "SKIA_IMPLEMENTATION=1" ]
+  }
+
+  if (current_cpu == "arm") {
+    if (arm_use_neon) {
+      defines += [ "SK_ARM_HAS_NEON" ]
+    } else if (arm_optionally_use_neon) {
+      defines += [ "SK_ARM_HAS_OPTIONAL_NEON" ]
+    }
+  }
+
+  # Settings for text blitting, chosen to approximate the system browser.
+  if (is_linux) {
+    defines += [
+      "SK_GAMMA_EXPONENT=1.2",
+      "SK_GAMMA_CONTRAST=0.2",
+    ]
+  } else if (is_android) {
+    defines += [
+      "SK_GAMMA_APPLY_TO_A8",
+      "SK_GAMMA_EXPONENT=1.4",
+      "SK_GAMMA_CONTRAST=0.0",
+    ]
+  } else if (is_win) {
+    defines += [
+      "SK_GAMMA_SRGB",
+      "SK_GAMMA_CONTRAST=0.5",
+    ]
+  } else if (is_mac) {
+    defines += [
+      "SK_GAMMA_SRGB",
+      "SK_GAMMA_CONTRAST=0.0",
+    ]
+  }
+
+  if (is_android) {
+    defines += [
+      # Android devices are typically more memory constrained, so default to a
+      # smaller glyph cache (it may be overriden at runtime when the renderer
+      # starts up, depending on the actual device memory).
+      "SK_DEFAULT_FONT_CACHE_LIMIT=1048576",  # 1024 * 1024
+    ]
+  } else {
+    defines += [ "SK_DEFAULT_FONT_CACHE_LIMIT=20971520" ]  # 20 * 1024 * 1024
+  }
+
+  if (is_win) {
+    defines += [
+      # On windows, GDI handles are a scarse system-wide resource so we have to
+      # keep the glyph cache, which holds up to 4 GDI handles per entry, to a
+      # fairly small size. http://crbug.com/314387
+      "SK_DEFAULT_FONT_CACHE_COUNT_LIMIT=256",
+    ]
+
+    cflags = [
+      "/wd4244",  # conversion from 'type1( __int64)' to 'type2 (unsigned int)'
+      "/wd4341",  # signed value is out of range for enum constant.
+      "/wd4345",  # Object is default-initialized if initialization is omitted.
+      "/wd4390",  # ';'empty statement found in looping;is it what was intended?
+      "/wd4554",  # 'operator' : check operator precedence for possible error
+      "/wd4748",  # compiler will disable optimizations if a function has inline
+                  # assembly code contains flow control(jmp or jcc) statements.
+
+      "/wd4800",  # forcing value to bool 'true/false'(assigning int to bool).
+      "/wd5041",  # out-of-line definition for constexpr static data member is not needed and is deprecated in C++17
+    ]
+    cflags_cc = [ "/std:c++17" ]
+  } else {
+    cflags_cc = [ "-std=c++17" ]
+    cflags_objcc = [ "-std=c++17" ]
+  }
+}
+
+source_set("skcms") {
+  cflags = []
+  if (!is_win || is_clang) {
+    cflags += [
+      "-w",
+      "-std=c11",
+    ]
+  }
+
+  # LLVM automatically sets the equivalent of GCC's -mfp16-format=ieee on ARM
+  # builds by default, while GCC itself does not. We need it to enable support
+  # for half-precision floating point data types used by SKCMS on ARM.
+  if (is_linux && !is_clang && current_cpu == "arm") {
+    cflags += [ "-mfp16-format=ieee" ]
+  }
+
+  public = [ "//third_party/skia/include/third_party/skcms/skcms.h" ]
+  include_dirs = [ "//third_party/skia/include/third_party/skcms" ]
+  sources =
+      rebase_path(skcms_sources, ".", "//third_party/skia/third_party/skcms")
+}
+
+component("skia") {
+  sources = [
+    # PDFium sources.
+    "config/SkUserConfig.h",
+    "ext/google_logging.cc",
+  ]
+
+  # The skia sources values are relative to the skia_dir, so we need to rebase.
+  sources += skia_sksl_gpu_sources
+  sources += skia_sksl_sources
+  sources += skia_utils_sources
+  sources += [
+    "//third_party/skia/src/codec/SkMasks.cpp",
+    "//third_party/skia/src/fonts/SkFontMgr_indirect.cpp",
+    "//third_party/skia/src/fonts/SkRemotableFontMgr.cpp",
+    "//third_party/skia/src/images/SkImageEncoder.cpp",
+    "//third_party/skia/src/ports/SkFontHost_FreeType.cpp",
+    "//third_party/skia/src/ports/SkFontHost_FreeType_common.cpp",
+    "//third_party/skia/src/ports/SkFontHost_win.cpp",
+    "//third_party/skia/src/ports/SkFontMgr_android.cpp",
+    "//third_party/skia/src/ports/SkFontMgr_android_factory.cpp",
+    "//third_party/skia/src/ports/SkFontMgr_android_parser.cpp",
+    "//third_party/skia/src/ports/SkGlobalInitialization_default.cpp",
+    "//third_party/skia/src/ports/SkImageGenerator_none.cpp",
+    "//third_party/skia/src/ports/SkOSFile_posix.cpp",
+    "//third_party/skia/src/ports/SkOSFile_stdio.cpp",
+    "//third_party/skia/src/ports/SkOSFile_win.cpp",
+    "//third_party/skia/src/ports/SkRemotableFontMgr_win_dw.cpp",
+    "//third_party/skia/src/ports/SkScalerContext_win_dw.cpp",
+    "//third_party/skia/src/ports/SkTLS_pthread.cpp",
+    "//third_party/skia/src/ports/SkTLS_win.cpp",
+    "//third_party/skia/src/ports/SkTypeface_win_dw.cpp",
+    "//third_party/skia/src/sfnt/SkOTTable_name.cpp",
+    "//third_party/skia/src/sfnt/SkOTUtils.cpp",
+
+    #mac
+    "//third_party/skia/src/utils/mac/SkStream_mac.cpp",
+
+    #pdfium
+    "//third_party/skia/src/ports/SkDiscardableMemory_none.cpp",
+    "//third_party/skia/src/ports/SkFontMgr_custom.cpp",
+    "//third_party/skia/src/ports/SkFontMgr_custom_empty.cpp",
+    "//third_party/skia/src/ports/SkFontMgr_custom_empty_factory.cpp",
+    "//third_party/skia/src/ports/SkMemory_malloc.cpp",
+  ]
+
+  # This and skia_opts are really the same conceptual target so share headers.
+  allow_circular_includes_from = [ ":skia_opts" ]
+
+  if (current_cpu == "arm") {
+    sources += [ "//third_party/skia/src/core/SkUtilsArm.cpp" ]
+  }
+
+  # GPU
+  if (skia_support_gpu) {
+    sources += skia_gpu_sources
+    sources += skia_null_gpu_sources
+    if (skia_use_gl) {
+      sources += skia_gl_gpu_sources
+    }
+  }
+
+  # Remove unused util files include in utils.gni
+  sources -= [
+    "//third_party/skia/src/utils/SkCamera.cpp",
+    "//third_party/skia/src/utils/SkFrontBufferedStream.cpp",
+    "//third_party/skia/src/utils/SkInterpolator.cpp",
+    "//third_party/skia/src/utils/SkParsePath.cpp",
+  ]
+
+  if (is_win) {
+    sources -= [
+      # Keeping _win.cpp
+      "//third_party/skia/src/utils/SkThreadUtils_pthread.cpp",
+    ]
+  } else {
+    sources -= [
+      # Keeping _pthread.cpp
+      "//third_party/skia/src/utils/SkThreadUtils_win.cpp",
+    ]
+  }
+
+  # need separate win section to handle chromes auto gn filter
+  # (build/config/BUILDCONFIG.gn)
+  if (is_win) {
+    sources -= [
+      #windows
+      "//third_party/skia/src/utils/win/SkAutoCoInitialize.cpp",
+      "//third_party/skia/src/utils/win/SkIStream.cpp",
+      "//third_party/skia/src/utils/win/SkWGL_win.cpp",
+    ]
+  }
+
+  # Fixup skia library sources.
+  if (is_win) {
+    sources -= [
+      "//third_party/skia/src/ports/SkOSFile_posix.cpp",
+      "//third_party/skia/src/ports/SkTLS_pthread.cpp",
+    ]
+  } else {
+    sources -= [
+      "//third_party/skia/src/ports/SkFontHost_win.cpp",
+      "//third_party/skia/src/ports/SkOSFile_win.cpp",
+      "//third_party/skia/src/ports/SkRemotableFontMgr_win_dw.cpp",
+      "//third_party/skia/src/ports/SkScalerContext_win_dw.cpp",
+      "//third_party/skia/src/ports/SkTLS_win.cpp",
+      "//third_party/skia/src/ports/SkTypeface_win_dw.cpp",
+    ]
+  }
+  if (!is_android) {
+    sources -= [
+      "//third_party/skia/src/ports/SkFontMgr_android.cpp",
+      "//third_party/skia/src/ports/SkFontMgr_android_factory.cpp",
+      "//third_party/skia/src/ports/SkFontMgr_android_parser.cpp",
+    ]
+  }
+  if (!is_linux && !is_android && !is_win && !is_mac) {
+    sources -= [
+      "//third_party/skia/src/ports/SkFontHost_FreeType.cpp",
+      "//third_party/skia/src/ports/SkFontHost_FreeType_common.cpp",
+      "//third_party/skia/src/ports/SkFontMgr_custom.cpp",
+      "//third_party/skia/src/ports/SkFontMgr_custom_empty_factory.cpp",
+    ]
+  }
+
+  if (is_clang && !is_nacl) {
+    # Skia won't compile with some of the more strict clang warnings.
+    # e.g. it does:
+    #  SkASSERT(!"sk_out_of_memory");
+    configs -= [ "//build/config/clang:extra_warnings" ]
+  }
+
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [
+    ":skia_config",
+    ":skia_library_config",
+    "//build/config/compiler:no_chromium_code",
+  ]
+  public_configs = [ ":skia_config" ]
+
+  deps = [
+    ":skcms",
+    ":skia_opts",
+    "../third_party:zlib",
+    "//:freetype_common",
+  ]
+  public_deps = [ ":skia_core_and_effects" ]
+
+  if (is_linux) {
+    deps += [ "//third_party/icu:icuuc" ]
+  }
+
+  if (is_android) {
+    set_sources_assignment_filter([])
+    set_sources_assignment_filter(sources_assignment_filter)
+    deps += [
+      "//third_party/android_sdk:cpu_features",
+      "//third_party/expat",
+      "//third_party/freetype-android:freetype",
+    ]
+  }
+
+  if (is_android && !is_debug) {
+    configs -= [ "//build/config/compiler:default_optimization" ]
+    configs += [ "//build/config/compiler:optimize_max" ]
+  }
+
+  if (is_ios) {
+    libs = [ "ImageIO.framework" ]
+    set_sources_assignment_filter([])
+    sources += [
+      "//third_party/skia/src/ports/SkFontHost_mac.cpp",
+      "//third_party/skia/src/utils/mac/SkCreateCGImageRef.cpp",
+      "//third_party/skia/src/utils/mac/SkStream_mac.cpp",
+    ]
+    set_sources_assignment_filter(sources_assignment_filter)
+  }
+
+  if (skia_support_pdf) {
+    deps += [ "//third_party/sfntly" ]
+    sources += skia_pdf_sources
+  } else {
+    sources += [ "//third_party/skia/src/pdf/SkDocument_PDF_None.cpp" ]
+  }
+}
+
+# Template for things that are logically part of :skia, but need to be split out
+# so custom compile flags can be applied.
+#
+# These are all opted out of check_includes, due to (logically) being part of
+# skia.
+template("skia_source_set") {
+  source_set(target_name) {
+    forward_variables_from(invoker, "*")
+
+    check_includes = false
+
+    if (!is_debug) {
+      configs -= [ "//build/config/compiler:default_optimization" ]
+      configs += [ "//build/config/compiler:optimize_max" ]
+    }
+
+    configs -= [ "//build/config/compiler:chromium_code" ]
+    configs += [
+      ":skia_config",
+      ":skia_library_config",
+      "//build/config/compiler:no_chromium_code",
+    ]
+    public_configs = [ ":skia_config" ]
+
+    if (is_win) {
+      cflags_cc = [
+        "/std:c++17",
+        "/wd5041",  # out-of-line definition for constexpr static data member is not needed and is deprecated in C++17
+      ]
+    } else {
+      cflags_cc = [ "-std=c++17" ]
+    }
+  }
+}
+
+skia_source_set("skia_core_and_effects") {
+  defines = skia_core_defines
+  sources = skia_core_sources
+  sources += skia_effects_sources
+  sources += skia_effects_imagefilter_sources
+
+  visibility = [ ":skia" ]
+}
+
+# Separated out so it can be compiled with different flags for SSE.
+if (current_cpu == "x86" || current_cpu == "x64") {
+  skia_source_set("skia_opts_sse3") {
+    sources = skia_opts.ssse3_sources
+    if (!is_win || is_clang) {
+      cflags = [ "-mssse3" ]
+    }
+    if (is_win) {
+      defines = [ "SK_CPU_SSE_LEVEL=31" ]
+    }
+    visibility = [ ":skia_opts" ]
+  }
+  skia_source_set("skia_opts_sse41") {
+    sources = skia_opts.sse41_sources
+    if (!is_win || is_clang) {
+      cflags = [ "-msse4.1" ]
+    }
+    if (is_win) {
+      defines = [ "SK_CPU_SSE_LEVEL=41" ]
+    }
+    visibility = [ ":skia_opts" ]
+  }
+  skia_source_set("skia_opts_sse42") {
+    sources = skia_opts.sse42_sources
+    if (!is_win || is_clang) {
+      cflags = [ "-msse4.2" ]
+    }
+    if (is_win) {
+      defines = [ "SK_CPU_SSE_LEVEL=42" ]
+    }
+    visibility = [ ":skia_opts" ]
+  }
+  skia_source_set("skia_opts_avx") {
+    sources = skia_opts.avx_sources
+    if (!is_win) {
+      cflags = [ "-mavx" ]
+    }
+    if (is_win) {
+      cflags = [ "/arch:AVX" ]
+    }
+    visibility = [ ":skia_opts" ]
+  }
+  skia_source_set("skia_opts_hsw") {
+    sources = skia_opts.hsw_sources
+    if (!is_win) {
+      cflags = [
+        "-mavx2",
+        "-mbmi",
+        "-mbmi2",
+        "-mf16c",
+        "-mfma",
+      ]
+    }
+    if (is_win) {
+      cflags = [ "/arch:AVX2" ]
+    }
+    visibility = [ ":skia_opts" ]
+  }
+}
+
+skia_source_set("skia_opts") {
+  cflags = []
+  defines = []
+
+  if (current_cpu == "x86" || current_cpu == "x64") {
+    sources = skia_opts.sse2_sources
+    deps = [
+      ":skia_opts_avx",
+      ":skia_opts_hsw",
+      ":skia_opts_sse3",
+      ":skia_opts_sse41",
+      ":skia_opts_sse42",
+    ]
+  } else if (current_cpu == "arm") {
+    # The assembly uses the frame pointer register (r7 in Thumb/r11 in
+    # ARM), the compiler doesn't like that.
+    cflags += [ "-fomit-frame-pointer" ]
+
+    if (arm_version >= 7) {
+      sources = skia_opts.armv7_sources
+      if (arm_use_neon || arm_optionally_use_neon) {
+        sources += skia_opts.neon_sources
+
+        # Root build config sets -mfpu=$arm_fpu, which we expect to be neon
+        # when running this.
+        if (!arm_use_neon) {
+          configs -= [ "//build/config/compiler:compiler_arm_fpu" ]
+          cflags += [ "-mfpu=neon" ]
+        }
+      }
+    } else {
+      sources = skia_opts.none_sources
+    }
+  } else if (current_cpu == "arm64") {
+    sources = skia_opts.arm64_sources
+  } else if (current_cpu == "mipsel") {
+    cflags += [ "-fomit-frame-pointer" ]
+
+    if (mips_dsp_rev >= 1) {
+      sources = skia_opts.mips_dsp_sources
+    } else {
+      sources = skia_opts.none_sources
+    }
+  } else if (current_cpu == "mips64el") {
+    cflags += [ "-fomit-frame-pointer" ]
+    sources = skia_opts.none_sources
+  } else {
+    assert(false, "Need to port cpu specific stuff from gn/BUILDCONFIG.gn")
+  }
+
+  if (is_android && !is_debug) {
+    configs -= [ "//build/config/compiler:default_optimization" ]
+    configs += [ "//build/config/compiler:optimize_max" ]
+  }
+
+  visibility = [ ":skia" ]
+}

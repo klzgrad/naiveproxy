@@ -1,0 +1,909 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//android_webview/system_webview_apk_tmpl.gni")
+import("//android_webview/system_webview_bundle.gni")
+import("//android_webview/variables.gni")
+import("//android_webview/webview_repack_locales.gni")
+import("//build/android/resource_sizes.gni")
+import("//build/config/android/config.gni")
+import("//build/config/android/rules.gni")
+import("//build/config/locales.gni")
+import("//chrome/android/chrome_common_shared_library.gni")
+import("//chrome/android/chrome_public_apk_tmpl.gni")
+import("//chrome/android/trichrome.gni")
+import("//components/spellcheck/spellcheck_build_features.gni")
+import("//tools/grit/repack.gni")
+import("//tools/resources/generate_resource_whitelist.gni")
+import("//tools/v8_context_snapshot/v8_context_snapshot.gni")
+import("//weblayer/variables.gni")
+
+if (enable_resource_whitelist_generation) {
+  system_webview_pak_whitelist =
+      "$target_gen_dir/system_webview_pak_whitelist.txt"
+}
+
+if (define_upstream_webview_targets) {
+  template("standalone_system_webview_apk_tmpl") {
+    system_webview_apk_or_module_tmpl(target_name) {
+      forward_variables_from(invoker, "*")
+      android_manifest = system_webview_android_manifest
+      android_manifest_dep =
+          "//android_webview/nonembedded:system_webview_manifest"
+      deps = upstream_only_webview_deps
+      min_sdk_version = 21
+    }
+  }
+
+  # Standalone WebView APK.
+  standalone_system_webview_apk_tmpl("system_webview_apk") {
+    apk_name = "SystemWebView"
+  }
+
+  # This version of the WebView APK doesn't include WebLayer java and resources.
+  # It's used to define the whitelist of resources to be pulled out of language
+  # splits. See |shared_resources_allowlist_target|.
+  standalone_system_webview_apk_tmpl("system_webview_no_weblayer_apk") {
+    exclude_weblayer_java = true
+    apk_name = "SystemWebViewNoWebLayer"
+  }
+
+  if (enable_webview_bundles) {
+    standalone_system_webview_apk_tmpl("system_webview_base_bundle_module") {
+      target_type = "android_app_bundle_module"
+      is_base_module = true
+    }
+
+    system_webview_bundle("system_webview_bundle") {
+      base_module_target = ":system_webview_base_bundle_module"
+      bundle_name = "SystemWebView"
+      min_sdk_version = 21
+    }
+  }
+
+  if (android_64bit_target_cpu) {
+    # These targets builds a 32-bit only Webview on a 64-bit config, analogous
+    # to what's built on a 32-bit config. This lets all Webviews build on a
+    # single configuration.
+    standalone_system_webview_apk_tmpl("system_webview_32_apk") {
+      apk_name = "SystemWebView32"
+      include_64_bit_webview = false
+    }
+
+    if (enable_webview_bundles) {
+      standalone_system_webview_apk_tmpl(
+          "system_webview_32_base_bundle_module") {
+        target_type = "android_app_bundle_module"
+        include_64_bit_webview = false
+        is_base_module = true
+      }
+
+      system_webview_bundle("system_webview_32_bundle") {
+        base_module_target = ":system_webview_32_base_bundle_module"
+        bundle_name = "SystemWebView32"
+        include_64_bit_webview = false
+        min_sdk_version = 21
+      }
+    }
+  }
+
+  android_resource_sizes_test("resource_sizes_system_webview_apk") {
+    apk_name = "SystemWebView"
+    data_deps = [ ":system_webview_apk" ]
+  }
+
+  # Trichrome WebView APK.
+  template("trichrome_webview_tmpl") {
+    system_webview_apk_or_module_tmpl(target_name) {
+      forward_variables_from(invoker, "*")
+      android_manifest = trichrome_webview_android_manifest
+      android_manifest_dep =
+          "//android_webview/nonembedded:trichrome_webview_manifest"
+      min_sdk_version = 29
+
+      deps = upstream_only_webview_deps
+      use_trichrome_library = true
+
+      if (android_64bit_target_cpu) {
+        is_64_bit_browser = false
+        include_64_bit_webview = true
+      }
+      static_library_provider = "//chrome/android:trichrome_library_apk"
+    }
+  }
+
+  trichrome_webview_tmpl("trichrome_webview_apk") {
+    apk_name = "TrichromeWebView"
+    uncompress_dex = true
+    if (!is_java_debug) {
+      static_library_synchronized_proguard = trichrome_synchronized_proguard
+    }
+  }
+
+  if (enable_webview_bundles) {
+    trichrome_webview_tmpl("trichrome_webview_base_bundle_module") {
+      target_type = "android_app_bundle_module"
+      is_base_module = true
+    }
+
+    system_webview_bundle("trichrome_webview_bundle") {
+      base_module_target = ":trichrome_webview_base_bundle_module"
+      bundle_name = "TrichromeWebView"
+      uncompress_dex = true
+      min_sdk_version = 29
+      static_library_provider = "//chrome/android:trichrome_library_apk"
+    }
+  }
+
+  # Trichrome WebView APK for a 64-bit Chrome.
+  if (android_64bit_target_cpu) {
+    template("trichrome_webview_64_32_tmpl") {
+      system_webview_apk_or_module_tmpl(target_name) {
+        forward_variables_from(invoker, "*")
+        android_manifest = trichrome_webview_64_32_android_manifest
+        android_manifest_dep =
+            "//android_webview/nonembedded:trichrome_webview_64_32_manifest"
+        use_trichrome_library = true
+        is_64_bit_browser = true
+        include_32_bit_webview = true
+
+        min_sdk_version = 29
+
+        deps = upstream_only_webview_deps
+        static_library_provider = "//chrome/android:trichrome_library_64_32_apk"
+      }
+    }
+
+    trichrome_webview_64_32_tmpl("trichrome_webview_64_32_apk") {
+      apk_name = "TrichromeWebView6432"
+      uncompress_dex = true
+    }
+
+    if (enable_webview_bundles) {
+      trichrome_webview_64_32_tmpl(
+          "trichrome_webview_64_32_base_bundle_module") {
+        target_type = "android_app_bundle_module"
+        is_base_module = true
+      }
+
+      system_webview_bundle("trichrome_webview_64_32_bundle") {
+        base_module_target = ":trichrome_webview_64_32_base_bundle_module"
+        bundle_name = "TrichromeWebView6432"
+        uncompress_dex = true
+        min_sdk_version = 29
+        static_library_provider = "//chrome/android:trichrome_library_64_32_apk"
+      }
+    }
+
+    template("trichrome_webview_32_tmpl") {
+      system_webview_apk_or_module_tmpl(target_name) {
+        forward_variables_from(invoker, "*")
+        android_manifest = trichrome_webview_32_android_manifest
+        android_manifest_dep =
+            "//android_webview/nonembedded:trichrome_webview_32_manifest"
+        use_trichrome_library = true
+        is_64_bit_browser = false
+        include_64_bit_webview = false
+
+        min_sdk_version = 29
+
+        deps = upstream_only_webview_deps
+        static_library_provider = "//chrome/android:trichrome_library_32_apk"
+      }
+    }
+
+    trichrome_webview_32_tmpl("trichrome_webview_32_apk") {
+      apk_name = "TrichromeWebView32"
+      uncompress_dex = true
+    }
+
+    if (enable_webview_bundles) {
+      trichrome_webview_32_tmpl("trichrome_webview_32_base_bundle_module") {
+        target_type = "android_app_bundle_module"
+        is_base_module = true
+      }
+
+      system_webview_bundle("trichrome_webview_32_bundle") {
+        base_module_target = ":trichrome_webview_32_base_bundle_module"
+        bundle_name = "TrichromeWebView32"
+        uncompress_dex = true
+        min_sdk_version = 29
+        static_library_provider = "//chrome/android:trichrome_library_32_apk"
+      }
+    }
+  }
+}
+
+# The shared library used by standalone WebView.
+shared_library("libwebviewchromium") {
+  deps = [
+    "//android_webview/lib",
+    "//android_webview/lib:webview_entry_point",
+    "//android_webview/nonembedded",
+  ]
+  configs -= [ "//build/config/android:hide_all_but_jni_onload" ]
+  configs += [ "//build/config/android:hide_all_but_jni" ]
+}
+
+# This template is used to define WebView's alternate-ABI libraries, which are
+# used by Monochrome and Trichrome on 64-bit devices which support both 32 and
+# 64-bit ABIs. WebView's browser process must use the same ABI as the embedding
+# app (renderer processes used the ABI defined in the WebView APK manifest),
+# which requires us to have two copies of the library available, one for each
+# ABI.  The primary library is the one shared with Chrome, and the alternate is
+# a WebView-specific library defined here for whichever ABI isn't used by
+# Chrome.
+#
+# Note that this library only includes code needed for the embedded usecase,
+# as all non-embedded code uses the primary library.
+template("webview_alternate_library") {
+  chrome_common_shared_library(target_name) {
+    forward_variables_from(invoker, "*")
+    deps = [
+      "//android_webview/lib",
+      "//android_webview/lib:webview_entry_point",
+    ]
+    is_webview = true
+  }
+}
+
+if (defined(android_secondary_abi_toolchain)) {
+  # Note here that on a given system, the webview-only library needs the same
+  # library name as the browser library, since the system webview factory will
+  # differentiate only by ABI.
+  if (current_toolchain == android_secondary_abi_toolchain) {
+    # This target is the 32-bit WebView library that pairs with a 64-bit
+    # browser. It is suffixed with _64 because its name must match the 64-bit
+    # browser library.
+    webview_alternate_library("monochrome_64") {
+    }
+  } else {
+    # Inverse of above, for the original 32-bit case.
+    webview_alternate_library("monochrome") {
+    }
+  }
+} else {
+  # 32-bit WebView library used in 32-bit only builds of 64/32 targets.
+  webview_alternate_library("monochrome_64") {
+  }
+}
+
+java_group("android_webview_no_weblayer_java") {
+  deps = [
+    ":browser_java",
+
+    # This includes AwResource, which may be called via JNI. We're including it
+    # here because there's currently no good way to enforce that it gets included
+    # when it's depended on via JNI.
+    ":common_java",
+    "//android_webview/glue",
+    "//android_webview/nonembedded:nonembedded_java",
+    "//android_webview/support_library:support_lib_glue_java",
+  ]
+}
+
+# Contains all Java dependencies used by WebView.
+java_group("android_webview_java") {
+  deps = [ ":android_webview_no_weblayer_java" ]
+
+  if (webview_includes_weblayer) {
+    deps += [
+      "//components/viz/service:service_java",
+      "//weblayer/browser/java",
+    ]
+  }
+}
+
+# An empty group included in //BUILD.gn to make this and other WebView build
+# files reachable by GN.
+group("empty_group") {
+}
+
+generate_jni("common_jni_headers") {
+  sources = [
+    "java/src/org/chromium/android_webview/common/AwResource.java",
+    "java/src/org/chromium/android_webview/common/crash/AwCrashReporterClient.java",
+  ]
+}
+
+generate_jni("browser_jni_headers") {
+  sources = [
+    "java/src/org/chromium/android_webview/AndroidProtocolHandler.java",
+    "java/src/org/chromium/android_webview/AwAutofillClient.java",
+    "java/src/org/chromium/android_webview/AwBrowserContext.java",
+    "java/src/org/chromium/android_webview/AwBrowserProcess.java",
+    "java/src/org/chromium/android_webview/AwContents.java",
+    "java/src/org/chromium/android_webview/AwContentsBackgroundThreadClient.java",
+    "java/src/org/chromium/android_webview/AwContentsClientBridge.java",
+    "java/src/org/chromium/android_webview/AwContentsIoThreadClient.java",
+    "java/src/org/chromium/android_webview/AwContentsLifecycleNotifier.java",
+    "java/src/org/chromium/android_webview/AwContentsStatics.java",
+    "java/src/org/chromium/android_webview/AwCookieManager.java",
+    "java/src/org/chromium/android_webview/AwDebug.java",
+    "java/src/org/chromium/android_webview/AwDevToolsServer.java",
+    "java/src/org/chromium/android_webview/AwFeatureList.java",
+    "java/src/org/chromium/android_webview/AwFormDatabase.java",
+    "java/src/org/chromium/android_webview/AwHttpAuthHandler.java",
+    "java/src/org/chromium/android_webview/AwPacProcessor.java",
+    "java/src/org/chromium/android_webview/AwPdfExporter.java",
+    "java/src/org/chromium/android_webview/AwProxyController.java",
+    "java/src/org/chromium/android_webview/AwQuotaManagerBridge.java",
+    "java/src/org/chromium/android_webview/AwRenderProcess.java",
+    "java/src/org/chromium/android_webview/AwSettings.java",
+    "java/src/org/chromium/android_webview/AwTracingController.java",
+    "java/src/org/chromium/android_webview/AwVariationsSeedBridge.java",
+    "java/src/org/chromium/android_webview/AwWebContentsDelegate.java",
+    "java/src/org/chromium/android_webview/AwWebResourceInterceptResponse.java",
+    "java/src/org/chromium/android_webview/AwWebResourceResponse.java",
+    "java/src/org/chromium/android_webview/InputStreamUtil.java",
+    "java/src/org/chromium/android_webview/JsReplyProxy.java",
+    "java/src/org/chromium/android_webview/PopupTouchHandleDrawable.java",
+    "java/src/org/chromium/android_webview/WebMessageListenerHolder.java",
+    "java/src/org/chromium/android_webview/WebMessageListenerInfo.java",
+    "java/src/org/chromium/android_webview/gfx/AwDrawFnImpl.java",
+    "java/src/org/chromium/android_webview/gfx/AwGLFunctor.java",
+    "java/src/org/chromium/android_webview/gfx/AwPicture.java",
+    "java/src/org/chromium/android_webview/gfx/JavaBrowserViewRendererHelper.java",
+    "java/src/org/chromium/android_webview/gfx/RootBeginFrameSourceWebView.java",
+    "java/src/org/chromium/android_webview/metrics/AwMetricsServiceClient.java",
+    "java/src/org/chromium/android_webview/permission/AwPermissionRequest.java",
+    "java/src/org/chromium/android_webview/safe_browsing/AwSafeBrowsingConfigHelper.java",
+  ]
+
+  deps = [ ":cancellation_signal_android_jar_jni_headers" ]
+}
+
+generate_jar_jni("cancellation_signal_android_jar_jni_headers") {
+  classes = [ "android/os/CancellationSignal.class" ]
+}
+
+android_library("browser_java") {
+  sources = [
+    "java/src/org/chromium/android_webview/AndroidProtocolHandler.java",
+    "java/src/org/chromium/android_webview/AwActionModeCallback.java",
+    "java/src/org/chromium/android_webview/AwAutofillClient.java",
+    "java/src/org/chromium/android_webview/AwBrowserContext.java",
+    "java/src/org/chromium/android_webview/AwBrowserProcess.java",
+    "java/src/org/chromium/android_webview/AwConsoleMessage.java",
+    "java/src/org/chromium/android_webview/AwContents.java",
+    "java/src/org/chromium/android_webview/AwContentsBackgroundThreadClient.java",
+    "java/src/org/chromium/android_webview/AwContentsClient.java",
+    "java/src/org/chromium/android_webview/AwContentsClientBridge.java",
+    "java/src/org/chromium/android_webview/AwContentsClientCallbackHelper.java",
+    "java/src/org/chromium/android_webview/AwContentsIoThreadClient.java",
+    "java/src/org/chromium/android_webview/AwContentsLifecycleNotifier.java",
+    "java/src/org/chromium/android_webview/AwContentsStatics.java",
+    "java/src/org/chromium/android_webview/AwCookieManager.java",
+    "java/src/org/chromium/android_webview/AwDataDirLock.java",
+    "java/src/org/chromium/android_webview/AwDebug.java",
+    "java/src/org/chromium/android_webview/AwDevToolsServer.java",
+    "java/src/org/chromium/android_webview/AwFeatureList.java",
+    "java/src/org/chromium/android_webview/AwFeatures.java",
+    "java/src/org/chromium/android_webview/AwFirebaseConfig.java",
+    "java/src/org/chromium/android_webview/AwFormDatabase.java",
+    "java/src/org/chromium/android_webview/AwGeolocationPermissions.java",
+    "java/src/org/chromium/android_webview/AwHistogramRecorder.java",
+    "java/src/org/chromium/android_webview/AwHttpAuthHandler.java",
+    "java/src/org/chromium/android_webview/AwLayoutSizer.java",
+    "java/src/org/chromium/android_webview/AwNetworkChangeNotifierRegistrationPolicy.java",
+    "java/src/org/chromium/android_webview/AwPacProcessor.java",
+    "java/src/org/chromium/android_webview/AwPdfExporter.java",
+    "java/src/org/chromium/android_webview/AwPrintDocumentAdapter.java",
+    "java/src/org/chromium/android_webview/AwProxyController.java",
+    "java/src/org/chromium/android_webview/AwQuotaManagerBridge.java",
+    "java/src/org/chromium/android_webview/AwRenderProcess.java",
+    "java/src/org/chromium/android_webview/AwRenderProcessGoneDetail.java",
+    "java/src/org/chromium/android_webview/AwScrollOffsetManager.java",
+    "java/src/org/chromium/android_webview/AwServiceWorkerClient.java",
+    "java/src/org/chromium/android_webview/AwServiceWorkerController.java",
+    "java/src/org/chromium/android_webview/AwServiceWorkerSettings.java",
+    "java/src/org/chromium/android_webview/AwSettings.java",
+    "java/src/org/chromium/android_webview/AwSupportLibIsomorphic.java",
+    "java/src/org/chromium/android_webview/AwTracingController.java",
+    "java/src/org/chromium/android_webview/AwVariationsSeedBridge.java",
+    "java/src/org/chromium/android_webview/AwViewAndroidDelegate.java",
+    "java/src/org/chromium/android_webview/AwViewMethods.java",
+    "java/src/org/chromium/android_webview/AwWebContentsDelegate.java",
+    "java/src/org/chromium/android_webview/AwWebContentsDelegateAdapter.java",
+    "java/src/org/chromium/android_webview/AwWebContentsObserver.java",
+    "java/src/org/chromium/android_webview/AwWebResourceInterceptResponse.java",
+    "java/src/org/chromium/android_webview/AwWebResourceResponse.java",
+    "java/src/org/chromium/android_webview/AwZoomControls.java",
+    "java/src/org/chromium/android_webview/CleanupReference.java",
+    "java/src/org/chromium/android_webview/ClientCertLookupTable.java",
+    "java/src/org/chromium/android_webview/DefaultVideoPosterRequestHandler.java",
+    "java/src/org/chromium/android_webview/ErrorCodeConversionHelper.java",
+    "java/src/org/chromium/android_webview/FindAddress.java",
+    "java/src/org/chromium/android_webview/FullScreenView.java",
+    "java/src/org/chromium/android_webview/HttpAuthDatabase.java",
+    "java/src/org/chromium/android_webview/InputStreamUtil.java",
+    "java/src/org/chromium/android_webview/JsPromptResultReceiver.java",
+    "java/src/org/chromium/android_webview/JsReplyProxy.java",
+    "java/src/org/chromium/android_webview/JsResultHandler.java",
+    "java/src/org/chromium/android_webview/JsResultReceiver.java",
+    "java/src/org/chromium/android_webview/NullAwViewMethods.java",
+    "java/src/org/chromium/android_webview/OverScrollGlow.java",
+    "java/src/org/chromium/android_webview/PopupTouchHandleDrawable.java",
+    "java/src/org/chromium/android_webview/ScrollAccessibilityHelper.java",
+    "java/src/org/chromium/android_webview/SslUtil.java",
+    "java/src/org/chromium/android_webview/VariationsSeedLoader.java",
+    "java/src/org/chromium/android_webview/ViewPositionObserver.java",
+    "java/src/org/chromium/android_webview/WebMessageListener.java",
+    "java/src/org/chromium/android_webview/WebMessageListenerHolder.java",
+    "java/src/org/chromium/android_webview/WebMessageListenerInfo.java",
+    "java/src/org/chromium/android_webview/WebViewChromiumRunQueue.java",
+    "java/src/org/chromium/android_webview/gfx/AwDrawFnImpl.java",
+    "java/src/org/chromium/android_webview/gfx/AwFunctor.java",
+    "java/src/org/chromium/android_webview/gfx/AwGLFunctor.java",
+    "java/src/org/chromium/android_webview/gfx/AwPicture.java",
+    "java/src/org/chromium/android_webview/gfx/JavaBrowserViewRendererHelper.java",
+    "java/src/org/chromium/android_webview/gfx/RootBeginFrameSourceWebView.java",
+    "java/src/org/chromium/android_webview/metrics/AwMetricsServiceClient.java",
+    "java/src/org/chromium/android_webview/permission/AwGeolocationCallback.java",
+    "java/src/org/chromium/android_webview/permission/AwPermissionRequest.java",
+    "java/src/org/chromium/android_webview/policy/AwPolicyProvider.java",
+    "java/src/org/chromium/android_webview/safe_browsing/AwSafeBrowsingConfigHelper.java",
+    "java/src/org/chromium/android_webview/safe_browsing/AwSafeBrowsingConversionHelper.java",
+    "java/src/org/chromium/android_webview/safe_browsing/AwSafeBrowsingResponse.java",
+  ]
+  deps = [
+    ":common_aidl_java",
+    ":common_crash_java",
+    ":common_java",
+    ":common_platform_services_java",
+    ":common_variations_java",
+    ":resources",
+    "//android_webview/nonembedded:system_webview_manifest",
+    "//base:base_java",
+    "//base:jni_java",
+    "//components/autofill/android:autofill_java",
+    "//components/autofill/android:provider_java",
+    "//components/background_task_scheduler:background_task_scheduler_task_ids_java",
+    "//components/content_capture/android:java",
+    "//components/crash/android:handler_java",
+    "//components/crash/android:java",
+    "//components/embedder_support/android:util_java",
+    "//components/embedder_support/android:web_contents_delegate_java",
+    "//components/embedder_support/android/metrics:java",
+    "//components/minidump_uploader:minidump_uploader_java",
+    "//components/navigation_interception/android:navigation_interception_java",
+    "//components/policy/android:policy_java",
+    "//components/safe_browsing/android:safe_browsing_java",
+    "//components/variations:load_seed_result_enum_java",
+    "//components/variations/android:variations_java",
+    "//components/version_info/android:version_constants_java",
+    "//components/viz/common:common_java",
+    "//content/public/android:content_java",
+    "//device/gamepad:java",
+    "//mojo/public/java:system_java",
+    "//mojo/public/java/system:system_impl_java",
+    "//net/android:net_java",
+    "//services/network/public/mojom:mojom_java",
+    "//third_party/android_deps:androidx_annotation_annotation_java",
+    "//third_party/blink/public:blink_headers_java",
+    "//ui/android:ui_java",
+    "//url:gurl_java",
+  ]
+  annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
+
+  if (enable_spellcheck) {
+    deps += [ "//components/spellcheck/browser/android:java" ]
+  }
+
+  srcjar_deps = [
+    "//android_webview/browser:browser_enums",
+    "//components/safe_browsing/core/db:sb_threat_values",
+  ]
+
+  android_manifest_for_lint = system_webview_android_manifest
+  min_sdk_version = 21
+}
+
+android_library("common_variations_java") {
+  sources = [
+    "java/src/org/chromium/android_webview/common/variations/VariationsServiceMetricsHelper.java",
+    "java/src/org/chromium/android_webview/common/variations/VariationsUtils.java",
+  ]
+  deps = [
+    "//android_webview/proto:aw_variations_seed_proto_java",
+    "//base:base_java",
+    "//components/variations/android:variations_java",
+    "//third_party/android_deps:com_google_protobuf_protobuf_javalite_java",
+  ]
+}
+
+# Separate target to allow for a dependency on GmsCore without pulling in all of
+# android_webview_java. It compiles the abstract class; implementations are
+# compiled separately.
+android_library("common_platform_services_java") {
+  sources = [
+    "java/src/org/chromium/android_webview/common/PlatformServiceBridge.java",
+    "java/src/org/chromium/android_webview/common/PlatformServiceBridgeImpl.java",
+  ]
+
+  deps = [
+    "//base:base_java",
+    "//components/embedder_support/android/metrics:java",
+    "//third_party/android_deps:androidx_annotation_annotation_java",
+  ]
+
+  # The appropriate .class file will be loaded via a dependency to a library
+  # like :platform_service_bridge_upstream_implementation_java below. We only include the
+  # .java file because other files in the target depend on it.
+  jar_excluded_patterns = [ "*/PlatformServiceBridgeImpl.class" ]
+}
+
+# This target compiles the implementation of PlatformServiceBridge for AOSP targets.
+android_library("platform_service_bridge_upstream_implementation_java") {
+  sources = [ "java/src/org/chromium/android_webview/common/PlatformServiceBridgeImpl.java" ]
+  deps = [ ":common_platform_services_java" ]
+}
+
+android_library("common_crash_java") {
+  sources = [
+    "java/src/org/chromium/android_webview/common/crash/AwCrashReporterClient.java",
+    "java/src/org/chromium/android_webview/common/crash/CrashInfo.java",
+    "java/src/org/chromium/android_webview/common/crash/CrashUploadUtil.java",
+    "java/src/org/chromium/android_webview/common/crash/SystemWideCrashDirectories.java",
+  ]
+
+  deps = [
+    ":common_java",
+    "//base:base_java",
+    "//base:jni_java",
+    "//components/background_task_scheduler:background_task_scheduler_task_ids_java",
+    "//components/minidump_uploader:minidump_uploader_java",
+  ]
+  annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
+  min_sdk_version = 21
+}
+
+android_library("common_java") {
+  sources = [
+    "java/src/org/chromium/android_webview/common/AwResource.java",
+    "java/src/org/chromium/android_webview/common/AwSwitches.java",
+    "java/src/org/chromium/android_webview/common/CommandLineUtil.java",
+    "java/src/org/chromium/android_webview/common/DeveloperModeUtils.java",
+    "java/src/org/chromium/android_webview/common/Flag.java",
+    "java/src/org/chromium/android_webview/common/FlagOverrideHelper.java",
+    "java/src/org/chromium/android_webview/common/ProductionSupportedFlagList.java",
+    "java/src/org/chromium/android_webview/common/services/ServiceNames.java",
+  ]
+  deps = [
+    "//base:base_java",
+    "//third_party/android_deps:androidx_annotation_annotation_java",
+  ]
+}
+
+android_aidl("common_aidl") {
+  import_include = [ "java/src" ]
+  sources = [
+    "java/src/org/chromium/android_webview/common/services/ICrashReceiverService.aidl",
+    "java/src/org/chromium/android_webview/common/services/IDeveloperUiService.aidl",
+    "java/src/org/chromium/android_webview/common/services/IVariationsSeedServer.aidl",
+    "java/src/org/chromium/android_webview/common/services/IVariationsSeedServerCallback.aidl",
+  ]
+}
+
+android_library("common_aidl_java") {
+  srcjar_deps = [ ":common_aidl" ]
+}
+
+# Generate ProductConfig.java so that android_webview_product_config_java's
+# compile step works.
+generate_product_config_srcjar("webview_product_config") {
+  java_package = webview_product_config_java_package
+}
+
+# ProductConfig.java is excluded from the generated .jar
+# (via. jar_excluded_patterns) and the final version is inserted at the APK
+# level - with the list of pak locales populated by looking at the assets that
+# are listed in the final APK's .build_config.
+android_library("android_webview_product_config_java") {
+  sources = [ "java/src/org/chromium/android_webview/AwLocaleConfig.java" ]
+  srcjar_deps = [ ":webview_product_config" ]
+  jar_excluded_patterns = [ "*/ProductConfig.class" ]
+}
+
+if (enable_resource_whitelist_generation) {
+  generate_resource_whitelist("system_webview_pak_whitelist") {
+    deps = [ ":libwebviewchromium" ]
+    inputs =
+        [ "$root_out_dir/lib.unstripped/libwebviewchromium$shlib_extension" ]
+    output = system_webview_pak_whitelist
+  }
+}
+
+webview_repack_locales("repack_locales") {
+  input_locales = locales
+  output_locales = locales
+
+  if (enable_resource_whitelist_generation) {
+    repack_whitelist = system_webview_pak_whitelist
+    deps = [ ":system_webview_pak_whitelist" ]
+  }
+}
+
+android_assets("locale_pak_assets") {
+  disable_compression = true
+  renaming_sources = []
+  renaming_destinations = []
+  foreach(_locale, locales) {
+    renaming_sources += [ "$root_out_dir/android_webview/locales/$_locale.pak" ]
+    renaming_destinations += [ "stored-locales/$_locale.pak" ]
+  }
+  treat_as_locale_paks = true
+  deps = [ ":repack_locales" ]
+}
+
+repack("repack_pack") {
+  sources = [
+    "$root_gen_dir/content/content_resources.pak",
+    "$root_gen_dir/net/net_resources.pak",
+    "$root_gen_dir/third_party/blink/public/resources/blink_resources.pak",
+    "$target_gen_dir/aw_resources.pak",
+    "$target_gen_dir/components_resources.pak",
+    "$target_gen_dir/mojo_bindings_resources.pak",
+    "$target_gen_dir/webui_resources.pak",
+  ]
+  deps = [
+    ":generate_aw_resources",
+    ":generate_components_resources",
+    ":generate_mojo_resources",
+    ":generate_webui_resources",
+    "//content:content_resources",
+    "//net:net_resources",
+    "//third_party/blink/public:resources",
+  ]
+  output = "$target_gen_dir/resources.pak"
+
+  if (enable_resource_whitelist_generation) {
+    repack_whitelist = system_webview_pak_whitelist
+    deps += [ ":system_webview_pak_whitelist" ]
+  }
+
+  if (webview_includes_weblayer) {
+    sources += [ "$root_gen_dir/weblayer/weblayer_resources.pak" ]
+    deps += [ "//weblayer:resources" ]
+  }
+}
+
+repack("repack_100_percent") {
+  sources = [
+    "$root_gen_dir/content/app/resources/content_resources_100_percent.pak",
+    "$root_gen_dir/third_party/blink/public/resources/blink_scaled_resources_100_percent.pak",
+    "$root_gen_dir/ui/resources/ui_resources_100_percent.pak",
+  ]
+  deps = [
+    "//content/app/resources",
+    "//third_party/blink/public:scaled_resources_100_percent",
+    "//ui/resources",
+  ]
+  output = "$target_gen_dir/chrome_100_percent.pak"
+
+  if (enable_resource_whitelist_generation) {
+    repack_whitelist = system_webview_pak_whitelist
+    deps += [ ":system_webview_pak_whitelist" ]
+  }
+}
+
+android_assets("pak_file_assets") {
+  sources = [
+    "$target_gen_dir/chrome_100_percent.pak",
+    "$target_gen_dir/resources.pak",
+  ]
+  deps = [
+    ":repack_100_percent",
+    ":repack_pack",
+  ]
+  disable_compression = true
+}
+
+if (android_64bit_target_cpu) {
+  android_assets("v8_snapshot_secondary_abi_assets") {
+    _secondary_abi_out_dir =
+        get_label_info("//v8($android_secondary_abi_toolchain)", "root_out_dir")
+    assert(android_64bit_target_cpu,
+           "32-bit targets shouldn't have secondary abi")
+    arch_suffix = "32"
+    if (use_v8_context_snapshot) {
+      renaming_sources = [ "$_secondary_abi_out_dir/v8_context_snapshot.bin" ]
+      renaming_destinations = [ "v8_context_snapshot_$arch_suffix.bin" ]
+    } else {
+      renaming_sources = [ "$_secondary_abi_out_dir/snapshot_blob.bin" ]
+      renaming_destinations = [ "snapshot_blob_$arch_suffix.bin" ]
+    }
+    disable_compression = true
+    deps = [
+      "//tools/v8_context_snapshot($android_secondary_abi_toolchain)",
+      "//v8($android_secondary_abi_toolchain)",
+    ]
+  }
+}
+
+android_assets("webview_primary_abi_assets") {
+  if (use_v8_context_snapshot) {
+    deps = [ "//tools/v8_context_snapshot:v8_context_snapshot_assets" ]
+  } else {
+    deps = [ "//v8:v8_external_startup_data_assets" ]
+  }
+}
+
+android_assets("monochrome_webview_primary_abi_assets") {
+  deps = [ "//third_party/icu:icu_assets" ]
+  if (use_v8_context_snapshot) {
+    deps += [ "//tools/v8_context_snapshot:v8_context_snapshot_assets" ]
+  } else {
+    deps += [ "//v8:v8_external_startup_data_assets" ]
+  }
+}
+
+if (android_64bit_target_cpu) {
+  android_assets("webview_secondary_abi_assets") {
+    deps = [ ":v8_snapshot_secondary_abi_assets" ]
+  }
+
+  android_assets("monochrome_webview_secondary_abi_assets") {
+    deps = [ "//third_party/icu:icu_assets" ]
+    deps += [ ":v8_snapshot_secondary_abi_assets" ]
+  }
+}
+
+android_assets("weblayer_webview_assets") {
+  deps = [
+    ":webview_primary_abi_assets",
+    "//third_party/icu:icu_assets",
+  ]
+  if (android_64bit_target_cpu) {
+    deps += [ ":webview_secondary_abi_assets" ]
+  }
+}
+
+android_assets("stub_assets") {
+  renaming_sources = [ "$root_gen_dir/components/resources/about_credits.html" ]
+  renaming_destinations = [ "webview_licenses.notice" ]
+  deps = [ "//components/resources:about_credits" ]
+}
+
+android_resources("resources") {
+  sources = [
+    "java/res/drawable-hdpi/ic_play_circle_outline_black_48dp.png",
+    "java/res/drawable-mdpi/ic_play_circle_outline_black_48dp.png",
+    "java/res/drawable-xhdpi/ic_play_circle_outline_black_48dp.png",
+    "java/res/drawable-xxhdpi/ic_play_circle_outline_black_48dp.png",
+    "java/res/drawable-xxxhdpi/ic_play_circle_outline_black_48dp.png",
+  ]
+  custom_package = "org.chromium.android_webview"
+  deps = [ ":strings_grd" ]
+}
+
+grit("generate_aw_resources") {
+  source = "ui/aw_resources.grd"
+  outputs = [
+    "grit/aw_resources.h",
+    "aw_resources.pak",
+  ]
+}
+
+grit("generate_aw_strings") {
+  source = "ui/aw_strings.grd"
+  outputs = [ "grit/aw_strings.h" ]
+  foreach(_locale, locales) {
+    outputs += [ "aw_strings_${_locale}.pak" ]
+  }
+}
+
+grit("generate_webui_resources") {
+  source = "../ui/webui/resources/webui_resources.grd"
+
+  # webui/resources has way too many resources. The allowlist is trim this down
+  # to a reasonable size
+  _allowlist = "ui/grit_resources_allowlist.txt"
+  inputs = [ _allowlist ]
+  grit_flags = [
+    "-w",
+    rebase_path(_allowlist, root_build_dir),
+    "-E",
+    "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
+  ]
+  outputs = [
+    "grit/webui_resources.h",
+    "grit/webui_resources_map.cc",
+    "grit/webui_resources_map.h",
+    "webui_resources.pak",
+  ]
+  deps = [
+    "//ui/webui/resources/js:modulize",
+    "//ui/webui/resources/js/cr:modulize",
+    "//ui/webui/resources/js/cr/ui:modulize",
+  ]
+}
+
+grit("generate_mojo_resources") {
+  source = "../mojo/public/js/mojo_bindings_resources.grd"
+
+  # See :generate_webui_resources for an explanation of the allowlist
+  _allowlist = "ui/grit_resources_allowlist.txt"
+  inputs = [ _allowlist ]
+  grit_flags = [
+    "-w",
+    rebase_path(_allowlist, root_build_dir),
+    "-E",
+    "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
+  ]
+  outputs = [
+    "grit/mojo_bindings_resources.h",
+    "grit/mojo_bindings_resources_map.cc",
+    "grit/mojo_bindings_resources_map.h",
+    "mojo_bindings_resources.pak",
+  ]
+  deps = [
+    "//mojo/public/js:bindings_lite",
+    "//mojo/public/mojom/base:base_js",
+  ]
+}
+
+grit("generate_components_resources") {
+  # Note that dev_ui_components_resources.grd is Chrome-only, so excluded.
+  source = "../components/resources/components_resources.grd"
+
+  use_brotli = true
+
+  # See :generate_webui_resources for an explanation of the allowlist
+  _allowlist = "ui/grit_resources_allowlist.txt"
+  inputs = [ _allowlist ]
+  _about_credits_file = get_label_info("//components/resources",
+                                       "target_gen_dir") + "/about_credits.html"
+
+  grit_flags = [
+    "-w",
+    rebase_path(_allowlist, root_build_dir),
+    "-E",
+    "about_credits_file=" + rebase_path(_about_credits_file, root_build_dir),
+    "-E",
+    "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
+  ]
+  outputs = [
+    "grit/components_resources.h",
+    "components_resources.pak",
+  ]
+
+  deps = [
+    "//components/resources:about_credits",
+    "//components/resources/ssl/ssl_error_assistant:make_ssl_error_assistant_protobuf",
+  ]
+}
+
+grit("generate_components_strings") {
+  source = "../components/components_strings.grd"
+
+  # components_strings contains strings from all components. WebView
+  # will never display most of them, so we try to limit the included
+  # strings. This allowlist trims about 50% more than the compile-based
+  # allowlist generated by :system_webview_pak_whitelist.
+  _allowlist = rebase_path("ui/grit_strings_allowlist.txt", root_build_dir)
+  inputs = [ "//android_webview/ui/grit_strings_allowlist.txt" ]
+  grit_flags = [
+    "-w",
+    _allowlist,
+  ]
+  outputs =
+      [
+        "grit/components_strings.h",
+        "java/res/values/components_strings.xml",
+      ] +
+      process_file_template(
+          android_bundle_locales_as_resources,
+          [ "java/res/values-{{source_name_part}}/components_strings.xml" ]) +
+      process_file_template(locales_with_fake_bidi,
+                            [ "components_strings_{{source_name_part}}.pak" ])
+}
+
+java_strings_grd("strings_grd") {
+  grd_file = "java/strings/android_webview_strings.grd"
+  outputs = [ "values/android_webview_strings.xml" ] +
+            process_file_template(
+                android_bundle_locales_as_resources,
+                [ "values-{{source_name_part}}/android_webview_strings.xml" ])
+}

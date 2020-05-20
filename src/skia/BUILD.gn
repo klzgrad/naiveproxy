@@ -1,0 +1,963 @@
+# Copyright (c) 2013 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/buildflag_header.gni")
+import("//build/config/compiler/compiler.gni")
+import("//build/config/features.gni")
+import("//build/config/freetype/freetype.gni")
+import("//build/config/sanitizers/sanitizers.gni")
+import("//gpu/vulkan/features.gni")
+import("//printing/buildflags/buildflags.gni")
+import("//testing/test.gni")
+import("//third_party/libgifcodec/libgifcodec.gni")
+import("//third_party/skia/gn/shared_sources.gni")
+import("//third_party/skia/third_party/skcms/skcms.gni")
+import("features.gni")
+
+if (current_cpu == "arm") {
+  import("//build/config/arm.gni")
+}
+if (current_cpu == "mipsel" || current_cpu == "mips64el") {
+  import("//build/config/mips.gni")
+}
+
+skia_support_gpu = !is_ios
+skia_support_pdf = !is_ios && enable_basic_printing
+skia_support_skottie = true
+
+declare_args() {
+  enable_skia_wuffs_gif = false
+  skia_whitelist_serialized_typefaces = false
+}
+
+# Generate a buildflag header for compile-time checking of Dawn support.
+buildflag_header("buildflags") {
+  header = "buildflags.h"
+  flags = [ "SKIA_USE_DAWN=$skia_use_dawn" ]
+}
+
+# External-facing config for dependent code.
+config("skia_config") {
+  include_dirs = [ "//third_party/skia" ]
+
+  if (!is_ios) {
+    if (enable_skia_wuffs_gif) {
+      include_dirs += [ "//third_party/wuffs/src/release/c" ]
+    } else {
+      include_dirs += [ "//third_party/libgifcodec" ]
+    }
+  }
+  if (enable_vulkan) {
+    include_dirs += [
+      "//third_party/vulkan/include",
+      "//third_party/skia/third_party/vulkanmemoryallocator",
+    ]
+    configs = [ "//third_party/vulkan:vulkan_config" ]
+  }
+
+  defines = [
+    "SK_CODEC_DECODES_PNG",
+    "SK_CODEC_DECODES_WEBP",
+    "SK_ENCODE_PNG",
+    "SK_ENCODE_WEBP",
+    "SK_USER_CONFIG_HEADER=\"../../skia/config/SkUserConfig.h\"",
+  ]
+
+  if (skia_use_gl) {
+    defines += [ "SK_GL" ]
+  }
+
+  if (!is_ios) {
+    defines += [
+      "SK_CODEC_DECODES_JPEG",
+      "SK_ENCODE_JPEG",
+    ]
+    if (enable_skia_wuffs_gif) {
+      defines += [ "SK_HAS_WUFFS_LIBRARY" ]
+    } else {
+      defines += [ "SK_USE_LIBGIFCODEC" ]
+    }
+  }
+  if (enable_vulkan) {
+    defines += [
+      "SK_VULKAN_HEADER=\"../../skia/config/SkVulkanConfig.h\"",
+      "SK_VULKAN=1",
+    ]
+  }
+  if (skia_use_dawn) {
+    defines += [ "SK_DAWN" ]
+  }
+
+  if (is_component_build) {
+    defines += [ "SKIA_DLL" ]
+    if (is_win) {
+      defines += [ "SKCMS_API=__declspec(dllexport)" ]
+    } else {
+      defines += [ "SKCMS_API=__attribute__((visibility(\"default\")))" ]
+    }
+  }
+
+  if (skia_support_gpu) {
+    workaround_header = "gpu/config/gpu_driver_bug_workaround_autogen.h"
+    defines += [
+      "SK_SUPPORT_GPU=1",
+      "SK_GPU_WORKAROUNDS_HEADER=\"$workaround_header\"",
+    ]
+  } else {
+    defines += [ "SK_SUPPORT_GPU=0" ]
+  }
+
+  if (is_android) {
+    defines += [
+      "SK_BUILD_FOR_ANDROID",
+      "USE_CHROMIUM_SKIA",
+    ]
+  }
+
+  if (is_mac) {
+    defines += [
+      "SK_BUILD_FOR_MAC",
+      "SK_METAL",
+    ]
+  }
+
+  if (is_win) {
+    defines += [ "GR_GL_FUNCTION_TYPE=__stdcall" ]
+  }
+
+  if (skia_whitelist_serialized_typefaces) {
+    defines += [ "SK_WHITELIST_SERIALIZED_TYPEFACES" ]
+  }
+}
+
+# Internal-facing config for Skia library code.
+config("skia_library_config") {
+  defines = []
+
+  if (!is_ios && !use_system_freetype) {
+    defines += [ "SK_FREETYPE_MINIMUM_RUNTIME_VERSION=(((FREETYPE_MAJOR) * 0x01000000) | ((FREETYPE_MINOR) * 0x00010000) | ((FREETYPE_PATCH) * 0x00000100))" ]
+  }
+
+  defines += [ "SKIA_IMPLEMENTATION=1" ]
+
+  if (current_cpu == "arm") {
+    if (arm_use_neon) {
+      defines += [ "SK_ARM_HAS_NEON" ]
+    } else if (arm_optionally_use_neon) {
+      defines += [ "SK_ARM_HAS_OPTIONAL_NEON" ]
+    }
+  }
+
+  # Settings for text blitting, chosen to approximate the system browser.
+  if (is_linux) {
+    defines += [
+      "SK_GAMMA_EXPONENT=1.2",
+      "SK_GAMMA_CONTRAST=0.2",
+    ]
+  } else if (is_android) {
+    defines += [
+      "SK_GAMMA_APPLY_TO_A8",
+      "SK_GAMMA_EXPONENT=1.4",
+      "SK_GAMMA_CONTRAST=0.0",
+    ]
+  } else if (is_win) {
+    defines += [
+      "SK_GAMMA_SRGB",
+      "SK_GAMMA_CONTRAST=0.5",
+    ]
+  } else if (is_mac) {
+    defines += [
+      "SK_GAMMA_SRGB",
+      "SK_GAMMA_CONTRAST=0.0",
+    ]
+  }
+
+  if (is_android) {
+    defines += [
+      # Android devices are typically more memory constrained, so default to a
+      # smaller glyph cache (it may be overriden at runtime when the renderer
+      # starts up, depending on the actual device memory).
+      "SK_DEFAULT_FONT_CACHE_LIMIT=1048576",  # 1024 * 1024
+    ]
+  } else {
+    defines += [ "SK_DEFAULT_FONT_CACHE_LIMIT=20971520" ]  # 20 * 1024 * 1024
+  }
+
+  if (is_win) {
+    defines += [
+      # On windows, GDI handles are a scarse system-wide resource so we have to
+      # keep the glyph cache, which holds up to 4 GDI handles per entry, to a
+      # fairly small size. http://crbug.com/314387
+      "SK_DEFAULT_FONT_CACHE_COUNT_LIMIT=256",
+    ]
+
+    cflags = [
+      "/wd4244",  # conversion from 'type1( __int64)' to 'type2 (unsigned int)'
+      "/wd4267",  # conversion from 'size_t' (64 bit) to 'type'(32 bit).
+      "/wd4341",  # signed value is out of range for enum constant.
+      "/wd4345",  # Object is default-initialized if initialization is omitted.
+      "/wd4390",  # ';'empty statement found in looping;is it what was intended?
+      "/wd4554",  # 'operator' : check operator precedence for possible error
+      "/wd4748",  # compiler will disable optimizations if a function has inline
+                  # assembly code contains flow control(jmp or jcc) statements.
+
+      "/wd4800",  # forcing value to bool 'true/false'(assigning int to bool).
+      "/wd5041",  # out-of-line definition for constexpr static data member is
+                  # not needed and is deprecated in C++17
+    ]
+    cflags_cc = [ "/std:c++17" ]
+  } else {
+    cflags_cc = [ "-std=c++17" ]
+    cflags_objcc = [ "-std=c++17" ]
+  }
+}
+
+source_set("skcms") {
+  cflags = []
+  if (!is_win || is_clang) {
+    cflags += [
+      "-w",
+      "-std=c11",
+    ]
+  }
+
+  # LLVM automatically sets the equivalent of GCC's -mfp16-format=ieee on ARM
+  # builds by default, while GCC itself does not. We need it to enable support
+  # for half-precision floating point data types used by SKCMS on ARM.
+  if (is_linux && !is_clang && current_cpu == "arm") {
+    cflags += [ "-mfp16-format=ieee" ]
+  }
+
+  public = [ "//third_party/skia/include/third_party/skcms/skcms.h" ]
+  include_dirs = [ "//third_party/skia/include/third_party/skcms" ]
+  sources =
+      rebase_path(skcms_sources, ".", "//third_party/skia/third_party/skcms")
+}
+
+component("skia") {
+  deps = []
+  sources = [
+    # Chrome sources.
+    "config/SkUserConfig.h",
+    "config/sk_ref_cnt_ext_debug.h",
+    "config/sk_ref_cnt_ext_release.h",
+    "ext/SkDiscardableMemory_chrome.cc",
+    "ext/SkDiscardableMemory_chrome.h",
+    "ext/SkMemory_new_handler.cpp",
+    "ext/benchmarking_canvas.cc",
+    "ext/benchmarking_canvas.h",
+    "ext/convolver.cc",
+    "ext/convolver.h",
+    "ext/event_tracer_impl.cc",
+    "ext/event_tracer_impl.h",
+    "ext/google_logging.cc",
+    "ext/image_operations.cc",
+    "ext/image_operations.h",
+    "ext/opacity_filter_canvas.cc",
+    "ext/opacity_filter_canvas.h",
+    "ext/recursive_gaussian_convolution.cc",
+    "ext/recursive_gaussian_convolution.h",
+    "ext/skia_histogram.cc",
+    "ext/skia_histogram.h",
+    "ext/skia_memory_dump_provider.cc",
+    "ext/skia_memory_dump_provider.h",
+    "ext/skia_trace_memory_dump_impl.cc",
+    "ext/skia_trace_memory_dump_impl.h",
+    "ext/skia_utils_base.cc",
+    "ext/skia_utils_base.h",
+    "ext/skia_utils_ios.h",
+    "ext/skia_utils_ios.mm",
+    "ext/skia_utils_mac.h",
+    "ext/skia_utils_mac.mm",
+    "ext/skia_utils_win.cc",
+    "ext/skia_utils_win.h",
+  ]
+
+  if (!is_mac && !is_ios) {
+    sources += [
+      "ext/fontmgr_default.cc",
+      "ext/fontmgr_default.h",
+      "ext/fontmgr_default_android.cc",
+      "ext/fontmgr_default_linux.cc",
+      "ext/fontmgr_default_win.cc",
+    ]
+  }
+
+  if (!is_ios) {
+    sources += [
+      "ext/platform_canvas.cc",
+      "ext/platform_canvas.h",
+    ]
+  }
+  if (!is_ios && (current_cpu == "x86" || current_cpu == "x64")) {
+    sources += [
+      "ext/convolver_SSE2.cc",
+      "ext/convolver_SSE2.h",
+    ]
+  } else if (current_cpu == "mipsel" && mips_dsp_rev >= 2) {
+    sources += [
+      "ext/convolver_mips_dspr2.cc",
+      "ext/convolver_mips_dspr2.h",
+    ]
+  } else if (current_cpu == "arm" || current_cpu == "arm64") {
+    if (arm_use_neon) {
+      sources += [
+        "ext/convolver_neon.cc",
+        "ext/convolver_neon.h",
+      ]
+    }
+  }
+
+  if (is_win) {
+    sources += [
+      # Select the right BitmapPlatformDevice.
+      "ext/raster_handle_allocator_win.cc",
+    ]
+  }
+
+  # The imported Skia gni source paths are made absolute by gn.
+  defines = skia_core_defines
+  sources += skia_sksl_sources
+  sources += skia_utils_sources
+  sources += skia_xps_sources
+  sources += [
+    "//third_party/skia/src/fonts/SkFontMgr_indirect.cpp",
+    "//third_party/skia/src/fonts/SkRemotableFontMgr.cpp",
+    "//third_party/skia/src/images/SkImageEncoder.cpp",
+    "//third_party/skia/src/images/SkPngEncoder.cpp",
+    "//third_party/skia/src/images/SkWebpEncoder.cpp",
+    "//third_party/skia/src/ports/SkGlobalInitialization_default.cpp",
+    "//third_party/skia/src/ports/SkImageGenerator_none.cpp",
+    "//third_party/skia/src/ports/SkOSFile_stdio.cpp",
+    "//third_party/skia/src/sfnt/SkOTTable_name.cpp",
+    "//third_party/skia/src/sfnt/SkOTUtils.cpp",
+  ]
+  if (!is_ios) {
+    sources -= [ "//third_party/skia/src/ports/SkImageGenerator_none.cpp" ]
+    sources += [
+      "//third_party/skia/src/codec/SkBmpBaseCodec.cpp",
+      "//third_party/skia/src/codec/SkBmpCodec.cpp",
+      "//third_party/skia/src/codec/SkBmpMaskCodec.cpp",
+      "//third_party/skia/src/codec/SkBmpRLECodec.cpp",
+      "//third_party/skia/src/codec/SkBmpStandardCodec.cpp",
+      "//third_party/skia/src/codec/SkCodec.cpp",
+      "//third_party/skia/src/codec/SkCodecImageGenerator.cpp",
+      "//third_party/skia/src/codec/SkColorTable.cpp",
+      "//third_party/skia/src/codec/SkEncodedInfo.cpp",
+      "//third_party/skia/src/codec/SkIcoCodec.cpp",
+      "//third_party/skia/src/codec/SkJpegCodec.cpp",
+      "//third_party/skia/src/codec/SkJpegDecoderMgr.cpp",
+      "//third_party/skia/src/codec/SkJpegUtility.cpp",
+      "//third_party/skia/src/codec/SkMaskSwizzler.cpp",
+      "//third_party/skia/src/codec/SkMasks.cpp",
+      "//third_party/skia/src/codec/SkParseEncodedOrigin.cpp",
+      "//third_party/skia/src/codec/SkPngCodec.cpp",
+      "//third_party/skia/src/codec/SkSampler.cpp",
+      "//third_party/skia/src/codec/SkStreamBuffer.cpp",
+      "//third_party/skia/src/codec/SkSwizzler.cpp",
+      "//third_party/skia/src/codec/SkWbmpCodec.cpp",
+      "//third_party/skia/src/codec/SkWebpCodec.cpp",
+      "//third_party/skia/src/images/SkJPEGWriteUtility.cpp",
+      "//third_party/skia/src/images/SkJpegEncoder.cpp",
+      "//third_party/skia/src/ports/SkImageGenerator_skia.cpp",
+    ]
+
+    if (enable_skia_wuffs_gif) {
+      deps += [ "//third_party/wuffs" ]
+      sources += [ "//third_party/skia/src/codec/SkWuffsCodec.cpp" ]
+    } else {
+      sources += rebase_path(libgifcodec_sources + libgifcodec_public,
+                             ".",
+                             "//third_party/libgifcodec")
+    }
+  }
+
+  if (current_cpu == "arm") {
+    sources += [ "//third_party/skia/src/core/SkUtilsArm.cpp" ]
+  }
+
+  # Remove unused util sources.
+  sources -= [
+    "//third_party/skia/src/utils/SkCamera.cpp",
+    "//third_party/skia/src/utils/SkFrontBufferedStream.cpp",
+    "//third_party/skia/src/utils/SkInterpolator.cpp",
+    "//third_party/skia/src/utils/SkParsePath.cpp",
+  ]
+
+  if (is_win) {
+    sources -= [
+      # Keeping _win.cpp
+      "//third_party/skia/src/utils/SkThreadUtils_pthread.cpp",
+    ]
+    libs = [ "fontsub.lib" ]
+  } else {
+    sources -= [
+      # Keeping _pthread.cpp
+      "//third_party/skia/src/utils/SkThreadUtils_win.cpp",
+    ]
+  }
+
+  # need separate win section to handle chromes auto gn filter
+  # (build/config/BUILDCONFIG.gn)
+  if (is_win) {
+    sources -= [
+      #windows
+      "//third_party/skia/src/utils/win/SkWGL_win.cpp",
+    ]
+  }
+
+  # Select Skia ports.
+
+  # FreeType is needed everywhere (except on iOS), on Linux and Android as main
+  # font backend, on Windows and Mac as fallback backend for Variations.
+  if (!is_ios) {
+    sources += [
+      "//third_party/skia/src/ports/SkFontHost_FreeType.cpp",
+      "//third_party/skia/src/ports/SkFontHost_FreeType_common.cpp",
+    ]
+  }
+
+  if (is_win) {
+    sources += [
+      "//third_party/skia/src/ports/SkFontHost_win.cpp",
+      "//third_party/skia/src/ports/SkFontMgr_win_dw.cpp",
+      "//third_party/skia/src/ports/SkOSFile_win.cpp",
+      "//third_party/skia/src/ports/SkRemotableFontMgr_win_dw.cpp",
+      "//third_party/skia/src/ports/SkScalerContext_win_dw.cpp",
+      "//third_party/skia/src/ports/SkTLS_win.cpp",
+      "//third_party/skia/src/ports/SkTypeface_win_dw.cpp",
+    ]
+  } else {
+    sources += [
+      "//third_party/skia/src/ports/SkOSFile_posix.cpp",
+      "//third_party/skia/src/ports/SkTLS_pthread.cpp",
+    ]
+  }
+
+  if (is_mac || is_ios) {
+    set_sources_assignment_filter([])
+    sources += [
+      "//third_party/skia/src/ports/SkFontHost_mac.cpp",
+      "//third_party/skia/src/utils/mac/SkStream_mac.cpp",
+    ]
+    set_sources_assignment_filter(sources_assignment_filter)
+  }
+
+  if (is_linux) {
+    sources += [
+      "//third_party/skia/src/ports/SkFontConfigInterface.cpp",
+      "//third_party/skia/src/ports/SkFontConfigInterface_direct.cpp",
+      "//third_party/skia/src/ports/SkFontConfigInterface_direct_factory.cpp",
+      "//third_party/skia/src/ports/SkFontMgr_FontConfigInterface.cpp",
+    ]
+  }
+
+  if (is_linux || is_android) {
+    sources += [
+      # Retain the files for the SkFontMgr_Android on linux to emulate android
+      # fonts. See content/zygote/zygote_main_linux.cc
+      # Note that this requires expat.
+      "//third_party/skia/src/ports/SkFontMgr_android.cpp",
+      "//third_party/skia/src/ports/SkFontMgr_android_parser.cpp",
+    ]
+  }
+
+  if (is_win || is_mac) {
+    sources += [
+      # Add the FreeType custom font manager as a fallback backend for variable fonts.
+      "//third_party/skia/src/ports/SkFontMgr_custom.cpp",
+      "//third_party/skia/src/ports/SkFontMgr_custom_empty.cpp",
+    ]
+  }
+
+  if (is_fuchsia) {
+    sources += [
+      "//third_party/skia/src/ports/SkFontMgr_custom.cpp",
+      "//third_party/skia/src/ports/SkFontMgr_fuchsia.cpp",
+      "ext/fontmgr_default_fuchsia.cc",
+    ]
+    deps += [
+      "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.fonts",
+      "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.io",
+      "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.sys",
+      "//third_party/fuchsia-sdk/sdk/pkg/sys_cpp",
+      "//third_party/fuchsia-sdk/sdk/pkg/zx",
+      "//third_party/icu:icuuc",
+    ]
+  }
+
+  if (is_clang && !is_nacl) {
+    # Skia won't compile with some of the more strict clang warnings.
+    # e.g. it does:
+    #  SkASSERT(!"sk_out_of_memory");
+    configs -= [ "//build/config/clang:extra_warnings" ]
+  }
+
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [
+    ":skia_config",
+    ":skia_library_config",
+    "//build/config/compiler:no_chromium_code",
+  ]
+  public_configs = [ ":skia_config" ]
+
+  deps += [
+    ":skcms",
+    ":skia_opts",
+    "//base",
+    "//base/third_party/dynamic_annotations",
+    "//third_party/libpng",
+    "//third_party/libwebp",
+    "//third_party/libwebp:libwebp_webp",
+  ]
+  public_deps = [
+    ":buildflags",
+    ":skia_core_and_effects",
+  ]
+  if (skia_use_dawn) {
+    public_deps += [ "//third_party/dawn/src/dawn:dawncpp_headers" ]
+    deps += [
+      "//third_party/dawn:libdawn_native",
+      "//third_party/dawn/src/dawn:libdawn",
+    ]
+  }
+
+  if (!is_ios) {
+    deps += [
+      "//build/config/freetype",
+      "//third_party:jpeg",
+    ]
+  }
+
+  if (is_linux) {
+    deps += [
+      "//third_party/expat",
+      "//third_party/fontconfig",
+      "//third_party/icu:icuuc",
+    ]
+  }
+
+  if (is_android) {
+    deps += [
+      "//third_party/android_ndk:cpu_features",
+      "//third_party/expat",
+    ]
+  }
+
+  if (!is_debug) {
+    configs -= [ "//build/config/compiler:default_optimization" ]
+    configs += [ "//build/config/compiler:optimize_max" ]
+  }
+
+  if (is_mac) {
+    deps += [ ":skia_metal" ]
+    defines += [ "SK_METAL" ]
+    libs = [
+      "AppKit.framework",
+      "CoreFoundation.framework",
+      "CoreGraphics.framework",
+      "CoreText.framework",
+      "Metal.framework",
+      "Foundation.framework",
+    ]
+  }
+  if (skia_use_dawn) {
+    sources += skia_dawn_sources
+  }
+  if (is_ios) {
+    libs = [ "ImageIO.framework" ]
+    set_sources_assignment_filter([])
+    sources += [ "//third_party/skia/src/utils/mac/SkCreateCGImageRef.cpp" ]
+    set_sources_assignment_filter(sources_assignment_filter)
+  }
+
+  if (is_fuchsia) {
+    deps += [ "//third_party/expat" ]
+  }
+
+  if (skia_support_gpu) {
+    sources += skia_gpu_sources
+    sources += skia_null_gpu_sources
+    sources += skia_sksl_gpu_sources
+    if (skia_use_gl) {
+      sources += skia_gl_gpu_sources
+    }
+    if (enable_vulkan) {
+      sources += skia_vk_sources
+      sources += [
+        "//third_party/skia/third_party/vulkanmemoryallocator/GrVulkanMemoryAllocator.cpp",
+        "//third_party/skia/third_party/vulkanmemoryallocator/GrVulkanMemoryAllocator.h",
+      ]
+    }
+    deps += [ "//gpu/config:workaround_list" ]
+  }
+
+  if (skia_support_pdf) {
+    deps += [
+      "//third_party:freetype_harfbuzz",
+      "//third_party/zlib",
+    ]
+    sources += skia_pdf_sources
+  } else {
+    sources += [ "//third_party/skia/src/pdf/SkDocument_PDF_None.cpp" ]
+  }
+
+  if (skia_support_skottie) {
+    import("//third_party/skia/modules/skottie/skottie.gni")
+    import("//third_party/skia/modules/skresources/skresources.gni")
+    import("//third_party/skia/modules/sksg/sksg.gni")
+    import("//third_party/skia/modules/skshaper/skshaper.gni")
+    sources += skia_skottie_sources + skia_skottie_public
+    sources += skia_skresources_sources
+    sources += skia_sksg_sources
+    sources += skia_shaper_primitive_sources
+  }
+}
+
+# Template for things that are logically part of :skia, but need to be split out
+# so custom compile flags can be applied.
+#
+# These are all opted out of check_includes, due to (logically) being part of
+# skia.
+template("skia_source_set") {
+  source_set(target_name) {
+    forward_variables_from(invoker, "*")
+
+    check_includes = false
+
+    if (!is_debug) {
+      configs -= [ "//build/config/compiler:default_optimization" ]
+      configs += [ "//build/config/compiler:optimize_max" ]
+    }
+
+    configs -= [ "//build/config/compiler:chromium_code" ]
+    configs += [
+      ":skia_config",
+      ":skia_library_config",
+      "//build/config/compiler:no_chromium_code",
+    ]
+    public_configs = [ ":skia_config" ]
+
+    # Android, the only user of mismatched sample files (for now), gets a small
+    # binary size decrease by using AFDO to optimize for size in these
+    # source_sets. However, that also comes at a relatively big performance
+    # cost.
+    if (using_mismatched_sample_profile) {
+      configs -= [ "//build/config/compiler:afdo_optimize_size" ]
+    }
+    if (is_win) {
+      cflags_cc = [
+        "/std:c++17",
+        "/wd5041",  # out-of-line definition for constexpr static data member is
+                    # not needed and is deprecated in C++17
+      ]
+    } else {
+      cflags_cc = [ "-std=c++17" ]
+    }
+  }
+}
+
+# Split out for targeted removal of the afdo_optimize_size config on Android.
+skia_source_set("skia_core_and_effects") {
+  defines = skia_core_defines
+  sources = skia_core_sources
+  sources += skia_effects_sources
+  sources += skia_effects_imagefilter_sources
+  if (skia_support_gpu) {
+    deps = [ "//gpu/config:workaround_list" ]
+  }
+  if (skia_use_dawn) {
+    deps += [ "//third_party/dawn/src/dawn:dawncpp_headers" ]
+  }
+
+  visibility = [ ":skia" ]
+}
+
+# Bits that involve special vector-y hardware.
+if (current_cpu == "arm64") {
+  skia_source_set("skia_opts_crc32") {
+    sources = skia_opts.crc32_sources
+    cflags = [ "-march=armv8-a+crc" ]
+    visibility = [ ":skia_opts" ]
+  }
+}
+if (current_cpu == "x86" || current_cpu == "x64") {
+  skia_source_set("skia_opts_sse3") {
+    sources = skia_opts.ssse3_sources
+    if (!is_win || is_clang) {
+      cflags = [ "-mssse3" ]
+    }
+    if (is_win) {
+      defines = [ "SK_CPU_SSE_LEVEL=31" ]
+    }
+    visibility = [ ":skia_opts" ]
+  }
+  skia_source_set("skia_opts_sse41") {
+    sources = skia_opts.sse41_sources
+    if (!is_win || is_clang) {
+      cflags = [ "-msse4.1" ]
+    }
+    if (is_win) {
+      defines = [ "SK_CPU_SSE_LEVEL=41" ]
+    }
+    visibility = [ ":skia_opts" ]
+  }
+  skia_source_set("skia_opts_sse42") {
+    sources = skia_opts.sse42_sources
+    if (!is_win || is_clang) {
+      cflags = [ "-msse4.2" ]
+    }
+    if (is_win) {
+      defines = [ "SK_CPU_SSE_LEVEL=42" ]
+    }
+    visibility = [ ":skia_opts" ]
+  }
+  skia_source_set("skia_opts_avx") {
+    sources = skia_opts.avx_sources
+    if (!is_win) {
+      cflags = [ "-mavx" ]
+    }
+    if (is_win) {
+      cflags = [ "/arch:AVX" ]
+    }
+    visibility = [ ":skia_opts" ]
+  }
+  skia_source_set("skia_opts_hsw") {
+    sources = skia_opts.hsw_sources
+    if (!is_win) {
+      cflags = [
+        "-mavx2",
+        "-mbmi",
+        "-mbmi2",
+        "-mf16c",
+        "-mfma",
+      ]
+    }
+    if (is_win) {
+      cflags = [ "/arch:AVX2" ]
+    }
+    visibility = [ ":skia_opts" ]
+  }
+}
+
+skia_source_set("skia_opts") {
+  cflags = []
+  defines = []
+
+  deps = [ "//base" ]
+
+  if (current_cpu == "x86" || current_cpu == "x64") {
+    sources = skia_opts.sse2_sources
+    deps += [
+      ":skia_opts_avx",
+      ":skia_opts_hsw",
+      ":skia_opts_sse3",
+      ":skia_opts_sse41",
+      ":skia_opts_sse42",
+    ]
+  } else if (current_cpu == "arm") {
+    # The assembly uses the frame pointer register (r7 in Thumb/r11 in
+    # ARM), the compiler doesn't like that.
+    if (!is_ios) {
+      cflags += [ "-fomit-frame-pointer" ]
+    }
+
+    if (arm_version >= 7) {
+      sources = skia_opts.armv7_sources
+      if (arm_use_neon || arm_optionally_use_neon) {
+        sources += skia_opts.neon_sources
+
+        # Root build config sets -mfpu=$arm_fpu, which we expect to be neon
+        # when running this.
+        if (!arm_use_neon) {
+          configs -= [ "//build/config/compiler:compiler_arm_fpu" ]
+          cflags += [ "-mfpu=neon" ]
+        }
+      }
+    } else {
+      sources = skia_opts.none_sources
+    }
+  } else if (current_cpu == "arm64") {
+    sources = skia_opts.arm64_sources
+    deps += [ ":skia_opts_crc32" ]
+  } else if (current_cpu == "mipsel") {
+    cflags += [ "-fomit-frame-pointer" ]
+
+    if (mips_dsp_rev >= 1) {
+      sources = skia_opts.mips_dsp_sources
+    } else {
+      sources = skia_opts.none_sources
+    }
+  } else if (current_cpu == "mips64el") {
+    cflags += [ "-fomit-frame-pointer" ]
+    sources = skia_opts.none_sources
+  } else if (current_cpu == "ppc64") {
+    sources = skia_opts.none_sources
+  } else if (current_cpu == "s390x") {
+    sources = skia_opts.none_sources
+  } else {
+    assert(false, "Need to port cpu specific stuff from skia_library_opts.gyp")
+  }
+
+  visibility = [ ":skia" ]
+}
+
+# Split out metal sources, because they require ARC.
+if (is_mac) {
+  skia_source_set("skia_metal") {
+    defines = [ "SK_METAL" ]
+    sources = skia_metal_sources
+    cflags_objcc = [
+      "-Wno-unguarded-availability",
+      "-fobjc-arc",
+    ]
+    deps = [ "//gpu/config:workaround_list" ]
+    if (skia_use_dawn) {
+      deps += [ "//third_party/dawn/src/dawn:dawncpp_headers" ]
+    }
+  }
+}
+
+# Font copies.
+if (is_fuchsia) {
+  copy("copy_fuchsia_fonts_manifest") {
+    sources = [ "ext/data/test_fonts/fuchsia_test_fonts_manifest.json" ]
+    outputs = [ "$root_out_dir/test_fonts/{{source_file_part}}" ]
+  }
+}
+if (is_mac || is_ios) {
+  bundle_data("test_fonts_bundle_data") {
+    public_deps = [ "//third_party/test_fonts" ]
+
+    sources = [
+      "$root_out_dir/test_fonts/Ahem.ttf",
+      "ext/data/test_fonts/ChromiumAATTest.ttf",
+    ]
+
+    outputs = [ "{{bundle_resources_dir}}/{{source_file_part}}" ]
+  }
+}
+
+group("test_fonts_resources") {
+  deps = []
+  data_deps = []
+
+  if (is_mac || is_ios) {
+    deps += [ ":test_fonts_bundle_data" ]
+    data_deps += [ ":test_fonts_bundle_data" ]
+  } else {
+    deps += [ "//third_party/test_fonts" ]
+    data_deps += [ "//third_party/test_fonts" ]
+  }
+
+  if (is_fuchsia) {
+    deps += [ ":copy_fuchsia_fonts_manifest" ]
+    data_deps += [ ":copy_fuchsia_fonts_manifest" ]
+  }
+}
+
+source_set("test_fonts") {
+  testonly = true
+
+  sources = [ "ext/test_fonts.h" ]
+  deps = [
+    ":test_fonts_resources",
+    "//base/test:test_support",
+    "//skia",
+  ]
+
+  if (is_fuchsia) {
+    sources += [
+      "ext/test_fonts_fuchsia.cc",
+      "ext/test_fonts_fuchsia.h",
+    ]
+    deps += [
+      "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.fonts",
+      "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.io",
+      "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.sys",
+      "//third_party/fuchsia-sdk/sdk/pkg/sys_cpp",
+    ]
+  }
+  if (is_mac) {
+    sources += [ "ext/test_fonts_mac.mm" ]
+  }
+}
+
+test("skia_unittests") {
+  sources = [
+    "ext/convolver_unittest.cc",
+    "ext/image_operations_unittest.cc",
+    "ext/platform_canvas_unittest.cc",
+    "ext/recursive_gaussian_convolution_unittest.cc",
+    "ext/skia_memory_dump_provider_unittest.cc",
+    "ext/skia_utils_ios_unittest.mm",
+    "ext/skia_utils_mac_unittest.mm",
+  ]
+
+  if (!is_win) {
+    sources -= [ "ext/platform_canvas_unittest.cc" ]
+  }
+
+  deps = [
+    ":skia",
+    ":test_fonts",
+    "//base",
+    "//base/test:test_support",
+    "//mojo/core/test:run_all_unittests",
+    "//testing/gtest",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+  ]
+
+  if (!is_ios) {
+    sources += [ "public/mojom/test/mojom_traits_unittest.cc" ]
+    deps += [
+      # TODO: Fix this test to not depend on cc.
+      "//cc:test_support",
+      "//mojo/public/cpp/bindings",
+      "//skia/public/mojom:test_interfaces",
+    ]
+  }
+
+  if (is_fuchsia) {
+    sources += [ "ext/fontmgr_fuchsia_unittest.cc" ]
+    deps += [
+      "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.fonts",
+      "//third_party/test_fonts",
+    ]
+    data_deps = [ "//third_party/test_fonts" ]
+  }
+
+  if (skia_support_skottie) {
+    sources += [ "ext/skottie_unittest.cc" ]
+  }
+}
+
+if (!is_ios) {
+  executable("image_operations_bench") {
+    sources = [ "ext/image_operations_bench.cc" ]
+
+    deps = [
+      ":skia",
+      "//base",
+      "//build/win:default_exe_manifest",
+    ]
+  }
+
+  executable("filter_fuzz_stub") {
+    testonly = true
+    sources = [ "tools/filter_fuzz_stub/filter_fuzz_stub.cc" ]
+
+    deps = [
+      ":skia",
+      "//base",
+      "//base/test:test_support",
+      "//build/win:default_exe_manifest",
+    ]
+  }
+}
+
+group("fuzzers") {
+  deps = [ "//skia/tools/fuzzers" ]
+}

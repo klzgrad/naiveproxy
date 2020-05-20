@@ -1,0 +1,205 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//third_party/abseil-cpp/absl.gni")
+
+# Build targets in this module are marked as "testonly" because it is not clear
+# how ABSL_FLAG will interact with //base/command_line.h.
+# If this is a problem, feel free to remove "testonly" and use "assert_no_deps"
+# on the main Chrome binary.
+
+absl_source_set("flag_internal") {
+  testonly = true
+  sources = [ "internal/flag.cc" ]
+  public = [ "internal/flag.h" ]
+  deps = [
+    ":config",
+    ":handle",
+    ":registry",
+    "../base",
+    "../base:config",
+    "../base:core_headers",
+    "../memory",
+    "../meta:type_traits",
+    "../strings",
+    "../synchronization",
+  ]
+  visibility = []
+  visibility += [
+    ":*",
+    "../base/*",
+  ]
+}
+
+absl_source_set("program_name") {
+  testonly = true
+  sources = [ "internal/program_name.cc" ]
+  public = [ "internal/program_name.h" ]
+  deps = [
+    ":path_util",
+    "../base:config",
+    "../base:core_headers",
+    "../strings",
+    "../synchronization",
+  ]
+  visibility = []
+  visibility += [ ":*" ]
+}
+
+absl_source_set("path_util") {
+  testonly = true
+  public = [ "internal/path_util.h" ]
+  deps = [
+    "../base:config",
+    "../strings",
+  ]
+  visibility = []
+  visibility += [ ":*" ]
+}
+
+absl_source_set("config") {
+  testonly = true
+  sources = [ "usage_config.cc" ]
+  public = [
+    "config.h",
+    "usage_config.h",
+  ]
+  deps = [
+    ":path_util",
+    ":program_name",
+    "../base:config",
+    "../base:core_headers",
+    "../strings",
+    "../synchronization",
+  ]
+}
+
+absl_source_set("marshalling") {
+  testonly = true
+  sources = [ "marshalling.cc" ]
+  public = [ "marshalling.h" ]
+  deps = [
+    "../base:config",
+    "../base:core_headers",
+    "../base:log_severity",
+    "../strings",
+    "../strings:str_format",
+  ]
+}
+
+absl_source_set("handle") {
+  testonly = true
+  sources = [ "internal/commandlineflag.cc" ]
+  public = [ "internal/commandlineflag.h" ]
+  deps = [
+    ":config",
+    ":marshalling",
+    "../base:config",
+    "../base:core_headers",
+    "../base:fast_type_id",
+    "../strings",
+    "../types:optional",
+  ]
+  visibility = []
+  visibility += [ ":*" ]
+}
+
+absl_source_set("registry") {
+  testonly = true
+  sources = [
+    "internal/registry.cc",
+    "internal/type_erased.cc",
+  ]
+  public = [
+    "internal/registry.h",
+    "internal/type_erased.h",
+  ]
+  deps = [
+    ":config",
+    ":handle",
+    "../base:config",
+    "../base:core_headers",
+    "../base:raw_logging_internal",
+    "../strings",
+    "../synchronization",
+  ]
+  visibility = []
+  visibility += [ ":*" ]
+}
+
+absl_source_set("flag") {
+  testonly = true
+  sources = [ "flag.cc" ]
+  public = [
+    "declare.h",
+    "flag.h",
+  ]
+  deps = [
+    ":config",
+    ":flag_internal",
+    ":handle",
+    ":marshalling",
+    ":registry",
+    "../base",
+    "../base:config",
+    "../base:core_headers",
+    "../strings",
+  ]
+}
+
+absl_source_set("usage_internal") {
+  testonly = true
+  sources = [ "internal/usage.cc" ]
+  public = [ "internal/usage.h" ]
+  deps = [
+    ":config",
+    ":flag",
+    ":flag_internal",
+    ":handle",
+    ":path_util",
+    ":program_name",
+    ":registry",
+    "../base:config",
+    "../base:core_headers",
+    "../strings",
+  ]
+  visibility = []
+  visibility += [ ":*" ]
+}
+
+absl_source_set("usage") {
+  testonly = true
+  sources = [ "usage.cc" ]
+  public = [ "usage.h" ]
+  deps = [
+    ":usage_internal",
+    "../base:config",
+    "../base:core_headers",
+    "../strings",
+    "../synchronization",
+  ]
+}
+
+absl_source_set("parse") {
+  testonly = true
+  sources = [ "parse.cc" ]
+  public = [
+    "internal/parse.h",
+    "parse.h",
+  ]
+  deps = [
+    ":config",
+    ":flag",
+    ":flag_internal",
+    ":handle",
+    ":program_name",
+    ":registry",
+    ":usage",
+    ":usage_internal",
+    "../base:config",
+    "../base:core_headers",
+    "../strings",
+    "../synchronization",
+  ]
+}

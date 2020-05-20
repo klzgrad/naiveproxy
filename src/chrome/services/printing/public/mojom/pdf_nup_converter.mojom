@@ -1,0 +1,62 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module printing.mojom;
+
+import "mojo/public/mojom/base/shared_memory.mojom";
+import "ui/gfx/geometry/mojom/geometry.mojom";
+import "url/mojom/url.mojom";
+
+// This set of interfaces is used to do Nup PDF conversion.
+// Usage:
+// - generate a PdfNupConverter.
+//
+// - call PdfNupConverter.NupPageConvert() to import N PDF pages into one N-up
+//   PDF page.
+//
+// - call PdfNupConverter.NupDocumentConvert() to convert a PDF document to a
+//   N-up PDF document.
+//
+// - call PdfNupConverter.SetWebContentsURL() to set the URL that is committed
+//   in the main frame of the WebContents for crash diagnosis.
+interface PdfNupConverter {
+
+  // The status of PDF conversion execution.
+  enum Status {
+    SUCCESS = 0,
+    CONVERSION_FAILURE = 1,
+    HANDLE_MAP_ERROR = 2,
+  };
+
+  // Convert a list of PDF pages to a N-up PDF.
+  // |pages_per_sheet| is the number of pages to put on a single sheet.
+  // |page_size| is the output page size, measured in PDF "user space" units.
+  // |printable_area| is the printable area of the output page, measured in
+  // PDF "user space" units.
+  // |pdf_page_regions| is a list of pdf pages to be converted to a N-up page.
+  // The number of items in |pdf_page_regions| can be different from N.  It
+  // will return a N-up PDF document of
+  // Math.ceil(size of |pdf_page_regions| / N) pages in it.
+  NupPageConvert(
+      uint32 pages_per_sheet,
+      gfx.mojom.Size page_size,
+      gfx.mojom.Rect printable_area,
+      array<mojo_base.mojom.ReadOnlySharedMemoryRegion> pdf_page_regions)
+   => (Status status, mojo_base.mojom.ReadOnlySharedMemoryRegion? pdf_region);
+
+  // Convert a PDF document to a N-up PDF document.
+  // |pages_per_sheet| is the number of pages to put on a single sheet.
+  // |page_size| is the output page size, measured in PDF "user space" units.
+  // |printable_area| is the printable area of the output page, measured in
+  // PDF "user space" units.
+  NupDocumentConvert(uint32 pages_per_sheet,
+                     gfx.mojom.Size page_size,
+                     gfx.mojom.Rect printable_area,
+                     mojo_base.mojom.ReadOnlySharedMemoryRegion src_pdf_region)
+   => (Status status, mojo_base.mojom.ReadOnlySharedMemoryRegion? pdf_region);
+
+  // Sets the URL which is committed in the main frame of the WebContents,
+  // for use in crash diagnosis.
+  SetWebContentsURL(url.mojom.Url url);
+};

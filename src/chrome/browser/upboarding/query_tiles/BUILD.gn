@@ -1,0 +1,129 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+if (is_android) {
+  import("//build/config/android/config.gni")
+  import("//build/config/android/rules.gni")
+}
+
+if (is_android) {
+  java_group("query_tiles_java") {
+    deps = [ ":public_java" ]
+  }
+}
+
+group("query_tiles") {
+  public_deps = [
+    ":factory",
+    ":public",
+  ]
+
+  deps = [ "internal" ]
+}
+
+source_set("public") {
+  sources = [
+    "query_tile_entry.cc",
+    "query_tile_entry.h",
+    "tile_service.h",
+  ]
+
+  deps = [ "//ui/gfx" ]
+
+  public_deps = [
+    "//base",
+    "//components/keyed_service/core",
+  ]
+
+  if (is_android) {
+    sources += [
+      "android/tile_provider_bridge.cc",
+      "android/tile_provider_bridge.h",
+    ]
+
+    deps += [ ":jni_headers" ]
+  }
+}
+
+source_set("factory") {
+  sources = [
+    "tile_service_factory_helper.cc",
+    "tile_service_factory_helper.h",
+  ]
+
+  deps = [
+    ":public",
+    "internal:internal",
+  ]
+}
+
+if (is_android) {
+  android_library("public_java") {
+    sources = [
+      "android/java/src/org/chromium/chrome/browser/query_tiles/QueryTileCoordinator.java",
+      "android/java/src/org/chromium/chrome/browser/query_tiles/QueryTileCoordinatorFactory.java",
+      "android/java/src/org/chromium/chrome/browser/query_tiles/Tile.java",
+      "android/java/src/org/chromium/chrome/browser/query_tiles/TileProvider.java",
+      "android/java/src/org/chromium/chrome/browser/query_tiles/bridges/TileProviderBridge.java",
+      "android/java/src/org/chromium/chrome/browser/query_tiles/list/QueryTileCoordinatorImpl.java",
+      "android/java/src/org/chromium/chrome/browser/query_tiles/list/TileListModel.java",
+      "android/java/src/org/chromium/chrome/browser/query_tiles/list/TileListProperties.java",
+      "android/java/src/org/chromium/chrome/browser/query_tiles/list/TileListPropertyViewBinder.java",
+      "android/java/src/org/chromium/chrome/browser/query_tiles/list/TileListView.java",
+      "android/java/src/org/chromium/chrome/browser/query_tiles/list/TileViewHolder.java",
+    ]
+
+    deps = [
+      ":chrome_upboarding_query_tiles_java_resources",
+      "//base:base_java",
+      "//base:jni_java",
+      "//third_party/android_deps:androidx_recyclerview_recyclerview_java",
+      "//ui/android:ui_java",
+    ]
+
+    annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
+  }
+
+  generate_jni("jni_headers") {
+    visibility = [ ":*" ]
+
+    sources = [ "android/java/src/org/chromium/chrome/browser/query_tiles/bridges/TileProviderBridge.java" ]
+  }
+
+  android_resources("chrome_upboarding_query_tiles_java_resources") {
+    sources = [ "android/java/res/layout/query_tile_view.xml" ]
+    custom_package = "org.chromium.chrome.query_tiles"
+  }
+
+  android_library("query_tiles_javatests") {
+    testonly = true
+
+    sources = [ "android/javatests/src/org/chromium/chrome/browser/query_tiles/QueryTileSectionTest.java" ]
+
+    deps = [
+      ":public_java",
+      "//base:base_java",
+      "//base:base_java_test_support",
+      "//chrome/android:chrome_java",
+      "//chrome/android:chrome_test_util_java",
+      "//chrome/test/android:chrome_java_test_support",
+      "//third_party/espresso:espresso_all_java",
+      "//third_party/hamcrest:hamcrest_java",
+      "//third_party/junit",
+      "//third_party/mockito:mockito_java",
+    ]
+  }
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [ "query_tile_entry_unittest.cc" ]
+  visibility = [ "//chrome/browser/upboarding:unit_tests" ]
+  deps = [
+    ":public",
+    "//chrome/browser/upboarding/query_tiles/internal:unit_tests",
+    "//testing/gtest",
+    "//url",
+  ]
+}

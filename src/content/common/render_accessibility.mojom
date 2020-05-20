@@ -1,0 +1,96 @@
+// Copyright 2020 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module content.mojom;
+
+import "content/common/ax_content_tree_update.mojom";
+import "ui/accessibility/ax_enums.mojom";
+import "ui/accessibility/mojom/ax_action_data.mojom";
+import "ui/accessibility/mojom/ax_event.mojom";
+import "ui/accessibility/mojom/ax_relative_bounds.mojom";
+import "ui/gfx/geometry/mojom/geometry.mojom";
+
+struct LocationChanges {
+  // ID of the object whose location is changing.
+  int32 id;
+
+  // The object's new location info.
+  ax.mojom.AXRelativeBounds new_location;
+};
+
+struct ChildFrameHitTestInfo {
+  // The routing ID of the child frame to request a hit test for.
+  int32 child_frame_routing_id;
+
+  // The coordinates that should be used for the hit test on the child frame
+  // indicated by |child_frame_routing_id|, accounting for the viewport.
+  gfx.mojom.Point transformed_point;
+
+  // The accessibility event that should be fired.
+  ax.mojom.Event event_to_fire;
+};
+
+// Interface for accessibility messages sent from the renderer to the browser,
+// implemented by RenderFrameHostImpl in the browser process.
+interface RenderAccessibilityHost {
+  // Sent to notify the browser about renderer accessibility events.
+  //
+  // The browser will respond by invoking the callback specified by the renderer
+  // as part of once the original call has been processed, in order to notify
+  // the renderer that it can send additional updates.
+  //
+  // |reset_token| parameter is set if this method was sent in response to a
+  // reset request from the browser. When the browser requests a reset, it
+  // ignores incoming remote calls until it sees one with the correct reset
+  // token. Any other time, it ignores further calls with a reset token.
+  HandleAXEvents(array<ax.mojom.AXContentTreeUpdate> updates,
+                 array<ax.mojom.AXEvent> events, int32 reset_token) => ();
+
+  // Sent to update the browser of the location of accessibility objects.
+  HandleAXLocationChanges(array<LocationChanges> changes);
+};
+
+// Interface for accessibility messages sent from RenderFrameHostImpl in the
+// browser process, implemented by the RenderAccessibilityManager object in the
+// renderer process. This RenderAccessibilityManager object will be owned by the
+// RenderFrameImpl object, which will keep it alive during its entire lifetime.
+//
+// This interface is used via an associated channel from RenderFrameHostImpl in
+// the browser process, shared with other interfaces that accessibility-related
+// messages need to maintain the order with like NavigationClient or LocalFrame.
+interface RenderAccessibility {
+  // Change the accessibility mode in the renderer process for a given frame to
+  // match the one set for such frame from the browser process. |ax_mode| should
+  // contain at least the ui::AXMode::kWebContents value to enable accessibility
+  // support for web contents. See ui/accessibility/ax_mode.h for valid values.
+  SetMode(uint32 ax_mode);
+
+  // Kills the renderer. Sent when there is a fatal error in the accessibility
+  // tree and the maximum number of resets has been hit.
+  FatalError();
+
+  // Relays a request from assistive technology to perform a hit test over the
+  // accessibility object at the point passed via |action_data.target_point|.
+  //
+  // If the object hit doesn't have a child frame, the accessibility event
+  // indicated via |action_data.hit_test_event_to_fire| will be emitted by the
+  // renderer and no |child_frame_hit_test_info| should be returned. Otherwise,
+  // |child_frame_hit_test_info| will provide the necessary information for the
+  // browser process to request another hit test over the child frame found.
+  HitTest(ax.mojom.AXActionData action_data)
+      => (ChildFrameHitTestInfo? child_frame_hit_test_info);
+
+  // Relay a request from assistive technology to perform an action, such as
+  // focusing or clicking on a node.
+  PerformAction(ax.mojom.AXActionData action_data);
+
+  // Tell the renderer to reset and send a new accessibility tree from scratch
+  // because the browser is out of sync. It passes a sequential reset token.
+  // This should be rare, and if we need to reset the same renderer too many
+  // times we just kill it. After sending a reset, the browser ignores incoming
+  // accessibility IPCs until it receives one with the matching reset token.
+  // Conversely, it ignores IPCs with a reset token if it was not expecting a
+  // reset.
+  Reset(int32 reset_token);
+};

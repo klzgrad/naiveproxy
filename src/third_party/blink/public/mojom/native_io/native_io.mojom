@@ -1,0 +1,70 @@
+// Copyright 2020 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module blink.mojom;
+
+import "mojo/public/mojom/base/file.mojom";
+
+// The NativeIO API currently offers synchronous access to storage. This is
+// purely for purpose of allowing developers to experiment, so we can learn the
+// performance and stability implications of a synchronous API. All the methods
+// here are [Sync] for this reason.
+//
+// NativeIO API docs: https://github.com/fivedots/nativeio-explainer
+
+// Handle and lock for a NativeIO file opened by a renderer.
+//
+// The interface is consumed by Blink in the renderer process. The interface is
+// currently implemented in the browser process, and will eventually move to the
+// Storage Service.
+//
+// This interface currently serves as a lock. The renderer gets exclusive access
+// to the associated file while it keeps this interface's mojo pipe open.
+//
+// The interface will also be used by the renderer to notify the browser of
+// writes to the file, for quota management purposes.
+interface NativeIOFileHost {
+  // Promises to the browser that the file was closed.
+  //
+  // Well-behaved renderers will call this method after closing the file
+  // descriptor received by the NativeIOHost.OpenFile() call that bound this
+  // NativeIOFile.
+  //
+  // A compromised renderer may lie and call this method without closing its
+  // corresponding file descriptor. This may allow it to observe writes from
+  // other renderers to the same (origin-scoped) file, so no cross-origin data
+  // would be leaked. This may also allow the compromised renderer to bypass a
+  // browser-managed quota on open file descriptors, but compromised renderers
+  // can already exhaust the system's resources.
+  [Sync] Close() => ();
+};
+
+// Origin-scoped implementation of the Web Platform's NativeIO API.
+//
+// The interface is consumed by Blink in the renderer process. The interface is
+// currently implemented in the browser process, and will eventually move to the
+// Storage Service.
+//
+// The interface grants access to origin-scoped data in the user's profile. A
+// compromised renderer can only use this interface to access the origin's data.
+// The origin's data will be quota-managed.
+interface NativeIOHost {
+  // Opens a previously created file. Creates a new file if necessary.
+  //
+  // The origin has an exclusive lock on the file until it calls Close() on the
+  // |lock_handle|, or until it disconnects from it.
+  [Sync]
+  OpenFile(string name, pending_receiver<NativeIOFileHost> file_host_receiver)
+      => (mojo_base.mojom.File? backing_file);
+
+  // Deletes a previously created file.
+  [Sync]
+  DeleteFile(string name) => (bool success);
+
+  // Lists all the files created by the origin.
+  [Sync]
+  GetAllFileNames() => (bool success, array<string> names);
+
+  // TODO(pwnall): Build quota integration before this API exits Dev Trials.
+};

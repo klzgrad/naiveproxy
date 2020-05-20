@@ -1,0 +1,176 @@
+// Copyright 2019 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// Definitions for the probe API exposed by the cros_healthd daemon. This API is
+// normally consumed by the browser.
+
+// NOTE: This mojom should be kept in sync with the copy in Chromium OS's repo
+// in src/platform2/diagnostics/mojo/cros_healthd_probe.mojom.
+
+module chromeos.cros_healthd.mojom;
+
+// An enumeration of CPU architectures.
+[Extensible]
+enum CpuArchitectureEnum {
+  kUnknown,
+  kX86_64,
+};
+
+// An enumeration of each category of information that cros_healthd can report.
+[Extensible]
+enum ProbeCategoryEnum {
+  kBattery,
+  kNonRemovableBlockDevices,
+  kCachedVpdData,
+  kCpu,
+  kTimezone,
+  kMemory,
+  kBacklight,
+  kFan,
+};
+
+// Information related to a Smart Battery, as defined in
+// http://sbs-forum.org/specs/sbdat110.pdf.
+struct SmartBatteryInfo {
+  // Manufacture date converted to yyyy-mm-dd format.
+  string manufacture_date;
+  // Temperature in 0.1K.
+  uint64 temperature;
+};
+
+// Information related to the main battery.
+struct BatteryInfo {
+  // TODO(https://crbug.com/979245): Update "smart" cycle count.
+  int64 cycle_count;
+  // Current battery voltage (V)
+  double voltage_now;
+  // Manufacturer of the battery
+  string vendor;
+  // Serial number of the battery
+  string serial_number;
+  // Design capacity (Ah)
+  double charge_full_design;
+  // Full capacity (Ah)
+  double charge_full;
+  // Desired minimum output voltage (V)
+  double voltage_min_design;
+  // Model name.
+  string model_name;
+  // Current battery charge (Ah)
+  double charge_now;
+  // Current battery current (A)
+  double current_now;
+  // Technology of the battery
+  string technology;
+  // Status of the battery
+  string status;
+  // Information related to a Smart Battery. Included when the main battery is a
+  // Smart Battery.
+  SmartBatteryInfo? smart_battery_info;
+};
+
+// Information related to a specific non-removable block device.
+struct NonRemovableBlockDeviceInfo {
+  // The path of this storage on the system. It is useful if caller needs to
+  // correlate with other information.
+  string path;
+  // Exact size of this storage, reported in bytes
+  uint64 size;
+  // Storage type, could be MMC / NVMe / ATA, based on udev subsystem.
+  string type;
+  // Manufacturer ID, 8 bits.
+  uint8 manufacturer_id;
+  // PNM: Product name, ASCII characters for 6 bytes.
+  string name;
+  // PSN: Product serial number, 32 bits
+  uint32 serial;
+};
+
+// Cached VPD read from sysfs.
+struct CachedVpdInfo {
+  // Contents of /sys/firmware/vpd/ro/sku_number, if the device supports it.
+  string? sku_number;
+};
+
+// Information related to a device's CPU.
+struct CpuInfo {
+  // The CPU model name.
+  string model_name;
+  // The CPU architecture.
+  CpuArchitectureEnum architecture;
+  // The max CPU clock speed in kHz.
+  uint32 max_clock_speed_khz;
+};
+
+// Timezone information.
+struct TimezoneInfo {
+  // The timezone of the device in POSIX standard.
+  string posix;
+  // The timezone region of the device.
+  string region;
+};
+
+// Memory information.
+struct MemoryInfo {
+  // Total memory, in KiB.
+  uint32 total_memory_kib;
+  // Free memory, in KiB.
+  uint32 free_memory_kib;
+  // Available memory, in KiB.
+  uint32 available_memory_kib;
+  // Number of page faults since the last boot.
+  uint32 page_faults_since_last_boot;
+};
+
+// Backlight information.
+struct BacklightInfo {
+  // Path to this backlight on the system. Useful if the caller needs to
+  // correlate with other information.
+  string path;
+  // Maximum brightness for the backlight.
+  uint32 max_brightness;
+  // Current brightness of the backlight, between 0 and max_brightness.
+  uint32 brightness;
+};
+
+// Fan information.
+struct FanInfo {
+  // Fan speed in RPM.
+  uint32 speed_rpm;
+};
+
+// A collection of all the device's telemetry information that cros_healthd is
+// capable of reporting. Note that every field in TelemetryInfo is nullable, and
+// the response for a particular ProbeTelemetryInfo request will only contain
+// fields corresponding to the categories passed to the ProbeTelemetryInfo
+// request. All optional array members will be null if cros_healthd did not
+// attempt to fetch that information, and size zero if cros_healthd did attempt
+// to fetch that information, but was unable to.
+struct TelemetryInfo {
+  // Information about the device's main battery. Only present when kBattery was
+  // included in the categories input to ProbeTelemetryInfo.
+  BatteryInfo? battery_info;
+  // Information about all of the device's non-removable block devices. Only
+  // present when kNonRemovableBlockDevices was included in the categories input
+  // to ProbeTelemetryInfo.
+  array<NonRemovableBlockDeviceInfo>? block_device_info;
+  // Only present when kCachedVpdData was included in the categories input to
+  // ProbeTelemetryInfo.
+  CachedVpdInfo? vpd_info;
+  // Information about each of the device's CPUs. Only present when kCpu was
+  // included in the categories input to ProbeTelemetryInfo.
+  array<CpuInfo>? cpu_info;
+  // Information about the device's timezone. Only present when kTimezone was
+  // included in the categories input to ProbeTelemetryInfo.
+  TimezoneInfo? timezone_info;
+  // Information about the system's memory. Only present when kMemory was
+  // included in the categories input to ProbeTelemetryInfo.
+  MemoryInfo? memory_info;
+  // Information about all of the device's backlights. Only present when
+  // kBacklight was included in the categories input to ProbeTelemetryInfo.
+  array<BacklightInfo>? backlight_info;
+  // Information about each of the device's fans. Only present when kFan was
+  // included in the categories input to ProbeTelemetryInfo.
+  array<FanInfo>? fan_info;
+};

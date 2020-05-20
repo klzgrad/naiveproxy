@@ -1,0 +1,80 @@
+// Copyright 2020 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module storage.mojom;
+
+import "components/services/storage/public/mojom/service_worker_database.mojom";
+import "mojo/public/mojom/base/big_buffer.mojom";
+import "services/network/public/mojom/url_response_head.mojom";
+import "url/mojom/url.mojom";
+
+// Conveys a result of finding a registration. If a registration is found,
+// |status| will be kOk. |registration| and |resources| are null and empty
+// if there is no matching registration.
+//
+// The Storage Service (components/services/storage) supplies this
+// information and the //content consumes the information.
+struct ServiceWorkerFindRegistrationResult {
+  ServiceWorkerDatabaseStatus status;
+  ServiceWorkerRegistrationData? registration;
+  array<ServiceWorkerResourceRecord> resources;
+};
+
+// Used to tell the browser process or embedders if there are registrations
+// after ServiceWorkerStorageControl::DeleteRegistration().
+enum ServiceWorkerStorageOriginState {
+  // Registrations may exist for the origin. It cannot be deleted.
+  kKeep,
+  // No registrations exist for the origin. It can be deleted.
+  kDelete,
+};
+
+// An interface that writes a service worker script (resource) to storage.
+interface ServiceWorkerResourceWriter {
+  // Writes the response head to storage.
+  WriteResponseHead(network.mojom.URLResponseHead response_head)
+      => (int32 status);
+  // Write the content of the resource to storage.
+  WriteData(mojo_base.mojom.BigBuffer data) => (int32 status);
+};
+
+// Controls the state of service worker storage within a partition. This is a
+// privileged interface and must not be brokered to untrusted clients.
+//
+// Currently this is consumed and implemented in the browser process, but the
+// implementation will eventually live in the Storage Service.
+//
+// TODO(crbug.com/1055677): Add more methods to cover all ServiceWorkerStorage
+// public methods.
+interface ServiceWorkerStorageControl {
+  // Reads a stored registration for |client_id|.
+  FindRegistrationForClientUrl(url.mojom.Url client_url) =>
+      (ServiceWorkerFindRegistrationResult result);
+  // Reads a stored registration for |scope|.
+  FindRegistrationForScope(url.mojom.Url scope) =>
+      (ServiceWorkerFindRegistrationResult result);
+  // Reads a stored registration for |registration_id|.
+  FindRegistrationForId(int64 registration_id, url.mojom.Url origin) =>
+      (ServiceWorkerFindRegistrationResult result);
+
+  // Stores |registration_data| and |resources| on persistent storage.
+  StoreRegistration(ServiceWorkerRegistrationData registration,
+                    array<ServiceWorkerResourceRecord> resources) =>
+      (ServiceWorkerDatabaseStatus status);
+
+  // Deletes the registration specified by |registration_id|. |origin_state| is
+  // kDelete if there is no registration for |origin| after deletion.
+  DeleteRegistration(int64 registration_id, url.mojom.Url origin) =>
+      (ServiceWorkerDatabaseStatus status,
+       ServiceWorkerStorageOriginState origin_state);
+
+  // Returns a new resource id which is guaranteed to be unique in the storage.
+  // Returns blink::mojom::kInvalidServiceWorkerResourceId if the storage
+  // is disabled.
+  GetNewResourceId() => (int64 resource_id);
+
+  // Creates a resource writer for the given |resource_id|.
+  CreateResourceWriter(int64 resource_id,
+                       pending_receiver<ServiceWorkerResourceWriter> writer);
+};

@@ -1,0 +1,106 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//third_party/closure_compiler/compile_js.gni")
+import("//tools/polymer/polymer.gni")
+import("//ui/webui/resources/tools/js_modulizer.gni")
+import("../settings.gni")
+
+js_type_check("closure_compile") {
+  deps = [
+    ":cloud_printers",
+    ":printing_page",
+  ]
+
+  if (!is_chromeos) {
+    deps += [ ":printing_browser_proxy" ]
+  }
+}
+
+js_library("cloud_printers") {
+}
+
+js_library("printing_browser_proxy") {
+  deps = [ "//ui/webui/resources/js:cr" ]
+}
+
+js_library("printing_page") {
+  deps = [
+    ":printing_browser_proxy",
+    "..:route",
+    "..:router",
+    "../settings_page:settings_animated_pages",
+  ]
+}
+
+js_type_check("closure_compile_module") {
+  is_polymer3 = true
+  deps = [
+    ":cloud_printers.m",
+    ":printing_page.m",
+  ]
+
+  if (!is_chromeos) {
+    deps += [ ":printing_browser_proxy.m" ]
+  }
+}
+
+js_library("cloud_printers.m") {
+  sources = [ "$root_gen_dir/chrome/browser/resources/settings/printing_page/cloud_printers.m.js" ]
+  deps = [
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+  ]
+  extra_deps = [ ":cloud_printers_module" ]
+}
+
+js_library("printing_browser_proxy.m") {
+  sources = [ "$root_gen_dir/chrome/browser/resources/settings/printing_page/printing_browser_proxy.m.js" ]
+  deps = [ "//ui/webui/resources/js:cr.m" ]
+  extra_deps = [ ":modulize" ]
+}
+
+js_library("printing_page.m") {
+  sources = [ "$root_gen_dir/chrome/browser/resources/settings/printing_page/printing_page.m.js" ]
+  deps = [
+    ":printing_browser_proxy.m",
+    "..:route.m",
+    "..:router.m",
+    "../settings_page:settings_animated_pages.m",
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+  ]
+  extra_deps = [ ":printing_page_module" ]
+}
+
+group("polymer3_elements") {
+  public_deps = [
+    ":cloud_printers_module",
+    ":printing_page_module",
+  ]
+
+  if (!is_chromeos) {
+    public_deps += [ ":modulize" ]
+  }
+}
+
+polymer_modulizer("cloud_printers") {
+  js_file = "cloud_printers.js"
+  html_file = "cloud_printers.html"
+  html_type = "dom-module"
+}
+
+polymer_modulizer("printing_page") {
+  js_file = "printing_page.js"
+  html_file = "printing_page.html"
+  html_type = "dom-module"
+  namespace_rewrites = settings_namespace_rewrites
+  auto_imports = settings_auto_imports + [
+                   "chrome/browser/resources/settings/route.html|routes",
+                   "chrome/browser/resources/settings/router.html|Router",
+                 ]
+}
+
+js_modulizer("modulize") {
+  input_files = [ "printing_browser_proxy.js" ]
+  namespace_rewrites = settings_namespace_rewrites
+}

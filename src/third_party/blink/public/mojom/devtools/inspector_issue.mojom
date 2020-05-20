@@ -1,0 +1,62 @@
+// Copyright 2020 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module blink.mojom;
+
+import "url/mojom/url.mojom";
+import "services/network/public/mojom/cookie_manager.mojom";
+
+// A code that uniquely identifies an issue. This type should be descriptive
+// enough for the front-end to provide a clear description of the issue.
+enum InspectorIssueCode {
+  kSameSiteCookieIssue,
+};
+
+// Information about a cookie that is affected by an issue.
+struct AffectedCookie {
+  string name;
+  string path;
+  string domain;
+  url.mojom.Url? site_for_cookies;
+};
+
+// The resources affected by an InspectorIssue.
+struct AffectedResources {
+  array<AffectedCookie> cookies;
+};
+
+enum SameSiteCookieExclusionReason {
+  ExcludeSameSiteUnspecifiedTreatedAsLax,
+  ExcludeSameSiteNoneInsecure,
+};
+
+enum SameSiteCookieWarningReason {
+  WarnSameSiteUnspecifiedCrossSiteContext,
+  WarnSameSiteNoneInsecure,
+  WarnSameSiteUnspecifiedLaxAllowUnsafe,
+  WarnSameSiteCrossSchemeSecureUrlMethodUnsafe,
+  WarnSameSiteCrossSchemeSecureUrlLax,
+  WarnSameSiteCrossSchemeSecureUrlStrict,
+  WarnSameSiteCrossSchemeInsecureUrlMethodUnsafe,
+  WarnSameSiteCrossSchemeInsecureUrlLax,
+  WarnSameSiteCrossSchemeInsecureUrlStrict,
+};
+
+// Specific information about |kSameSiteCookieIssue| type issues.
+struct SameSiteCookieIssueDetails {
+  array<SameSiteCookieExclusionReason> exclusionReason;
+  array<SameSiteCookieWarningReason> warningReason;
+};
+
+// A collection of optional fields that may store additional data depending
+// on the issue code.
+struct InspectorIssueDetails {
+  SameSiteCookieIssueDetails? sameSiteCookieIssueDetails;
+};
+
+struct InspectorIssueInfo {
+  InspectorIssueCode code;
+  InspectorIssueDetails details;
+  AffectedResources resources;
+};

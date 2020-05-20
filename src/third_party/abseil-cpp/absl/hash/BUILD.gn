@@ -1,0 +1,75 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build_overrides/build.gni")
+import("//third_party/abseil-cpp/absl.gni")
+
+# Usage of Abseil in Chromium is guarded by an explicit opt-in list, before
+# adding projects to this list please reach out to cxx@chromium.org and CC:
+# - https://cs.chromium.org/chromium/src/third_party/abseil-cpp/OWNERS
+#
+# More information can be found at:
+# https://docs.google.com/document/d/1DgS1-A3rzboTLjpf4m1sqkJgWjnY_Ru2dokk1X1vBDU
+if (build_with_chromium) {
+  default_visibility = absl_visibility
+  default_visibility += [ "//third_party/openscreen/*" ]
+} else {
+  default_visibility = [ "*" ]
+}
+
+absl_source_set("hash") {
+  sources = [
+    "internal/hash.cc",
+    "internal/hash.h",
+  ]
+  public = [ "hash.h" ]
+  deps = [
+    ":city",
+    "../base:core_headers",
+    "../base:endian",
+    "../container:fixed_array",
+    "../meta:type_traits",
+    "../numeric:int128",
+    "../strings",
+    "../strings:cord",
+    "../types:optional",
+    "../types:variant",
+    "../utility",
+  ]
+  visibility = default_visibility
+}
+
+absl_source_set("hash_testing") {
+  testonly = true
+  public = [ "hash_testing.h" ]
+  deps = [
+    ":spy_hash_state",
+    "../meta:type_traits",
+    "../strings",
+    "../types:variant",
+    "//testing/gtest",
+  ]
+}
+
+absl_source_set("spy_hash_state") {
+  testonly = true
+  public = [ "internal/spy_hash_state.h" ]
+  deps = [
+    ":hash",
+    "../strings",
+    "../strings:str_format",
+  ]
+  visibility = []
+  visibility += [ "../*" ]
+}
+
+absl_source_set("city") {
+  public = [ "internal/city.h" ]
+  sources = [ "internal/city.cc" ]
+  deps = [
+    "../base:config",
+    "../base:core_headers",
+    "../base:endian",
+  ]
+}

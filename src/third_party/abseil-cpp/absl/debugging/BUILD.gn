@@ -1,0 +1,164 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/sanitizers/sanitizers.gni")
+import("//third_party/abseil-cpp/absl.gni")
+
+absl_source_set("stacktrace") {
+  sources = [
+    "internal/stacktrace_aarch64-inl.inc",
+    "internal/stacktrace_arm-inl.inc",
+    "internal/stacktrace_config.h",
+    "internal/stacktrace_generic-inl.inc",
+    "internal/stacktrace_powerpc-inl.inc",
+    "internal/stacktrace_unimplemented-inl.inc",
+    "internal/stacktrace_win32-inl.inc",
+    "internal/stacktrace_x86-inl.inc",
+    "stacktrace.cc",
+  ]
+  public = [ "stacktrace.h" ]
+  deps = [
+    ":debugging_internal",
+    "../base:config",
+    "../base:core_headers",
+    "../base:raw_logging_internal",
+  ]
+}
+
+absl_source_set("symbolize") {
+  sources = [
+    "symbolize.cc",
+    "symbolize_elf.inc",
+    "symbolize_unimplemented.inc",
+    "symbolize_win32.inc",
+  ]
+  public = [
+    "internal/symbolize.h",
+    "symbolize.h",
+  ]
+  deps = [
+    ":debugging_internal",
+    ":demangle_internal",
+    "../base",
+    "../base:config",
+    "../base:core_headers",
+    "../base:dynamic_annotations",
+    "../base:malloc_internal",
+    "../base:raw_logging_internal",
+  ]
+
+  # TODO(mbonadei): The bazel file has:
+  #   -DEFAULTLIB:dbghelp.lib
+  # evaluate if this needs to be added here as well.
+}
+
+absl_source_set("examine_stack") {
+  sources = [ "internal/examine_stack.cc" ]
+  public = [ "internal/examine_stack.h" ]
+  visibility = []
+  visibility += [ ":*" ]
+  deps = [
+    ":stacktrace",
+    ":symbolize",
+    "../base:config",
+    "../base:core_headers",
+    "../base:raw_logging_internal",
+  ]
+}
+
+absl_source_set("failure_signal_handler") {
+  sources = [ "failure_signal_handler.cc" ]
+  public = [ "failure_signal_handler.h" ]
+  deps = [
+    ":examine_stack",
+    ":stacktrace",
+    "../base",
+    "../base:config",
+    "../base:core_headers",
+    "../base:errno_saver",
+    "../base:raw_logging_internal",
+  ]
+}
+
+absl_source_set("debugging_internal") {
+  sources = [
+    "internal/address_is_readable.cc",
+    "internal/elf_mem_image.cc",
+    "internal/vdso_support.cc",
+  ]
+  public = [
+    "internal/address_is_readable.h",
+    "internal/elf_mem_image.h",
+    "internal/vdso_support.h",
+  ]
+  deps = [
+    "../base:config",
+    "../base:core_headers",
+    "../base:dynamic_annotations",
+    "../base:errno_saver",
+    "../base:raw_logging_internal",
+  ]
+}
+
+absl_source_set("demangle_internal") {
+  sources = [ "internal/demangle.cc" ]
+  public = [ "internal/demangle.h" ]
+  deps = [
+    "../base",
+    "../base:config",
+    "../base:core_headers",
+  ]
+}
+
+absl_source_set("leak_check") {
+  if (is_ios || is_win) {
+    sources = []
+    public = []
+  } else {
+    sources = [ "leak_check.cc" ]
+    public = [ "leak_check.h" ]
+  }
+  deps = [
+    "../base:config",
+    "../base:core_headers",
+  ]
+}
+
+absl_source_set("leak_check_disable") {
+  sources = [ "leak_check_disable.cc" ]
+  deps = [ "../base:config" ]
+}
+
+if (is_lsan) {
+  absl_source_set("leak_check_api_enabled_for_testing") {
+    testonly = true
+    sources = [ "leak_check.cc" ]
+    public = [ "leak_check.h" ]
+    visibility = []
+    visibility += [ ":*" ]
+    deps = [ "../base:config" ]
+  }
+} else {
+  absl_source_set("leak_check_api_disabled_for_testing") {
+    testonly = true
+    sources = [ "leak_check.cc" ]
+    public = [ "leak_check.h" ]
+    visibility = []
+    visibility += [ ":*" ]
+    deps = [ "../base:config" ]
+  }
+}
+
+absl_source_set("stack_consumption") {
+  testonly = true
+  sources = [ "internal/stack_consumption.cc" ]
+  public = [ "internal/stack_consumption.h" ]
+  deps = [
+    "../base:config",
+    "../base:core_headers",
+    "../base:raw_logging_internal",
+  ]
+  visibility = []
+  visibility += [ ":*" ]
+}

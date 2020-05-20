@@ -1,0 +1,74 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//third_party/closure_compiler/compile_js.gni")
+
+# Note we compile with reportUnknownTypes while it works, but if dependencies
+# get more complex, we should remove it and only enable in developer builds.
+media_closure_flags = default_closure_args + [
+                        "jscomp_error=strictCheckTypes",
+                        "jscomp_error=reportUnknownTypes",
+                        "language_in=ECMASCRIPT_2018",
+
+                        # TODO(crbug/1048973): Remove these when the mojo bindings
+                        # js is updated to pass a closure compile check.
+                        "hide_warnings_for=mojo/public/js/",
+                        "hide_warnings_for=chromeos/components/media_app_ui/media_app_ui.mojom-lite-for-compile.js",
+                      ]
+
+group("closure_compile") {
+  deps = [
+    ":closure_compile_app",
+    ":closure_compile_index",
+  ]
+}
+
+js_type_check("closure_compile_index") {
+  closure_flags = media_closure_flags
+  deps = [
+    ":launch",
+    ":message_pipe",
+    ":mojo_api_bootstrap",
+  ]
+}
+
+js_type_check("closure_compile_app") {
+  closure_flags = media_closure_flags
+  deps = [
+    ":message_pipe",
+    ":receiver",
+  ]
+}
+
+js_library("launch") {
+  externs_list = [
+    "web_app_file_handling.externs.js",
+    "dom_draft.externs.js",
+  ]
+  deps = [
+    ":message_pipe",
+    ":message_types",
+    ":mojo_api_bootstrap",
+  ]
+}
+
+js_library("message_pipe") {
+}
+
+js_library("message_types") {
+}
+
+js_library("receiver") {
+  externs_list = [ "media_app.externs.js" ]
+  deps = [
+    ":message_pipe",
+    ":message_types",
+  ]
+}
+
+js_library("mojo_api_bootstrap") {
+  deps = [
+    "//chromeos/components/media_app_ui:mojo_bindings_js_library_for_compile",
+  ]
+}

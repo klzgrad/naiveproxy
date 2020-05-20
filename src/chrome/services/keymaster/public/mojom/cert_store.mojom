@@ -1,0 +1,61 @@
+// Copyright 2019 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// Next MinVersion: 1
+
+// This file defines the mojo interface between arc-keymaster and Chrome for the
+// keys hardware-backed and accessible by Chrome.
+
+module arc.keymaster.mojom;
+
+// Enumerates the crypto algorithms supported by Host.
+[Extensible]
+enum Algorithm {
+  kRsaPkcs1,
+};
+
+// Enumerates the digests supported by Host.
+[Extensible]
+enum Digest {
+  kSha1,
+  kSha256,
+  kSha384,
+  kSha512,
+};
+
+// Enumerates the result codes of signature operation.
+[Extensible]
+enum SignatureResult {
+  kOk,
+  // Failed with error.
+  kFailed,
+  kUnsupportedAlgorithm,
+};
+
+// Interface exposed by Chrome.
+// Next method ID: 1
+interface CertStoreHost {
+  // Returns an interface to SecurityTokenOperation.
+  GetSecurityTokenOperation@0(SecurityTokenOperation& operation) => ();
+};
+
+// Interface exposed by arc-keymaster daemon.
+// Next method ID: 1
+interface CertStoreInstance {
+  // Establishes full-duplex communication with the host.
+  Init@0(CertStoreHost host_ptr) => ();
+};
+
+// Implemented in Chrome.
+// Next method ID: 1
+interface SecurityTokenOperation {
+  // Signs input |data| pre-hashed with the given |digest|.
+  // Retrieves a |signature| signed by a certificate identified by
+  // |subject_public_key_info| by |algorithm| (currently, only RSA is
+  // supported).
+  // In case of any error, |signature| is null.
+  SignDigest@0(string subject_public_key_info, Algorithm algorithm,
+       Digest digest, array<uint8> data) => (SignatureResult result,
+           array<uint8>? signature);
+};

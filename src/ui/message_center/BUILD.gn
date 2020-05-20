@@ -1,0 +1,211 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/features.gni")
+import("//build/config/jumbo.gni")
+import("//build/config/ui.gni")
+import("//components/vector_icons/vector_icons.gni")
+import("//testing/test.gni")
+import("//ui/base/ui_features.gni")
+
+aggregate_vector_icons("message_center_vector_icons") {
+  icon_directory = "vector_icons"
+
+  icons = [
+    "notification_close_button.icon",
+    "notification_expand_less.icon",
+    "notification_expand_more.icon",
+    "notification_inline_reply.icon",
+    "notification_settings_button.icon",
+    "notification_snooze_button.icon",
+    "product.icon",
+  ]
+}
+
+# TODO(msw|mukai|dewittj): Move ash-specific files: crbug.com/585175
+jumbo_component("message_center") {
+  deps = [
+    "//base",
+    "//ui/base",
+    "//ui/strings",
+    "//url",
+  ]
+
+  public_deps = [ "//ui/message_center/public/cpp" ]
+
+  defines = [ "MESSAGE_CENTER_IMPLEMENTATION" ]
+
+  if (enable_message_center) {
+    deps += [
+      ":message_center_vector_icons",
+      "//base:i18n",
+      "//base/third_party/dynamic_annotations",
+      "//components/url_formatter",
+      "//skia",
+      "//ui/accessibility",
+      "//ui/display",
+      "//ui/events",
+      "//ui/events:gesture_detection",
+      "//ui/gfx",
+      "//ui/gfx/geometry",
+      "//ui/native_theme",
+      "//ui/resources",
+    ]
+
+    configs += [ "//build/config:precompiled_headers" ]
+    sources = [
+      "lock_screen/empty_lock_screen_controller.cc",
+      "lock_screen/empty_lock_screen_controller.h",
+      "lock_screen/lock_screen_controller.h",
+      "message_center.cc",
+      "message_center.h",
+      "message_center_export.h",
+      "message_center_impl.cc",
+      "message_center_impl.h",
+      "message_center_observer.h",
+      "message_center_stats_collector.cc",
+      "message_center_stats_collector.h",
+      "message_center_style.cc",
+      "message_center_style.h",
+      "message_center_types.h",
+      "notification_blocker.cc",
+      "notification_blocker.h",
+      "notification_list.cc",
+      "notification_list.h",
+      "popup_timer.cc",
+      "popup_timer.h",
+      "popup_timers_controller.cc",
+      "popup_timers_controller.h",
+    ]
+
+    sources += get_target_outputs(":message_center_vector_icons")
+
+    if (is_win) {
+      deps += [
+        "//ui/aura",
+        "//ui/wm/public",
+      ]
+    }
+
+    if (toolkit_views) {
+      sources += [
+        "views/desktop_message_popup_collection.cc",
+        "views/desktop_message_popup_collection.h",
+        "views/message_popup_collection.cc",
+        "views/message_popup_collection.h",
+        "views/message_popup_view.cc",
+        "views/message_popup_view.h",
+        "views/message_popup_view_mac.mm",
+        "views/message_view.cc",
+        "views/message_view.h",
+        "views/message_view_factory.cc",
+        "views/message_view_factory.h",
+        "views/notification_background_painter.cc",
+        "views/notification_background_painter.h",
+        "views/notification_control_buttons_view.cc",
+        "views/notification_control_buttons_view.h",
+        "views/notification_header_view.cc",
+        "views/notification_header_view.h",
+        "views/notification_view_md.cc",
+        "views/notification_view_md.h",
+        "views/padded_button.cc",
+        "views/padded_button.h",
+        "views/proportional_image_view.cc",
+        "views/proportional_image_view.h",
+        "views/relative_time_formatter.cc",
+        "views/relative_time_formatter.h",
+      ]
+      deps += [
+        "//ui/compositor",
+        "//ui/events",
+        "//ui/views",
+      ]
+      if (is_mac) {
+        libs = [ "Foundation.framework" ]
+      }
+    }
+  } else {
+    # Notification service disabled.
+    sources = [ "dummy_message_center.cc" ]
+  }
+}
+
+if (enable_message_center) {
+  static_library("test_support") {
+    testonly = true
+
+    sources = [
+      "fake_message_center.cc",
+      "fake_message_center.h",
+    ]
+
+    deps = [
+      "//base",
+      "//base/test:test_support",
+      "//skia",
+      "//ui/gfx",
+      "//ui/gfx/geometry",
+    ]
+
+    public_deps = [
+      ":message_center",
+      "//ui/message_center/public/cpp",
+    ]
+  }
+
+  test("message_center_unittests") {
+    sources = [
+      "lock_screen/fake_lock_screen_controller.cc",
+      "lock_screen/fake_lock_screen_controller.h",
+      "message_center_impl_unittest.cc",
+      "notification_list_unittest.cc",
+      "public/cpp/notification_delegate_unittest.cc",
+      "test/run_all_unittests.cc",
+    ]
+
+    deps = [
+      ":message_center",
+      ":test_support",
+      "//base",
+      "//base/test:test_support",
+      "//mojo/core/embedder",
+      "//skia",
+      "//testing/gmock",
+      "//testing/gtest",
+      "//ui/base",
+      "//ui/base:test_support",
+      "//ui/events",
+      "//ui/events:test_support",
+      "//ui/gfx",
+      "//ui/gfx:test_support",
+      "//ui/gfx/geometry",
+      "//ui/gl",
+      "//ui/gl:test_support",
+      "//ui/message_center/public/cpp",
+      "//ui/resources",
+      "//ui/resources:ui_test_pak",
+      "//url",
+    ]
+
+    data_deps = [
+      "//third_party/mesa_headers",
+      "//ui/resources:ui_test_pak_data",
+    ]
+
+    if (toolkit_views) {
+      sources += [
+        "views/message_popup_collection_unittest.cc",
+        "views/notification_header_view_unittest.cc",
+        "views/notification_view_md_unittest.cc",
+        "views/relative_time_formatter_unittest.cc",
+      ]
+      deps += [
+        "//ui/display",
+        "//ui/strings",
+        "//ui/views",
+        "//ui/views:test_support",
+      ]
+    }
+  }
+}

@@ -1,0 +1,65 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//third_party/closure_compiler/compile_js.gni")
+import("//tools/polymer/polymer.gni")
+import("../settings.gni")
+
+js_type_check("closure_compile") {
+  deps = [ ":basic_page" ]
+}
+
+js_library("basic_page") {
+  deps = [
+    "..:page_visibility",
+    "..:route",
+    "..:router",
+    "..:search_settings",
+    "../chrome_cleanup_page:chrome_cleanup_proxy",
+    "../prefs:prefs_behavior",
+    "../settings_page:main_page_behavior",
+    "//ui/webui/resources/js:load_time_data",
+  ]
+  externs_list = [ "$externs_path/pending_polymer.js" ]
+}
+
+js_type_check("closure_compile_module") {
+  is_polymer3 = true
+  deps = [ ":basic_page.m" ]
+}
+
+js_library("basic_page.m") {
+  sources = [ "$root_gen_dir/chrome/browser/resources/settings/basic_page/basic_page.m.js" ]
+  deps = [
+    "..:page_visibility.m",
+    "..:route.m",
+    "..:router.m",
+    "..:search_settings.m",
+    "../chrome_cleanup_page:chrome_cleanup_proxy.m",
+    "../prefs:prefs_behavior.m",
+    "../settings_page:main_page_behavior.m",
+    "//ui/webui/resources/js:load_time_data.m",
+  ]
+  extra_deps = [ ":basic_page_module" ]
+}
+
+group("polymer3_elements") {
+  public_deps = [ ":basic_page_module" ]
+}
+
+polymer_modulizer("basic_page") {
+  js_file = "basic_page.js"
+  html_file = "basic_page.html"
+  html_type = "dom-module"
+  auto_imports = settings_auto_imports + [
+                   "chrome/browser/resources/settings/page_visibility.html|PageVisibility",
+                   "chrome/browser/resources/settings/route.html|routes",
+                   "chrome/browser/resources/settings/router.html|Route, Router, RouteObserverBehavior",
+                   "chrome/browser/resources/settings/settings_page/main_page_behavior.html|MainPageBehavior",
+                   "chrome/browser/resources/settings/search_settings.html|getSearchManager, SearchResult",
+                   "ui/webui/resources/html/assert.html|assert",
+                   "ui/webui/resources/html/polymer.html|beforeNextRender,html,Polymer",
+                 ]
+  namespace_rewrites = settings_namespace_rewrites
+}

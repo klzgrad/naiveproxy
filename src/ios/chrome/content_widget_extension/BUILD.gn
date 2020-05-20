@@ -1,0 +1,109 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ios/rules.gni")
+import("//build/config/locales.gni")
+import("//build/config/mac/base_rules.gni")
+import("//build/mac/tweak_info_plist.gni")
+import("//ios/build/chrome_build.gni")
+import("//ios/build/config.gni")
+import("//ios/chrome/tools/strings/generate_localizable_strings.gni")
+import("//tools/grit/repack.gni")
+
+tweak_info_plist("tweak_info_plist") {
+  info_plist = "Info.plist"
+}
+
+compile_entitlements("entitlements") {
+  substitutions = [ "IOS_BUNDLE_ID_PREFIX=$ios_app_bundle_id_prefix" ]
+  output_name = "$target_gen_dir/content_widget_extension.appex.entitlements"
+  entitlements_templates =
+      [ "entitlements/external/content_widget_extension.appex.entitlements" ]
+}
+
+ios_appex_bundle("content_widget_extension") {
+  deps = [
+    ":content_widget",
+    ":system_strings",
+  ]
+
+  extra_substitutions = [
+    "CHROME_CHANNEL_SCHEME=$url_channel_scheme",
+    "CHROMIUM_SHORT_NAME=$chromium_short_name",
+    "WIDGET_EXTENSION_BUNDLE_ID=$chromium_bundle_id.ContentTodayExtension",
+  ]
+
+  assert_no_deps = ios_extension_assert_no_deps
+
+  entitlements_target = ":entitlements"
+  info_plist_target = ":tweak_info_plist"
+}
+
+source_set("content_widget") {
+  sources = [
+    "content_widget_view.h",
+    "content_widget_view.mm",
+    "content_widget_view_controller.h",
+    "content_widget_view_controller.mm",
+    "most_visited_tile_view.h",
+    "most_visited_tile_view.mm",
+  ]
+
+  deps = [
+    "//base",
+    "//ios/chrome/common/app_group",
+    "//ios/chrome/common/app_group:command",
+    "//ios/chrome/common/ntp_tile",
+    "//ios/chrome/common/ui/elements",
+    "//ios/chrome/common/ui/favicon",
+    "//ios/chrome/common/ui/util",
+  ]
+
+  libs = [
+    "Foundation.framework",
+    "NotificationCenter.framework",
+    "UIKit.framework",
+  ]
+
+  assert_no_deps = [ "//ios/chrome/browser" ]
+
+  configs += [ "//build/config/compiler:enable_arc" ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [ "content_widget_view_controller_unittest.mm" ]
+  deps = [
+    ":content_widget",
+    "//testing/gtest",
+  ]
+  configs += [ "//build/config/compiler:enable_arc" ]
+}
+
+repack_locales("packed_resources") {
+  input_locales = ios_packed_locales
+  output_locales = ios_packed_locales_as_mac_outputs
+
+  source_patterns = [ "$root_gen_dir/ios/content_widget_extension/ios_content_widget_extension_${branding_path_component}_strings_" ]
+
+  deps = [ "//ios/chrome/content_widget_extension/strings:ios_content_widget_extension_${branding_path_component}_strings" ]
+}
+
+generate_localizable_strings("system_strings") {
+  visibility = [ ":*" ]
+  _packed_resources_target = ":packed_resources"
+  config_file = "content_widget_extension_localize_strings_config.plist"
+  datapack_dir = get_label_info(_packed_resources_target, "target_gen_dir")
+  packed_locales = ios_packed_locales_as_mac_outputs
+  output_filenames = [ "InfoPlist.strings" ]
+  deps = [
+    "//ios/chrome/content_widget_extension/strings:ios_content_widget_extension_chromium_strings",
+
+    # Depends on both branding strings target to ensure the proper .h exists
+    # (the .plist configuration can only reference one of them, and their
+    # content is identical).
+    "//ios/chrome/content_widget_extension/strings:ios_content_widget_extension_google_chrome_strings",
+    _packed_resources_target,
+  ]
+}

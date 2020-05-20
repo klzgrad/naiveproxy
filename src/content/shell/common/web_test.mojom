@@ -1,0 +1,97 @@
+// Copyright 2020 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module content.mojom;
+
+import "mojo/public/mojom/base/file_path.mojom";
+import "mojo/public/mojom/base/values.mojom";
+import "mojo/public/mojom/base/string16.mojom";
+import "third_party/blink/public/mojom/permissions/permission_status.mojom";
+import "url/mojom/url.mojom";
+
+// Web test messages sent from the browser process to the renderer.
+interface WebTestControl {
+  // Used send flag changes to renderers - either when
+  // 1) broadcasting change happening in one renderer to all other renderers, or
+  // 2) sending accumulated changes to a single new renderer.
+  ReplicateWebTestRuntimeFlagsChanges(
+      mojo_base.mojom.DictionaryValue changed_layout_test_runtime_flags);
+};
+
+// Web test messages sent from the renderer process to the browser.
+interface WebTestClient {
+  // Start to inspect a secondary window.
+  InspectSecondaryWindow();
+
+  // Sent by secondary test window to notify the test has finished.
+  TestFinishedInSecondaryRenderer();
+
+  // Simulates a click on the notification.
+  //   - |title|: the title of the notification.
+  //   - |action_index|: indicates which action was clicked.
+  //   - |reply|: indicates the user reply.
+  SimulateWebNotificationClick(
+      string title, int32 action_index, mojo_base.mojom.String16? reply);
+
+  // Simulates closing a titled web notification depending on the user
+  // click.
+  //   - |title|: the title of the notification.
+  //   - |by_user|: whether the user clicks the notification.
+  SimulateWebNotificationClose(string title, bool by_user);
+
+  // Simulates a user deleting a content index entry.
+  SimulateWebContentIndexDelete(string id);
+
+  // Sets the cookie policy to:
+  // - allow all cookies when |block| is false
+  // - block only third-party cookies when |block| is true
+  BlockThirdPartyCookies(bool block);
+
+  // Reset all permissions of WebTestPermissionManager.
+  ResetPermissions();
+
+  // Sets the permission for |name| to |status| when queried or requested in
+  // |origin| from |embedding_origin|.
+  SetPermission(string name,
+               blink.mojom.PermissionStatus status,
+               url.mojom.Url origin,
+               url.mojom.Url embedding_origin);
+
+  // Notifies the browser that one of renderers has changed web test runtime
+  // flags (i.e. has set dump_as_text).
+  WebTestRuntimeFlagsChanged(
+      mojo_base.mojom.DictionaryValue changed_web_test_runtime_flags);
+
+  // Delete all cookies created in this associated storage context.
+  DeleteAllCookies();
+
+  // Clears all WebSQL databases.
+  ClearAllDatabases();
+
+  // Sets WebSQL quota size. If |quota| is the same to kDefaultDatabaseQuota,
+  // this resets quota to settings with a zero refresh interval to force
+  // QuotaManager to refresh settings immediately.
+  SetDatabaseQuota(int32 quota);
+
+  // Returns the absolute path to a directory this test can write data in. This
+  // returns the path to a fresh empty directory for each test that calls this
+  // method, but repeatedly calling this from the same test will return the same
+  // directory.
+  [Sync]
+  GetWritableDirectory() => (mojo_base.mojom.FilePath path);
+
+  // Registers a new isolated filesystem with the given files, and returns the
+  // new filesystem id.
+  [Sync]
+  RegisterIsolatedFileSystem(
+      array<mojo_base.mojom.FilePath> absolute_filenames)
+          => (string filesystem_id);
+
+  // For the duration of the current test this causes all file choosers to
+  // return the passed in |path|.
+  SetFilePathForMockFileDialog(mojo_base.mojom.FilePath path);
+
+  // Initialize to dump the main frame with a navigation history or pixels.
+  InitiateCaptureDump(bool capture_navigation_history, bool capture_pixels);
+};

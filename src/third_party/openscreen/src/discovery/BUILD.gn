@@ -1,0 +1,179 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build_overrides/build.gni")
+import("../testing/libfuzzer/fuzzer_test.gni")
+
+source_set("common") {
+  sources = [
+    "common/config.h",
+    "common/reporting_client.h",
+  ]
+
+  deps = [
+    "../util",
+  ]
+
+  public_deps = [
+    "../platform",
+    "../third_party/abseil",
+  ]
+}
+
+source_set("mdns") {
+  sources = [
+    "mdns/mdns_domain_confirmed_provider.h",
+    "mdns/mdns_probe.cc",
+    "mdns/mdns_probe.h",
+    "mdns/mdns_probe_manager.cc",
+    "mdns/mdns_probe_manager.h",
+    "mdns/mdns_publisher.cc",
+    "mdns/mdns_publisher.h",
+    "mdns/mdns_querier.cc",
+    "mdns/mdns_querier.h",
+    "mdns/mdns_reader.cc",
+    "mdns/mdns_reader.h",
+    "mdns/mdns_receiver.cc",
+    "mdns/mdns_receiver.h",
+    "mdns/mdns_record_changed_callback.h",
+    "mdns/mdns_records.cc",
+    "mdns/mdns_records.h",
+    "mdns/mdns_responder.cc",
+    "mdns/mdns_responder.h",
+    "mdns/mdns_sender.cc",
+    "mdns/mdns_sender.h",
+    "mdns/mdns_service_impl.cc",
+    "mdns/mdns_service_impl.h",
+    "mdns/mdns_trackers.cc",
+    "mdns/mdns_trackers.h",
+    "mdns/mdns_writer.cc",
+    "mdns/mdns_writer.h",
+    "mdns/public/mdns_constants.h",
+    "mdns/public/mdns_service.cc",
+    "mdns/public/mdns_service.h",
+  ]
+
+  deps = [
+    "../util",
+  ]
+
+  public_deps = [
+    ":common",
+    "../platform",
+    "../third_party/abseil",
+  ]
+}
+
+source_set("dnssd") {
+  sources = [
+    "dnssd/impl/conversion_layer.cc",
+    "dnssd/impl/conversion_layer.h",
+    "dnssd/impl/dns_data.cc",
+    "dnssd/impl/dns_data.h",
+    "dnssd/impl/instance_key.cc",
+    "dnssd/impl/instance_key.h",
+    "dnssd/impl/publisher_impl.cc",
+    "dnssd/impl/publisher_impl.h",
+    "dnssd/impl/querier_impl.cc",
+    "dnssd/impl/querier_impl.h",
+    "dnssd/impl/service_impl.cc",
+    "dnssd/impl/service_impl.h",
+    "dnssd/impl/service_key.cc",
+    "dnssd/impl/service_key.h",
+    "dnssd/public/dns_sd_instance_record.cc",
+    "dnssd/public/dns_sd_instance_record.h",
+    "dnssd/public/dns_sd_publisher.h",
+    "dnssd/public/dns_sd_querier.h",
+    "dnssd/public/dns_sd_service.h",
+    "dnssd/public/dns_sd_txt_record.cc",
+    "dnssd/public/dns_sd_txt_record.h",
+  ]
+
+  public_deps = [
+    ":common",
+    ":mdns",
+  ]
+}
+
+source_set("public") {
+  sources = [
+    "public/dns_sd_service_factory.h",
+    "public/dns_sd_service_publisher.h",
+    "public/dns_sd_service_watcher.h",
+  ]
+
+  public_deps = [
+    ":common",
+    ":dnssd",
+  ]
+}
+
+source_set("testing") {
+  testonly = true
+
+  sources = [
+    "common/testing/mock_reporting_client.h",
+    "dnssd/testing/fake_dns_record_factory.cc",
+    "mdns/testing/mdns_test_util.cc",
+    "mdns/testing/mdns_test_util.h",
+  ]
+
+  public_deps = [
+    ":mdns",
+    "../third_party/abseil",
+    "../third_party/googletest:gmock",
+  ]
+}
+
+source_set("unittests") {
+  testonly = true
+
+  sources = [
+    "dnssd/impl/conversion_layer_unittest.cc",
+    "dnssd/impl/dns_data_unittest.cc",
+    "dnssd/impl/instance_key_unittest.cc",
+    "dnssd/impl/publisher_impl_unittest.cc",
+    "dnssd/impl/querier_impl_unittest.cc",
+    "dnssd/impl/service_key_unittest.cc",
+    "dnssd/public/dns_sd_instance_record_unittest.cc",
+    "dnssd/public/dns_sd_txt_record_unittest.cc",
+    "mdns/mdns_probe_manager_unittest.cc",
+    "mdns/mdns_probe_unittest.cc",
+    "mdns/mdns_publisher_unittest.cc",
+    "mdns/mdns_querier_unittest.cc",
+    "mdns/mdns_random_unittest.cc",
+    "mdns/mdns_reader_unittest.cc",
+    "mdns/mdns_receiver_unittest.cc",
+    "mdns/mdns_records_unittest.cc",
+    "mdns/mdns_responder_unittest.cc",
+    "mdns/mdns_sender_unittest.cc",
+    "mdns/mdns_trackers_unittest.cc",
+    "mdns/mdns_writer_unittest.cc",
+    "public/dns_sd_service_watcher_unittest.cc",
+  ]
+
+  deps = [
+    ":dnssd",
+    ":mdns",
+    ":testing",
+    "../third_party/googletest:gmock",
+    "../third_party/googletest:gtest",
+    "../util",
+  ]
+}
+
+openscreen_fuzzer_test("mdns_fuzzer") {
+  sources = [
+    "mdns/mdns_reader_fuzztest.cc",
+  ]
+
+  deps = [
+    ":mdns",
+  ]
+
+  seed_corpus = "mdns/fuzzer_seeds"
+
+  # Note: 512 is the maximum size for a serialized mDNS packet.
+  libfuzzer_options = [ "max_len=512" ]
+}

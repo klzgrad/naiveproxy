@@ -1,0 +1,92 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module content.mojom;
+
+import "services/network/public/mojom/host_resolver.mojom";
+import "services/network/public/mojom/url_response_head.mojom";
+import "services/network/public/mojom/url_loader.mojom";
+import "services/network/public/mojom/url_loader_factory.mojom";
+import "content/common/frame_messages.mojom";
+import "content/common/navigation_params.mojom";
+import "content/public/common/transferrable_url_loader.mojom";
+import "mojo/public/mojom/base/unguessable_token.mojom";
+import "url/mojom/url.mojom";
+import "third_party/blink/public/mojom/loader/url_loader_factory_bundle.mojom";
+import "third_party/blink/public/mojom/service_worker/controller_service_worker.mojom";
+import "third_party/blink/public/mojom/service_worker/service_worker_provider.mojom";
+import "third_party/blink/public/mojom/commit_result/commit_result.mojom";
+
+interface NavigationClient {
+  // Tells the renderer that a navigation is ready to commit.
+  //
+  // The renderer should bind the |url_loader_client_endpoints| to an
+  // URLLoaderClient implementation to continue loading the document that will
+  // be the result of the committed navigation.
+  //
+  // Note: |url_loader_client_endpoints| will be empty iff the navigation URL
+  // wasn't handled by the network stack (i.e. about:blank, ...)
+  //
+  // Note: |response_body| will be invalid iff the navigation URL wasn't handled
+  // by the network stack (i.e. about:blank, ...)
+  //
+  // When the Network Service is enabled, |subresource_loader_factories| may
+  // also be provided by the browser as a a means for the renderer to load
+  // subresources where applicable.
+  //
+  // |controller_service_worker_info| may also be provided by the browser if the
+  // frame that is being navigated is supposed to be controlled by a Service
+  // Worker.
+  // |provider_info| may also be provided if the browser has created a
+  // ServiceWorkerProviderHost for this navigation.
+  // |prefetch_loader_factory| is populated only when Network Service is
+  // enabled. The pointer is used to start a prefetch loading via the browser
+  // process.
+  //
+  // For automation driver-initiated navigations over the devtools protocol,
+  // |devtools_navigation_token_| is used to tag the navigation. This navigation
+  // token is then sent into the renderer and lands on the DocumentLoader. That
+  // way subsequent Blink-level frame lifecycle events can be associated with
+  // the concrete navigation.
+  // - The value should not be sent back to the browser.
+  // - The value on DocumentLoader may be generated in the renderer in some
+  // cases, and thus shouldn't be trusted.
+  // TODO(crbug.com/783506): Replace devtools navigation token with the generic
+  // navigation token that can be passed from renderer to the browser.
+  CommitNavigation(
+      CommonNavigationParams common_params,
+      CommitNavigationParams request_params,
+      network.mojom.URLResponseHead response_head,
+      handle<data_pipe_consumer>? response_body,
+      network.mojom.URLLoaderClientEndpoints? url_loader_client_endpoints,
+      blink.mojom.URLLoaderFactoryBundle? subresource_loader_factories,
+      array<TransferrableURLLoader>? subresource_overrides,
+      blink.mojom.ControllerServiceWorkerInfo? controller_service_worker_info,
+      blink.mojom.ServiceWorkerProviderInfoForClient? provider_info,
+      pending_remote<network.mojom.URLLoaderFactory>? prefetch_loader_factory,
+      mojo_base.mojom.UnguessableToken devtools_navigation_token)
+      => (DidCommitProvisionalLoadParams params,
+          DidCommitProvisionalLoadInterfaceParams? interface_params);
+
+  // Tells the renderer that a failed navigation is ready to commit.
+  //
+  // The result of this commit usually results in displaying an error page.
+  // Note |error_page_content| may contain the content of the error page
+  // (i.e. flattened HTML, JS, CSS).
+  //
+  // When the Network Service is enabled, |subresource_loader_factories| may
+  // also be provided by the browser as a means for the renderer to load
+  // subresources where applicable.
+  CommitFailedNavigation(
+      CommonNavigationParams common_params,
+      CommitNavigationParams request_params,
+      bool has_stale_copy_in_cache,
+      int32 error_code,
+      network.mojom.ResolveErrorInfo resolve_error_info,
+      string? error_page_content,
+      blink.mojom.URLLoaderFactoryBundle? subresource_loader_factories)
+      => (DidCommitProvisionalLoadParams params,
+          DidCommitProvisionalLoadInterfaceParams? interface_params);
+};
+

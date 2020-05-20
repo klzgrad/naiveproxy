@@ -1,0 +1,71 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//third_party/closure_compiler/compile_js.gni")
+import("//tools/polymer/polymer.gni")
+import("//ui/webui/resources/tools/js_modulizer.gni")
+import("../settings.gni")
+
+js_type_check("closure_compile") {
+  deps = [
+    ":default_browser_browser_proxy",
+    ":default_browser_page",
+  ]
+}
+
+js_library("default_browser_browser_proxy") {
+  deps = [ "//ui/webui/resources/js:cr" ]
+}
+
+js_library("default_browser_page") {
+  deps = [
+    ":default_browser_browser_proxy",
+    "//ui/webui/resources/js:cr",
+    "//ui/webui/resources/js:web_ui_listener_behavior",
+  ]
+}
+
+js_type_check("closure_compile_module") {
+  is_polymer3 = true
+  deps = [
+    ":default_browser_browser_proxy.m",
+    ":default_browser_page.m",
+  ]
+}
+
+js_library("default_browser_browser_proxy.m") {
+  sources = [ "$root_gen_dir/chrome/browser/resources/settings/default_browser_page/default_browser_browser_proxy.m.js" ]
+  deps = [ "//ui/webui/resources/js:cr.m" ]
+  extra_deps = [ ":modulize" ]
+}
+
+js_library("default_browser_page.m") {
+  sources = [ "$root_gen_dir/chrome/browser/resources/settings/default_browser_page/default_browser_page.m.js" ]
+  deps = [
+    ":default_browser_browser_proxy.m",
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+    "//ui/webui/resources/js:web_ui_listener_behavior.m",
+  ]
+  extra_deps = [ ":default_browser_page_module" ]
+}
+
+group("polymer3_elements") {
+  public_deps = [
+    ":default_browser_page_module",
+    ":modulize",
+  ]
+}
+
+polymer_modulizer("default_browser_page") {
+  js_file = "default_browser_page.js"
+  html_file = "default_browser_page.html"
+  html_type = "dom-module"
+  namespace_rewrites = settings_namespace_rewrites
+  auto_imports = [ "chrome/browser/resources/settings/default_browser_page/default_browser_browser_proxy.html|DefaultBrowserBrowserProxyImpl,DefaultBrowserBrowserProxy,DefaultBrowserInfo" ]
+}
+
+js_modulizer("modulize") {
+  input_files = [ "default_browser_browser_proxy.js" ]
+  namespace_rewrites = settings_namespace_rewrites
+}
