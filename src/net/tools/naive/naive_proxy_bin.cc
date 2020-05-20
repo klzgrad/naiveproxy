@@ -28,6 +28,8 @@
 #include "net/base/auth.h"
 #include "net/base/network_isolation_key.h"
 #include "net/base/url_util.h"
+#include "net/cert/cert_verifier.h"
+#include "net/cert_net/cert_net_fetcher_url_request.h"
 #include "net/dns/host_resolver.h"
 #include "net/dns/mapped_host_resolver.h"
 #include "net/http/http_auth.h"
@@ -112,9 +114,29 @@ std::unique_ptr<base::Value> GetConstants() {
   return constants_dict;
 }
 
+std::unique_ptr<net::URLRequestContext> BuildCertURLRequestContext(
+    net::NetLog* net_log) {
+  net::URLRequestContextBuilder builder;
+
+  builder.DisableHttpCache();
+  builder.set_net_log(net_log);
+
+  net::ProxyConfig proxy_config;
+  auto proxy_service =
+      net::ConfiguredProxyResolutionService::CreateWithoutProxyResolver(
+          std::make_unique<net::ProxyConfigServiceFixed>(
+              net::ProxyConfigWithAnnotation(proxy_config, kTrafficAnnotation)),
+          net_log);
+  proxy_service->ForceReloadProxyConfig();
+  builder.set_proxy_resolution_service(std::move(proxy_service));
+
+  return builder.Build();
+}
+
 // Builds a URLRequestContext assuming there's only a single loop.
 std::unique_ptr<net::URLRequestContext> BuildURLRequestContext(
     const Params& params,
+    scoped_refptr<net::CertNetFetcherURLRequest> cert_net_fetcher,
     net::NetLog* net_log) {
   net::URLRequestContextBuilder builder;
 
@@ -135,6 +157,9 @@ std::unique_ptr<net::URLRequestContext> BuildURLRequestContext(
   if (!params.host_resolver_rules.empty()) {
     builder.set_host_mapping_rules(params.host_resolver_rules);
   }
+
+  builder.SetCertVerifier(
+      net::CertVerifier::CreateDefault(std::move(cert_net_fetcher)));
 
   auto context = builder.Build();
 
@@ -465,7 +490,14 @@ int main(int argc, char* argv[]) {
                          net::NetLogCaptureMode::kDefault);
   }
 
-  auto context = BuildURLRequestContext(params, net_log);
+  auto cert_context = BuildCertURLRequestContext(net_log);
+  scoped_refptr<net::CertNetFetcherURLRequest> cert_net_fetcher;
+#if defined(OS_LINUX) || defined(OS_MAC) || defined(OS_ANDROID)
+  cert_net_fetcher = base::MakeRefCounted<net::CertNetFetcherURLRequest>();
+  cert_net_fetcher->SetURLRequestContext(cert_context.get());
+#endif
+  auto context =
+      BuildURLRequestContext(params, std::move(cert_net_fetcher), net_log);
   auto* session = context->http_transaction_factory()->GetSession();
 
   auto listen_socket =
