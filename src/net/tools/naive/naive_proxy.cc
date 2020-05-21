@@ -5,6 +5,7 @@
 
 #include "net/tools/naive/naive_proxy.h"
 
+#include <algorithm>
 #include <utility>
 
 #include "base/bind.h"
@@ -28,12 +29,14 @@ namespace net {
 NaiveProxy::NaiveProxy(std::unique_ptr<ServerSocket> listen_socket,
                        NaiveConnection::Protocol protocol,
                        bool use_padding,
+                       int concurrency,
                        RedirectResolver* resolver,
                        HttpNetworkSession* session,
                        const NetworkTrafficAnnotationTag& traffic_annotation)
     : listen_socket_(std::move(listen_socket)),
       protocol_(protocol),
       use_padding_(use_padding),
+      concurrency_(std::min(4, std::max(1, concurrency))),
       resolver_(resolver),
       session_(session),
       net_log_(
@@ -53,6 +56,10 @@ NaiveProxy::NaiveProxy(std::unique_ptr<ServerSocket> listen_socket,
 
   session_->GetSSLConfig(&server_ssl_config_, &proxy_ssl_config_);
   proxy_ssl_config_.disable_cert_verification_network_fetches = true;
+
+  for (int i = 0; i < concurrency_; i++) {
+    network_isolation_keys_.push_back(NetworkIsolationKey::CreateTransient());
+  }
 
   DCHECK(listen_socket_);
   // Start accepting connections in next run loop in case when delegate is not
@@ -110,9 +117,11 @@ void NaiveProxy::DoConnect() {
   if (!use_padding_) {
     pad_direction = NaiveConnection::kNone;
   }
+  last_id_++;
+  const auto& nik = network_isolation_keys_[last_id_ % concurrency_];
   auto connection_ptr = std::make_unique<NaiveConnection>(
-      ++last_id_, protocol_, pad_direction, proxy_info_, server_ssl_config_,
-      proxy_ssl_config_, resolver_, session_, net_log_, std::move(socket),
+      last_id_, protocol_, pad_direction, proxy_info_, server_ssl_config_,
+      proxy_ssl_config_, resolver_, session_, nik, net_log_, std::move(socket),
       traffic_annotation_);
   auto* connection = connection_ptr.get();
   connection_by_id_[connection->id()] = std::move(connection_ptr);

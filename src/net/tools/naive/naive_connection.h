@@ -28,6 +28,7 @@ class StreamSocket;
 struct NetworkTrafficAnnotationTag;
 struct SSLConfig;
 class RedirectResolver;
+class NetworkIsolationKey;
 
 class NaiveConnection {
  public:
@@ -55,6 +56,7 @@ class NaiveConnection {
                   const SSLConfig& proxy_ssl_config,
                   RedirectResolver* resolver,
                   HttpNetworkSession* session,
+                  const NetworkIsolationKey& network_isolation_key,
                   const NetLogWithSource& net_log,
                   std::unique_ptr<StreamSocket> accepted_socket,
                   const NetworkTrafficAnnotationTag& traffic_annotation);
@@ -107,6 +109,7 @@ class NaiveConnection {
   const SSLConfig& proxy_ssl_config_;
   RedirectResolver* resolver_;
   HttpNetworkSession* session_;
+  const NetworkIsolationKey& network_isolation_key_;
   const NetLogWithSource& net_log_;
 
   CompletionRepeatingCallback io_callback_;
