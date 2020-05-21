@@ -8,10 +8,12 @@
 
 #include <map>
 #include <memory>
+#include <vector>
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "net/base/completion_repeating_callback.h"
+#include "net/base/network_isolation_key.h"
 #include "net/log/net_log_with_source.h"
 #include "net/proxy_resolution/proxy_info.h"
 #include "net/ssl/ssl_config.h"
@@ -32,6 +34,7 @@ class NaiveProxy {
   NaiveProxy(std::unique_ptr<ServerSocket> server_socket,
              NaiveConnection::Protocol protocol,
              bool use_padding,
+             int concurrency,
              RedirectResolver* resolver,
              HttpNetworkSession* session,
              const NetworkTrafficAnnotationTag& traffic_annotation);
@@ -57,6 +60,7 @@ class NaiveProxy {
   std::unique_ptr<ServerSocket> listen_socket_;
   NaiveConnection::Protocol protocol_;
   bool use_padding_;
+  int concurrency_;
   ProxyInfo proxy_info_;
   SSLConfig server_ssl_config_;
   SSLConfig proxy_ssl_config_;
@@ -67,6 +71,8 @@ class NaiveProxy {
   unsigned int last_id_;
 
   std::unique_ptr<StreamSocket> accepted_socket_;
+
+  std::vector<NetworkIsolationKey> network_isolation_keys_;
 
   std::map<unsigned int, std::unique_ptr<NaiveConnection>> connection_by_id_;
 
