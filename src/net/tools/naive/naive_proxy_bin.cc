@@ -11,6 +11,7 @@
 
 #include "base/at_exit.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/json/json_file_value_serializer.h"
 #include "base/json/json_writer.h"
@@ -80,6 +81,7 @@ struct CommandLine {
   std::string listen;
   std::string proxy;
   bool padding;
+  std::string concurrency;
   std::string extra_headers;
   std::string host_resolver_rules;
   std::string resolver_range;
@@ -94,6 +96,7 @@ struct Params {
   std::string listen_addr;
   int listen_port;
   bool use_padding;
+  int concurrency;
   net::HttpRequestHeaders extra_headers;
   std::string proxy_url;
   std::string proxy_user;
@@ -141,6 +144,7 @@ void GetCommandLine(const base::CommandLine& proc, CommandLine* cmdline) {
                  "--proxy=<proto>://[<user>:<pass>@]<hostname>[:<port>]\n"
                  "                           proto: https, quic\n"
                  "--padding                  Use padding\n"
+                 "--concurrency=<N>          Use N connections, less secure\n"
                  "--extra-headers=...        Extra headers split by CRLF\n"
                  "--host-resolver-rules=...  Resolver rules\n"
                  "--resolver-range=...       Redirect resolver range\n"
@@ -159,6 +163,7 @@ void GetCommandLine(const base::CommandLine& proc, CommandLine* cmdline) {
   cmdline->listen = proc.GetSwitchValueASCII("listen");
   cmdline->proxy = proc.GetSwitchValueASCII("proxy");
   cmdline->padding = proc.HasSwitch("padding");
+  cmdline->concurrency = proc.GetSwitchValueASCII("concurrency");
   cmdline->extra_headers = proc.GetSwitchValueASCII("extra-headers");
   cmdline->host_resolver_rules =
       proc.GetSwitchValueASCII("host-resolver-rules");
@@ -193,6 +198,10 @@ void GetCommandLineFromConfig(const base::FilePath& config_path,
     cmdline->proxy = *proxy;
   }
   cmdline->padding = value->FindBoolKey("padding").value_or(false);
+  const auto* concurrency = value->FindStringKey("concurrency");
+  if (concurrency) {
+    cmdline->concurrency = *concurrency;
+  }
   const auto* extra_headers = value->FindStringKey("extra_headers");
   if (extra_headers) {
     cmdline->extra_headers = *extra_headers;
@@ -291,6 +300,16 @@ bool ParseCommandLine(const CommandLine& cmdline, Params* params) {
   }
 
   params->use_padding = cmdline.padding;
+
+  if (!cmdline.concurrency.empty()) {
+    if (!base::StringToInt(cmdline.concurrency, &params->concurrency) ||
+        params->concurrency < 1 || params->concurrency > 4) {
+      std::cerr << "Invalid concurrency" << std::endl;
+      return false;
+    }
+  } else {
+    params->concurrency = 1;
+  }
 
   params->extra_headers.AddHeadersFromString(cmdline.extra_headers);
 
@@ -475,6 +494,8 @@ std::unique_ptr<URLRequestContext> BuildURLRequestContext(
 }  // namespace net
 
 int main(int argc, char* argv[]) {
+  base::FeatureList::InitializeInstance(
+      "PartitionConnectionsByNetworkIsolationKey", std::string());
   base::SingleThreadTaskExecutor io_task_executor(base::MessagePumpType::IO);
   base::ThreadPoolInstance::CreateAndStartWithDefaultParams("naive");
   base::AtExitManager exit_manager;
@@ -589,8 +610,8 @@ int main(int argc, char* argv[]) {
   }
 
   net::NaiveProxy naive_proxy(std::move(listen_socket), params.protocol,
-                              params.use_padding, resolver.get(), session,
-                              kTrafficAnnotation);
+                              params.use_padding, params.concurrency,
+                              resolver.get(), session, kTrafficAnnotation);
 
   base::RunLoop().Run();
 
