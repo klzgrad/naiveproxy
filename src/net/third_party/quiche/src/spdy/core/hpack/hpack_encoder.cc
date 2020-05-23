@@ -71,7 +71,7 @@ bool DefaultPolicy(quiche::QuicheStringPiece name,
   if (name[0] == kPseudoHeaderPrefix) {
     return name == ":authority";
   }
-  return true;
+  return name != "padding";
 }
 
 }  // namespace
