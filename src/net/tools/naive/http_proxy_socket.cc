@@ -16,6 +16,7 @@
 #include "net/base/ip_address.h"
 #include "net/base/net_errors.h"
 #include "net/log/net_log.h"
+#include "net/third_party/quiche/src/spdy/core/hpack/hpack_constants.h"
 
 namespace net {
 
@@ -27,6 +28,24 @@ constexpr int kResponseHeaderSize = sizeof(kResponseHeader) - 1;
 // A plain 200 is 10 bytes. Expected 48 bytes. "Padding" uses up 7 bytes.
 constexpr int kMinPaddingSize = 30;
 constexpr int kMaxPaddingSize = kMinPaddingSize + 32;
+
+bool g_nonindex_codes_initialized;
+uint8_t g_nonindex_codes[17];
+
+void InitializeNonindexCodes() {
+  if (g_nonindex_codes_initialized)
+    return;
+  g_nonindex_codes_initialized = true;
+  unsigned i = 0;
+  for (const auto& symbol : spdy::HpackHuffmanCodeVector()) {
+    if (symbol.id >= 0x20 && symbol.id <= 0x7f && symbol.length >= 8) {
+      g_nonindex_codes[i++] = symbol.id;
+      if (i >= sizeof(g_nonindex_codes))
+        break;
+    }
+  }
+  CHECK(i == sizeof(g_nonindex_codes));
+}
 }  // namespace
 
 HttpProxySocket::HttpProxySocket(
@@ -40,7 +59,9 @@ HttpProxySocket::HttpProxySocket(
       was_ever_used_(false),
       header_write_size_(-1),
       net_log_(transport_->NetLog()),
-      traffic_annotation_(traffic_annotation) {}
+      traffic_annotation_(traffic_annotation) {
+  InitializeNonindexCodes();
+}
 
 HttpProxySocket::~HttpProxySocket() {
   Disconnect();
@@ -308,7 +329,13 @@ int HttpProxySocket::DoHeaderWrite() {
   handshake_buf_ = base::MakeRefCounted<IOBuffer>(header_write_size_);
   char* p = handshake_buf_->data();
   std::memcpy(p, kResponseHeader, kResponseHeaderSize);
-  std::memset(p + kResponseHeaderSize, '.', padding_size);
+  std::memset(p + kResponseHeaderSize, g_nonindex_codes[16], padding_size);
+  // Prevents index reuse
+  uint64_t bits = base::RandUint64();
+  for (int i = 0; i < 16; i++) {
+    p[kResponseHeaderSize + i] = g_nonindex_codes[bits & 0b1111];
+    bits >>= 4;
+  }
   std::memcpy(p + kResponseHeaderSize + padding_size, "\r\n\r\n", 4);
 
   return transport_->Write(handshake_buf_.get(), header_write_size_,
