@@ -408,7 +408,7 @@ class NaiveProxyDelegate : public ProxyDelegate {
   void OnBeforeTunnelRequest(const ProxyServer& proxy_server,
                              HttpRequestHeaders* extra_headers) override {
     extra_headers->SetHeader("Padding",
-                             std::string(base::RandInt(16, 32), '.'));
+                             std::string(base::RandInt(16, 32), '*'));
     extra_headers->MergeFrom(params_.extra_headers);
   }
 

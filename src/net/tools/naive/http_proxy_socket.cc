@@ -308,7 +308,7 @@ int HttpProxySocket::DoHeaderWrite() {
   handshake_buf_ = base::MakeRefCounted<IOBuffer>(header_write_size_);
   char* p = handshake_buf_->data();
   std::memcpy(p, kResponseHeader, kResponseHeaderSize);
-  std::memset(p + kResponseHeaderSize, '.', padding_size);
+  std::memset(p + kResponseHeaderSize, '*', padding_size);
   std::memcpy(p + kResponseHeaderSize + padding_size, "\r\n\r\n", 4);
 
   return transport_->Write(handshake_buf_.get(), header_write_size_,
