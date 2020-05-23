@@ -58,6 +58,7 @@
 #include "net/socket/udp_server_socket.h"
 #include "net/ssl/ssl_key_logger_impl.h"
 #include "net/third_party/quiche/src/quic/core/quic_versions.h"
+#include "net/third_party/quiche/src/spdy/core/hpack/hpack_constants.h"
 #include "net/tools/naive/naive_proxy.h"
 #include "net/tools/naive/redirect_resolver.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
@@ -392,7 +393,18 @@ class ProxyServer;
 namespace {
 class NaiveProxyDelegate : public ProxyDelegate {
  public:
-  NaiveProxyDelegate(const Params& params) : params_(params) {}
+  NaiveProxyDelegate(const Params& params) : params_(params) {
+    unsigned i = 0;
+    for (const auto& symbol : spdy::HpackHuffmanCodeVector()) {
+      if (symbol.id >= 0x20 && symbol.id <= 0x7f && symbol.length >= 8) {
+        nonindex_codes_[i++] = symbol.id;
+        if (i >= sizeof(nonindex_codes_))
+          break;
+      }
+    }
+    CHECK(i == sizeof(nonindex_codes_));
+  }
+
   void OnResolveProxy(const GURL& url,
                       const std::string& method,
                       const ProxyRetryInfoMap& proxy_retry_info,
@@ -401,8 +413,14 @@ class NaiveProxyDelegate : public ProxyDelegate {
 
   void OnBeforeTunnelRequest(const ProxyServer& proxy_server,
                              HttpRequestHeaders* extra_headers) override {
-    extra_headers->SetHeader("Padding",
-                             std::string(base::RandInt(16, 32), '.'));
+    std::string padding(base::RandInt(16, 32), nonindex_codes_[16]);
+    // Prevents index reuse
+    uint64_t bits = base::RandUint64();
+    for (int i = 0; i < 16; i++) {
+      padding[i] = nonindex_codes_[bits & 0b1111];
+      bits >>= 4;
+    }
+    extra_headers->SetHeader("Padding", padding);
     extra_headers->MergeFrom(params_.extra_headers);
   }
 
@@ -414,6 +432,7 @@ class NaiveProxyDelegate : public ProxyDelegate {
 
  private:
   const Params& params_;
+  uint8_t nonindex_codes_[17];
 };
 
 std::unique_ptr<URLRequestContext> BuildCertURLRequestContext(NetLog* net_log) {
