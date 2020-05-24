@@ -40,7 +40,6 @@
 #include "net/http/http_auth_cache.h"
 #include "net/http/http_network_session.h"
 #include "net/http/http_request_headers.h"
-#include "net/http/http_response_headers.h"
 #include "net/http/http_transaction_factory.h"
 #include "net/log/file_net_log_observer.h"
 #include "net/log/net_log.h"
@@ -58,8 +57,9 @@
 #include "net/socket/udp_server_socket.h"
 #include "net/ssl/ssl_key_logger_impl.h"
 #include "net/third_party/quiche/src/quic/core/quic_versions.h"
-#include "net/third_party/quiche/src/spdy/core/hpack/hpack_constants.h"
+#include "net/tools/naive/naive_protocol.h"
 #include "net/tools/naive/naive_proxy.h"
+#include "net/tools/naive/naive_proxy_delegate.h"
 #include "net/tools/naive/redirect_resolver.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_request_context.h"
@@ -84,7 +84,6 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
 struct CommandLine {
   std::string listen;
   std::string proxy;
-  bool padding;
   std::string concurrency;
   std::string extra_headers;
   std::string host_resolver_rules;
@@ -96,10 +95,9 @@ struct CommandLine {
 };
 
 struct Params {
-  net::NaiveConnection::Protocol protocol;
+  net::ClientProtocol protocol;
   std::string listen_addr;
   int listen_port;
-  bool use_padding;
   int concurrency;
   net::HttpRequestHeaders extra_headers;
   std::string proxy_url;
@@ -139,7 +137,6 @@ void GetCommandLine(const base::CommandLine& proc, CommandLine* cmdline) {
                  "                                  redir (Linux only)\n"
                  "--proxy=<proto>://[<user>:<pass>@]<hostname>[:<port>]\n"
                  "                           proto: https, quic\n"
-                 "--padding                  Use padding\n"
                  "--concurrency=<N>          Use N connections, less secure\n"
                  "--extra-headers=...        Extra headers split by CRLF\n"
                  "--host-resolver-rules=...  Resolver rules\n"
@@ -158,7 +155,6 @@ void GetCommandLine(const base::CommandLine& proc, CommandLine* cmdline) {
 
   cmdline->listen = proc.GetSwitchValueASCII("listen");
   cmdline->proxy = proc.GetSwitchValueASCII("proxy");
-  cmdline->padding = proc.HasSwitch("padding");
   cmdline->concurrency = proc.GetSwitchValueASCII("concurrency");
   cmdline->extra_headers = proc.GetSwitchValueASCII("extra-headers");
   cmdline->host_resolver_rules =
@@ -193,7 +189,6 @@ void GetCommandLineFromConfig(const base::FilePath& config_path,
   if (proxy) {
     cmdline->proxy = *proxy;
   }
-  cmdline->padding = value->FindBoolKey("padding").value_or(false);
   const auto* concurrency = value->FindStringKey("concurrency");
   if (concurrency) {
     cmdline->concurrency = *concurrency;
@@ -236,7 +231,7 @@ std::string GetProxyFromURL(const GURL& url) {
 }
 
 bool ParseCommandLine(const CommandLine& cmdline, Params* params) {
-  params->protocol = net::NaiveConnection::kSocks5;
+  params->protocol = net::ClientProtocol::kSocks5;
   params->listen_addr = "0.0.0.0";
   params->listen_port = 1080;
   url::AddStandardScheme("socks", url::SCHEME_WITH_HOST_AND_PORT);
@@ -244,14 +239,14 @@ bool ParseCommandLine(const CommandLine& cmdline, Params* params) {
   if (!cmdline.listen.empty()) {
     GURL url(cmdline.listen);
     if (url.scheme() == "socks") {
-      params->protocol = net::NaiveConnection::kSocks5;
+      params->protocol = net::ClientProtocol::kSocks5;
       params->listen_port = 1080;
     } else if (url.scheme() == "http") {
-      params->protocol = net::NaiveConnection::kHttp;
+      params->protocol = net::ClientProtocol::kHttp;
       params->listen_port = 8080;
     } else if (url.scheme() == "redir") {
 #if defined(OS_LINUX)
-      params->protocol = net::NaiveConnection::kRedir;
+      params->protocol = net::ClientProtocol::kRedir;
       params->listen_port = 1080;
 #else
       std::cerr << "Redir protocol only supports Linux." << std::endl;
@@ -277,8 +272,6 @@ bool ParseCommandLine(const CommandLine& cmdline, Params* params) {
     }
   }
 
-  url::AddStandardScheme("quic",
-                         url::SCHEME_WITH_HOST_PORT_AND_USER_INFORMATION);
   params->proxy_url = "direct://";
   GURL url(cmdline.proxy);
   GURL::Replacements remove_auth;
@@ -294,8 +287,6 @@ bool ParseCommandLine(const CommandLine& cmdline, Params* params) {
     net::GetIdentityFromURL(url, &params->proxy_user, &params->proxy_pass);
   }
 
-  params->use_padding = cmdline.padding;
-
   if (!cmdline.concurrency.empty()) {
     if (!base::StringToInt(cmdline.concurrency, &params->concurrency) ||
         params->concurrency < 1 || params->concurrency > 4) {
@@ -310,7 +301,7 @@ bool ParseCommandLine(const CommandLine& cmdline, Params* params) {
 
   params->host_resolver_rules = cmdline.host_resolver_rules;
 
-  if (params->protocol == net::NaiveConnection::kRedir) {
+  if (params->protocol == net::ClientProtocol::kRedir) {
     std::string range = "100.64.0.0/10";
     if (!cmdline.resolver_range.empty())
       range = cmdline.resolver_range;
@@ -387,54 +378,7 @@ class PrintingLogObserver : public NetLog::ThreadSafeObserver {
 };
 }  // namespace
 
-class ProxyInfo;
-class ProxyServer;
-
 namespace {
-class NaiveProxyDelegate : public ProxyDelegate {
- public:
-  NaiveProxyDelegate(const Params& params) : params_(params) {
-    unsigned i = 0;
-    for (const auto& symbol : spdy::HpackHuffmanCodeVector()) {
-      if (symbol.id >= 0x20 && symbol.id <= 0x7f && symbol.length >= 8) {
-        nonindex_codes_[i++] = symbol.id;
-        if (i >= sizeof(nonindex_codes_))
-          break;
-      }
-    }
-    CHECK(i == sizeof(nonindex_codes_));
-  }
-
-  void OnResolveProxy(const GURL& url,
-                      const std::string& method,
-                      const ProxyRetryInfoMap& proxy_retry_info,
-                      ProxyInfo* result) override {}
-  void OnFallback(const ProxyServer& bad_proxy, int net_error) override {}
-
-  void OnBeforeTunnelRequest(const ProxyServer& proxy_server,
-                             HttpRequestHeaders* extra_headers) override {
-    std::string padding(base::RandInt(16, 32), nonindex_codes_[16]);
-    // Prevents index reuse
-    uint64_t bits = base::RandUint64();
-    for (int i = 0; i < 16; i++) {
-      padding[i] = nonindex_codes_[bits & 0b1111];
-      bits >>= 4;
-    }
-    extra_headers->SetHeader("Padding", padding);
-    extra_headers->MergeFrom(params_.extra_headers);
-  }
-
-  Error OnTunnelHeadersReceived(
-      const ProxyServer& proxy_server,
-      const HttpResponseHeaders& response_headers) override {
-    return OK;
-  }
-
- private:
-  const Params& params_;
-  uint8_t nonindex_codes_[17];
-};
-
 std::unique_ptr<URLRequestContext> BuildCertURLRequestContext(NetLog* net_log) {
   URLRequestContextBuilder builder;
 
@@ -481,7 +425,8 @@ std::unique_ptr<URLRequestContext> BuildURLRequestContext(
   builder.SetCertVerifier(
       CertVerifier::CreateDefault(std::move(cert_net_fetcher)));
 
-  builder.set_proxy_delegate(std::make_unique<NaiveProxyDelegate>(params));
+  builder.set_proxy_delegate(
+      std::make_unique<NaiveProxyDelegate>(params.extra_headers));
 
   auto context = builder.Build();
 
@@ -511,6 +456,8 @@ std::unique_ptr<URLRequestContext> BuildURLRequestContext(
 }  // namespace net
 
 int main(int argc, char* argv[]) {
+  url::AddStandardScheme("quic",
+                         url::SCHEME_WITH_HOST_PORT_AND_USER_INFORMATION);
   base::FeatureList::InitializeInstance(
       "PartitionConnectionsByNetworkIsolationKey", std::string());
   base::SingleThreadTaskExecutor io_task_executor(base::MessagePumpType::IO);
@@ -605,7 +552,7 @@ int main(int argc, char* argv[]) {
             << params.listen_port;
 
   std::unique_ptr<net::RedirectResolver> resolver;
-  if (params.protocol == net::NaiveConnection::kRedir) {
+  if (params.protocol == net::ClientProtocol::kRedir) {
     auto resolver_socket =
         std::make_unique<net::UDPServerSocket>(net_log, net::NetLogSource());
     resolver_socket->AllowAddressReuse();
@@ -628,8 +575,8 @@ int main(int argc, char* argv[]) {
   }
 
   net::NaiveProxy naive_proxy(std::move(listen_socket), params.protocol,
-                              params.use_padding, params.concurrency,
-                              resolver.get(), session, kTrafficAnnotation);
+                              params.concurrency, resolver.get(), session,
+                              kTrafficAnnotation);
 
   base::RunLoop().Run();
 
