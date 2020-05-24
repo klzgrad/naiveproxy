@@ -48,8 +48,8 @@ constexpr int kMaxPaddingSize = 255;
 
 NaiveConnection::NaiveConnection(
     unsigned int id,
-    Protocol protocol,
-    Direction pad_direction,
+    ClientProtocol protocol,
+    std::unique_ptr<PaddingDetectorDelegate> padding_detector_delegate,
     const ProxyInfo& proxy_info,
     const SSLConfig& server_ssl_config,
     const SSLConfig& proxy_ssl_config,
@@ -61,7 +61,7 @@ NaiveConnection::NaiveConnection(
     const NetworkTrafficAnnotationTag& traffic_annotation)
     : id_(id),
       protocol_(protocol),
-      pad_direction_(pad_direction),
+      padding_detector_delegate_(std::move(padding_detector_delegate)),
       proxy_info_(proxy_info),
       server_ssl_config_(server_ssl_config),
       proxy_ssl_config_(proxy_ssl_config),
@@ -177,6 +177,17 @@ int NaiveConnection::DoConnectClientComplete(int result) {
   if (result < 0)
     return result;
 
+  // For proxy client sockets, padding support detection is finished after the
+  // first server response which means there will be one missed early pull. For
+  // proxy server sockets (HttpProxySocket), padding support detection is
+  // done during client connect, so there shouldn't be any missed early pull.
+  if (!padding_detector_delegate_->IsPaddingSupportKnown()) {
+    early_pull_pending_ = false;
+    early_pull_result_ = 0;
+    next_state_ = STATE_CONNECT_SERVER;
+    return OK;
+  }
+
   early_pull_pending_ = true;
   Pull(kClient, kServer);
   if (early_pull_result_ != ERR_IO_PENDING) {
@@ -194,15 +205,15 @@ int NaiveConnection::DoConnectServer() {
   next_state_ = STATE_CONNECT_SERVER_COMPLETE;
 
   HostPortPair origin;
-  if (protocol_ == kSocks5) {
+  if (protocol_ == ClientProtocol::kSocks5) {
     const auto* socket =
         static_cast<const Socks5ServerSocket*>(client_socket_.get());
     origin = socket->request_endpoint();
-  } else if (protocol_ == kHttp) {
+  } else if (protocol_ == ClientProtocol::kHttp) {
     const auto* socket =
         static_cast<const HttpProxySocket*>(client_socket_.get());
     origin = socket->request_endpoint();
-  } else if (protocol_ == kRedir) {
+  } else if (protocol_ == ClientProtocol::kRedir) {
 #if defined(OS_LINUX)
     const auto* socket =
         static_cast<const TCPClientSocket*>(client_socket_.get());
@@ -280,7 +291,11 @@ int NaiveConnection::Run(CompletionOnceCallback callback) {
   yield_after_time_[kServer] = yield_after_time_[kClient];
 
   can_push_to_server_ = true;
-  if (!early_pull_pending_) {
+  // early_pull_result_ == 0 means the early pull was not started because
+  // padding support was not yet known.
+  if (!early_pull_pending_ && early_pull_result_ == 0) {
+    Pull(kClient, kServer);
+  } else if (!early_pull_pending_) {
     DCHECK_GT(early_pull_result_, 0);
     Push(kClient, kServer, early_pull_result_);
   }
@@ -294,7 +309,8 @@ void NaiveConnection::Pull(Direction from, Direction to) {
     return;
 
   int read_size = kBufferSize;
-  if (from == pad_direction_ && num_paddings_[from] < kFirstPaddings) {
+  auto padding_direction = padding_detector_delegate_->GetPaddingDirection();
+  if (from == padding_direction && num_paddings_[from] < kFirstPaddings) {
     auto buffer = base::MakeRefCounted<GrowableIOBuffer>();
     buffer->SetCapacity(kBufferSize);
     buffer->set_offset(kPaddingHeaderSize);
@@ -320,7 +336,8 @@ void NaiveConnection::Pull(Direction from, Direction to) {
 void NaiveConnection::Push(Direction from, Direction to, int size) {
   int write_size = size;
   int write_offset = 0;
-  if (from == pad_direction_ && num_paddings_[from] < kFirstPaddings) {
+  auto padding_direction = padding_detector_delegate_->GetPaddingDirection();
+  if (from == padding_direction && num_paddings_[from] < kFirstPaddings) {
     // Adds padding.
     ++num_paddings_[from];
     int padding_size = base::RandInt(0, kMaxPaddingSize);
@@ -332,7 +349,7 @@ void NaiveConnection::Push(Direction from, Direction to, int size) {
     p[2] = padding_size;
     std::memset(p + kPaddingHeaderSize + size, 0, padding_size);
     write_size = kPaddingHeaderSize + size + padding_size;
-  } else if (to == pad_direction_ && num_paddings_[from] < kFirstPaddings) {
+  } else if (to == padding_direction && num_paddings_[from] < kFirstPaddings) {
     // Removes padding.
     const char* p = read_buffers_[from]->data();
     bool trivial_padding = false;
@@ -482,7 +499,7 @@ void NaiveConnection::OnPushError(Direction from, Direction to, int error) {
 void NaiveConnection::OnPullComplete(Direction from, Direction to, int result) {
   if (from == kClient && early_pull_pending_) {
     early_pull_pending_ = false;
-    early_pull_result_ = result;
+    early_pull_result_ = result ? result : ERR_CONNECTION_CLOSED;
   }
 
   if (result <= 0) {
