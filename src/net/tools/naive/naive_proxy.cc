@@ -22,20 +22,21 @@
 #include "net/socket/server_socket.h"
 #include "net/socket/stream_socket.h"
 #include "net/tools/naive/http_proxy_socket.h"
+#include "net/tools/naive/naive_proxy_delegate.h"
 #include "net/tools/naive/socks5_server_socket.h"
 
 namespace net {
 
 NaiveProxy::NaiveProxy(std::unique_ptr<ServerSocket> listen_socket,
-                       NaiveConnection::Protocol protocol,
-                       bool use_padding,
+                       ClientProtocol protocol,
+                       bool force_padding,
                        int concurrency,
                        RedirectResolver* resolver,
                        HttpNetworkSession* session,
                        const NetworkTrafficAnnotationTag& traffic_annotation)
     : listen_socket_(std::move(listen_socket)),
       protocol_(protocol),
-      use_padding_(use_padding),
+      force_padding_(force_padding),
       concurrency_(std::min(4, std::max(1, concurrency))),
       resolver_(resolver),
       session_(session),
@@ -99,30 +100,33 @@ void NaiveProxy::HandleAcceptResult(int result) {
 
 void NaiveProxy::DoConnect() {
   std::unique_ptr<StreamSocket> socket;
-  NaiveConnection::Direction pad_direction;
-  if (protocol_ == NaiveConnection::kSocks5) {
+  auto* proxy_delegate =
+      static_cast<NaiveProxyDelegate*>(session_->context().proxy_delegate);
+  DCHECK(proxy_delegate);
+  DCHECK(!proxy_info_.is_empty());
+  const auto& proxy_server = proxy_info_.proxy_server();
+  auto padding_detector_delegate = std::make_unique<PaddingDetectorDelegate>(
+      proxy_delegate, proxy_server, protocol_, force_padding_);
+
+  if (protocol_ == ClientProtocol::kSocks5) {
     socket = std::make_unique<Socks5ServerSocket>(std::move(accepted_socket_),
                                                   traffic_annotation_);
-    pad_direction = NaiveConnection::kClient;
-  } else if (protocol_ == NaiveConnection::kHttp) {
+  } else if (protocol_ == ClientProtocol::kHttp) {
     socket = std::make_unique<HttpProxySocket>(std::move(accepted_socket_),
+                                               padding_detector_delegate.get(),
                                                traffic_annotation_);
-    pad_direction = NaiveConnection::kServer;
-  } else if (protocol_ == NaiveConnection::kRedir) {
+  } else if (protocol_ == ClientProtocol::kRedir) {
     socket = std::move(accepted_socket_);
-    pad_direction = NaiveConnection::kClient;
   } else {
     return;
   }
-  if (!use_padding_) {
-    pad_direction = NaiveConnection::kNone;
-  }
+
   last_id_++;
   const auto& nik = network_isolation_keys_[last_id_ % concurrency_];
   auto connection_ptr = std::make_unique<NaiveConnection>(
-      last_id_, protocol_, pad_direction, proxy_info_, server_ssl_config_,
-      proxy_ssl_config_, resolver_, session_, nik, net_log_, std::move(socket),
-      traffic_annotation_);
+      last_id_, protocol_, std::move(padding_detector_delegate), proxy_info_,
+      server_ssl_config_, proxy_ssl_config_, resolver_, session_, nik, net_log_,
+      std::move(socket), traffic_annotation_);
   auto* connection = connection_ptr.get();
   connection_by_id_[connection->id()] = std::move(connection_ptr);
   int result = connection->Connect(

@@ -50,9 +50,7 @@ SpdyProxyClientSocket::SpdyProxyClientSocket(
       user_buffer_len_(0),
       write_buffer_len_(0),
       was_ever_used_(false),
-      // This is a hack to avoid messing up higher APIs.
-      // Should be false by default officially.
-      use_fastopen_(true),
+      use_fastopen_(false),
       read_headers_pending_(false),
       net_log_(NetLogWithSource::Make(spdy_stream->net_log().net_log(),
                                       NetLogSourceType::PROXY_CLIENT_SOCKET)),
@@ -390,6 +388,10 @@ int SpdyProxyClientSocket::DoSendRequest() {
     HttpRequestHeaders proxy_delegate_headers;
     proxy_delegate_->OnBeforeTunnelRequest(proxy_server_,
                                            &proxy_delegate_headers);
+    if (proxy_delegate_headers.HasHeader("fastopen")) {
+      proxy_delegate_headers.RemoveHeader("fastopen");
+      use_fastopen_ = true;
+    }
     request_.extra_headers.MergeFrom(proxy_delegate_headers);
   }
 

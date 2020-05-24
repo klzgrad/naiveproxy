@@ -42,9 +42,7 @@ QuicProxyClientSocket::QuicProxyClientSocket(
       proxy_server_(proxy_server),
       proxy_delegate_(proxy_delegate),
       user_agent_(user_agent),
-      // This is a hack to avoid messing up higer APIs.
-      // Should be false by default officially.
-      use_fastopen_(true),
+      use_fastopen_(false),
       read_headers_pending_(false),
       net_log_(net_log) {
   DCHECK(stream_->IsOpen());
@@ -371,6 +369,10 @@ int QuicProxyClientSocket::DoSendRequest() {
     HttpRequestHeaders proxy_delegate_headers;
     proxy_delegate_->OnBeforeTunnelRequest(proxy_server_,
                                            &proxy_delegate_headers);
+    if (proxy_delegate_headers.HasHeader("fastopen")) {
+      proxy_delegate_headers.RemoveHeader("fastopen");
+      use_fastopen_ = true;
+    }
     request_.extra_headers.MergeFrom(proxy_delegate_headers);
   }
 
