@@ -14,6 +14,8 @@
 #include "base/time/time.h"
 #include "net/base/completion_once_callback.h"
 #include "net/base/completion_repeating_callback.h"
+#include "net/tools/naive/naive_protocol.h"
+#include "net/tools/naive/naive_proxy_delegate.h"
 
 namespace net {
 
@@ -33,32 +35,19 @@ class NaiveConnection {
  public:
   using TimeFunc = base::TimeTicks (*)();
 
-  enum Protocol {
-    kSocks5,
-    kHttp,
-    kRedir,
-  };
-
-  // From this direction.
-  enum Direction {
-    kClient = 0,
-    kServer = 1,
-    kNumDirections = 2,
-    kNone = 2,
-  };
-
-  NaiveConnection(unsigned int id,
-                  Protocol protocol,
-                  Direction pad_direction,
-                  const ProxyInfo& proxy_info,
-                  const SSLConfig& server_ssl_config,
-                  const SSLConfig& proxy_ssl_config,
-                  RedirectResolver* resolver,
-                  HttpNetworkSession* session,
-                  const NetworkIsolationKey& network_isolation_key,
-                  const NetLogWithSource& net_log,
-                  std::unique_ptr<StreamSocket> accepted_socket,
-                  const NetworkTrafficAnnotationTag& traffic_annotation);
+  NaiveConnection(
+      unsigned int id,
+      ClientProtocol protocol,
+      std::unique_ptr<PaddingDetectorDelegate> padding_detector_delegate,
+      const ProxyInfo& proxy_info,
+      const SSLConfig& server_ssl_config,
+      const SSLConfig& proxy_ssl_config,
+      RedirectResolver* resolver,
+      HttpNetworkSession* session,
+      const NetworkIsolationKey& network_isolation_key,
+      const NetLogWithSource& net_log,
+      std::unique_ptr<StreamSocket> accepted_socket,
+      const NetworkTrafficAnnotationTag& traffic_annotation);
   ~NaiveConnection();
   NaiveConnection(const NaiveConnection&) = delete;
   NaiveConnection& operator=(const NaiveConnection&) = delete;
@@ -103,8 +92,8 @@ class NaiveConnection {
   void OnPushComplete(Direction from, Direction to, int result);
 
   unsigned int id_;
-  Protocol protocol_;
-  Direction pad_direction_;
+  ClientProtocol protocol_;
+  std::unique_ptr<PaddingDetectorDelegate> padding_detector_delegate_;
   const ProxyInfo& proxy_info_;
   const SSLConfig& server_ssl_config_;
   const SSLConfig& proxy_ssl_config_;

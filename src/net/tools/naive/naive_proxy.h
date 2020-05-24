@@ -17,6 +17,7 @@
 #include "net/proxy_resolution/proxy_info.h"
 #include "net/ssl/ssl_config.h"
 #include "net/tools/naive/naive_connection.h"
+#include "net/tools/naive/naive_protocol.h"
 
 namespace net {
 
@@ -31,8 +32,7 @@ class RedirectResolver;
 class NaiveProxy {
  public:
   NaiveProxy(std::unique_ptr<ServerSocket> server_socket,
-             NaiveConnection::Protocol protocol,
-             bool use_padding,
+             ClientProtocol protocol,
              int concurrency,
              RedirectResolver* resolver,
              HttpNetworkSession* session,
@@ -59,8 +59,7 @@ class NaiveProxy {
   NaiveConnection* FindConnection(unsigned int connection_id);
 
   std::unique_ptr<ServerSocket> listen_socket_;
-  NaiveConnection::Protocol protocol_;
-  bool use_padding_;
+  ClientProtocol protocol_;
   int concurrency_;
   ProxyInfo proxy_info_;
   SSLConfig server_ssl_config_;
