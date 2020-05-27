@@ -15,6 +15,7 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -1181,6 +1182,7 @@ std::unique_ptr<spdy::SpdySerializedFrame> SpdySession::CreateHeaders(
   headers.set_parent_stream_id(parent_stream_id);
   headers.set_exclusive(exclusive);
   headers.set_fin((flags & spdy::CONTROL_FLAG_FIN) != 0);
+  headers.set_padding_len(base::RandInt(32, 48));
 
   streams_initiated_count_++;
 

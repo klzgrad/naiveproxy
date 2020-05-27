@@ -106,6 +106,7 @@ SpdyStream::SpdyStream(SpdyStreamType type,
       raw_received_bytes_(0),
       raw_sent_bytes_(0),
       recv_bytes_(0),
+      sent_frames_(0),
       write_handler_guard_(false),
       traffic_annotation_(traffic_annotation) {
   CHECK(type_ == SPDY_BIDIRECTIONAL_STREAM ||
@@ -845,6 +846,9 @@ void SpdyStream::QueueNextDataFrame() {
   spdy::SpdyDataFlags flags = (pending_send_status_ == NO_MORE_DATA_TO_SEND)
                                   ? spdy::DATA_FLAG_FIN
                                   : spdy::DATA_FLAG_NONE;
+  if (++sent_frames_ <= 4) {
+    flags = static_cast<spdy::SpdyDataFlags>(flags | spdy::DATA_FLAG_PADDED);
+  }
   std::unique_ptr<SpdyBuffer> data_buffer(
       session_->CreateDataBuffer(stream_id_, pending_send_data_.get(),
                                  pending_send_data_->BytesRemaining(), flags));

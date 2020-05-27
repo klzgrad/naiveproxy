@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/logging.h"
+#include "base/rand_util.h"
 #include "base/strings/string_util.h"
 #include "base/trace_event/memory_usage_estimator.h"
 
@@ -300,6 +301,9 @@ std::unique_ptr<spdy::SpdySerializedFrame> BufferedSpdyFramer::CreateDataFrame(
     spdy::SpdyDataFlags flags) {
   spdy::SpdyDataIR data_ir(stream_id, base::StringPiece(data, len));
   data_ir.set_fin((flags & spdy::DATA_FLAG_FIN) != 0);
+  if (flags & spdy::DATA_FLAG_PADDED) {
+    data_ir.set_padding_len(base::RandInt(1, spdy::kPaddingSizePerFrame));
+  }
   return std::make_unique<spdy::SpdySerializedFrame>(
       spdy_framer_.SerializeData(data_ir));
 }
