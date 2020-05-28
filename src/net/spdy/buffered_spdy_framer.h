@@ -218,6 +218,7 @@ class NET_EXPORT_PRIVATE BufferedSpdyFramer
       spdy::SpdyStreamId stream_id,
       const char* data,
       uint32_t len,
+      uint32_t padding_len,
       spdy::SpdyDataFlags flags);
   std::unique_ptr<spdy::SpdySerializedFrame> CreatePriority(
       spdy::SpdyStreamId stream_id,

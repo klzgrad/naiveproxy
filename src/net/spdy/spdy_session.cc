@@ -15,7 +15,6 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -1145,6 +1144,7 @@ int SpdySession::ConfirmHandshake(CompletionOnceCallback callback) {
 std::unique_ptr<spdy::SpdySerializedFrame> SpdySession::CreateHeaders(
     spdy::SpdyStreamId stream_id,
     RequestPriority priority,
+    int padding_len,
     spdy::SpdyControlFlags flags,
     spdy::SpdyHeaderBlock block,
     NetLogSource source_dependency) {
@@ -1182,7 +1182,9 @@ std::unique_ptr<spdy::SpdySerializedFrame> SpdySession::CreateHeaders(
   headers.set_parent_stream_id(parent_stream_id);
   headers.set_exclusive(exclusive);
   headers.set_fin((flags & spdy::CONTROL_FLAG_FIN) != 0);
-  headers.set_padding_len(base::RandInt(32, 48));
+  if (padding_len > 0) {
+    headers.set_padding_len(padding_len);
+  }
 
   streams_initiated_count_++;
 
@@ -1194,6 +1196,7 @@ std::unique_ptr<SpdyBuffer> SpdySession::CreateDataBuffer(
     spdy::SpdyStreamId stream_id,
     IOBuffer* data,
     int len,
+    int* padding_len,
     spdy::SpdyDataFlags flags) {
   if (availability_state_ == STATE_DRAINING) {
     return std::unique_ptr<SpdyBuffer>();
@@ -1209,7 +1212,7 @@ std::unique_ptr<SpdyBuffer> SpdySession::CreateDataBuffer(
     return std::unique_ptr<SpdyBuffer>();
   }
 
-  int effective_len = std::min(len, kMaxSpdyFrameChunkSize);
+  int effective_len = std::min(len, kMaxSpdyFrameChunkSize - *padding_len);
 
   bool send_stalled_by_stream = (stream->send_window_size() <= 0);
   bool send_stalled_by_session = IsSendStalled();
@@ -1250,6 +1253,8 @@ std::unique_ptr<SpdyBuffer> SpdySession::CreateDataBuffer(
   }
 
   effective_len = std::min(effective_len, stream->send_window_size());
+  *padding_len =
+      std::min(*padding_len, stream->send_window_size() - effective_len);
 
   // Obey send window size of the session.
   if (send_stalled_by_session) {
@@ -1262,6 +1267,8 @@ std::unique_ptr<SpdyBuffer> SpdySession::CreateDataBuffer(
   }
 
   effective_len = std::min(effective_len, session_send_window_size_);
+  *padding_len =
+      std::min(*padding_len, session_send_window_size_ - effective_len);
 
   DCHECK_GE(effective_len, 0);
 
@@ -1286,9 +1293,11 @@ std::unique_ptr<SpdyBuffer> SpdySession::CreateDataBuffer(
   std::unique_ptr<spdy::SpdySerializedFrame> frame(
       buffered_spdy_framer_->CreateDataFrame(
           stream_id, data->data(), static_cast<uint32_t>(effective_len),
-          flags));
+          static_cast<uint32_t>(*padding_len), flags));
 
   auto data_buffer = std::make_unique<SpdyBuffer>(std::move(frame));
+
+  effective_len += *padding_len;
 
   // Send window size is based on payload size, so nothing to do if this is
   // just a FIN with no payload.

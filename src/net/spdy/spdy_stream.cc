@@ -14,6 +14,7 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -106,7 +107,9 @@ SpdyStream::SpdyStream(SpdyStreamType type,
       raw_received_bytes_(0),
       raw_sent_bytes_(0),
       recv_bytes_(0),
-      sent_frames_(0),
+      enable_padding_(false),
+      sent_data_frames_(0),
+      data_padding_len_(0),
       write_handler_guard_(false),
       traffic_annotation_(traffic_annotation) {
   CHECK(type_ == SPDY_BIDIRECTIONAL_STREAM ||
@@ -185,11 +188,20 @@ std::unique_ptr<spdy::SpdySerializedFrame> SpdyStream::ProduceHeadersFrame() {
   CHECK(request_headers_valid_);
   CHECK_GT(stream_id_, 0u);
 
+  int padding_len = 0;
+  auto it = request_headers_.find(":method");
+  if (it != request_headers_.end() && it->second == "CONNECT") {
+    enable_padding_ = true;
+    padding_len = base::RandInt(32, 48);
+  } else {
+    enable_padding_ = false;
+  }
+
   spdy::SpdyControlFlags flags = (pending_send_status_ == NO_MORE_DATA_TO_SEND)
                                      ? spdy::CONTROL_FLAG_FIN
                                      : spdy::CONTROL_FLAG_NONE;
   std::unique_ptr<spdy::SpdySerializedFrame> frame(session_->CreateHeaders(
-      stream_id_, priority_, flags, std::move(request_headers_),
+      stream_id_, priority_, padding_len, flags, std::move(request_headers_),
       delegate_->source_dependency()));
   request_headers_valid_ = false;
   send_time_ = base::TimeTicks::Now();
@@ -644,7 +656,10 @@ int SpdyStream::OnDataSent(size_t frame_size) {
   CHECK(io_state_ == STATE_OPEN ||
         io_state_ == STATE_HALF_CLOSED_REMOTE) << io_state_;
 
-  size_t frame_payload_size = frame_size - spdy::kDataFrameMinimumSize;
+  size_t frame_payload_size =
+      frame_size - spdy::kDataFrameMinimumSize - data_padding_len_;
+
+  data_padding_len_ = 0;
 
   CHECK_GE(frame_size, spdy::kDataFrameMinimumSize);
   CHECK_LE(frame_payload_size, spdy::kHttp2DefaultFramePayloadLimit);
@@ -846,12 +861,14 @@ void SpdyStream::QueueNextDataFrame() {
   spdy::SpdyDataFlags flags = (pending_send_status_ == NO_MORE_DATA_TO_SEND)
                                   ? spdy::DATA_FLAG_FIN
                                   : spdy::DATA_FLAG_NONE;
-  if (++sent_frames_ <= 4) {
-    flags = static_cast<spdy::SpdyDataFlags>(flags | spdy::DATA_FLAG_PADDED);
+  if (++sent_data_frames_ <= 4 && enable_padding_) {
+    CHECK_EQ(data_padding_len_, 0) << stream_id_;
+    data_padding_len_ = base::RandInt(1, spdy::kPaddingSizePerFrame);
   }
   std::unique_ptr<SpdyBuffer> data_buffer(
       session_->CreateDataBuffer(stream_id_, pending_send_data_.get(),
-                                 pending_send_data_->BytesRemaining(), flags));
+                                 pending_send_data_->BytesRemaining(),
+                                 &data_padding_len_, flags));
   // We'll get called again by PossiblyResumeIfSendStalled().
   if (!data_buffer)
     return;

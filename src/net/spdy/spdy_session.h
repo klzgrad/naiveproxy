@@ -442,6 +442,7 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
   std::unique_ptr<spdy::SpdySerializedFrame> CreateHeaders(
       spdy::SpdyStreamId stream_id,
       RequestPriority priority,
+      int padding_len,
       spdy::SpdyControlFlags flags,
       spdy::SpdyHeaderBlock headers,
       NetLogSource source_dependency);
@@ -451,6 +452,7 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
   std::unique_ptr<SpdyBuffer> CreateDataBuffer(spdy::SpdyStreamId stream_id,
                                                IOBuffer* data,
                                                int len,
+                                               int* padding_len,
                                                spdy::SpdyDataFlags flags);
 
   // Send PRIORITY frames according to the new priority of an existing stream.

@@ -527,7 +527,9 @@ class NET_EXPORT_PRIVATE SpdyStream {
   // frame overhead. Note that this does not count headers.
   int recv_bytes_;
 
-  int sent_frames_;
+  bool enable_padding_;
+  int sent_data_frames_;
+  int data_padding_len_;
 
   // Guards calls of delegate write handlers ensuring |this| is not destroyed.
   // TODO(jgraettinger): Consider removing after crbug.com/35511 is tracked
