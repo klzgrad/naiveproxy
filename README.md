@@ -1,6 +1,6 @@
 # NaïveProxy [![Build Status](https://travis-ci.com/klzgrad/naiveproxy.svg?branch=master)](https://travis-ci.com/klzgrad/naiveproxy) [![Build status](https://ci.appveyor.com/api/projects/status/ohpyaf49baihmxa9?svg=true)](https://ci.appveyor.com/project/klzgrad/naiveproxy)
 
-NaïveProxy uses Chrome's network stack to camouflage traffic with stronger censorship resistence and less detectablility than custom-made network stacks (Shadowsocks and variants, V2Ray suite, handmade Golang stacks). Reusing Chrome's stack also ensures NaïveProxy has the best practices in performance and security.
+NaïveProxy uses Chrome's network stack to camouflage traffic with strong censorship resistence and low detectablility. Reusing Chrome's stack also ensures best practices in performance and security.
 
 The following traffic attacks are mitigated in NaïveProxy:
 
@@ -8,6 +8,8 @@ The following traffic attacks are mitigated in NaïveProxy:
 * [TLS parameter fingerprinting](https://arxiv.org/abs/1607.01639): defeated by reusing [Chrome's network stack](https://www.chromium.org/developers/design-documents/network-stack).
 * [Active probing](https://ensa.fi/active-probing/): defeated by *application fronting*, i.e. hiding proxy servers behind a commonly used frontend with application-layer routing.
 * Length-based traffic analysis: mitigated by length padding.
+
+The code consists of a patch series morphed and rebased onto every new Chrome release. It's normal to see the latest commit being old, while most recent activities happen in [project releases](https://github.com/klzgrad/naiveproxy/releases).
 
 ## Architecture
 
