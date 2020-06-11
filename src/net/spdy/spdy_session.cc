@@ -15,6 +15,7 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -2186,8 +2187,41 @@ void SpdySession::EnqueueResetStreamFrame(spdy::SpdyStreamId stream_id,
   std::unique_ptr<spdy::SpdySerializedFrame> rst_frame(
       buffered_spdy_framer_->CreateRstStream(stream_id, error_code));
 
-  EnqueueSessionWrite(priority, spdy::SpdyFrameType::RST_STREAM,
-                      std::move(rst_frame));
+  int padding_len = base::RandInt(48, 72);
+  std::unique_ptr<spdy::SpdySerializedFrame> data_frame(
+      buffered_spdy_framer_->CreateDataFrame(stream_id, nullptr, 0, padding_len,
+                                             spdy::DATA_FLAG_FIN));
+
+  size_t frame_size = data_frame->size() + rst_frame->size();
+  auto frame_data = std::make_unique<char[]>(frame_size);
+  size_t offset = 0;
+
+  memcpy(frame_data.get() + offset, data_frame->data(), data_frame->size());
+  offset += data_frame->size();
+  memcpy(frame_data.get() + offset, rst_frame->data(), rst_frame->size());
+
+  auto buffer =
+      std::make_unique<SpdyBuffer>(std::make_unique<spdy::SpdySerializedFrame>(
+          frame_data.release(), frame_size, /* owns_buffer = */ true));
+
+  DecreaseSendWindowSize(padding_len);
+  buffer->AddConsumeCallback(base::BindRepeating(
+      &SpdySession::OnWriteBufferConsumed, weak_factory_.GetWeakPtr(),
+      static_cast<size_t>(padding_len)));
+
+  // TODO: per stream flow control is not needed here?
+  auto it = active_streams_.find(stream_id);
+  if (it != active_streams_.end()) {
+    it->second->DecreaseSendWindowSize(padding_len);
+    buffer->AddConsumeCallback(base::BindRepeating(
+        &SpdyStream::OnWriteBufferConsumed, it->second->GetWeakPtr(),
+        static_cast<size_t>(padding_len)));
+  }
+
+  EnqueueWrite(priority, spdy::SpdyFrameType::RST_STREAM,
+               std::make_unique<SimpleBufferProducer>(std::move(buffer)),
+               base::WeakPtr<SpdyStream>(),
+               kSpdySessionCommandsTrafficAnnotation);
   RecordProtocolErrorHistogram(MapRstStreamStatusToProtocolError(error_code));
 }
 
