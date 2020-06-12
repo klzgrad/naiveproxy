@@ -988,6 +988,12 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
   // empty.
   spdy::SpdyStreamId PopStreamToPossiblyResume();
 
+  std::unique_ptr<SpdyBuffer> PrecedeFrameWithPaddingData(
+      std::unique_ptr<spdy::SpdySerializedFrame> orig_frame,
+      spdy::SpdyStreamId stream_id,
+      int padding_len,
+      spdy::SpdyDataFlags flags);
+
   // Whether Do{Read,Write}Loop() is in the call stack. Useful for
   // making sure we don't destroy ourselves prematurely in that case.
   bool in_io_loop_;
