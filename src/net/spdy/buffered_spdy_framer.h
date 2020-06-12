@@ -205,7 +205,8 @@ class NET_EXPORT_PRIVATE BufferedSpdyFramer
   bool HasError();
   std::unique_ptr<spdy::SpdySerializedFrame> CreateRstStream(
       spdy::SpdyStreamId stream_id,
-      spdy::SpdyErrorCode error_code) const;
+      spdy::SpdyErrorCode error_code,
+      uint32_t padding_len = 0) const;
   std::unique_ptr<spdy::SpdySerializedFrame> CreateSettings(
       const spdy::SettingsMap& values) const;
   std::unique_ptr<spdy::SpdySerializedFrame> CreatePingFrame(
@@ -213,7 +214,8 @@ class NET_EXPORT_PRIVATE BufferedSpdyFramer
       bool is_ack) const;
   std::unique_ptr<spdy::SpdySerializedFrame> CreateWindowUpdate(
       spdy::SpdyStreamId stream_id,
-      uint32_t delta_window_size) const;
+      uint32_t delta_window_size,
+      uint32_t padding_len = 0) const;
   std::unique_ptr<spdy::SpdySerializedFrame> CreateDataFrame(
       spdy::SpdyStreamId stream_id,
       const char* data,
