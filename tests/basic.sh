@@ -79,11 +79,11 @@ test_naive 'HTTP-HTTP' http://127.0.0.1:60701 \
   '--log --listen=http://:60702'
 
 test_naive 'HTTP-SOCKS' http://127.0.0.1:60801 \
-  '--log --listen=http://:60801 --proxy=http://127.0.0.1:60802' \
-  '--log --listen=http://:60802'
+  '--log --listen=http://:60801 --proxy=socks://127.0.0.1:60802' \
+  '--log --listen=socks://:60802'
 
 test_naive 'SOCKS-HTTP padded' socks5h://127.0.0.1:60901 \
-  '--log --listen=socks://:60901 --proxy=http://127.0.01:60902 --padding' \
+  '--log --listen=socks://:60901 --proxy=http://127.0.0.1:60902 --padding' \
   '--log --listen=http://:60902 --padding'
 
 test_naive 'SOCKS-SOCKS-SOCKS' socks5h://127.0.0.1:61001 \
@@ -92,16 +92,16 @@ test_naive 'SOCKS-SOCKS-SOCKS' socks5h://127.0.0.1:61001 \
   '--log --listen=socks://:61003'
 
 test_naive 'SOCKS-HTTP-SOCKS' socks5h://127.0.0.1:61101 \
-  '--log --listen=socks://:61101 --proxy=socks://127.0.0.1:61102' \
-  '--log --listen=socks://:61102 --proxy=socks://127.0.0.1:61103' \
+  '--log --listen=socks://:61101 --proxy=http://127.0.0.1:61102' \
+  '--log --listen=http://:61102 --proxy=socks://127.0.0.1:61103' \
   '--log --listen=socks://:61103'
 
-test_naive 'HTTP-SOCKS-HTTP' socks5h://127.0.0.1:61201 \
-  '--log --listen=socks://:61201 --proxy=socks://127.0.0.1:61202' \
-  '--log --listen=socks://:61202 --proxy=socks://127.0.0.1:61203' \
-  '--log --listen=socks://:61203'
+test_naive 'HTTP-SOCKS-HTTP' http://127.0.0.1:61201 \
+  '--log --listen=http://:61201 --proxy=socks://127.0.0.1:61202' \
+  '--log --listen=socks://:61202 --proxy=http://127.0.0.1:61203' \
+  '--log --listen=http://:61203'
 
-test_naive 'HTTP-HTTP-HTTP' socks5h://127.0.0.1:61301 \
-  '--log --listen=socks://:61301 --proxy=socks://127.0.0.1:61302' \
-  '--log --listen=socks://:61302 --proxy=socks://127.0.0.1:61303' \
-  '--log --listen=socks://:61303'
+test_naive 'HTTP-HTTP-HTTP' http://127.0.0.1:61301 \
+  '--log --listen=http://:61301 --proxy=http://127.0.0.1:61302' \
+  '--log --listen=http://:61302 --proxy=http://127.0.0.1:61303' \
+  '--log --listen=http://:61303'
