@@ -21,9 +21,15 @@ Frontend also reroutes unauthenticated users and active probes to a backend HTTP
 
 ## Download
 
-See [latest release](https://github.com/klzgrad/naiveproxy/releases/latest).
+- [Manually download](https://github.com/klzgrad/naiveproxy/releases/latest)
 
-Note: On Linux libnss3 must be installed before using the prebuilt binary.
+  Note: On Linux libnss3 must be installed before using the prebuilt binary.
+- Windows users can use [Scoop](https://scoop.sh/):
+  
+  ```powershell
+  scoop bucket add v2ray https://github.com/kidonng/scoop-v2ray
+  scoop install naiveproxy
+  ```
 
 ## Setup
 
