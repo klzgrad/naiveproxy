@@ -41,7 +41,7 @@ namespace net {
 
 namespace {
 constexpr int kBufferSize = 64 * 1024;
-constexpr int kFirstPaddings = 4;
+constexpr int kFirstPaddings = 8;
 constexpr int kPaddingHeaderSize = 3;
 constexpr int kMaxPaddingSize = 255;
 }  // namespace
