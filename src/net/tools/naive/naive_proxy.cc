@@ -29,14 +29,12 @@ namespace net {
 
 NaiveProxy::NaiveProxy(std::unique_ptr<ServerSocket> listen_socket,
                        ClientProtocol protocol,
-                       bool force_padding,
                        int concurrency,
                        RedirectResolver* resolver,
                        HttpNetworkSession* session,
                        const NetworkTrafficAnnotationTag& traffic_annotation)
     : listen_socket_(std::move(listen_socket)),
       protocol_(protocol),
-      force_padding_(force_padding),
       concurrency_(std::min(4, std::max(1, concurrency))),
       resolver_(resolver),
       session_(session),
@@ -106,7 +104,7 @@ void NaiveProxy::DoConnect() {
   DCHECK(!proxy_info_.is_empty());
   const auto& proxy_server = proxy_info_.proxy_server();
   auto padding_detector_delegate = std::make_unique<PaddingDetectorDelegate>(
-      proxy_delegate, proxy_server, protocol_, force_padding_);
+      proxy_delegate, proxy_server, protocol_);
 
   if (protocol_ == ClientProtocol::kSocks5) {
     socket = std::make_unique<Socks5ServerSocket>(std::move(accepted_socket_),

@@ -41,9 +41,8 @@ void FillNonindexHeaderValue(uint64_t unique_bits, char* buf, int len) {
   }
 }
 
-NaiveProxyDelegate::NaiveProxyDelegate(const HttpRequestHeaders& extra_headers,
-                                       bool force_padding)
-    : extra_headers_(extra_headers), force_padding_(force_padding) {
+NaiveProxyDelegate::NaiveProxyDelegate(const HttpRequestHeaders& extra_headers)
+    : extra_headers_(extra_headers) {
   InitializeNonindexCodes();
 }
 
@@ -62,8 +61,7 @@ void NaiveProxyDelegate::OnBeforeTunnelRequest(
 
   // Enables Fast Open in H2/H3 proxy client socket once the state of server
   // padding support is known.
-  if (force_padding_ ||
-      padding_state_by_server_[proxy_server] != PaddingSupport::kUnknown) {
+  if (padding_state_by_server_[proxy_server] != PaddingSupport::kUnknown) {
     extra_headers->SetHeader("fastopen", "1");
   }
   extra_headers->MergeFrom(extra_headers_);
@@ -73,8 +71,6 @@ Error NaiveProxyDelegate::OnTunnelHeadersReceived(
     const ProxyServer& proxy_server,
     const HttpResponseHeaders& response_headers) {
   if (proxy_server.is_direct() || proxy_server.is_socks())
-    return OK;
-  if (force_padding_)
     return OK;
 
   // Detects server padding support, even if it changes dynamically.
@@ -96,22 +92,16 @@ PaddingSupport NaiveProxyDelegate::GetProxyServerPaddingSupport(
   if (proxy_server.is_direct() || proxy_server.is_socks())
     return PaddingSupport::kIncapable;
 
-  // If detecting padding is possible, forces it.
-  if (force_padding_)
-    return PaddingSupport::kCapable;
-
   return padding_state_by_server_[proxy_server];
 }
 
 PaddingDetectorDelegate::PaddingDetectorDelegate(
     NaiveProxyDelegate* naive_proxy_delegate,
     const ProxyServer& proxy_server,
-    ClientProtocol client_protocol,
-    bool force_padding)
+    ClientProtocol client_protocol)
     : naive_proxy_delegate_(naive_proxy_delegate),
       proxy_server_(proxy_server),
       client_protocol_(client_protocol),
-      force_padding_(force_padding),
       detected_client_padding_support_(PaddingSupport::kUnknown),
       cached_server_padding_support_(PaddingSupport::kUnknown) {}
 
@@ -150,10 +140,6 @@ PaddingSupport PaddingDetectorDelegate::GetClientPaddingSupport() {
   } else if (client_protocol_ == ClientProtocol::kRedir) {
     return PaddingSupport::kIncapable;
   }
-
-  // If detecting padding is possible, forces it.
-  if (force_padding_)
-    return PaddingSupport::kCapable;
 
   return detected_client_padding_support_;
 }

@@ -81,7 +81,6 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
 struct CommandLine {
   std::string listen;
   std::string proxy;
-  bool padding;
   std::string concurrency;
   std::string extra_headers;
   std::string host_resolver_rules;
@@ -96,7 +95,6 @@ struct Params {
   net::ClientProtocol protocol;
   std::string listen_addr;
   int listen_port;
-  bool force_padding;
   int concurrency;
   net::HttpRequestHeaders extra_headers;
   std::string proxy_url;
@@ -144,7 +142,6 @@ void GetCommandLine(const base::CommandLine& proc, CommandLine* cmdline) {
                  "                                  redir (Linux only)\n"
                  "--proxy=<proto>://[<user>:<pass>@]<hostname>[:<port>]\n"
                  "                           proto: https, quic\n"
-                 "--padding                  Force use of padding\n"
                  "--concurrency=<N>          Use N connections, less secure\n"
                  "--extra-headers=...        Extra headers split by CRLF\n"
                  "--host-resolver-rules=...  Resolver rules\n"
@@ -163,7 +160,6 @@ void GetCommandLine(const base::CommandLine& proc, CommandLine* cmdline) {
 
   cmdline->listen = proc.GetSwitchValueASCII("listen");
   cmdline->proxy = proc.GetSwitchValueASCII("proxy");
-  cmdline->padding = proc.HasSwitch("padding");
   cmdline->concurrency = proc.GetSwitchValueASCII("concurrency");
   cmdline->extra_headers = proc.GetSwitchValueASCII("extra-headers");
   cmdline->host_resolver_rules =
@@ -198,7 +194,6 @@ void GetCommandLineFromConfig(const base::FilePath& config_path,
   if (proxy) {
     cmdline->proxy = *proxy;
   }
-  cmdline->padding = value->FindBoolKey("padding").value_or(false);
   const auto* concurrency = value->FindStringKey("concurrency");
   if (concurrency) {
     cmdline->concurrency = *concurrency;
@@ -297,8 +292,6 @@ bool ParseCommandLine(const CommandLine& cmdline, Params* params) {
     params->proxy_user = url.username();
     params->proxy_pass = url.password();
   }
-
-  params->force_padding = cmdline.padding;
 
   if (!cmdline.concurrency.empty()) {
     if (!base::StringToInt(cmdline.concurrency, &params->concurrency) ||
@@ -438,8 +431,8 @@ std::unique_ptr<URLRequestContext> BuildURLRequestContext(
   builder.SetCertVerifier(
       CertVerifier::CreateDefault(std::move(cert_net_fetcher)));
 
-  builder.set_proxy_delegate(std::make_unique<NaiveProxyDelegate>(
-      params.extra_headers, params.force_padding));
+  builder.set_proxy_delegate(
+      std::make_unique<NaiveProxyDelegate>(params.extra_headers));
 
   auto context = builder.Build();
 
@@ -583,8 +576,8 @@ int main(int argc, char* argv[]) {
   }
 
   net::NaiveProxy naive_proxy(std::move(listen_socket), params.protocol,
-                              params.force_padding, params.concurrency,
-                              resolver.get(), session, kTrafficAnnotation);
+                              params.concurrency, resolver.get(), session,
+                              kTrafficAnnotation);
 
   base::RunLoop().Run();
 

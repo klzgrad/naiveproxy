@@ -31,8 +31,7 @@ enum class PaddingSupport {
 
 class NaiveProxyDelegate : public ProxyDelegate {
  public:
-  NaiveProxyDelegate(const HttpRequestHeaders& extra_headers,
-                     bool force_padding);
+  NaiveProxyDelegate(const HttpRequestHeaders& extra_headers);
   ~NaiveProxyDelegate() override;
 
   void OnResolveProxy(const GURL& url,
@@ -53,7 +52,6 @@ class NaiveProxyDelegate : public ProxyDelegate {
 
  private:
   const HttpRequestHeaders& extra_headers_;
-  bool force_padding_;
   std::map<ProxyServer, PaddingSupport> padding_state_by_server_;
 };
 
@@ -68,8 +66,7 @@ class PaddingDetectorDelegate : public ClientPaddingDetectorDelegate {
  public:
   PaddingDetectorDelegate(NaiveProxyDelegate* naive_proxy_delegate,
                           const ProxyServer& proxy_server,
-                          ClientProtocol client_protocol,
-                          bool force_padding);
+                          ClientProtocol client_protocol);
   ~PaddingDetectorDelegate() override;
 
   bool IsPaddingSupportKnown();
@@ -83,7 +80,6 @@ class PaddingDetectorDelegate : public ClientPaddingDetectorDelegate {
   NaiveProxyDelegate* naive_proxy_delegate_;
   const ProxyServer& proxy_server_;
   ClientProtocol client_protocol_;
-  bool force_padding_;
 
   PaddingSupport detected_client_padding_support_;
   // The result is only cached during one connection, so it's still dynamically
