@@ -19,56 +19,86 @@ NaïveProxy uses Chrome's network stack. The traffic behavior intercepted by the
 
 Frontend also reroutes unauthenticated users and active probes to a backend HTTP server, making it impossible to detect the existence of a proxy, like this: Probe ⟶ Frontend ⟶ index.html
 
+Starting from v84, users can run a naïve fork of Caddy forwardproxy without the Naïve server.
+
 ## Download
 
-See [latest release](https://github.com/klzgrad/naiveproxy/releases/latest).
+See [latest release](https://github.com/klzgrad/naiveproxy/releases/latest). Linux, Windows, Mac OS, and various OpenWrt targets are supported.
+
+Users should always use the latest version to keep signatures identical to Chrome.
 
 Note: On Linux libnss3 must be installed before using the prebuilt binary.
 
 ## Setup
 
-On the server, download Caddy (from https://caddyserver.com/download with plugin: http.forwardproxy):
-```
-curl -OJ 'https://caddyserver.com/download/linux/amd64?plugins=http.forwardproxy&license=personal'
-tar xf ./caddy_*.tar.gz
-sudo setcap cap_net_bind_service=+ep caddy
-```
-
-Run `./caddy` with the following Caddyfile (replace the example values accordingly):
-```
-domain.example
-root /var/www/html
-tls myemail@example.com
-forwardproxy {
-  basicauth user pass
-  hide_ip
-  hide_via
-  probe_resistance secret.localhost
-  upstream http://127.0.0.1:8080
-}
+On the server, build and run Caddy v2 with naïve fork of forwardproxy:
+```sh
+git clone -b naive https://github.com/klzgrad/forwardproxy
+go get -u github.com/caddyserver/xcaddy/cmd/xcaddy
+~/go/bin/xcaddy build --with github.com/caddyserver/forwardproxy=./forwardproxy
+sudo setcap cap_net_bind_service=+ep ./caddy
+./caddy run --config caddy.json
 ```
 
-and `./naive` with the following `config.json`:
+`caddy.json` using Let's Encrypt (replace the example values accordingly):
+<details>
+<summary>Example caddy.json using Let's Encrypt (replace example values accordingly)</summary>
 ```json
 {
-  "listen": "http://127.0.0.1:8080",
-  "padding": true
+  "apps": {
+    "http": {
+      "servers": {
+        "srv0": {
+          "listen": [":443"],
+          "routes": [{
+            "handle": [{
+              "handler": "forward_proxy",
+              "hide_ip": true,
+              "hide_via": true,
+              "auth_user": "username",
+              "auth_pass": "password",
+              "probe_resistance": {"domain": "secret.localhost"}
+            }]
+          }, {
+            "match": [{"host": ["example.com", "www.example.com"]}],
+            "handle": [{
+              "handler": "file_server",
+              "root": "/var/www/html"
+            }],
+            "terminal": true
+          }],
+          "tls_connection_policies": [{
+            "match": {"sni": ["example.com", "www.example.com"]}
+          }]
+        }
+      }
+    },
+    "tls": {
+      "automation": {
+        "policies": [{
+          "subjects": ["example.com", "www.example.com"],
+          "issuer": {
+            "email": "admin@example.com",
+            "module": "acme"
+          }
+        }]
+      }
+    }
+  }
 }
 ```
+</details>
 
-Locally run `./naive` with `config.json`:
+
+Locally run `./naive` with the following `config.json` to get a SOCKS5 proxy at local port 1080.
 ```json
 {
   "listen": "socks://127.0.0.1:1080",
-  "proxy": "https://user:pass@domain.example",
-  "padding": true
+  "proxy": "https://username:password@example.com"
 }
 ```
-to get a SOCKS5 proxy at local port 1080.
 
-See [USAGE.txt](https://github.com/klzgrad/naiveproxy/blob/master/USAGE.txt) on how to configure `config.json`. See also [Parameter Tuning](https://github.com/klzgrad/naiveproxy/wiki/Parameter-Tuning) to improve client-side performance.
-
-It's possible to run Caddy without Naive server, but you need to remove `padding` from `config.json` and `upstream` from Caddyfile.
+See [USAGE.txt](https://github.com/klzgrad/naiveproxy/blob/master/USAGE.txt) for more parameters in `config.json`. See also [Parameter Tuning](https://github.com/klzgrad/naiveproxy/wiki/Parameter-Tuning) to improve client-side performance.
 
 ## Build
 
