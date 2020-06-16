@@ -42,6 +42,7 @@ sudo setcap cap_net_bind_service=+ep ./caddy
 
 <details>
 <summary>Example caddy.json using Let's Encrypt (replace example values accordingly)</summary>
+  
 ```json
 {
   "apps": {
