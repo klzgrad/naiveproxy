@@ -198,7 +198,7 @@ void GetCommandLineFromConfig(const base::FilePath& config_path,
   if (concurrency) {
     cmdline->concurrency = *concurrency;
   }
-  const auto* extra_headers = value->FindStringKey("extra_headers");
+  const auto* extra_headers = value->FindStringKey("extra-headers");
   if (extra_headers) {
     cmdline->extra_headers = *extra_headers;
   }
@@ -304,6 +304,9 @@ bool ParseCommandLine(const CommandLine& cmdline, Params* params) {
   }
 
   params->extra_headers.AddHeadersFromString(cmdline.extra_headers);
+  if (!params->extra_headers.IsEmpty()) {
+    LOG(INFO) << "Using extra headers: " << params->extra_headers.ToString();
+  }
 
   params->host_resolver_rules = cmdline.host_resolver_rules;
 
