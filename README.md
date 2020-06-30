@@ -31,7 +31,7 @@ Note: On Linux libnss3 must be installed before using the prebuilt binary.
 
 ## Setup
 
-On the server, build and run Caddy v2 with naïve fork of forwardproxy:
+On the server, build and run Caddy v2 with naïve fork of forwardproxy: (golang v1.14+ required)
 ```sh
 git clone -b naive https://github.com/klzgrad/forwardproxy
 go get -u github.com/caddyserver/xcaddy/cmd/xcaddy
