@@ -1,0 +1,84 @@
+# Copyright 2016 The SwiftShader Authors. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("//build/config/ui.gni")
+import("../swiftshader.gni")
+
+# Need a separate config to ensure the warnings are added to the end.
+config("swiftshader_main_private_config") {
+  if (is_win) {
+    cflags = [
+      "/wd4201",  # nameless struct/union
+      "/wd5030",  # attribute is not recognized
+    ]
+
+    if (is_clang) {
+      cflags += [
+        "-Wno-string-conversion",
+        "-Wno-sign-compare",
+      ]
+    }
+  } else if (current_cpu == "x86" || current_cpu == "x64") {
+    cflags = [ "-msse2" ]
+    defines =
+        [ "NO_SANITIZE_FUNCTION=__attribute__((no_sanitize(\"function\")))" ]
+  }
+}
+
+swiftshader_source_set("swiftshader_main") {
+  deps = [
+    "../Common:swiftshader_common",
+  ]
+
+  sources = [
+    "Config.cpp",
+    "FrameBuffer.cpp",
+    "SwiftConfig.cpp",
+  ]
+
+  if (use_ozone && !is_win) {
+    sources += [ "FrameBufferOzone.cpp" ]
+  } else if (is_linux) {
+    if (use_x11) {
+      sources += [
+        "FrameBufferX11.cpp",
+        "libX11.cpp",
+      ]
+    }
+  } else if (is_mac) {
+    sources += [ "FrameBufferOSX.mm" ]
+  } else if (is_win) {
+    sources += [
+      "FrameBufferDD.cpp",
+      "FrameBufferGDI.cpp",
+      "FrameBufferWin.cpp",
+    ]
+  }
+
+  if (is_win) {
+    libs = [ "dxguid.lib" ]  # For FrameBufferDD
+  }
+
+  configs = [ ":swiftshader_main_private_config" ]
+
+  include_dirs = [ ".." ]
+
+  if (is_mac) {
+    include_dirs += [ "../../include" ]
+    libs = [
+      "Quartz.framework",
+      "Cocoa.framework",
+    ]
+  }
+}

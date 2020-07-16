@@ -1,0 +1,133 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/jumbo.gni")
+import("//build/config/sysroot.gni")
+import("//build/config/ui.gni")
+import("//ui/ozone/ozone.gni")
+
+assert(use_x11 || ozone_platform_x11)
+
+declare_args() {
+  xcbproto_path = ""
+}
+
+if (xcbproto_path == "") {
+  if (use_sysroot) {
+    xcbproto_path = "$sysroot/usr/share/xcb"
+  } else {
+    xcbproto_path = "/usr/share/xcb"
+  }
+}
+
+config("x11_private_config") {
+  cflags = [
+    # Generated proto files pull all fields from a struct into scope
+    # even if they aren't used.  Rather than adding logic in the
+    # generator to determine which fields are used and keeping only
+    # those, simply ignore unused variable warnings.
+    "-Wno-unused-variable",
+  ]
+  defines = [ "IS_X11_IMPL" ]
+}
+
+action_foreach("gen_xprotos") {
+  visibility = [ ":xprotos" ]
+  script = "gen_xproto.py"
+  sources = [
+    "$xcbproto_path/bigreq.xml",
+    "$xcbproto_path/composite.xml",
+    "$xcbproto_path/damage.xml",
+    "$xcbproto_path/dpms.xml",
+    "$xcbproto_path/dri2.xml",
+    "$xcbproto_path/dri3.xml",
+    "$xcbproto_path/ge.xml",
+    "$xcbproto_path/glx.xml",
+    "$xcbproto_path/present.xml",
+    "$xcbproto_path/randr.xml",
+    "$xcbproto_path/record.xml",
+    "$xcbproto_path/render.xml",
+    "$xcbproto_path/res.xml",
+    "$xcbproto_path/screensaver.xml",
+    "$xcbproto_path/shape.xml",
+    "$xcbproto_path/shm.xml",
+    "$xcbproto_path/sync.xml",
+    "$xcbproto_path/xc_misc.xml",
+    "$xcbproto_path/xevie.xml",
+    "$xcbproto_path/xf86dri.xml",
+    "$xcbproto_path/xf86vidmode.xml",
+    "$xcbproto_path/xfixes.xml",
+    "$xcbproto_path/xinerama.xml",
+    "$xcbproto_path/xinput.xml",
+    "$xcbproto_path/xkb.xml",
+    "$xcbproto_path/xprint.xml",
+    "$xcbproto_path/xproto.xml",
+    "$xcbproto_path/xselinux.xml",
+    "$xcbproto_path/xtest.xml",
+    "$xcbproto_path/xv.xml",
+    "$xcbproto_path/xvmc.xml",
+  ]
+  outputs = [
+    "$target_gen_dir/{{source_name_part}}_undef.h",
+    "$target_gen_dir/{{source_name_part}}.h",
+    "$target_gen_dir/{{source_name_part}}.cc",
+  ]
+  args = [ "{{source}}" ] + rebase_path(outputs, root_build_dir)
+  if (use_sysroot) {
+    args += [
+      "--sysroot",
+      rebase_path(sysroot, root_build_dir),
+    ]
+  }
+}
+
+component("xprotos") {
+  deps = [
+    ":gen_xprotos",
+    "//base",
+  ]
+  sources = get_target_outputs(":gen_xprotos") + [
+              "xproto_internal.h",
+              "xproto_types.h",
+              "request_queue.h",
+              "request_queue.cc",
+              "xproto_util.h",
+              "xproto_util.cc",
+              "connection.h",
+              "connection.cc",
+              "x11_switches.cc",
+              "x11_switches.h",
+            ]
+  configs += [
+    ":x11_private_config",
+    "//build/config/linux:x11",
+  ]
+}
+
+jumbo_component("x") {
+  output_name = "gfx_x11"
+
+  sources = [
+    "../gfx_export.h",
+    "x11.h",
+    "x11_atom_cache.cc",
+    "x11_atom_cache.h",
+    "x11_error_tracker.cc",
+    "x11_error_tracker.h",
+    "x11_path.cc",
+    "x11_path.h",
+    "x11_types.cc",
+    "x11_types.h",
+  ]
+
+  defines = [ "GFX_IMPLEMENTATION" ]
+
+  public_configs = [ "//build/config/linux:x11" ]
+
+  deps = [
+    "//base",
+    "//skia",
+  ]
+  public_deps = [ ":xprotos" ]
+}

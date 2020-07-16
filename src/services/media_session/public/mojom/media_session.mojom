@@ -1,0 +1,273 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module media_session.mojom;
+
+import "mojo/public/mojom/base/string16.mojom";
+import "mojo/public/mojom/base/time.mojom";
+import "ui/gfx/geometry/mojom/geometry.mojom";
+import "url/mojom/url.mojom";
+
+// Next MinVersion: 9
+
+[Extensible]
+enum MediaPlaybackState {
+  kPaused,
+  kPlaying,
+};
+
+[Extensible]
+enum MediaSessionAction {
+  kPlay,
+  kPause,
+  kPreviousTrack,
+  kNextTrack,
+  kSeekBackward,
+  kSeekForward,
+  kSkipAd,
+  kStop,
+  kSeekTo,
+  kScrubTo,
+  kEnterPictureInPicture,
+  kExitPictureInPicture,
+};
+
+[Extensible]
+enum MediaSessionImageType {
+  // The artwork associated with the media session (e.g album art).
+  kArtwork,
+
+  // The icon associated with the source of the media session.
+  kSourceIcon,
+};
+
+[Extensible]
+enum MediaPictureInPictureState {
+  kNotInPictureInPicture,
+  kInPictureInPicture,
+};
+
+[Extensible]
+enum MediaAudioVideoState {
+  kUnknown,
+  kAudioOnly,
+  kAudioVideo,
+};
+
+// Album art in MediaMetadata
+// Spec: https://wicg.github.io/mediasession/
+struct MediaImage {
+  url.mojom.Url src;
+  mojo_base.mojom.String16 type;
+  array<gfx.mojom.Size> sizes;
+};
+
+// MediaMetadata
+struct MediaMetadata {
+  // These are defined in the spec: https://wicg.github.io/mediasession/
+  mojo_base.mojom.String16 title;
+  mojo_base.mojom.String16 artist;
+  mojo_base.mojom.String16 album;
+
+  // The |source_title| is a human readable title for the source of the media
+  // session. This could be the name of the app or the name of the site playing
+  // media.
+  mojo_base.mojom.String16 source_title;
+};
+
+// The color type of the bitmap.
+[Extensible]
+enum MediaImageBitmapColorType {
+  kRGBA_8888,  // On Android, this is Bitmap.Config.ARGB_8888
+  kBGRA_8888,
+};
+
+// A bitmap image. We use this instead of SkImage or skia.image.Bitmap so we can
+// use it in ARC and we do not use ArcBitmap because we need to use it in the
+// service.
+struct MediaImageBitmap {
+  int32 width;
+  int32 height;
+  array<uint8> pixel_data;
+  [MinVersion=5] MediaImageBitmapColorType color_type;
+};
+
+struct MediaPosition {
+  double playback_rate;
+  mojo_base.mojom.TimeDelta duration;
+  mojo_base.mojom.TimeDelta position;
+  mojo_base.mojom.TimeTicks last_updated_time;
+};
+
+// Contains state information about a MediaSession.
+struct MediaSessionInfo {
+  [Extensible]
+  enum SessionState {
+    // The MediaSession is currently playing media.
+    kActive,
+
+    // The MediaSession is currently playing at a reduced volume (ducking).
+    kDucking,
+
+    // The MediaSession is currently paused.
+    kSuspended,
+
+    // The MediaSession is not currently playing media.
+    kInactive,
+  };
+
+  // The current audio focus state of the MediaSession.
+  SessionState state;
+
+  // If true then we will always duck this MediaSession instead of suspending.
+  bool force_duck;
+
+  // The playback state tells the client whether the audio is playing. This is
+  // different from the audio focus state as it is common for a media session
+  // to hold audio focus sometimes even though it is not actually playing.
+  [MinVersion=1] MediaPlaybackState playback_state;
+
+  // If true then the session should be controllable by the user.
+  [MinVersion=2] bool is_controllable;
+
+  // If true then we will stop this MediaSession instead of suspending when the
+  // session loses focus to a kGain focus type.
+  [MinVersion=4] bool prefer_stop_for_gain_focus_loss;
+
+  // If true then the session is considered to be sensitive (e.g. from an
+  // off the record profile). This may result in it being hidden from certain
+  // UIs (e.g. lock screen media controls).
+  [MinVersion=6] bool is_sensitive;
+
+  // The picture-in-picture state tells the client whether the media is
+  // currently in a picture-in-picture window.
+  [MinVersion=7] MediaPictureInPictureState picture_in_picture_state;
+
+  // The audio/video state of the Media Session (if known).
+  [MinVersion=8] MediaAudioVideoState audio_video_state;
+};
+
+// Contains debugging information about a MediaSession. This will be displayed
+// on the Media Internals WebUI.
+struct MediaSessionDebugInfo {
+  // A unique name for the MediaSession.
+  string name;
+
+  // The owner of the MediaSession.
+  string owner;
+
+  // State information stored in a string e.g. Ducked.
+  string state;
+};
+
+// The observer for observing media session events.
+// Next Method ID: 5
+interface MediaSessionObserver {
+  // Call when the info associated with the session changed.
+  MediaSessionInfoChanged@0(MediaSessionInfo info);
+
+  // Called when the observed MediaSession has changed metadata. The metadata
+  // can be null to be reset, e.g. the media that was being played has been
+  // stopped.
+  MediaSessionMetadataChanged@1(MediaMetadata? metadata);
+
+  // Called when the media session action list has changed. This tells the
+  // observer which actions can be used to control the session.
+  MediaSessionActionsChanged@2(array<MediaSessionAction> action);
+
+  // Called when the images associated with a media session change.
+  MediaSessionImagesChanged@3(
+      map<MediaSessionImageType, array<MediaImage>> images);
+
+  // Called when the position associated with the session has changed.
+  MediaSessionPositionChanged@4(MediaPosition? position);
+};
+
+// A MediaSession manages the media session and audio focus for a given
+// WebContents or ARC app.
+// TODO(https://crbug.com/875004): migrate media session from content/public
+// to mojo.
+// Next Method ID: 17
+interface MediaSession {
+  [Extensible]
+  enum SuspendType {
+    // Suspended by the system because a transient sound needs to be played.
+    kSystem,
+    // Suspended by the UI.
+    kUI,
+    // Suspended by the page via script or user interaction.
+    kContent,
+  };
+
+  // Returns information about the MediaSession.
+  GetMediaSessionInfo@0() => (MediaSessionInfo info);
+
+  // Returns debug information about the MediaSession.
+  GetDebugInfo@1() => (MediaSessionDebugInfo info);
+
+  // Let the media session start ducking such that the volume multiplier
+  // is reduced.
+  StartDucking@2();
+
+  // Let the media session stop ducking such that the volume multiplier is
+  // recovered.
+  StopDucking@3();
+
+  // Suspend the media session.
+  // |type| represents the origin of the request.
+  Suspend@4(SuspendType suspend_type);
+
+  // Resume the media session.
+  // |type| represents the origin of the request.
+  Resume@5(SuspendType suspend_type);
+
+  AddObserver@6(pending_remote<MediaSessionObserver> observer);
+
+  // Skip to the previous track. If there is no previous track then this will
+  // be a no-op.
+  PreviousTrack@7();
+
+  // Skip to the next track. If there is no next track then this will be a
+  // no-op.
+  NextTrack@8();
+
+  // Seek the media session from the current position. If the media cannot
+  // seek then this will be a no-op. The |seek_time| is the time delta that
+  // the media will seek by and supports both positive and negative values.
+  // This value cannot be zero. The |kDefaultSeekTimeSeconds| provides a
+  // default value for seeking by a few seconds.
+  Seek@9(mojo_base.mojom.TimeDelta seek_time);
+
+  // Stop the media session.
+  // |type| represents the origin of the request.
+  Stop@10(SuspendType suspend_type);
+
+  // Skip ad.
+  SkipAd@11();
+
+  // Gets/Downloads the bitmap version of a MediaImage at least
+  // |minimum_size_px| and closest to |desired_size_px|. If the download
+  // failed, was too small or the image did not come from the media session
+  // then returns a null image.
+  GetMediaImageBitmap@12(
+      MediaImage image, int32 minimum_size_px, int32 desired_size_px)
+          => (MediaImageBitmap? image);
+
+  // Seek the media session to a non-negative |seek_time| from the beginning of
+  // the current playing media. If the media cannot seek then this will be a
+  // no-op.
+  SeekTo@13(mojo_base.mojom.TimeDelta seek_time);
+
+  // Scrub ("fast seek") the media session to a non-negative |seek_time| from
+  // the beginning of the current playing media. If the media cannot scrub then
+  // this will be a no-op. The client should call |SeekTo| to finish the
+  // scrubbing operation.
+  ScrubTo@14(mojo_base.mojom.TimeDelta seek_time);
+
+  // Enter picture-in-picture.
+  EnterPictureInPicture@15();
+
+  // Exit picture-in-picture.
+  ExitPictureInPicture@16();
+};

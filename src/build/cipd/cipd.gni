@@ -1,0 +1,73 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# Build targets for constructing CIPD packages.
+#
+# Prepares a CIPD archive and generates a manifest file.
+#
+# TODO(crbug.com/1042819): Add support for including directories.
+#
+# Parameters:
+#   package_definition_yaml: CIPD package definition filename. "cipd.yaml"
+#                            if unspecified.
+#   package: The path where the package will be located inside the CIPD
+#            repository.
+#   description: Sets the "description" field in CIPD package definition.
+#   install_mode: String, should be either "symlink" or "copy". Defaults to
+#                 "symlink".
+#   deps: A list of targets to build prior to copying files.
+#   sources: A list of files to copy into the staging root.
+#
+# Example:
+#   cipd_package_definition("chromedriver") {
+#     package = "path/to/cipd/package"
+#     description = "Prebuilt test binary."
+#     install_mode = "copy"
+#     deps = [ "//path/to:test_binary_target" ]
+#     sources = [ "//path/to:test_binary_file" ]
+#   }
+#
+template("cipd_package_definition") {
+  forward_variables_from(invoker,
+                         [
+                           "deps",
+                           "data",
+                           "data_deps",
+                           "sources",
+                           "testonly",
+                         ])
+
+  assert(defined(invoker.sources), "sources must be specified.")
+
+  _install_mode = "symlink"
+  if (defined(invoker.install_mode)) {
+    _install_mode = invoker.install_mode
+  }
+  assert(_install_mode == "copy" || _install_mode == "symlink",
+         "\"install_mode\" arg should be either \"copy\" or \"symlink\".")
+
+  _cipd_definition_yaml = "cipd.yaml"
+  if (defined(invoker.package_definition_yaml)) {
+    _cipd_definition_yaml = invoker.package_definition_yaml
+  }
+
+  _package_staging_dir = "${target_gen_dir}/${target_name}"
+
+  _yaml_contents = [
+    "package: ${invoker.package}",
+    "description: ${invoker.description}",
+    "root: \${outdir}/" + rebase_path(_package_staging_dir, root_build_dir),
+    "install_mode: ${_install_mode}",
+    "data:",
+  ]
+  foreach(source, sources) {
+    _yaml_contents += [ "  - file: " + get_path_info(source, "file") ]
+  }
+
+  write_file("${_package_staging_dir}/${_cipd_definition_yaml}", _yaml_contents)
+
+  copy(target_name) {
+    outputs = [ "${_package_staging_dir}/{{source_file_part}}" ]
+  }
+}

@@ -1,0 +1,88 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//tools/grit/grit_rule.gni")
+import("//tools/grit/repack.gni")
+import("//ui/base/ui_features.gni")
+
+assert(is_chromeos)
+assert(enable_hidpi)
+
+# Repacks resources needed for ash_unittests, etc. at a given scale.
+# TODO(msw): Use ui_test.pak instead of its pieces? (no 200% support?)
+template("ash_test_resources") {
+  percent = invoker.percent
+
+  repack("ash_test_resources_${target_name}") {
+    output = "$root_build_dir/${target_name}.pak"
+
+    sources = [
+      "$root_gen_dir/ash/app_list/resources/app_list_resources_${percent}_percent.pak",
+      "$root_gen_dir/ash/login/resources/login_resources_${percent}_percent.pak",
+      "$root_gen_dir/ash/public/cpp/resources/ash_public_unscaled_resources.pak",
+      "$root_gen_dir/ui/chromeos/resources/ui_chromeos_resources_${percent}_percent.pak",
+      "$root_gen_dir/ui/resources/ui_resources_${percent}_percent.pak",
+      "$root_gen_dir/ui/views/resources/views_resources_${percent}_percent.pak",
+    ]
+
+    if (percent == "100") {
+      sources += [
+        "$root_gen_dir/mojo/public/js/mojo_bindings_resources.pak",
+        "$root_gen_dir/ui/resources/webui_resources.pak",
+      ]
+    }
+
+    if (defined(invoker.sources)) {
+      sources += invoker.sources
+    }
+
+    deps = [
+      "//ash/app_list/resources",
+      "//ash/login/resources",
+      "//ash/public/cpp/resources:ash_public_unscaled_resources",
+      "//mojo/public/js:resources",
+      "//ui/chromeos/resources",
+      "//ui/resources",
+      "//ui/views/resources",
+    ]
+
+    if (defined(invoker.deps)) {
+      deps += invoker.deps
+    }
+
+    if (percent == "100") {
+      # TODO(msw): This seems bad, but follows repack_ui_test_pak's example.
+      deps += [ "//third_party/blink/public:resources_grit" ]
+      sources += [
+        "$root_gen_dir/third_party/blink/public/resources/blink_resources.pak",
+      ]
+    }
+  }
+}
+
+ash_test_resources("100_percent") {
+  percent = "100"
+}
+
+ash_test_resources("200_percent") {
+  percent = "200"
+}
+
+# There is no with_content_200_percent as content resources are only available
+# at 100%.
+ash_test_resources("with_content_100_percent") {
+  percent = "100"
+  sources = [
+    "$root_gen_dir/content/content_resources.pak",
+    "$root_gen_dir/content/dev_ui_content_resources.pak",
+    "$root_gen_dir/third_party/blink/public/resources/blink_scaled_resources_100_percent.pak",
+    "$root_gen_dir/third_party/blink/public/strings/blink_strings_en-US.pak",
+  ]
+  deps = [
+    "//content:content_resources",
+    "//content:dev_ui_content_resources",
+    "//third_party/blink/public:scaled_resources_100_percent",
+    "//third_party/blink/public/strings",
+  ]
+}

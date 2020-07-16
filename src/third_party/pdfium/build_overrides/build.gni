@@ -1,0 +1,62 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# See https://bugs.chromium.org/p/webrtc/issues/detail?id=5453.
+# Some WebRTC targets require the 10.7 deployment version of the Mac SDK
+# and a 10.11 min SDK, but those targets are only used in non-Chromium
+# builds. We can remove this when Chromium drops 10.6 support and also
+# requires 10.7.
+mac_sdk_min_build_override = "10.10"
+mac_deployment_target_build_override = "10.7"
+
+# Variable that can be used to support multiple build scenarios, like having
+# Chromium specific targets in a client project's GN file etc.
+build_with_chromium = false
+
+# Support different NDK locations in non-Chromium builds.
+default_android_ndk_root = "//third_party/android_ndk"
+default_android_ndk_version = "r16"
+default_android_ndk_major_version = 16
+
+# PDFium builds don't support building java targets.
+enable_java_templates = false
+
+# Whether to use the neon FPU instruction set or not.
+if (current_cpu == "arm") {
+  arm_use_neon = true
+}
+
+# PDFium builds don't use Chromium's third_party/binutils.
+linux_use_bundled_binutils_override = false
+
+# PDFium just uses the Chromium suppression files for now.
+asan_suppressions_file = "//build/sanitizers/asan_suppressions.cc"
+lsan_suppressions_file = "//build/sanitizers/lsan_suppressions.cc"
+tsan_suppressions_file = "//build/sanitizers/tsan_suppressions.cc"
+
+declare_args() {
+  # Android 32-bit non-component, non-clang builds cannot have symbol_level=2
+  # due to 4GiB file size limit, see https://crbug.com/648948.
+  # Set this flag to true to skip the assertion.
+  ignore_elf32_limitations = false
+
+  # Use the system install of Xcode for tools like ibtool, libtool, etc.
+  # This does not affect the compiler. When this variable is false, targets will
+  # instead use a hermetic install of Xcode. [The hermetic install can be
+  # obtained with gclient sync after setting the environment variable
+  # FORCE_MAC_TOOLCHAIN].
+  use_system_xcode = ""
+}
+
+if (use_system_xcode == "") {
+  if (target_os == "mac") {
+    _result = exec_script("//build/mac/should_use_hermetic_xcode.py",
+                          [ target_os ],
+                          "value")
+    use_system_xcode = _result == 0
+  }
+  if (target_os == "ios") {
+    use_system_xcode = true
+  }
+}

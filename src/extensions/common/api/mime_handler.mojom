@@ -1,0 +1,49 @@
+// Copyright 2015 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module extensions.mime_handler;
+
+// Information about a stream.
+struct StreamInfo {
+  // The MIME type of the intercepted URL request.
+  string mime_type;
+
+  // The original URL that was intercepted.
+  string original_url;
+
+  // The URL that the stream can be read from.
+  string stream_url;
+
+  // The ID of the tab that opened the stream. If the stream is not opened in a
+  // tab, it will be -1.
+  int32 tab_id;
+
+  // The HTTP response headers of the intercepted request stored as a dictionary
+  // mapping header name to header value. If a header name appears multiple
+  // times, the header values are merged in the dictionary and separated by a
+  // ",". Non-ASCII headers are dropped.
+  map<string, string> response_headers;
+
+  // Whether the stream is embedded within another document.
+  bool embedded;
+};
+
+interface MimeHandlerService {
+  // Returns information about the stream associated with this service instance.
+  // If the stream has been aborted, |stream_info| will be null.
+  GetStreamInfo() => (StreamInfo? stream_info);
+};
+
+// Provides a mime handler guest with control over beforeunload event handling
+// when running in a PluginDocument.
+//
+// For full-frame mime handler guests, an instance of this interface is passed
+// from the embedding renderer to the browser when creating the mime handler
+// guest. If the frame hosting the guest requests this interface from the
+// browser, that instance is provided to the guest.
+interface BeforeUnloadControl {
+  // Instructs the containing PluginDocument whether to show a beforeunload
+  // dialog.
+  SetShowBeforeUnloadDialog(bool show_dialog) => ();
+};

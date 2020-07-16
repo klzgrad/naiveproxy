@@ -1,0 +1,157 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ui.gni")
+import("//testing/test.gni")
+import("//tools/v8_context_snapshot/v8_context_snapshot.gni")
+
+# One Big Target for services to register their unit test sources. This exists
+# to avoid having to maintain a separate test binary for every service.
+#
+# To add tests for a new service, please define a "tests" source_set in the
+# service subdirectory and add it as a dependency here.
+test("services_unittests") {
+  # The tracing unittests require this for testing unwinding. See
+  # stack_unwinder_android_unittest.cc.
+  if (is_android && can_unwind_with_cfi_table && is_official_build) {
+    add_unwind_tables_in_apk = true
+  }
+
+  # If your service does not run on iOS, its tests should go in the !iOS
+  # section below. If you are unsure, contact blundell@chromium.org.
+  deps = [
+    "//services/cert_verifier:tests",
+    "//services/cert_verifier/cert_net_url_loader:tests",
+    "//services/content:tests",
+    "//services/metrics/public/cpp:tests",
+    "//services/network:tests",
+    "//services/network/public/cpp:tests",
+    "//services/test:run_all_unittests",
+  ]
+
+  if (!is_ios) {
+    deps += [
+      "//services/audio:tests",
+      "//services/data_decoder:tests",
+      "//services/device:tests",
+      "//services/image_annotation:tests",
+      "//services/image_annotation/public/cpp:tests",
+      "//services/media_session:tests",
+      "//services/media_session/public/cpp:tests",
+      "//services/proxy_resolver:tests",
+      "//services/resource_coordinator:tests",
+      "//services/shape_detection:tests",
+      "//services/tracing:tests",
+      "//services/viz/privileged/mojom:unit_tests",
+      "//services/viz/public/cpp/compositing:tests",
+      "//services/viz/public/cpp/gpu:tests",
+      "//services/viz/public/cpp/hit_test:tests",
+    ]
+  }
+
+  if (is_android) {
+    deps += [
+      "//components/signin/public/android:java",
+      "//services/data_decoder/public/cpp/android:safe_json_java",
+      "//services/device:java",
+      "//services/media_session/public/cpp/android:media_session_java",
+      "//services/tracing:tracing_test_helper_java",
+
+      # Some tests make network requests.
+      "//net/android:net_java",
+    ]
+
+    # Some tests need to initialize V8.
+    if (use_v8_context_snapshot) {
+      deps += [ "//tools/v8_context_snapshot:v8_context_snapshot_assets" ]
+    } else {
+      deps += [ "//v8:v8_external_startup_data_assets" ]
+    }
+  }
+
+  if (!is_android && !is_ios) {
+    # NOTE: We do not currently support standalone service binaries on Android
+    # or iOS, so any tests which use the ServiceTest framework to connect to
+    # standalone services must be added here.
+    deps += [ "//services/video_capture:tests" ]
+  }
+
+  if (is_fuchsia) {
+    # Enable the test HTTP server for use by NetworkServiceTestWithService.*
+    use_test_server = true
+  }
+}
+
+if (!is_ios) {
+  test("services_perftests") {
+    deps = [
+      "//services/device:perftests",
+      "//services/test:run_all_unittests",
+      "//services/viz/public/cpp/compositing:perftests",
+    ]
+  }
+}
+
+if (is_android) {
+  junit_binary("service_junit_tests") {
+    sources = [
+      "device/generic_sensor/android/junit/src/org/chromium/device/sensors/PlatformSensorAndProviderTest.java",
+      "device/geolocation/android/junit/src/org/chromium/device/geolocation/LocationProviderTest.java",
+      "device/nfc/android/junit/src/org/chromium/device/nfc/NFCTest.java",
+      "device/nfc/android/junit/src/org/chromium/device/nfc/NfcBlocklistTest.java",
+      "shape_detection/android/junit/src/org/chromium/shape_detection/BitmapUtilsTest.java",
+    ]
+    deps = [
+      "$google_play_services_package:google_play_services_base_java",
+      "$google_play_services_package:google_play_services_basement_java",
+      "$google_play_services_package:google_play_services_vision_common_java",
+      "$google_play_services_package:google_play_services_vision_java",
+      "//base:base_java",
+      "//base:base_java_test_support",
+      "//base:base_junit_test_support",
+      "//mojo/public/java:bindings_java",
+      "//mojo/public/java:system_java",
+      "//services/device/generic_sensor:java",
+      "//services/device/geolocation:geolocation_java",
+      "//services/device/nfc/android:java",
+      "//services/device/public/java:geolocation_java_test_support",
+      "//services/device/public/java:nfc_java",
+      "//services/device/public/mojom:generic_sensor_java",
+      "//services/device/public/mojom:mojom_java",
+      "//services/shape_detection:shape_detection_java",
+      "//skia/public/mojom:mojom_java",
+      "//third_party/android_deps:androidx_annotation_annotation_java",
+    ]
+  }
+
+  android_library("service_javatests") {
+    testonly = true
+    sources = [
+      "shape_detection/android/javatests/src/org/chromium/shape_detection/BarcodeDetectionImplTest.java",
+      "shape_detection/android/javatests/src/org/chromium/shape_detection/FaceDetectionImplTest.java",
+      "shape_detection/android/javatests/src/org/chromium/shape_detection/TestUtils.java",
+      "shape_detection/android/javatests/src/org/chromium/shape_detection/TextDetectionImplTest.java",
+    ]
+    deps = [
+      "$google_play_services_package:google_play_services_base_java",
+      "$google_play_services_package:google_play_services_basement_java",
+      "$google_play_services_package:google_play_services_vision_common_java",
+      "$google_play_services_package:google_play_services_vision_java",
+      "//base:base_java",
+      "//base:base_java_test_support",
+      "//mojo/public/java:base_java",
+      "//mojo/public/java:bindings_java",
+      "//mojo/public/mojom/base:base_java",
+      "//services/shape_detection:shape_detection_java",
+      "//services/shape_detection/public/mojom:mojom_java",
+      "//skia/public/mojom:mojom_java",
+      "//third_party/android_deps:androidx_test_monitor_java",
+      "//third_party/android_deps:androidx_test_runner_java",
+      "//third_party/android_support_test_runner:runner_java",
+      "//third_party/junit",
+      "//ui/gfx/geometry/mojom:mojom_java",
+    ]
+    data = [ "test/data/" ]
+  }
+}

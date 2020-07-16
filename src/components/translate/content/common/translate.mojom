@@ -1,0 +1,81 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module translate.mojom;
+
+import "mojo/public/mojom/base/time.mojom";
+import "mojo/public/mojom/base/string16.mojom";
+import "url/mojom/url.mojom";
+
+enum TranslateError {
+  NONE,
+  NETWORK,
+  INITIALIZATION_ERROR,
+  UNKNOWN_LANGUAGE,
+  UNSUPPORTED_LANGUAGE,
+  IDENTICAL_LANGUAGES,
+  TRANSLATION_ERROR,
+  TRANSLATION_TIMEOUT,
+  UNEXPECTED_SCRIPT_ERROR,
+  BAD_ORIGIN,
+  SCRIPT_LOAD_ERROR,
+  TRANSLATE_ERROR_MAX,
+};
+
+struct LanguageDetectionDetails {
+  mojo_base.mojom.Time time;
+  url.mojom.Url url;
+  string content_language;
+  string cld_language;
+  bool is_cld_reliable;
+  bool has_notranslate;
+  string html_root_language;
+  string adopted_language;
+  mojo_base.mojom.String16 contents;
+};
+
+// Handles language translation. This is used by the browser process to
+// direct a renderer to detect the language details of a frame and translate
+// the language of a frame (or revert a previous translation of the contents
+// of a frame.
+interface TranslateAgent {
+  // Requests that the frame's language details be detected and returned to
+  // the browser process. This includes the html root language, the content
+  // language metadata, and whether the notranslate metadata is present.
+  GetWebLanguageDetectionDetails()
+        => (string content_meta_language, string html_root_lang,
+          url.mojom.Url url, bool has_notranslate_meta);
+
+  // Requests that the frame be translated from |source_lang| to
+  // |target_lang|.
+  //
+  // If a Translate request is already in progress with a matching
+  // |target_lang|, this request will respond with |cancelled| set
+  // to |true|.
+  //
+  // If a Translate request is already in progress with a different
+  // |target_lang|, that request will respond with |cancelled| set
+  // to |true| and this request will proceed normally.
+  //
+  // If |cancelled| is |true| all other response values should be
+  // ignored.
+  TranslateFrame(string translate_script, string source_lang,
+                 string target_lang)
+      => (bool cancelled, string original_lang, string translated_lang,
+          TranslateError error);
+
+  // Requests that the frame be reverted to its original language with
+  // no translation applied.
+  RevertTranslation();
+};
+
+// Reports when page is ready for translation. This is used by the
+// renderer of a main frame to report its detected language to the
+// browser process and provides the translation interface back to itself.
+interface ContentTranslateDriver {
+  // Notification that a new page is ready to translate,
+  // and the language for it has been determined.
+  RegisterPage(pending_remote<TranslateAgent> translate_agent,
+               LanguageDetectionDetails details, bool page_needs_translation);
+};

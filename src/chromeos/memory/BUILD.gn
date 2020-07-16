@@ -1,0 +1,65 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/buildflag_header.gni")
+import("//testing/test.gni")
+
+assert(is_chromeos, "Non-Chrome-OS builds must not depend on //chromeos")
+
+# Used by targets that compile into the implementation.
+config("chromeos_implementation") {
+  defines = [ "CHROMEOS_IMPLEMENTATION" ]
+}
+
+component("memory") {
+  configs += [
+    ":chromeos_implementation",
+    "//build/config/linux/nss:system_nss_no_ssl_config",
+  ]
+
+  public_deps = [ "//chromeos/constants" ]
+  deps = [
+    "//base",
+    "//base/util/memory_pressure",
+    "//chromeos:chromeos_export",
+    "//chromeos/dbus",
+    "//chromeos/dbus/constants",
+    "//crypto",
+    "//crypto:platform",
+    "//third_party/zlib/google:compression_utils",
+  ]
+  sources = [
+    "kstaled.cc",
+    "kstaled.h",
+    "memory.cc",
+    "memory.h",
+    "pagemap.cc",
+    "pagemap.h",
+    "swap_configuration.cc",
+    "swap_configuration.h",
+    "userspace_swap/region.h",
+    "userspace_swap/swap_storage.cc",
+    "userspace_swap/swap_storage.h",
+    "userspace_swap/userfaultfd.cc",
+    "userspace_swap/userfaultfd.h",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  configs += [ "//build/config/linux/nss:system_nss_no_ssl_config" ]
+  deps = [
+    ":memory",
+    "//base/test:test_support",
+    "//chromeos:chromeos_buildflags",
+    "//mojo/core/embedder",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+  sources = [
+    "pagemap_unittest.cc",
+    "userspace_swap/swap_storage_unittest.cc",
+    "userspace_swap/userfaultfd_unittest.cc",
+  ]
+}

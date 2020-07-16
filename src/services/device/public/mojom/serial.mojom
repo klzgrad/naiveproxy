@@ -1,0 +1,163 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module device.mojom;
+
+import "mojo/public/mojom/base/file_path.mojom";
+import "mojo/public/mojom/base/unguessable_token.mojom";
+
+struct SerialPortInfo {
+  mojo_base.mojom.UnguessableToken token;
+  mojo_base.mojom.FilePath path;
+  uint16 vendor_id;
+  bool has_vendor_id = false;
+  uint16 product_id;
+  bool has_product_id = false;
+  string? display_name;
+};
+
+enum SerialSendError {
+  NONE,
+  DISCONNECTED,
+  SYSTEM_ERROR,
+};
+
+enum SerialReceiveError {
+  NONE,
+  DISCONNECTED,
+  DEVICE_LOST,
+  BREAK,
+  FRAME_ERROR,
+  OVERRUN,
+  BUFFER_OVERFLOW,
+  PARITY_ERROR,
+  SYSTEM_ERROR,
+};
+
+enum SerialDataBits {
+  NONE,
+  SEVEN,
+  EIGHT,
+};
+
+enum SerialParityBit {
+  NONE,
+  NO_PARITY,
+  ODD,
+  EVEN,
+};
+
+enum SerialStopBits {
+  NONE,
+  ONE,
+  TWO,
+};
+
+struct SerialConnectionOptions {
+  uint32 bitrate = 0;
+  SerialDataBits data_bits = NONE;
+  SerialParityBit parity_bit = NONE;
+  SerialStopBits stop_bits = NONE;
+  bool cts_flow_control;
+  bool has_cts_flow_control = false;
+};
+
+struct SerialConnectionInfo {
+  uint32 bitrate = 0;
+  SerialDataBits data_bits = NONE;
+  SerialParityBit parity_bit = NONE;
+  SerialStopBits stop_bits = NONE;
+  bool cts_flow_control;
+};
+
+struct SerialHostControlSignals {
+  // DTR (Data Terminal Ready)
+  bool dtr;
+  bool has_dtr = false;
+  // RTS (Request to Send)
+  bool rts;
+  bool has_rts = false;
+  // BRK (Break)
+  bool brk;
+  bool has_brk = false;
+};
+
+struct SerialPortControlSignals {
+  bool dcd;
+  bool cts;
+  bool ri;
+  bool dsr;
+};
+
+// Discovers and enumerates serial devices available to the host.
+interface SerialPortManager {
+  // Associates an interface the port manager can used to notify the client of
+  // events such as the addition or removal of serial ports from the host.
+  SetClient(pending_remote<SerialPortManagerClient> client);
+
+  // Returns the list of serial ports currently available on the host.
+  GetDevices() => (array<SerialPortInfo> devices);
+
+  // Creates a SerialPort instance attached to the port represented by |token|.
+  // When the pipe passed in |port_receiver| is closed the optional pipe passed
+  // in |watcher| will also be closed.
+  GetPort(mojo_base.mojom.UnguessableToken token,
+          pending_receiver<SerialPort> port_receiver,
+          pending_remote<SerialPortConnectionWatcher>? watcher);
+};
+
+// Client interface for SerialPortManager.
+interface SerialPortManagerClient {
+  // This message indicates that a port has been added to the host.
+  OnPortAdded(SerialPortInfo port_info);
+
+  // This message indicates that a port has been removed from the host.
+  OnPortRemoved(SerialPortInfo port_info);
+};
+
+// Performs asynchronous I/O on serial devices.
+interface SerialPort {
+  // Initiates an Open of the device then returns result.
+  Open(SerialConnectionOptions options,
+       handle<data_pipe_consumer> in_stream,
+       handle<data_pipe_producer> out_stream,
+       pending_remote<SerialPortClient> client) => (bool success);
+
+  // Try to clear existing send error and reconnect the data pipe for send.
+  // This is supposed to be called after SerialPortClient#OnSendError is
+  // notified.
+  ClearSendError(handle<data_pipe_consumer> consumer);
+
+  // Try to clear existing read error and reconnect the data pipe for read.
+  // This is supposed to be called after SerialPortClient#OnReadError is
+  // notified.
+  ClearReadError(handle<data_pipe_producer> producer);
+
+  // Flushes input and output buffers.
+  Flush() => (bool success);
+
+  // Reads current control signals (DCD, CTS, etc.).
+  GetControlSignals() => (SerialPortControlSignals signals);
+
+  // Sets one or more control signals and returns result.
+  SetControlSignals(SerialHostControlSignals signals) => (bool success);
+
+  // Performs platform-specific port configuration and returns result.
+  ConfigurePort(SerialConnectionOptions options) => (bool success);
+
+  // Performs a platform-specific port configuration query and returns got info.
+  GetPortInfo() => (SerialConnectionInfo info);
+
+  // Closes the connection created by Open(). Once this returns no more data
+  // will be sent or received on |in_stream| or |out_stream|.
+  Close() => ();
+};
+
+interface SerialPortClient {
+  OnReadError(SerialReceiveError error);
+  OnSendError(SerialSendError error);
+};
+
+interface SerialPortConnectionWatcher {
+};

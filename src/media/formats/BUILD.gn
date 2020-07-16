@@ -1,0 +1,267 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//media/media_options.gni")
+
+source_set("formats") {
+  # Do not expand the visibility here without double-checking with OWNERS, this
+  # is a roll-up target which is part of the //media component. Most other DEPs
+  # should be using //media and not directly DEP this roll-up target.
+  visibility = [
+    "//media",
+    "//media/base/android/",
+    "//media/cdm",
+    "//media/filters",
+    "//media/muxers",
+    "//media/ffmpeg",
+  ]
+
+  sources = [
+    "ac3/ac3_util.cc",
+    "ac3/ac3_util.h",
+    "common/offset_byte_queue.cc",
+    "common/offset_byte_queue.h",
+    "common/opus_constants.cc",
+    "common/opus_constants.h",
+    "mp4/bitstream_converter.cc",
+    "mp4/bitstream_converter.h",
+    "mp4/box_definitions.cc",
+    "mp4/box_definitions.h",
+    "mp4/box_reader.cc",
+    "mp4/box_reader.h",
+    "mp4/es_descriptor.cc",
+    "mp4/es_descriptor.h",
+    "mp4/fourccs.h",
+    "mp4/mp4_stream_parser.cc",
+    "mp4/mp4_stream_parser.h",
+    "mp4/parse_result.h",
+    "mp4/rcheck.h",
+    "mp4/sample_to_group_iterator.cc",
+    "mp4/sample_to_group_iterator.h",
+    "mp4/track_run_iterator.cc",
+    "mp4/track_run_iterator.h",
+    "mpeg/mpeg1_audio_stream_parser.cc",
+    "mpeg/mpeg1_audio_stream_parser.h",
+    "mpeg/mpeg_audio_stream_parser_base.cc",
+    "mpeg/mpeg_audio_stream_parser_base.h",
+    "webm/webm_audio_client.cc",
+    "webm/webm_audio_client.h",
+    "webm/webm_cluster_parser.cc",
+    "webm/webm_cluster_parser.h",
+    "webm/webm_colour_parser.cc",
+    "webm/webm_colour_parser.h",
+    "webm/webm_constants.cc",
+    "webm/webm_constants.h",
+    "webm/webm_content_encodings.cc",
+    "webm/webm_content_encodings.h",
+    "webm/webm_content_encodings_client.cc",
+    "webm/webm_content_encodings_client.h",
+    "webm/webm_crypto_helpers.cc",
+    "webm/webm_crypto_helpers.h",
+    "webm/webm_info_parser.cc",
+    "webm/webm_info_parser.h",
+    "webm/webm_parser.cc",
+    "webm/webm_parser.h",
+    "webm/webm_stream_parser.cc",
+    "webm/webm_stream_parser.h",
+    "webm/webm_tracks_parser.cc",
+    "webm/webm_tracks_parser.h",
+    "webm/webm_video_client.cc",
+    "webm/webm_video_client.h",
+    "webm/webm_webvtt_parser.cc",
+    "webm/webm_webvtt_parser.h",
+  ]
+
+  deps = [
+    "//build:chromecast_buildflags",
+    "//media:media_buildflags",
+    "//media/base",
+    "//third_party/libwebm",
+  ]
+
+  configs += [
+    "//media:subcomponent_config",
+
+    # TODO(crbug.com/167187): Fix size_t to int truncations.
+    "//build/config/compiler:no_size_t_to_int_warning",
+  ]
+
+  if (proprietary_codecs) {
+    deps += [ "//media/video" ]
+    sources += [
+      "mp4/aac.cc",
+      "mp4/aac.h",
+      "mp4/avc.cc",
+      "mp4/avc.h",
+      "mpeg/adts_constants.cc",
+      "mpeg/adts_constants.h",
+      "mpeg/adts_stream_parser.cc",
+      "mpeg/adts_stream_parser.h",
+    ]
+  }
+
+  if (proprietary_codecs && enable_platform_hevc) {
+    sources += [
+      "mp4/hevc.cc",
+      "mp4/hevc.h",
+    ]
+  }
+
+  if (proprietary_codecs && enable_platform_dolby_vision) {
+    sources += [
+      "mp4/dolby_vision.cc",
+      "mp4/dolby_vision.h",
+    ]
+  }
+
+  if (proprietary_codecs && enable_mse_mpeg2ts_stream_parser) {
+    deps += [ "//ui/gfx/geometry" ]
+    sources += [
+      "mp2t/descriptors.cc",
+      "mp2t/descriptors.h",
+      "mp2t/es_adapter_video.cc",
+      "mp2t/es_adapter_video.h",
+      "mp2t/es_parser.cc",
+      "mp2t/es_parser.h",
+      "mp2t/es_parser_adts.cc",
+      "mp2t/es_parser_adts.h",
+      "mp2t/es_parser_h264.cc",
+      "mp2t/es_parser_h264.h",
+      "mp2t/es_parser_mpeg1audio.cc",
+      "mp2t/es_parser_mpeg1audio.h",
+      "mp2t/mp2t_common.h",
+      "mp2t/mp2t_stream_parser.cc",
+      "mp2t/mp2t_stream_parser.h",
+      "mp2t/timestamp_unroller.cc",
+      "mp2t/timestamp_unroller.h",
+      "mp2t/ts_packet.cc",
+      "mp2t/ts_packet.h",
+      "mp2t/ts_section.h",
+      "mp2t/ts_section_pat.cc",
+      "mp2t/ts_section_pat.h",
+      "mp2t/ts_section_pes.cc",
+      "mp2t/ts_section_pes.h",
+      "mp2t/ts_section_pmt.cc",
+      "mp2t/ts_section_pmt.h",
+      "mp2t/ts_section_psi.cc",
+      "mp2t/ts_section_psi.h",
+    ]
+  }
+
+  if (proprietary_codecs && enable_mse_mpeg2ts_stream_parser &&
+      enable_hls_sample_aes) {
+    sources += [
+      "mp2t/ts_section_cat.cc",
+      "mp2t/ts_section_cat.h",
+      "mp2t/ts_section_cets_ecm.cc",
+      "mp2t/ts_section_cets_ecm.h",
+      "mp2t/ts_section_cets_pssh.cc",
+      "mp2t/ts_section_cets_pssh.h",
+    ]
+  }
+}
+
+static_library("test_support") {
+  testonly = true
+  visibility = [ "//media:test_support" ]
+
+  sources = [
+    "common/stream_parser_test_base.cc",
+    "common/stream_parser_test_base.h",
+    "webm/cluster_builder.cc",
+    "webm/cluster_builder.h",
+    "webm/opus_packet_builder.cc",
+    "webm/opus_packet_builder.h",
+    "webm/tracks_builder.cc",
+    "webm/tracks_builder.h",
+  ]
+
+  configs += [
+    # TODO(crbug.com/167187): Fix size_t to int truncations.
+    "//build/config/compiler:no_size_t_to_int_warning",
+  ]
+
+  deps = [
+    "//base/test:test_support",
+    "//media/base:test_support",
+    "//testing/gtest",
+  ]
+
+  if (proprietary_codecs) {
+    sources += [
+      "mp4/nalu_test_helper.cc",
+      "mp4/nalu_test_helper.h",
+    ]
+
+    if (enable_mse_mpeg2ts_stream_parser) {
+      sources += [
+        "mp2t/es_parser_test_base.cc",
+        "mp2t/es_parser_test_base.h",
+      ]
+    }
+  }
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "ac3/ac3_util_unittest.cc",
+    "common/offset_byte_queue_unittest.cc",
+    "mpeg/mpeg1_audio_stream_parser_unittest.cc",
+    "webm/webm_cluster_parser_unittest.cc",
+    "webm/webm_content_encodings_client_unittest.cc",
+    "webm/webm_crypto_helpers_unittest.cc",
+    "webm/webm_parser_unittest.cc",
+    "webm/webm_stream_parser_unittest.cc",
+    "webm/webm_tracks_parser_unittest.cc",
+    "webm/webm_video_client_unittest.cc",
+    "webm/webm_webvtt_parser_unittest.cc",
+  ]
+
+  configs += [
+    # TODO(crbug.com/167187): Fix size_t to int truncations.
+    "//build/config/compiler:no_size_t_to_int_warning",
+  ]
+
+  deps = [
+    "//base/test:test_support",
+    "//media:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+
+  if (proprietary_codecs) {
+    sources += [
+      "mp4/aac_unittest.cc",
+      "mp4/avc_unittest.cc",
+      "mp4/box_reader_unittest.cc",
+      "mp4/es_descriptor_unittest.cc",
+      "mp4/mp4_stream_parser_unittest.cc",
+      "mp4/sample_to_group_iterator_unittest.cc",
+      "mp4/track_run_iterator_unittest.cc",
+      "mpeg/adts_stream_parser_unittest.cc",
+    ]
+
+    deps += [ "//crypto" ]
+
+    if (enable_mse_mpeg2ts_stream_parser) {
+      sources += [
+        "mp2t/es_adapter_video_unittest.cc",
+        "mp2t/es_parser_adts_unittest.cc",
+        "mp2t/es_parser_h264_unittest.cc",
+        "mp2t/es_parser_mpeg1audio_unittest.cc",
+        "mp2t/mp2t_stream_parser_unittest.cc",
+        "mp2t/timestamp_unroller_unittest.cc",
+      ]
+    }
+
+    if (enable_platform_dolby_vision) {
+      sources += [ "mp4/dolby_vision_unittest.cc" ]
+    }
+
+    if (enable_platform_hevc) {
+      sources += [ "mp4/hevc_unittest.cc" ]
+    }
+  }
+}

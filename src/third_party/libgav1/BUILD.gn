@@ -1,0 +1,60 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//third_party/libgav1/libgav1_srcs.gni")
+import("//third_party/libgav1/options.gni")
+
+config("public_libgav1_config") {
+  include_dirs = [
+    "src",
+    "src/src",
+  ]
+
+  defines = [
+    "LIBGAV1_MAX_BITDEPTH=10",
+    "LIBGAV1_THREADPOOL_USE_STD_MUTEX",  # to avoid abseil dependency.
+    "LIBGAV1_ENABLE_LOGGING=0",  # to avoid debug log of libgav1 in chromium
+                                 # debug build.
+  ]
+}
+
+if (enable_libgav1_decoder) {
+  # Separate from libgav1 because utils/constants.cc and dsp/constants.cc
+  # generate the same object file, constants.o.
+  source_set("libgav1_utils") {
+    configs -= [ "//build/config/compiler:chromium_code" ]
+    configs += [ "//build/config/compiler:no_chromium_code" ]
+
+    public_configs = [ ":public_libgav1_config" ]
+
+    sources = gav1_utils_sources
+  }
+
+  # Separate from libgav1 because film_grain.cc and dsp/film_grain.cc
+  # generate the same object file, film_grain.o.
+  source_set("libgav1_dsp") {
+    configs -= [ "//build/config/compiler:chromium_code" ]
+    configs += [ "//build/config/compiler:no_chromium_code" ]
+
+    deps = [ ":libgav1_utils" ]
+    public_configs = [ ":public_libgav1_config" ]
+
+    sources = gav1_dsp_sources
+  }
+  static_library("libgav1") {
+    configs -= [ "//build/config/compiler:chromium_code" ]
+    configs += [ "//build/config/compiler:no_chromium_code" ]
+
+    public_configs = [ ":public_libgav1_config" ]
+    public_deps = [
+      ":libgav1_dsp",
+      ":libgav1_utils",
+    ]
+
+    sources = gav1_common_sources
+    sources += gav1_gav1_sources
+    sources += gav1_post_filter_sources
+    sources += gav1_tile_sources
+  }
+}

@@ -1,0 +1,83 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/jumbo.gni")
+
+jumbo_component("crdtp") {
+  sources = [
+    "crdtp/cbor.cc",
+    "crdtp/cbor.h",
+    "crdtp/dispatch.cc",
+    "crdtp/dispatch.h",
+    "crdtp/error_support.cc",
+    "crdtp/error_support.h",
+    "crdtp/export.h",
+    "crdtp/find_by_first.h",
+    "crdtp/frontend_channel.h",
+    "crdtp/glue.h",
+    "crdtp/json.cc",
+    "crdtp/json.h",
+    "crdtp/parser_handler.h",
+    "crdtp/serializable.cc",
+    "crdtp/serializable.h",
+    "crdtp/serializer_traits.h",
+    "crdtp/span.cc",
+    "crdtp/span.h",
+    "crdtp/status.cc",
+    "crdtp/status.h",
+  ]
+
+  defines = [ "CRDTP_IMPLEMENTATION" ]
+
+  if (!is_debug) {
+    configs -= [ "//build/config/compiler:default_optimization" ]
+    configs += [ "//build/config/compiler:optimize_max" ]
+  }
+  deps = [ ":crdtp_platform" ]
+}
+
+# A small adapter library which only :crdtp may depend on.
+source_set("crdtp_platform") {
+  visibility = [ ":crdtp" ]
+  sources = [
+    "crdtp/chromium/json_platform_chromium.cc",
+    "crdtp/json_platform.h",
+  ]
+  deps = [ "//base" ]
+}
+
+# These tests are linked into //content/test:content_unittests.
+source_set("crdtp_test") {
+  testonly = true
+  sources = [
+    "crdtp/cbor_test.cc",
+    "crdtp/dispatch_test.cc",
+    "crdtp/error_support_test.cc",
+    "crdtp/find_by_first_test.cc",
+    "crdtp/glue_test.cc",
+    "crdtp/json_test.cc",
+    "crdtp/serializable_test.cc",
+    "crdtp/serializer_traits_test.cc",
+    "crdtp/span_test.cc",
+    "crdtp/status_test.cc",
+    "crdtp/status_test_support.cc",
+    "crdtp/status_test_support.h",
+  ]
+  deps = [ ":crdtp_test_platform" ]
+}
+
+# A small adapter library which only :crdtp_test may depend on.
+source_set("crdtp_test_platform") {
+  testonly = true
+  sources = [
+    "crdtp/test_platform.cc",
+    "crdtp/test_platform.h",
+  ]
+  public_deps = [
+    "//base",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//third_party/inspector_protocol:crdtp",
+  ]
+}

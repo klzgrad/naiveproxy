@@ -1,0 +1,80 @@
+# Copyright 2019 The Chromium OS Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//common-mk/pkg_config.gni")
+
+group("all") {
+  deps = [
+    ":libipp",
+  ]
+  if (use.test) {
+    deps += [ ":libipp_test" ]
+  }
+  if (use.fuzzer) {
+    deps += [ ":libipp_fuzzer" ]
+  }
+}
+
+shared_library("libipp") {
+  sources = [
+    "ipp.h",
+    "ipp_attribute.cc",
+    "ipp_attribute.h",
+    "ipp_base.cc",
+    "ipp_base.h",
+    "ipp_collections.cc",
+    "ipp_collections.h",
+    "ipp_encoding.h",
+    "ipp_enums.cc",
+    "ipp_enums.h",
+    "ipp_export.h",
+    "ipp_frame.h",
+    "ipp_frame_builder.cc",
+    "ipp_frame_builder.h",
+    "ipp_operations.cc",
+    "ipp_operations.h",
+    "ipp_package.cc",
+    "ipp_package.h",
+    "ipp_parser.cc",
+    "ipp_parser.h",
+  ]
+}
+
+if (use.test) {
+  executable("libipp_test") {
+    configs += [ "//common-mk:test" ]
+    sources = [
+      "ipp_attribute_test.cc",
+      "ipp_encoding_test.cc",
+      "ipp_enums_test.cc",
+      "ipp_package_test.cc",
+      "ipp_test.cc",
+    ]
+    deps = [
+      ":libipp",
+      "//common-mk/testrunner",
+    ]
+  }
+}
+
+if (use.fuzzer) {
+  pkg_config("libchrome_test_config") {
+    pkg_deps = [
+      "libchrome-${libbase_ver}",
+      "libchrome-test-${libbase_ver}",
+    ]
+  }
+  executable("libipp_fuzzer") {
+    configs += [
+      "//common-mk/common_fuzzer",
+      ":libchrome_test_config",
+    ]
+    sources = [
+      "ipp_fuzzer.cc",
+    ]
+    deps = [
+      ":libipp",
+    ]
+  }
+}

@@ -1,0 +1,65 @@
+# Copyright 2016 The SwiftShader Authors. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("//testing/test.gni")
+import("../../src/swiftshader.gni")
+
+if (build_with_chromium) {
+  test("swiftshader_unittests") {
+    deps = [
+      "//base",
+      "//base/test:test_support",
+      "//testing/gmock",
+      "//testing/gtest",
+      "//third_party/googletest:gmock",
+      "//third_party/googletest:gtest",
+      "//third_party/swiftshader/src/OpenGL/libEGL:swiftshader_libEGL",
+      "//third_party/swiftshader/src/OpenGL/libGLESv2:swiftshader_libGLESv2",
+    ]
+
+    sources = [
+      "//gpu/swiftshader_tests_main.cc",
+      "unittests.cpp",
+    ]
+
+    include_dirs = [ "../../include" ]  # Khronos headers
+
+    defines = [
+      "GL_GLEXT_PROTOTYPES",
+      "GL_APICALL=",
+      "GLAPI=",
+    ]
+
+    # Make sure we're loading SwiftShader's libraries, not ANGLE's or the system
+    # provided ones. On Windows an explicit LoadLibrary("swiftshader\lib*.dll")
+    # is required before making the first EGL or OpenGL ES call.
+    if (is_win) {
+      ldflags = [
+        "/DELAYLOAD:libEGL.dll",
+        "/DELAYLOAD:libGLESv2.dll",
+      ]
+    } else if (is_mac) {
+      ldflags = [
+        "-rpath",
+        "@executable_path/",
+      ]
+      libs = [
+        "CoreFoundation.framework",
+        "IOSurface.framework",
+      ]
+    } else {
+      ldflags = [ "-Wl,-rpath=\$ORIGIN/swiftshader" ]
+    }
+  }
+}

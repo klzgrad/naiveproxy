@@ -1,0 +1,52 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("../../third_party/typescript/typescript.gni")
+
+resources_out_dir = "$root_out_dir/resources/inspector_overlay"
+
+action("build_inspector_overlay") {
+  script = "../../scripts/build/build_inspector_overlay.py"
+
+  inputs = [
+    "./common.css",
+    "$target_gen_dir/common.js",
+    "$target_gen_dir/tool_highlight_impl.js",
+    "$target_gen_dir/tool_highlight.js",
+  ]
+
+  outputs = [
+    "$resources_out_dir/common.css",
+    "$resources_out_dir/tool_highlight.js",
+  ]
+
+  args = [
+    "common.css",
+    "1200",  # max_size in bytes
+    "tool_highlight.js",
+    "50000",  # max_size in bytes
+    "--input_path",
+    rebase_path(".", root_build_dir),
+    "--output_path",
+    rebase_path(resources_out_dir, root_build_dir),
+  ]
+
+  public_deps = [
+    ":copy_resources",
+    ":inspector_overlay",
+  ]
+}
+
+copy("copy_resources") {
+  sources = [ "resources.grd" ]
+  outputs = [ "$resources_out_dir/inspector_overlay_resources.grd" ]
+}
+
+ts_library("inspector_overlay") {
+  sources = [
+    "common.js",
+    "tool_highlight.js",
+    "tool_highlight_impl.js",
+  ]
+}

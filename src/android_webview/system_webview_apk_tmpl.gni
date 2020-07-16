@@ -1,0 +1,255 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//android_webview/variables.gni")
+import("//base/android/resource_exclusions.gni")
+import("//build/config/android/config.gni")
+import("//build/config/android/rules.gni")
+import("//build/config/locales.gni")
+import("//build/util/version.gni")
+import("//chrome/android/trichrome.gni")
+import("//tools/v8_context_snapshot/v8_context_snapshot.gni")
+import("//weblayer/variables.gni")
+
+declare_args() {
+  # Android package name to use when compiling the system_webview_apk and
+  # trichrome_webview_apk targets. This should be used if the Android build
+  # on which you are going to install WebView is configured to load a
+  # different package name than the default used in AOSP.
+  system_webview_package_name = "com.android.webview"
+
+  # Whether to enable standalone and trichrome WebView bundle build targets.
+  enable_webview_bundles = true
+}
+
+template("system_webview_apk_or_module_tmpl") {
+  if (!defined(invoker.target_type)) {
+    _is_bundle_module = false
+    _target_type = "android_apk"
+  } else {
+    _is_bundle_module = invoker.target_type == "android_app_bundle_module"
+    _target_type = invoker.target_type
+  }
+  _exclude_weblayer_java =
+      defined(invoker.exclude_weblayer_java) && invoker.exclude_weblayer_java
+  target(_target_type, target_name) {
+    forward_variables_from(invoker,
+                           "*",
+                           [
+                             "is_64_bit_browser",
+                             "include_32_bit_webview",
+                             "include_64_bit_webview",
+                           ])
+
+    deps += [
+      "//android_webview:locale_pak_assets",
+      "//android_webview:pak_file_assets",
+    ]
+
+    # If the R SDK isn't public yet, include the downstream code to support R.
+    if (!public_android_sdk && android_sdk_release == "r") {
+      deps += [ "//clank/android_webview/next:r_sdk_java" ]
+    }
+
+    if (_exclude_weblayer_java) {
+      deps += [ "//android_webview:android_webview_no_weblayer_java" ]
+    } else {
+      deps += [ "//android_webview:android_webview_java" ]
+
+      # Resources from this target will be kept in the base bundle module
+      # instead of in language splits.
+      if (!defined(invoker.shared_resources_allowlist_target)) {
+        shared_resources_allowlist_target =
+            "//android_webview:system_webview_no_weblayer_apk"
+      }
+    }
+
+    target_sdk_version = android_sdk_version
+    product_config_java_packages = [ webview_product_config_java_package ]
+
+    if (webview_includes_weblayer) {
+      if (_is_bundle_module) {
+        deps += [ "//weblayer:bundle_locale_pak_assets" ]
+      } else {
+        deps += [ "//weblayer:locale_pak_assets" ]
+      }
+      product_config_java_packages += [ weblayer_product_config_java_package ]
+    }
+
+    if (!defined(alternative_android_sdk_dep)) {
+      alternative_android_sdk_dep = webview_framework_dep
+    }
+
+    if (webview_devui_show_icon) {
+      deps += [ "//android_webview/nonembedded:devui_launcher_icon_resources" ]
+    }
+
+    _use_trichrome_library =
+        defined(use_trichrome_library) && use_trichrome_library
+    assert(
+        _use_trichrome_library == defined(invoker.static_library_provider),
+        "If trichrome library is used, static_library_provider must be set " +
+            "so that a dep can be added on the library APK.")
+
+    # Pure 32-bit implies a 32-bit only Webview built on a 64-bit configuration.
+    _pure_32_bit =
+        android_64bit_target_cpu && defined(invoker.include_64_bit_webview) &&
+        !invoker.include_64_bit_webview
+    not_needed([ "_pure_32_bit" ])
+
+    # Flag whether additional deps and libs should be included for each ABI.
+    _include_primary_support = false
+    _include_secondary_support = false
+
+    if (!_use_trichrome_library) {
+      shared_resources = true
+
+      if (!android_64bit_target_cpu || !_pure_32_bit) {
+        shared_libraries = [ "//android_webview:libwebviewchromium" ]
+        _include_primary_support = true
+      }
+      if (android_64bit_target_cpu) {
+        secondary_abi_shared_libraries = [ "//android_webview:libwebviewchromium($android_secondary_abi_toolchain)" ]
+        _include_secondary_support = true
+      }
+      deps += [ "//third_party/icu:icu_assets" ]
+    } else {
+      uncompress_shared_libraries = true
+      app_as_shared_lib = true
+
+      # Include placeholder libraries to ensure we are treated as the desired
+      # architecture.
+      if (android_64bit_target_cpu) {
+        if (invoker.is_64_bit_browser) {
+          native_lib_placeholders = [ "libdummy.so" ]
+          if (invoker.include_32_bit_webview) {
+            secondary_abi_shared_libraries = [ "//android_webview:monochrome_64($android_secondary_abi_toolchain)" ]
+            _include_secondary_support = true
+          }
+        } else {
+          if (invoker.include_64_bit_webview) {
+            shared_libraries = [ "//android_webview:monochrome" ]
+            _include_primary_support = true
+          }
+          secondary_native_lib_placeholders = [ "libdummy.so" ]
+        }
+      } else {
+        native_lib_placeholders = [ "libdummy.so" ]
+      }
+    }
+
+    if (_include_primary_support) {
+      deps += [
+        "//android_webview:webview_primary_abi_assets",
+        "//third_party/crashpad/crashpad/handler:crashpad_handler_trampoline",
+      ]
+      loadable_modules = [ "$root_out_dir/libcrashpad_handler_trampoline.so" ]
+      if (webview_includes_weblayer) {
+        deps += [ "//base/android/linker:chromium_android_linker" ]
+        loadable_modules +=
+            [ "$root_out_dir/libchromium_android_linker$shlib_extension" ]
+      }
+    }
+    if (_include_secondary_support) {
+      _trampoline = "//third_party/crashpad/crashpad/handler:crashpad_handler_trampoline($android_secondary_abi_toolchain)"
+      deps += [
+        "//android_webview:webview_secondary_abi_assets",
+        _trampoline,
+      ]
+      _secondary_out_dir = get_label_info(_trampoline, "root_out_dir")
+      secondary_abi_loadable_modules =
+          [ "$_secondary_out_dir/libcrashpad_handler_trampoline.so" ]
+      if (webview_includes_weblayer) {
+        deps += [ "//base/android/linker:chromium_android_linker($android_secondary_abi_toolchain)" ]
+        secondary_abi_loadable_modules +=
+            [ "$_secondary_out_dir/libchromium_android_linker$shlib_extension" ]
+      }
+    }
+
+    if (!_use_trichrome_library || android_64bit_target_cpu) {
+      # 32-bit TrichromeWebView doesn't have a native library, so only do this
+      # for other configs.
+      native_lib_version_rule = "//build/util:chrome_version_json"
+      _native_lib_file =
+          rebase_path("$root_gen_dir/CHROME_VERSION.json", root_out_dir)
+      native_lib_version_arg = "@FileArg($_native_lib_file:full-quoted)"
+    }
+
+    aapt_locale_allowlist = locales
+
+    resource_exclusion_regex = common_resource_exclusion_regex
+    resource_exclusion_exceptions = common_resource_exclusion_exceptions
+
+    if (!_is_bundle_module) {
+      # Used as an additional apk in test scripts.
+      never_incremental = true
+      command_line_flags_file = "webview-command-line"
+    }
+
+    if (!is_java_debug) {
+      proguard_enabled = true
+      if (!defined(proguard_configs)) {
+        proguard_configs = []
+      }
+      proguard_configs += [
+        "//android_webview/nonembedded/java/proguard.flags",
+        "//base/android/proguard/chromium_apk.flags",
+        "//base/android/proguard/chromium_code.flags",
+      ]
+      if (enable_proguard_obfuscation) {
+        proguard_configs +=
+            [ "//base/android/proguard/enable_obfuscation.flags" ]
+      } else {
+        proguard_configs +=
+            [ "//base/android/proguard/disable_all_obfuscation.flags" ]
+      }
+      png_to_webp = true
+    }
+
+    if (!defined(version_code)) {
+      if (_use_trichrome_library) {
+        if (android_64bit_target_cpu) {
+          if (invoker.is_64_bit_browser) {
+            if (invoker.include_32_bit_webview) {
+              version_code = trichrome_64_32_version_code
+            } else {
+              version_code = trichrome_64_version_code
+            }
+          } else {
+            if (invoker.include_64_bit_webview) {
+              version_code = trichrome_32_64_version_code
+            } else {
+              version_code = trichrome_32_version_code
+            }
+          }
+        } else {
+          version_code = trichrome_version_code
+        }
+      } else {
+        if (android_channel == "dev") {
+          if (_pure_32_bit) {
+            version_code = webview_32_dev_version_code
+          } else {
+            version_code = webview_dev_version_code
+          }
+        } else if (android_channel == "beta") {
+          if (_pure_32_bit) {
+            version_code = webview_32_beta_version_code
+          } else {
+            version_code = webview_beta_version_code
+          }
+        } else {
+          if (_pure_32_bit) {
+            version_code = webview_32_stable_version_code
+          } else {
+            version_code = webview_stable_version_code
+          }
+        }
+      }
+    }
+    if (!defined(version_name)) {
+      version_name = chrome_version_name
+    }
+  }
+}

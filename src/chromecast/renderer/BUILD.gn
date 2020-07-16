@@ -1,0 +1,119 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//chromecast/chromecast.gni")
+import("//tools/grit/grit_rule.gni")
+
+grit("extensions_resources") {
+  source = "resources/extensions_renderer_resources.grd"
+  output_dir = "$root_gen_dir/chromecast/renderer"
+  output_name = "extensions_renderer_resources"
+  outputs = [
+    "grit/extensions_renderer_resources.h",
+    "extensions_renderer_resources.pak",
+  ]
+  grit_flags = [
+    "-E",
+    "mojom_root=" + rebase_path(root_gen_dir, root_build_dir),
+  ]
+  deps = [
+    "//services/network/public/mojom:mojom_js",
+    "//url/mojom:url_mojom_gurl_js",
+    "//url/mojom:url_mojom_origin_js",
+  ]
+}
+
+cast_source_set("renderer") {
+  sources = [
+    "activity_filtering_websocket_handshake_throttle.cc",
+    "activity_filtering_websocket_handshake_throttle.h",
+    "cast_activity_url_filter_manager.cc",
+    "cast_activity_url_filter_manager.h",
+    "cast_content_renderer_client.cc",
+    "cast_content_renderer_client.h",
+    "cast_url_loader_throttle_provider.cc",
+    "cast_url_loader_throttle_provider.h",
+    "cast_websocket_handshake_throttle_provider.cc",
+    "cast_websocket_handshake_throttle_provider.h",
+    "js_channel_bindings.cc",
+    "js_channel_bindings.h",
+    "native_bindings_helper.cc",
+    "native_bindings_helper.h",
+    "on_load_script_injector.cc",
+    "on_load_script_injector.h",
+    "queryable_data_bindings.cc",
+    "queryable_data_bindings.h",
+    "queryable_data_store.cc",
+    "queryable_data_store.h",
+  ]
+
+  public_deps = [ "//chromecast/renderer/media" ]
+
+  if (chromecast_branding == "public") {
+    sources += [ "cast_content_renderer_client_simple.cc" ]
+  }
+
+  deps = [
+    "//base",
+    "//chromecast:chromecast_buildflags",
+    "//chromecast/base",
+    "//chromecast/common",
+    "//chromecast/common:activity_url_filter",
+    "//chromecast/common:queryable_data",
+    "//chromecast/common/media",
+    "//chromecast/common/mojom",
+    "//chromecast/crash",
+    "//chromecast/media",
+    "//chromecast/media/base:media_codec_support",
+    "//components/media_control/renderer",
+    "//components/network_hints/renderer",
+    "//content/public/common",
+    "//content/public/renderer",
+    "//crypto",
+    "//gin",
+    "//ipc",
+    "//media",
+    "//services/network/public/cpp:cpp",
+    "//services/service_manager/public/cpp",
+    "//v8",
+  ]
+
+  if (!is_android) {
+    sources += [
+      "memory_pressure_observer_impl.cc",
+      "memory_pressure_observer_impl.h",
+    ]
+
+    deps += [
+      "//chromecast/common/mojom",
+      "//mojo/public/cpp/bindings",
+    ]
+  } else {
+    deps += [ "//chromecast/media/audio:cast_audio_device_factory" ]
+  }
+
+  if (enable_chromecast_extensions) {
+    sources += [
+      "cast_extensions_dispatcher_delegate.cc",
+      "cast_extensions_dispatcher_delegate.h",
+      "cast_extensions_renderer_client.cc",
+      "cast_extensions_renderer_client.h",
+      "extensions/extension_hooks_delegate.cc",
+      "extensions/extension_hooks_delegate.h",
+      "extensions/tabs_hooks_delegate.cc",
+      "extensions/tabs_hooks_delegate.h",
+    ]
+
+    deps += [
+      "//chromecast/common",
+      "//chromecast/common/extensions_api:api",
+      "//chromecast/renderer:extensions_resources",
+      "//components/version_info:version_info",
+      "//extensions/common",
+      "//extensions/common/api",
+      "//extensions/renderer",
+      "//gin:gin",
+    ]
+  }
+}

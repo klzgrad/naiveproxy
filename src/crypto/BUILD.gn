@@ -1,0 +1,216 @@
+# Copyright (c) 2013 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/crypto.gni")
+import("//testing/test.gni")
+
+component("crypto") {
+  output_name = "crcrypto"  # Avoid colliding with OpenSSL's libcrypto.
+  sources = [
+    "aead.cc",
+    "aead.h",
+    "apple_keychain.h",
+    "apple_keychain_ios.mm",
+    "apple_keychain_mac.mm",
+    "capi_util.cc",
+    "capi_util.h",
+    "crypto_export.h",
+    "ec_private_key.cc",
+    "ec_private_key.h",
+    "ec_signature_creator.cc",
+    "ec_signature_creator.h",
+    "ec_signature_creator_impl.cc",
+    "ec_signature_creator_impl.h",
+    "encryptor.cc",
+    "encryptor.h",
+    "hkdf.cc",
+    "hkdf.h",
+    "hmac.cc",
+    "hmac.h",
+    "mac_security_services_lock.cc",
+    "mac_security_services_lock.h",
+
+    # TODO(brettw) these mocks should be moved to a test_support_crypto target
+    # if possible.
+    "mock_apple_keychain.cc",
+    "mock_apple_keychain.h",
+    "mock_apple_keychain_ios.cc",
+    "mock_apple_keychain_mac.cc",
+    "nss_crypto_module_delegate.h",
+    "nss_key_util.cc",
+    "nss_key_util.h",
+    "nss_util.cc",
+    "nss_util.h",
+    "nss_util_internal.h",
+    "openssl_util.cc",
+    "openssl_util.h",
+    "p224.cc",
+    "p224.h",
+    "p224_spake.cc",
+    "p224_spake.h",
+    "random.cc",
+    "random.h",
+    "rsa_private_key.cc",
+    "rsa_private_key.h",
+    "scoped_capi_types.h",
+    "scoped_nss_types.h",
+    "secure_hash.cc",
+    "secure_hash.h",
+    "secure_util.cc",
+    "secure_util.h",
+    "sha2.cc",
+    "sha2.h",
+    "signature_creator.cc",
+    "signature_creator.h",
+    "signature_verifier.cc",
+    "signature_verifier.h",
+    "symmetric_key.cc",
+    "symmetric_key.h",
+  ]
+
+  deps = [
+    ":platform",
+    "//base",
+    "//base/third_party/dynamic_annotations",
+  ]
+
+  public_deps = [ "//third_party/boringssl" ]
+
+  if (!is_mac && !is_ios) {
+    sources -= [
+      "apple_keychain.h",
+      "mock_apple_keychain.cc",
+      "mock_apple_keychain.h",
+    ]
+  } else {
+    libs = [
+      "CoreFoundation.framework",
+      "Security.framework",
+    ]
+  }
+
+  if (!is_mac) {
+    sources -= [
+      "mac_security_services_lock.cc",
+      "mac_security_services_lock.h",
+    ]
+  }
+  if (!is_win) {
+    sources -= [
+      "capi_util.cc",
+      "capi_util.h",
+    ]
+  }
+
+  # Some files are built when NSS is used for the platform certificate library.
+  if (!use_nss_certs) {
+    sources -= [
+      "nss_key_util.cc",
+      "nss_key_util.h",
+      "nss_util.cc",
+      "nss_util.h",
+      "nss_util_internal.h",
+    ]
+  }
+
+  if (is_chromeos) {
+    sources += [ "nss_util_chromeos.cc" ]
+  }
+
+  defines = [ "CRYPTO_IMPLEMENTATION" ]
+
+  if (is_nacl) {
+    deps += [ "//native_client_sdk/src/libraries/nacl_io" ]
+  }
+}
+
+test("crypto_unittests") {
+  sources = [
+    "aead_unittest.cc",
+    "ec_private_key_unittest.cc",
+    "ec_signature_creator_unittest.cc",
+    "encryptor_unittest.cc",
+    "hmac_unittest.cc",
+    "nss_key_util_unittest.cc",
+    "nss_util_unittest.cc",
+    "p224_spake_unittest.cc",
+    "p224_unittest.cc",
+    "random_unittest.cc",
+    "rsa_private_key_unittest.cc",
+    "secure_hash_unittest.cc",
+    "sha2_unittest.cc",
+    "signature_creator_unittest.cc",
+    "signature_verifier_unittest.cc",
+    "symmetric_key_unittest.cc",
+  ]
+
+  # Some files are built when NSS is used for the platform certificate library.
+  if (!use_nss_certs) {
+    sources -= [
+      "nss_key_util_unittest.cc",
+      "nss_util_unittest.cc",
+    ]
+  }
+
+  deps = [
+    ":crypto",
+    ":platform",
+    ":test_support",
+    "//base",
+    "//base/test:run_all_unittests",
+    "//base/test:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+}
+
+# This has no sources in some cases so can't be a static library.
+source_set("test_support") {
+  testonly = true
+  sources = []
+
+  if (use_nss_certs) {
+    sources += [
+      "scoped_test_nss_db.cc",
+      "scoped_test_nss_db.h",
+    ]
+  }
+
+  if (is_chromeos) {
+    sources += [
+      "scoped_test_nss_chromeos_user.cc",
+      "scoped_test_nss_chromeos_user.h",
+      "scoped_test_system_nss_key_slot.cc",
+      "scoped_test_system_nss_key_slot.h",
+    ]
+  }
+
+  deps = [
+    ":crypto",
+    ":platform",
+    "//base",
+  ]
+}
+
+config("platform_config") {
+  if (use_nss_certs && is_clang) {
+    # There is a broken header guard in /usr/include/nss/secmod.h:
+    # https://bugzilla.mozilla.org/show_bug.cgi?id=884072
+    cflags = [ "-Wno-header-guard" ]
+  }
+}
+
+# This is a meta-target that forwards to NSS's SSL library or OpenSSL,
+# according to the state of the crypto flags. A target just wanting to depend
+# on the current SSL library should just depend on this.
+group("platform") {
+  public_deps = [ "//third_party/boringssl" ]
+
+  # Link in NSS if it is used for the platform certificate library
+  # (use_nss_certs).
+  if (use_nss_certs) {
+    public_configs = [ ":platform_config" ]
+    public_configs += [ "//build/config/linux/nss:system_nss_no_ssl_config" ]
+  }
+}

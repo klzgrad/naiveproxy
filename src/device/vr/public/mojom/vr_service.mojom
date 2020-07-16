@@ -1,0 +1,911 @@
+// Copyright 2015 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module device.mojom;
+
+import "device/gamepad/public/mojom/gamepad.mojom";
+import "mojo/public/mojom/base/time.mojom";
+import "gpu/ipc/common/mailbox_holder.mojom";
+import "gpu/ipc/common/sync_token.mojom";
+import "ui/display/mojom/display.mojom";
+import "ui/gfx/geometry/mojom/geometry.mojom";
+import "ui/gfx/mojom/gpu_fence_handle.mojom";
+import "ui/gfx/mojom/transform.mojom";
+
+//
+// WebXR interfaces
+//
+
+// Note on terminology: unless otherwise noted, all poses passed across mojo are
+// expressed in device space, aka mojo space, aka world space.
+
+// TODO(https://crbug.com/966099): Use EnableIf to only define values on
+// platforms that have implementations.
+// XRDeviceId is used in metrics, so don't reorder.
+enum XRDeviceId {
+  WEB_TEST_DEVICE_ID = 0, // Fake device used by web_tests.
+  FAKE_DEVICE_ID = 1, // Fake device used in unit tests.
+  ORIENTATION_DEVICE_ID = 2,
+  GVR_DEVICE_ID = 3,
+  [EnableIf=enable_openvr] OPENVR_DEVICE_ID = 4,
+  [EnableIf=enable_oculus_vr] OCULUS_DEVICE_ID = 5,
+  [EnableIf=enable_windows_mr] WINDOWS_MIXED_REALITY_ID = 6,
+  ARCORE_DEVICE_ID = 7,
+  [EnableIf=enable_openxr] OPENXR_DEVICE_ID = 8,
+};
+
+enum XRHandedness {
+  NONE = 0,
+  LEFT = 1,
+  RIGHT = 2
+};
+
+enum XRTargetRayMode {
+  GAZING = 1,
+  POINTING = 2,
+  TAPPING = 3
+};
+
+// These correspond with the features from the WebXR Spec:
+// https://immersive-web.github.io/webxr/#feature-descriptor
+enum XRSessionFeature {
+  REF_SPACE_VIEWER = 1,
+  REF_SPACE_LOCAL = 2,
+  REF_SPACE_LOCAL_FLOOR = 3,
+  REF_SPACE_BOUNDED_FLOOR = 4,
+  REF_SPACE_UNBOUNDED = 5,
+
+  DOM_OVERLAY = 6,
+  HIT_TEST = 7,
+  LIGHT_ESTIMATION = 8, // Experimental feature.
+  ANCHORS = 9,  // Experimental feature.
+};
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+// This enum corresponds to 'XRFeatureRequestStatus' in
+// tools/metrics/histograms/enums.xml
+enum XRSessionFeatureRequestStatus {
+  kNotRequested = 0,
+  kRequired = 1,
+  kOptionalAccepted = 2,
+  kOptionalRejected = 3,
+};
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+// These enum names come from the WebXR spec:
+// https://immersive-web.github.io/webxr/#xrsessionmode-enum
+enum XRSessionMode {
+  kInline = 1,
+  kImmersiveVr = 2,
+  kImmersiveAr = 3,
+};
+
+struct XRSessionOptions {
+  // Represents the type of session that is being requested.
+  XRSessionMode mode;
+
+  // Represents the set of requested features that have been marked "required",
+  // if any of these features are missing, a session will not be created.
+  array<XRSessionFeature> required_features;
+
+  // Represents the set of requested features that have been marked "optional",
+  // if any of these features are missing, a session will still be created, but
+  // the feature will not be added to the enabled_features set on the XRSession
+  // struct that is returned.
+  array<XRSessionFeature> optional_features;
+};
+
+// This structure contains all the mojo interfaces for different kinds of
+// XRSession. The only interface required by all sessions is the
+// XRFrameDataProvider. It must always be present. Other interfaces are set as
+// apropriate based on the session creation options. (for example, an immersive
+// session ought to have a XRPresentationConnection to submit the frames to the
+// immersive environment).
+// The XRSessionClient receiver must be fulfilled for the session to get
+// information about the device it is connected to, such as focus and blur
+// events, changes to view or stage parameters, or exit present calls initiated
+// by the device.
+struct XRSession {
+  pending_remote<XRFrameDataProvider> data_provider;
+  // TODO(http://crbug.com/842025) Move where the client_receiver gets set to the
+  // device process then mark this as non-optional.
+  pending_receiver<XRSessionClient>? client_receiver;
+  // TODO(http://crbug.com/842025) Move the information that is sent in display
+  // info to more sensible places so that this doesn't need to be sent here.
+  VRDisplayInfo display_info;
+  XRPresentationConnection? submit_frame_sink;
+
+  // Represents the set of requested features that are both supported by the
+  // runtime, and have been consented to by the user.
+  array<XRSessionFeature> enabled_features;
+
+  // Indicates whether the device backing this session sends input events solely
+  // via eventing (as opposed to polling).
+  bool uses_input_eventing;
+};
+
+// This structure contains the infomation and interfaces needed to create a two
+// way connection between the renderer and a device to synchronize and submit
+// frames to a sink outside of Chrome.
+struct XRPresentationConnection {
+  pending_remote<XRPresentationProvider> provider;
+  pending_receiver<XRPresentationClient> client_receiver;
+  XRPresentationTransportOptions transport_options;
+};
+
+struct XRInputSourceDescription {
+  XRTargetRayMode target_ray_mode;
+  XRHandedness handedness;
+
+  // Pointer ray pose in input device space. The pointer space origin represents
+  // the point on the input device where the ray originates, and the ray travels
+  // along the pointer space negative-Z direction.
+  // For controllers, the input device space is grip space (defined by the
+  // controller's position). For screen input, the input device space is
+  // equivalent to viewer space, and the ray originates from either the actual
+  // screen position (if available), or from an implementation-defined location
+  // such as the near plane intersection.
+  gfx.mojom.Transform? input_from_pointer;
+
+  // List of 0 or more names describing both the preferred visual representation
+  // and behavior of the associated input source. Each name is lowercase with no
+  // spaces and has separate words concatenated with a "-". These names are
+  // sorted in descending order of specificity.
+  array<string> profiles;
+};
+
+struct XRInputSourceState {
+  // Uniquely identifies input source. The IDs are *not* guaranteed to be unique
+  // within a session - they can potentially be reused by the device. The IDs
+  // will be unique per frame data delivered, and the device must not reuse an
+  // ID for at least one frame after the corresponding source is no longer
+  // present.
+  uint32 source_id;
+
+  // Description of this input source's behavior. Should be mostly static, only
+  // need periodic updates.
+  XRInputSourceDescription? description;
+
+  // Input device pose in mojo space. This is the grip pose for tracked
+  // controllers, and the viewer pose for screen input.
+  gfx.mojom.Transform? mojo_from_input;
+
+  // True when position is estimated by something like a neck or arm model.
+  // False when position is based on sensors tracking a 6DoF pose.
+  bool emulated_position;
+
+  // True if the input source should be considered auxiliary, as opposed to
+  // primary. See https://immersive-web.github.io/webxr/#auxiliary-input-source.
+  // Auxiliary input sources do not cause the select events to fire.
+  // Note: some of subsequent fields are named "primary_*" - this does not imply
+  // that the input source needs to have is_auxiliary set to false for those
+  // fields to be present / valid. Input sources (even auxiliary) can have
+  // multiple buttons - those fields are used to signify the state of those of
+  // them that are considered primary for the specified input source.
+  bool is_auxiliary;
+
+  // Describes the current state of the primary input.
+  bool primary_input_pressed;
+
+  // Indicates if the input's primary input has been released (clicked) since
+  // the last report. May indicate that the button was pressed and released in
+  // the space of a single frame, so it may not have been preceeded by a
+  // primary_input_pressed = true;
+  bool primary_input_clicked;
+
+  // Describes the current state of the primary squeeze.
+  bool primary_squeeze_pressed;
+
+  // Indicates if the input's primary sequeeze has been released (clicked) since
+  // the last report. May indicate that the button was pressed and released in
+  // the space of a single frame, so it may not have been preceeded by a
+  // primary_squeeze_pressed = true;
+  bool primary_squeeze_clicked;
+
+  // Contains information about advanced input state such as additional buttons,
+  // triggers, touch sensors, joysticks, touchpads, and vibration actuators. If
+  // the controller has none of these capabilities, then this field will be
+  // null. The information is a snapshot of the controller state that was taken
+  // at the time corresponding to the timestamp field's value.
+  Gamepad? gamepad;
+
+  // If DOM Overlay is enabled and active, and if this input source's pointer
+  // ray intersects the DOM overlay element, this contains the 2D screen space
+  // coordinates of that intersection point within the DOM overlay content
+  // element, with origin at the top left. Null if there is no intersection
+  // point, or if DOM Overlay is not active or not supported. (Currently, only
+  // the ARCore device's immersive-ar mode supports it when requested via
+  // XRSessionFeature.DOM_OVERLAY aka "dom-overlay".)
+  gfx.mojom.PointF? overlay_pointer_position;
+};
+
+//
+// WebVR/WebXR shared interfaces
+//
+
+// A field of view, given by 4 degrees describing the view from a center point.
+// For a typical field of view that contains the center point, all angles are
+// positive.
+struct VRFieldOfView {
+  float up_degrees;
+  float down_degrees;
+  float left_degrees;
+  float right_degrees;
+};
+
+// An entity's pose. Used by entities for which either position or orientation
+// may sometimes not be known. Also supports those poses where the position may
+// be emulated and this is worth telling consumers.
+struct VRPose {
+  gfx.mojom.Quaternion? orientation;
+  gfx.mojom.Point3F? position;
+
+  // True when position is estimated by something like a neck or arm model.
+  // False when position is based on sensors tracking a 6DoF pose.
+  bool emulated_position;
+};
+
+// An entity's pose. Used by entities for which both position and orientation is
+// always known (e.g. anchors, planes).
+struct Pose {
+  gfx.mojom.Quaternion orientation;
+  gfx.mojom.Point3F position;
+};
+
+struct XRRay {
+  gfx.mojom.Point3F origin;
+  gfx.mojom.Vector3dF direction;
+};
+
+struct XRHitResult {
+  gfx.mojom.Transform hit_matrix;
+  uint64 plane_id;  // If the hit test result was computed based off of a plane,
+                    // the plane ID will be stored here. 0 signifies no plane.
+                    // TODO(https://crbug.com/657632) - make it optional once
+                    // mojo supports optional numeric types.
+};
+
+// Information about the optical properties for an eye in a VRDisplay.
+struct VREyeParameters {
+  VRFieldOfView field_of_view;
+
+  // Describes the relationship between the head and eye space for this device.
+  // It should always include translation that is based on IPD (interpupillary
+  // distance), and will sometimes include rotation if the device has angled
+  // screens.
+  gfx.mojom.Transform head_from_eye;
+
+  uint32 render_width;
+  uint32 render_height;
+};
+
+struct VRStageParameters {
+  gfx.mojom.Transform standing_transform;
+
+  // If present, indicates that the device supports a bounded reference space
+  // (https://immersive-web.github.io/webxr/#xrboundedreferencespace-interface).
+  // The points are expected to be in the "standing" space (i.e. there should be
+  // no need to transform them by the accompanying standing transform) and
+  // in a clockwise winding order.
+  array<gfx.mojom.Point3F>? bounds;
+};
+
+struct VRDisplayInfo {
+  XRDeviceId id;
+  VRStageParameters? stage_parameters;
+  // Parameters required to distort a scene for viewing in a VR headset. Only
+  // required for devices which have the can_present capability.
+  VREyeParameters? left_eye;
+  VREyeParameters? right_eye;
+  float webxr_default_framebuffer_scale = 1.0;
+};
+
+// Frame transport method from the Renderer's point of view.
+enum XRPresentationTransportMethod {
+  NONE = 0,
+
+  // Renderer should create a new texture handle (Windows) or
+  // texture mailbox (Android Surface path) containing the
+  // frame's image and supply that as a submitFrame argument.
+  SUBMIT_AS_TEXTURE_HANDLE = 1,
+  SUBMIT_AS_MAILBOX_HOLDER = 2,
+
+  // Renderer should draw directly into a texture mailbox
+  // provided for each frame in OnVSync.
+  DRAW_INTO_TEXTURE_MAILBOX = 3,
+};
+
+struct XRPresentationTransportOptions {
+  XRPresentationTransportMethod transport_method;
+
+  // Booleans indicating which of the XRPresentationClient callbacks
+  // are in use. Default is false, the device implementation should set
+  // the ones to true that it needs and can ignore the rest.
+  bool wait_for_transfer_notification;
+  bool wait_for_render_notification;
+  bool wait_for_gpu_fence;
+};
+
+// Native origins that are reference spaces are identified by their category.
+// Currently, the device needs to know about 3 reference space categories.
+enum XRReferenceSpaceCategory {
+  LOCAL,
+  LOCAL_FLOOR,
+  VIEWER,
+  BOUNDED_FLOOR,
+  UNBOUNDED
+};
+
+// Native origin represents a reference space that is known to the device and
+// whose position can be tracked over time. There are multiple different types
+// of native origins (planes, anchors, reference spaces, input sources), each of
+// them roughly corresponds to something that either is an XRSpace (for example
+// XRReferenceSpaceType, XRBoundedReferenceSpace) or returns an XRSpace (for
+// example XRAnchor, XRPlane, XRInputSource). Native origin can be identified,
+// depending on its type, by the id of the entity (this is the case for planes,
+// anchors and input sources), or by reference space category.
+union XRNativeOriginInformation {
+  uint32 input_source_id;
+  uint64 plane_id;
+  uint64 anchor_id;
+  XRReferenceSpaceCategory reference_space_category;
+};
+
+enum XRPlaneOrientation {
+  UNKNOWN = 0,
+  HORIZONTAL = 1,
+  VERTICAL = 2
+};
+
+struct XRPlanePointData {
+  float x;
+  float z;
+};
+
+// Struct containing plane-related information. A plane describes a flat surface
+// detected in the real world by the underlying system.
+struct XRPlaneData {
+  // Unique (within a session) identifier of the plane.
+  uint64 id;
+
+  // Plane orientation relative to gravity.
+  XRPlaneOrientation orientation;
+
+  // Pose of the plane's center. Defines new coordinate space.
+  // Y axis of the coordinate space describes plane's normal, the rotation of
+  // X and Z around the Y axis is arbitrary.
+  // Null if the device does not know where the plane is located in the world
+  // space (tracking loss), but the tracking can still be recovered.
+  Pose? mojo_from_plane;
+
+  // Vertices of 2D convex polygon approximating the plane.
+  array<XRPlanePointData> polygon;
+};
+
+// Struct containing information about all tracked & updated planes in a given
+// frame. If a plane tracked in frame N-1 is no longer being tracked in frame N,
+// its ID will not be present in all_plane_ids and its XRPlaneData will not be
+// present in updated_planes_data.
+struct XRPlaneDetectionData {
+  // Array with ids of all tracked planes.
+  array<uint64> all_planes_ids;
+
+  // Array with plane data for all updated planes. Plane is considered updated
+  // if its position or polygon has changed. Updated planes are always a subset
+  // of all planes (i.e. for each plane found in updated_planes_data, its ID
+  // will be present in all_planes_ids).
+  array<XRPlaneData> updated_planes_data;
+};
+
+// Struct containing anchor-related information. An anchor represents a pose
+// (position and orientation) in the real world. The anchor's pose will be
+// adjusted by the underlying system as its understanding of the real world
+// evolves.
+struct XRAnchorData {
+  // Unique (within a session) identifier of the anchor.
+  uint64 id;
+
+  // Pose of the anchor. Null if the device does not know where the anchor is
+  // located in the world space (tracking loss), but the tracking can still be
+  // recovered.
+  Pose? mojo_from_anchor;
+};
+
+// Struct containing information about all tracked & updated anchors in a given
+// frame. If an anchor tracked in frame N-1 is no longer being tracked in
+// frame N, its ID will not be present in all_anchors_ids and its XRAnchorData
+// will not be present in updated_anchors_data.
+struct XRAnchorsData {
+  // Array with ids of all tracked anchors.
+  array<uint64> all_anchors_ids;
+
+  // Array with anchor data for all updated anchors. Updated anchors are always
+  // a subset of all anchors (i.e. for each anchor found in
+  // updated_anchors_data, its ID will be present in all_anchors_ids).
+  array<XRAnchorData> updated_anchors_data;
+};
+
+// Information about results for a single subscription for the current frame.
+// This struct is relevant for subscriptions to hit test for persistent input
+// sources.
+struct XRHitTestSubscriptionResultData {
+  uint64 subscription_id;
+  array<XRHitResult> hit_test_results;
+};
+
+// Information about results for a single subscription for the current frame.
+// This struct is relevant for subscriptions to hit test for transient input
+// sources.
+struct XRHitTestTransientInputSubscriptionResultData {
+  uint64 subscription_id;
+  // Map from input source id to array of hit test results obtained using that
+  // input source. Required since there might be multiple input sources that
+  // match input source profile name passed in at subscription creation (see
+  // XRFrameDataProvider::SubscribeToHitTestForTransientInput()).
+  map<uint32, array<XRHitResult>> input_source_id_to_hit_test_results;
+};
+
+// Struct containing data about results of all hit test subscriptions for the
+// current frame.
+struct XRHitTestSubscriptionResultsData {
+  // Results for non-transient input sources.
+  array<XRHitTestSubscriptionResultData> results;
+  // Results for transient input sources.
+  array<XRHitTestTransientInputSubscriptionResultData> transient_input_results;
+};
+
+// Tuple of single-precision floating point RGB data.
+// This is the format used by ArCore for spherical harmonics coefficients
+// and main light intensity.
+struct RgbTupleF32 {
+  float red;
+  float green;
+  float blue;
+};
+
+// Contains the coefficient data for L2 spherical harmonics generated by ArCore.
+struct XRSphericalHarmonics {
+  // L2 (3rd order) spherical harmonics coefficients.
+  // This array has 9 RGB vector elements, representing the 27 coefficients
+  // given by ArCore.
+  // Units are expressed in nits:
+  // https://github.com/immersive-web/lighting-estimation/blob/master/lighting-estimation-explainer.md#physically-based-units
+  array<RgbTupleF32, 9> coefficients;
+};
+
+// Tuple of half-precision floating point RGBA data.
+// Since there isn't a native way to represent half-precision floats, they are
+// stored a uint16s.
+// This is the pixel format used by ArCore for cubemap textures.
+struct RgbaTupleF16 {
+  uint16 red;
+  uint16 green;
+  uint16 blue;
+  uint16 alpha;
+};
+
+// Contains the pixel data for all six faces of an HDR cubemap generated by
+// ArCore. Pixel data is stored in RGBA16F format.
+struct XRCubeMap {
+  // Each pixel has four components (RGBA)
+  const uint64 kNumComponentsPerPixel = 4;
+
+  // The width and height (in pixels) of each cube map face.
+  // Since each face is equal and square, this is only given as a single value.
+  // Additionally, the dimensions of each face will be a power of two.
+  // Note that each pixel is a contiguous RGBA16F vector, so the length of each
+  // array will be this times |kNumComponentsPerPixel|.
+  uint32 width_and_height;
+
+  // Each cube map face, stored in RGBA row-major order. Units are in nits.
+  // Each array will be |width_and_height ** 2| in length.
+  // https://github.com/immersive-web/lighting-estimation/blob/master/lighting-estimation-explainer.md#physically-based-units
+  array<RgbaTupleF16> positive_x;
+  array<RgbaTupleF16> negative_x;
+  array<RgbaTupleF16> positive_y;
+  array<RgbaTupleF16> negative_y;
+  array<RgbaTupleF16> positive_z;
+  array<RgbaTupleF16> negative_z;
+};
+
+// Contains lighting information generated from ArCore for use in diffuse
+// lighting calculations.
+struct XRLightProbe {
+  XRSphericalHarmonics spherical_harmonics;
+  gfx.mojom.Vector3dF main_light_direction;
+
+  // RGB vector, units in nits.
+  RgbTupleF32 main_light_intensity;
+};
+
+// Contains lighting information generated from ArCore for use in specular
+// lighting calculations.
+struct XRReflectionProbe {
+  XRCubeMap cube_map;
+};
+
+// Contains all lighting information generated from ArCore.
+struct XRLightEstimationData {
+  XRLightProbe? light_probe;
+  XRReflectionProbe? reflection_probe;
+};
+
+// The data needed for each animation frame of an XRSession.
+struct XRFrameData {
+  // General XRSession value
+
+  // The pose may be null if the device lost tracking. The XRFrameData can still
+  // have other data, such as pass through camera image.
+  VRPose? pose;
+  // TODO(https://crbug.com/838515): Is this delta since the last
+  // frame? OR an unspecified origin? Something else?
+  mojo_base.mojom.TimeDelta time_delta;
+  // The buffer_holder is used for sending data imagery back and forth across
+  // the process boundary. For application with pass through camera, it holds
+  // the camera image to be passed to the renderer. For immersive sessions, it
+  // is the place for the renderer to draw into to pass imagery to the device
+  // for rendering.
+  gpu.mojom.MailboxHolder? buffer_holder;
+
+  // Indicates that there has been a significant discontinuity in the mojo space
+  // coordinate system, and that poses from this point forward with the same
+  // coordinates as those received previously may not actually be in the same
+  // position. This could have been triggered either via device specific UI or
+  // due to a major change in tracking locatibility, but should not typically
+  // be used when recovering from tracking loss.
+  // This event should be bubbled up as a reference space reset event:
+  // https://immersive-web.github.io/webxr/#eventdef-xrreferencespace-reset
+  bool mojo_space_reset;
+
+  // Exclusive session values
+
+  // The frame_id maps frame data to a frame arriving from the compositor. IDs
+  // will be reused after the frame arrives from the compositor. Negative IDs
+  // imply no mapping.
+  int16 frame_id;
+
+  // Eye parameters may be provided per-frame for some runtimes.  If both of
+  // these are null, it indicates that there was no change since the previous
+  // frame.  If either are non-null, it indicates that data has changed. If only
+  // one is null, it indicates that the data has changed and the display is
+  // mono. Some hardware have sliders to adjust the displays for the eyes, so
+  // Oculus, Vive, and Samsung headsets may have differen't eye offsets for each
+  // frame. These need to be synchronized with a frame because the runtimes
+  // distort textures assuming the view matrix they handed out was used for
+  // rendering.
+  VREyeParameters? left_eye;
+  VREyeParameters? right_eye;
+
+  // For immersive sessions only, reports the state of all active input devices
+  // at the time of this frame. If a session has indicated that it
+  // |uses_input_eventing|, then these input states should not fire select,
+  // squeeze, or similar events, but all controller state, including current
+  // button states, should still be updated.
+  array<XRInputSourceState>? input_state;
+
+  // Stage parameters may be provided per-frame, or only re-computed
+  // periodically.  However, setting the stage parameters to null is perfectly
+  // valid in some cases (e.g. we've lost tracking), so we can't just use
+  // whether they are present or not to indicate that they have been updated
+  // so we have an extra flag to indicate to us that they have been updated.
+  bool stage_parameters_updated;
+  VRStageParameters? stage_parameters;
+
+  // Detected plane information. Only present if plane detection is enabled.
+  XRPlaneDetectionData? detected_planes_data;
+
+  // Tracked anchors information.
+  XRAnchorsData? anchors_data;
+
+  // Lighting estimation data. Only present if lighting estimation is enabled.
+  XRLightEstimationData? light_estimation_data;
+
+  // Hit test subscription results. Only present if the session supports
+  // environment integration.
+  XRHitTestSubscriptionResultsData? hit_test_subscription_results;
+};
+
+// Used primarily in logging to indicate why a session was rejecting to aid
+// developer debuggability. To this end, rather than re-using an existing enum
+// value, if it doesn't match your error case, a new value should be added.
+// Note that this is converted to a console log, and thus the numbers can still
+// be re-arranged as needed (e.g. if a value should be removed).
+enum RequestSessionError {
+  // Indicates that another session is already using the hardware that a new
+  // session would need exclusive control over.
+  EXISTING_IMMERSIVE_SESSION = 1,
+  // Used to indicate that something happened to the connection between either
+  // renderer and browser or browser and device processes, and thus a session
+  // could not be brokered.
+  INVALID_CLIENT = 2,
+  // The user denied consent for one or more required features in the session
+  // configuration (or the mode).
+  USER_DENIED_CONSENT = 3,
+  // No runtime was present which supported both the requested mode and all
+  // required features.
+  NO_RUNTIME_FOUND = 4,
+  // The runtime could not successfully create a session.
+  UNKNOWN_RUNTIME_ERROR = 5,
+  // The runtime requires additional installation which could not be completed.
+  RUNTIME_INSTALL_FAILURE = 6,
+  // While processing/creating a session the "best fit" runtime changed (either
+  // a better runtime was added or the only supported runtime was removed).
+  RUNTIMES_CHANGED = 7,
+  // Something prevented the session from entering fullscreen, which was
+  // required by part of the session configuration.
+  FULLSCREEN_ERROR = 8,
+  // We are unable to determine why the request failed. This should be used very
+  // sparingly, (e.g. Crashes, destructors, etc.)
+  UNKNOWN_FAILURE = 9,
+};
+
+struct RequestSessionSuccess {
+  XRSession session;
+
+  // Used to report metrics during the session to the browser process.
+  // See the note on |XRSessionMetricsRecorder| for context.
+  pending_remote<XRSessionMetricsRecorder> metrics_recorder;
+};
+
+union RequestSessionResult {
+  RequestSessionSuccess success;
+  RequestSessionError failure_reason;
+};
+
+// Interface for requesting XRDevice interfaces and registering for
+// notifications that the XRDevice has changed. Implemented in the browser
+// process and consumed in the renderer process.
+interface VRService {
+  // Optionally supply a VRServiceClient to listen for changes to the XRDevice.
+  // A bad message will be reported if this is called multiple times.
+  SetClient(pending_remote<VRServiceClient> client);
+
+  // Request to initialize a session in the browser process. If successful, the
+  // XRSession struct with the requisite interfaces will be returned.
+  RequestSession(XRSessionOptions options) => (RequestSessionResult result);
+  SupportsSession(XRSessionOptions options) => (bool supports_session);
+
+  // Shuts down an active immersive session. The callback is triggered
+  // once teardown is complete and the system is again in a state where
+  // a new immersive session could be started.
+  ExitPresent() => ();
+
+  // Used for the renderer process to indicate that it is throttling frame
+  // requests from the page, and thus it (not the page) is responsible for any
+  // drop in frame rate or delay in posting frames. This is mainly meant to be
+  // informational for the browser process, so that it can decide if or what UI
+  // to show if it seems like the frame rate is too low or has stalled. The
+  // renderer can (and may) still decide to submit frames and that should not be
+  // treated as illegal or clear the throttled state.
+  SetFramesThrottled(bool throttled);
+};
+
+// Any metrics that must be recorded throughout the duration of an XR session
+// should be reported through this interface, so that the UKM event may still
+// be recorded even if the session is shut down via user navigation.
+interface XRSessionMetricsRecorder {
+  // Records a use (or attempted use - the feature request
+  // may not have been granted) of a feature.
+  ReportFeatureUsed(XRSessionFeature feature);
+};
+
+// The interface for the renderer to listen to top level XR events, events that
+// can be listened to and triggered without the renderer calling requestDevice.
+interface VRServiceClient {
+  // Signals changes to the available physical device runtimes.
+  OnDeviceChanged();
+};
+
+enum CreateAnchorResult {
+  SUCCESS = 0,
+  FAILURE = 1,
+};
+
+enum SubscribeToHitTestResult {
+  SUCCESS = 0,
+  FAILURE_GENERIC = 1,
+};
+
+enum EntityTypeForHitTest {
+  POINT = 1,
+  PLANE = 2,
+};
+
+// Provides functionality for integrating environment information into an
+// XRSession. For example, some AR sessions would implement hit test to allow
+// developers to get the information about the world that its sensors supply.
+// On XRSession end, the message pipe will be destroyed - we need to clean up
+// all outstanding JavaScript promises at that time. The XRsession might end for
+// example due to a call to XRSession::end() method (exposed to JavaScript).
+interface XREnvironmentIntegrationProvider {
+  // Establishes a hit test subscription on the device. The subscription results
+  // will be computed taking into account latest state of the native origin
+  // identified by passed in |native_origin_information|. I.e., in each frame,
+  // the ray used to subscribe to hit test will be transformed to device
+  // coordinate system using the device's current knowledge of the state of the
+  // native origin. |entity_types| are used to filter out results based on the
+  // specific type of the entity that was used to compute the hit test result -
+  // only the results based on the entities passed in this array will be
+  // returned in XRFrameData for this particular subscription.
+  // The returned |subscription_id| uniquely identifies the subscription within
+  // an immersive session. Lifetime of the subscription is tied to the lifetime
+  // of the immersive session.
+  // Hit-test-related mojo interfaces are influenced by WebXR's Hit Test API
+  // proposal, details can be found here:
+  // https://github.com/immersive-web/hit-test
+  SubscribeToHitTest(
+    XRNativeOriginInformation native_origin_information,
+    array<EntityTypeForHitTest> entity_types,
+    XRRay ray) => (SubscribeToHitTestResult result, uint64 subscription_id);
+
+  // Establishes a hit test subscription on the device. The subscription results
+  // will be computed taking into account latest state of the input sources that
+  // are matching profile name specified in |profile_name|. I.e., in each frame,
+  // the ray used to subscribe to hit test will be transformed to device
+  // coordinate system using the device's current knowledge of the state of the
+  // input sources. |entity_types| are used to filter out results based on the
+  // specific type of the entity that was used to compute the hit test result -
+  // only the results based on the entities passed in this array will be
+  // returned in XRFrameData for this particular subscription.
+  // The returned |subscription_id| uniquely identifies the subscription within
+  // an immersive session. Lifetime of the subscription is tied to the lifetime
+  // of the immersive session.
+  // Hit-test-related mojo interfaces are influenced by WebXR's Hit Test API
+  // proposal, details can be found here:
+  // https://github.com/immersive-web/hit-test
+  // Transient input is described here:
+  // https://immersive-web.github.io/webxr/#transient-input
+  SubscribeToHitTestForTransientInput(
+    string profile_name,
+    array<EntityTypeForHitTest> entity_types,
+    XRRay ray) => (SubscribeToHitTestResult result, uint64 subscription_id);
+
+  // Notifies the device that subscription with the passed in |subscription_id|
+  // is no longer needed and should be removed. The |subscription_id| must be a
+  // valid id of a subscription returned by one of the SubscribeToHitTest/
+  // SubscribeToHitTestForTransientInput calls, otherwise the call will be
+  // ignored.
+  UnsubscribeFromHitTest(uint64 subscription_id);
+
+  // Issues a request to create an anchor attached to a session.
+  // |result| will contain status code of the request. |anchor_id| will be valid
+  // only if the |result| is SUCCESS.
+  CreateAnchor(
+    XRNativeOriginInformation native_origin_information,
+    Pose native_origin_from_anchor)
+      => (CreateAnchorResult result, uint64 anchor_id);
+  // TODO(https://crbug.com/657632): Switch anchor_id to nullable integer once
+  // that's available. This will allow us to remove CreateAnchorResult if we're
+  // not interested in obtaining detailed error information from the device.
+
+  // Issues a request to create an anchor attached to a plane.
+  // |result| will contain status code of the request. |anchor_id| will be valid
+  // only if the |result| is SUCCESS.
+  CreatePlaneAnchor(Pose plane_from_anchor, uint64 plane_id) =>
+    (CreateAnchorResult result, uint64 anchor_id);
+  // TODO(https://crbug.com/657632): Ditto - make anchor_id a nullable integer..
+
+  // Detaches an existing anchor. The |anchor_id| must be a valid id of an
+  // anchor created by one of the CreateAnchor calls, otherwise the call will be
+  // ignored.
+  DetachAnchor(uint64 anchor_id);
+};
+
+// Provides a mechanism for a channel to plumb up any button click events
+// separately from polling, to provide better latency/position tracking for
+// those events.
+interface XRInputSourceButtonListener {
+  OnButtonEvent(XRInputSourceState input_source);
+};
+
+struct XRFrameDataRequestOptions {
+  // Controls whether |XRFrameData.detected_planes| should be populated by the
+  // request to |XRFrameDataProvider.GetFrameData()|.
+  bool include_plane_data;
+
+  // Controls whether |XRFrameData.light_estimation_data| should be populated
+  // by the request to |XRFrameDataProvider.GetFrameData()|.
+  bool include_lighting_estimation_data;
+};
+
+// Provides the necessary functionality for a WebXR session to get data for
+// drawing frames. The kind of data it gets depends on what kind of session was
+// requested.
+// This interface is hosted in the Browser process, but will move to a sandboxed
+// utility process on Windows.  The render process communicates with it.
+interface XRFrameDataProvider {
+  // frame_data is optional and will not be set if and only if the call fails
+  // for some reason, such as device disconnection.
+  GetFrameData(XRFrameDataRequestOptions? options) => (XRFrameData? frame_data);
+  GetEnvironmentIntegrationProvider(
+      pending_associated_receiver<XREnvironmentIntegrationProvider>
+          environment_provider);
+  SetInputSourceButtonListener(
+      pending_associated_remote<XRInputSourceButtonListener>? event_listener);
+};
+
+// Provides the necessary functionality for sending frames to a headset.
+// This interface is hosted in the Browser process, but will move to a sandboxed
+// utility process on Windows.  The render process communicates with it.
+interface XRPresentationProvider {
+  // This function tells the device which parts of the canvas should be rendered
+  // to which view.
+  UpdateLayerBounds(int16 frame_id, gfx.mojom.RectF left_bounds,
+                    gfx.mojom.RectF right_bounds, gfx.mojom.Size source_size);
+
+  // Call this if the animation loop exited without submitting a frame to
+  // ensure that every GetFrameData has a matching Submit call. This happens for
+  // WebXR if there were no drawing operations to the opaque framebuffer, and
+  // for WebVR 1.1 if the application didn't call SubmitFrame. Usable with any
+  // XRPresentationTransportMethod. This path does *not* call the
+  // SubmitFrameClient methods such as OnSubmitFrameTransferred. This is
+  // intended to help separate frames while presenting, it may or may not
+  // be called for the last animating frame when presentation ends.
+  SubmitFrameMissing(int16 frame_id, gpu.mojom.SyncToken sync_token);
+
+  // XRPresentationTransportMethod SUBMIT_AS_MAILBOX_HOLDER
+  SubmitFrame(int16 frame_id, gpu.mojom.MailboxHolder mailbox_holder,
+              mojo_base.mojom.TimeDelta time_waited);
+
+  // XRPresentationTransportMethod SUBMIT_AS_TEXTURE_HANDLE
+  // TODO(https://crbug.com/676224): Support preprocessing of mojom files, since
+  // this is Windows only.
+  SubmitFrameWithTextureHandle(int16 frameId, handle<platform> texture);
+
+  // XRPresentationTransportMethod DRAW_INTO_TEXTURE_MAILBOX
+  SubmitFrameDrawnIntoTexture(int16 frameId, gpu.mojom.SyncToken sync_token,
+                              mojo_base.mojom.TimeDelta time_waited);
+};
+
+// After submitting a frame, the XRPresentationProvider will notify the client
+// about several stages of the render pipeline.  This allows pipelining
+// efficiency.  Following XRPresentationProvider::Submit*, the submitted frame
+// will be transferred (read from, perhaps copied to another texture), and then
+// rendered (submitted to the underlying VR API).
+// The client lives in the render process.
+//
+// See XRPresentationTransportOptions which configures which of these
+// callbacks are in use.
+interface XRPresentationClient {
+  // The XRPresentationProvider calls this to indicate that the submitted frame
+  // has been transferred, so the backing data (mailbox or GpuMemoryBuffer) can
+  // be reused or discarded.  Note that this is a convenience/optimization
+  // feature, not a security feature - if a site discards the data early we may
+  // drop a frame, but nothing will otherwise misbehave.
+  // When the frame wasn't successfully transferred, the client should create a
+  // new mailbox/GpuMemoryBuffer rather than reusing an existing one to recover
+  // for subsequent frames.
+  OnSubmitFrameTransferred(bool success);
+
+  // The XRPresentationProvider calls this after the frame was handed off to the
+  // underlying VR API. This allows some pipelining of CPU/GPU work, while
+  // delaying expensive tasks for a subsequent frame until the current frame has
+  // completed.
+  OnSubmitFrameRendered();
+
+  // This callback provides a GpuFence corresponding to the previous frame's
+  // rendering completion, intended for use with a server wait issued before
+  // the following wait to prevent its rendering work from competing with
+  // the previous frame.
+  OnSubmitFrameGpuFence(gfx.mojom.GpuFenceHandle gpu_fence_handle);
+};
+
+enum XRVisibilityState {
+  // Indicates the WebXR content is visible to the user and receiving input.
+  VISIBLE = 1,
+  // Indicates the WebXR content is visible but not receiving input.
+  VISIBLE_BLURRED = 2,
+  // Indicates the WebXR content is not visible.
+  HIDDEN = 3
+};
+
+// Functions for pushing device information to the sessions.
+interface XRSessionClient {
+  OnChanged(VRDisplayInfo display);
+  OnExitPresent();
+  // Indicates a change in the visibility of the WebXR content.
+  OnVisibilityStateChanged(XRVisibilityState visibility_state);
+};

@@ -1,0 +1,67 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# A fuzzable_proto_library is a proto_library that is the same as any other in
+# non-fuzzer builds (ie: use_libfuzzer=false). However, in fuzzer builds, the
+# proto_library is built with the full protobuf runtime and any "optimize_for =
+# LITE_RUNTIME" options are ignored. This is done because libprotobuf-mutator
+# needs the full protobuf runtime, but proto_libraries shipped in chrome must
+# use the optimize for LITE_RUNTIME option which is incompatible with the full
+# protobuf runtime. tl;dr: A fuzzable_proto_library is a proto_library that can
+# be fuzzed with libprotobuf-mutator and shipped in Chrome.
+
+import("//testing/libfuzzer/fuzzer_test.gni")
+import("//third_party/protobuf/proto_library.gni")
+
+template("fuzzable_proto_library") {
+  # Only make the proto library fuzzable if we are doing a build that we can
+  # use LPM on (i.e. libFuzzer not on Chrome OS).
+  if (use_libfuzzer && current_toolchain != "//build/toolchain/cros:target") {
+    proto_library("proto_library_" + target_name) {
+      forward_variables_from(invoker, "*")
+      assert(current_toolchain == host_toolchain)
+      if (!defined(proto_deps)) {
+        proto_deps = []
+      }
+      proto_deps +=
+          [ "//third_party/libprotobuf-mutator:override_lite_runtime_plugin" ]
+      generator_plugin_label =
+          "//third_party/libprotobuf-mutator:override_lite_runtime_plugin"
+      generator_plugin_suffix = ".pb"
+
+      # The plugin will generate cc, so don't ask for it to be done by protoc.
+      generate_cc = false
+      generate_python = false
+      extra_configs = [ "//third_party/protobuf:protobuf_config" ]
+    }
+
+    # Inspired by proto_library.gni's handling of
+    # component_build_force_source_set.
+    if (defined(component_build_force_source_set) &&
+        component_build_force_source_set && is_component_build) {
+      link_target_type = "source_set"
+    } else {
+      link_target_type = "static_library"
+    }
+
+    # By making target a static_library or source_set, we can add protobuf_full
+    # to public_deps.
+    target(link_target_type, target_name) {
+      if (defined(invoker.testonly)) {
+        testonly = invoker.testonly
+      }
+      sources = [ "//third_party/libprotobuf-mutator/dummy.cc" ]
+      public_deps = [
+        ":proto_library_" + target_name,
+        "//third_party/libprotobuf-mutator:protobuf_full",
+      ]
+    }
+  } else {
+    # fuzzable_proto_library should behave like a proto_library when
+    # !use_libfuzzer.
+    proto_library(target_name) {
+      forward_variables_from(invoker, "*")
+    }
+  }
+}

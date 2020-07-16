@@ -1,0 +1,130 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ui.gni")
+
+import("//chromecast/chromecast.gni")
+import("//components/vector_icons/vector_icons.gni")
+
+cast_source_set("public") {
+  sources = [ "media_overlay.h" ]
+
+  deps = [ "//base" ]
+}
+
+cast_source_set("display_settings_public") {
+  sources = [
+    "display_settings_manager.cc",
+    "display_settings_manager.h",
+  ]
+
+  deps = [
+    "//base",
+    "//chromecast/ui/mojom",
+    "//mojo/public/cpp/bindings",
+    "//ui/display/types",
+  ]
+}
+
+cast_source_set("display_settings_manager") {
+  sources = [
+    "display_settings_manager_impl.cc",
+    "display_settings_manager_impl.h",
+  ]
+
+  deps = [
+    ":display_settings_public",
+    "//base",
+    "//chromecast/browser",
+    "//chromecast/graphics",
+    "//chromecast/ui/display_settings",
+    "//chromecast/ui/mojom",
+    "//mojo/public/cpp/bindings",
+    "//ui/display/types",
+  ]
+}
+
+cast_source_set("aura_components") {
+  sources = [ "aura_components.h" ]
+
+  deps = [ ":public" ]
+
+  if (use_aura) {
+    sources += [ "aura_components.cc" ]
+
+    deps += [ ":media_overlay" ]
+  } else {
+    sources += [ "aura_components_dummy.cc" ]
+  }
+}
+
+if (use_aura) {
+  cast_source_set("media_control_ui") {
+    sources = [
+      "media_control_ui.cc",
+      "media_control_ui.h",
+    ]
+
+    deps = [
+      ":vector_icons",
+      "//base",
+      "//chromecast/base",
+      "//chromecast/graphics",
+      "//chromecast/ui/mojom",
+      "//ui/aura",
+      "//ui/views",
+    ]
+  }
+
+  cast_source_set("media_overlay") {
+    sources = [
+      "media_overlay_impl.cc",
+      "media_overlay_impl.h",
+    ]
+
+    deps = [
+      ":public",
+      "//base",
+      "//chromecast/app:resources",
+      "//chromecast/base",
+      "//chromecast/graphics",
+      "//chromecast/media/cma/pipeline",
+      "//chromecast/ui/mojom",
+      "//media",
+      "//ui/aura",
+      "//ui/views",
+    ]
+  }
+}
+
+# Rules for generating vector icon source files.
+# Adapted from //components/vector_icons/BUILD.gn
+
+aggregate_vector_icons("media_controls_vector_icons") {
+  icon_directory = "vector_icons"
+
+  icons = [
+    "back30.icon",
+    "forward30.icon",
+    "next.icon",
+    "pause.icon",
+    "play.icon",
+    "previous.icon",
+  ]
+}
+
+static_library("vector_icons") {
+  sources = get_target_outputs(":media_controls_vector_icons")
+
+  deps = [
+    ":media_controls_vector_icons",
+    "//base",
+    "//skia",
+    "//ui/gfx",
+  ]
+}
+
+cast_source_set("back_gesture_router") {
+  sources = [ "back_gesture_router.h" ]
+}

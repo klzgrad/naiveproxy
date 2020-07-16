@@ -1,0 +1,90 @@
+// Copyright 2020 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module blink.mojom;
+
+import "url/mojom/url.mojom";
+import "services/network/public/mojom/cookie_manager.mojom";
+import "third_party/blink/public/mojom/fetch/fetch_api_request.mojom";
+
+// A code that uniquely identifies an issue. This type should be descriptive
+// enough for the front-end to provide a clear description of the issue.
+enum InspectorIssueCode {
+  kSameSiteCookieIssue,
+  kMixedContentIssue,
+};
+
+// Information about a cookie that is affected by an issue.
+struct AffectedCookie {
+  string name;
+  string path;
+  string domain;
+};
+
+struct AffectedRequest {
+  string request_id;
+  string? url;
+};
+
+struct AffectedFrame {
+  string frame_id;
+};
+
+enum MixedContentResolutionStatus {
+  MixedContentBlocked,
+  MixedContentAutomaticallyUpgraded,
+  MixedContentWarning,
+};
+
+struct MixedContentIssueDetails {
+  RequestContextType request_context;
+  MixedContentResolutionStatus resolution_status;
+  string insecure_url;
+  string main_resource_url;
+  AffectedRequest? request;
+  AffectedFrame? frame;
+};
+
+enum SameSiteCookieOperation {
+  SetCookie, ReadCookie
+};
+
+enum SameSiteCookieExclusionReason {
+  ExcludeSameSiteUnspecifiedTreatedAsLax,
+  ExcludeSameSiteNoneInsecure,
+};
+
+enum SameSiteCookieWarningReason {
+  WarnSameSiteUnspecifiedCrossSiteContext,
+  WarnSameSiteNoneInsecure,
+  WarnSameSiteUnspecifiedLaxAllowUnsafe,
+  WarnSameSiteStrictLaxDowngradeStrict,
+  WarnSameSiteStrictCrossDowngradeStrict,
+  WarnSameSiteStrictCrossDowngradeLax,
+  WarnSameSiteLaxCrossDowngradeStrict,
+  WarnSameSiteLaxCrossDowngradeLax,
+};
+
+// Specific information about |kSameSiteCookieIssue| type issues.
+struct SameSiteCookieIssueDetails {
+  AffectedCookie cookie;
+  array<SameSiteCookieExclusionReason> exclusionReason;
+  array<SameSiteCookieWarningReason> warningReason;
+  SameSiteCookieOperation operation;
+  url.mojom.Url? site_for_cookies;
+  url.mojom.Url? cookie_url;
+  AffectedRequest? request;
+};
+
+// A collection of optional fields that may store additional data depending
+// on the issue code.
+struct InspectorIssueDetails {
+  SameSiteCookieIssueDetails? sameSiteCookieIssueDetails;
+  MixedContentIssueDetails? mixed_content_issue_details;
+};
+
+struct InspectorIssueInfo {
+  InspectorIssueCode code;
+  InspectorIssueDetails details;
+};

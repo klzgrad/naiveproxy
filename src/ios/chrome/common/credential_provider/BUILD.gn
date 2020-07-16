@@ -1,0 +1,78 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/buildflag_header.gni")
+import("//build/config/ios/ios_sdk.gni")
+import("//ios/build/chrome_build.gni")
+
+source_set("credential_provider") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "archivable_credential.h",
+    "archivable_credential.mm",
+    "archivable_credential_store.h",
+    "archivable_credential_store.mm",
+    "as_password_credential_identity+credential.h",
+    "as_password_credential_identity+credential.mm",
+    "constants.h",
+    "constants.mm",
+  ]
+  deps = [
+    ":ui",
+    "//base",
+    "//ios/chrome/common:ios_app_bundle_id_prefix_buildflags",
+    "//ios/chrome/common/app_group",
+  ]
+  libs = [
+    "AuthenticationServices.framework",
+    "Foundation.framework",
+  ]
+}
+
+source_set("ui") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "credential.h",
+    "credential_store.h",
+  ]
+  libs = [ "Foundation.framework" ]
+}
+
+source_set("account_verification_provider") {
+  public_deps = [ ":account_verification_provider_header" ]
+  deps = [ ios_account_verification_provider_target ]
+  assert_no_deps = [ "//ios/chrome/browser/*" ]
+  configs += [ "//build/config/compiler:enable_arc" ]
+  libs = [ "Foundation.framework" ]
+}
+
+source_set("account_verification_provider_header") {
+  sources = [ "account_verification_provider.h" ]
+  assert_no_deps = [ "//ios/chrome/browser/*" ]
+  configs += [ "//build/config/compiler:enable_arc" ]
+  libs = [ "Foundation.framework" ]
+}
+
+source_set("account_verification_provider_implementation") {
+  sources = [ "account_verification_provider.mm" ]
+  deps = [ ":account_verification_provider_header" ]
+  assert_no_deps = [ "//ios/chrome/browser/*" ]
+  configs += [ "//build/config/compiler:enable_arc" ]
+  libs = [ "Foundation.framework" ]
+}
+
+source_set("unit_tests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  testonly = true
+  sources = [
+    "archivable_credential_store_unittest.mm",
+    "archivable_credential_unittest.mm",
+    "as_password_credential_identity+credential_unittests.mm",
+  ]
+  deps = [
+    ":credential_provider",
+    "//base/test:test_support",
+    "//testing/gtest",
+  ]
+}

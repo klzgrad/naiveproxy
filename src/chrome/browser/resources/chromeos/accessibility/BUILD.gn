@@ -1,0 +1,115 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/features.gni")
+import("//chrome/common/features.gni")
+import("//chromecast/chromecast.gni")
+import("strings/accessibility_strings.gni")
+
+assert(is_chromeos || is_chromecast)
+
+accessibility_out_dir = "$root_out_dir/resources/chromeos/accessibility/"
+
+group("build") {
+  deps = [
+    ":accessibility_strings",
+    ":chromevox_guest_manifest",
+    ":chromevox_manifest",
+    "chromevox:build",
+    "common:build",
+  ]
+  if (is_chromeos) {
+    deps += [
+      ":select_to_speak_guest_manifest",
+      ":select_to_speak_manifest",
+      ":switch_access_guest_manifest",
+      ":switch_access_manifest",
+      "autoclick:build",
+      "select_to_speak:build",
+      "switch_access:build",
+    ]
+  }
+}
+
+template("manifest") {
+  version_file = "//chrome/VERSION"
+  version_script = "//build/util/version.py"
+  template_file = invoker.input_file
+  output_file = invoker.output_file
+  key = invoker.key
+  action(target_name) {
+    script = "//chrome/browser/resources/chromeos/accessibility/chromevox/tools/generate_manifest.py"
+    inputs = [
+      version_file,
+      version_script,
+    ]
+    sources = [ template_file ]
+    outputs = [ output_file ]
+    args = [
+      "--key=$key",
+      "--version_file=" + rebase_path(version_file, root_build_dir),
+      "--output_manifest=" + rebase_path(output_file, root_build_dir),
+    ]
+    if (defined(invoker.is_guest_manifest) && invoker.is_guest_manifest) {
+      args += [ "--is_guest_manifest=1" ]
+    }
+    args += rebase_path(sources, root_build_dir)
+  }
+}
+
+manifest("chromevox_manifest") {
+  input_file = "chromevox_manifest.json.jinja2"
+  output_file = "$accessibility_out_dir/chromevox_manifest.json"
+  key = "MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDltVl1k15pjRzuZfMc3B69inxwm2bZeZ2O8/zFO+NluHnBm3GJ3fzdOoFGJd+M16I8p7zxxQyHeDMfWYASyCeB8XnUEDKjqNLQfCnncsANzHsYoEbYj2nEUML2P13b9q+AAvpCBpAJ4cZp81e9n1y/vbSXHE4385cgkKueItzikQIDAQAB"
+}
+
+manifest("chromevox_guest_manifest") {
+  input_file = "chromevox_manifest.json.jinja2"
+  output_file = "$accessibility_out_dir/chromevox_manifest_guest.json"
+  key = "MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDltVl1k15pjRzuZfMc3B69inxwm2bZeZ2O8/zFO+NluHnBm3GJ3fzdOoFGJd+M16I8p7zxxQyHeDMfWYASyCeB8XnUEDKjqNLQfCnncsANzHsYoEbYj2nEUML2P13b9q+AAvpCBpAJ4cZp81e9n1y/vbSXHE4385cgkKueItzikQIDAQAB"
+  is_guest_manifest = true
+}
+
+manifest("select_to_speak_manifest") {
+  input_file = "select_to_speak_manifest.json.jinja2"
+  output_file = "$accessibility_out_dir/select_to_speak_manifest.json"
+  key = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAukZ6JJWr0jHmFTkn0pcigpjI+cP0FqTo8FRIcCwy2fPeM+Ymf+7C9MK642i+Nhdr2qSsRF26AMIKbBdSDUnh04bfg5J/rKa/VO88LvXENYQMGhTo1y9mVg2OsbQJtEL9aTLU2G0SoKcr3g/+lggBKR5ydW1Qa0WGGAM9XrLm8iu/wn2uF4mfcMii6KfyEsAwWalpr/Td5WbtIoNNDpNeKO4ZSZJis1n9PZXqaOKpW7PqFDpEHw2PnPATxkcqj/wIx+Shgada0fhrzMlhXLhhj7ThSSWbuTz5n5NebuQ49/Z2ATgpBCSzYBVXEXMDe6LBBtGiZ/QR9UkA8Lz8bP6xIQIDAQAB"
+}
+
+manifest("select_to_speak_guest_manifest") {
+  input_file = "select_to_speak_manifest.json.jinja2"
+  output_file = "$accessibility_out_dir/select_to_speak_manifest_guest.json"
+  key = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAukZ6JJWr0jHmFTkn0pcigpjI+cP0FqTo8FRIcCwy2fPeM+Ymf+7C9MK642i+Nhdr2qSsRF26AMIKbBdSDUnh04bfg5J/rKa/VO88LvXENYQMGhTo1y9mVg2OsbQJtEL9aTLU2G0SoKcr3g/+lggBKR5ydW1Qa0WGGAM9XrLm8iu/wn2uF4mfcMii6KfyEsAwWalpr/Td5WbtIoNNDpNeKO4ZSZJis1n9PZXqaOKpW7PqFDpEHw2PnPATxkcqj/wIx+Shgada0fhrzMlhXLhhj7ThSSWbuTz5n5NebuQ49/Z2ATgpBCSzYBVXEXMDe6LBBtGiZ/QR9UkA8Lz8bP6xIQIDAQAB"
+  is_guest_manifest = true
+}
+
+manifest("switch_access_manifest") {
+  input_file = "switch_access_manifest.json.jinja2"
+  output_file = "$accessibility_out_dir/switch_access_manifest.json"
+  key = "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDVWTYdXNGhIG6FJKIhaohRRrYYGwg9cR2jea2NRBSEg+T7E3EvUyFy0ouez0N0omeSAL/xlvQtCjZJ72eCqDBgON/49SRtUdLS5TQ2U9cHYcIwI86llKMqqws6uMSwlWXldyNwKx5LVT1nR0+x3J744E2mymCSip2Y+NrGEA2yCUFL8D+O/uS+d5pVFb3NNjPTVbNOlhIs5ZUVX3FBij86ILivoSfRZMIZqK7MU8XDT1zolpFPiSYvDh1Qivwqar0pVYmNbCSjEgbGIuQh7zMaMdHC1HtvjbI20XFzWHyP/cW2YKszlfqawH+kdHSp4ANIjc7GCAjGJNxm33iMNwcFAgMBAAECggEAL47YakkzjZheKp3U6mAGDSAXHV6BQrkBY1yPXGstq7B/DZzy4RrF3QOkDf2jys8dCUXTg7YjrhqVqXuNdmmphvmGq8dxnFDeDxb6wZWE3GdlUzfYK77rdGp2cVuYtMhI05LwOmPSN/bDXk9eK4bDhTTy+lgomOH/aYcntXkEpIfVQ1kVs7RLvBs3tF3QfsL7t+aqphUlbyVRxCzogK3EDnLD0NODrydx5xB2UMKcxrQD8mVl8IhyBUeluWmcqVkIv7z9C9Y6s9HgcQdxsxhClymAsXtjkZVyP/xst9iwIxOyTijffcqbQOPtB9w1d7GWUrdpwCys0TveJslU7zo6jQKBgQD3VOJSiJuENck71q2Sg4yP0ytBNWVO7xLeTDc6OPEuhqtennWYFeprdplL8aejHqPFiNi7L2QVguP1JDLWPPu+RHHsZDtvG+stssE9Z+oVzBowDJZO1EvBH7nvqgxFz4utoDIrQmkbCcsBqOqwv1i7UdJ0DPIofZE/u0G8wONriwKBgQDc02xS5HZ8ysxEdhL9dC8FSvd12lHocEuBML5ufCkK4SUo8EFeg8k+2UVwd0xXwFNv3nKRPfr/yOQ0CRlKTo3IXXj4Uie+ww3j1jWIMPzC5Oo7IUHRd69KfLvG5N9byGv4wdsPKsXsGrUlvP4meD1U9fujxJdE9RC9evZss33prwKBgAQE7BydPbG7UgbX6UAtRRZ9PwGzRW8v8WWNZYRbsoeoBpbmClErYgDXD4ytY6UB9XVbUPJRxdWXp+6u5OiYWxrvb86AnnqiwIKgmgVOb/5kr7RCMBsd1hFQW6wqXkKwKbvrk4UiciTPVu4y+YVfxqhcnwflwfWofLjFaT8Q/2EbAoGANkdtr+5iRYhfr1BKmKwvRqDHtNtGGNlJZecCWAwC1p7C0I5FsyK3m9AyJlPcmxE2MSA/jv3qLWdG2JeH9ODcLuzy6C7hgB1X07H6lJBeANXd0Uz6ba96kdeZHGlzkY7xI0MbQl4kKkXiUvVijzgs8y5HfVi8SgHm7HxGCDASehcCgYEAnw1yu4eaWqsq7ECyjEBM7sQcMVGypiG3VupzLKA75iPkg/E+peUZyDRg7LPCiX/UcW22bliUw1ASRzY+thuVlGWC2CPah95Z4m+H4cJVSEEqKUbYRGfsDlDIJNxPihGvhoTniKZwvpUacbAhop7rbiAVGx+RJ+tFG8P56AbvBVE="
+}
+
+manifest("switch_access_guest_manifest") {
+  input_file = "switch_access_manifest.json.jinja2"
+  output_file = "$accessibility_out_dir/switch_access_manifest_guest.json"
+  key = "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDVWTYdXNGhIG6FJKIhaohRRrYYGwg9cR2jea2NRBSEg+T7E3EvUyFy0ouez0N0omeSAL/xlvQtCjZJ72eCqDBgON/49SRtUdLS5TQ2U9cHYcIwI86llKMqqws6uMSwlWXldyNwKx5LVT1nR0+x3J744E2mymCSip2Y+NrGEA2yCUFL8D+O/uS+d5pVFb3NNjPTVbNOlhIs5ZUVX3FBij86ILivoSfRZMIZqK7MU8XDT1zolpFPiSYvDh1Qivwqar0pVYmNbCSjEgbGIuQh7zMaMdHC1HtvjbI20XFzWHyP/cW2YKszlfqawH+kdHSp4ANIjc7GCAjGJNxm33iMNwcFAgMBAAECggEAL47YakkzjZheKp3U6mAGDSAXHV6BQrkBY1yPXGstq7B/DZzy4RrF3QOkDf2jys8dCUXTg7YjrhqVqXuNdmmphvmGq8dxnFDeDxb6wZWE3GdlUzfYK77rdGp2cVuYtMhI05LwOmPSN/bDXk9eK4bDhTTy+lgomOH/aYcntXkEpIfVQ1kVs7RLvBs3tF3QfsL7t+aqphUlbyVRxCzogK3EDnLD0NODrydx5xB2UMKcxrQD8mVl8IhyBUeluWmcqVkIv7z9C9Y6s9HgcQdxsxhClymAsXtjkZVyP/xst9iwIxOyTijffcqbQOPtB9w1d7GWUrdpwCys0TveJslU7zo6jQKBgQD3VOJSiJuENck71q2Sg4yP0ytBNWVO7xLeTDc6OPEuhqtennWYFeprdplL8aejHqPFiNi7L2QVguP1JDLWPPu+RHHsZDtvG+stssE9Z+oVzBowDJZO1EvBH7nvqgxFz4utoDIrQmkbCcsBqOqwv1i7UdJ0DPIofZE/u0G8wONriwKBgQDc02xS5HZ8ysxEdhL9dC8FSvd12lHocEuBML5ufCkK4SUo8EFeg8k+2UVwd0xXwFNv3nKRPfr/yOQ0CRlKTo3IXXj4Uie+ww3j1jWIMPzC5Oo7IUHRd69KfLvG5N9byGv4wdsPKsXsGrUlvP4meD1U9fujxJdE9RC9evZss33prwKBgAQE7BydPbG7UgbX6UAtRRZ9PwGzRW8v8WWNZYRbsoeoBpbmClErYgDXD4ytY6UB9XVbUPJRxdWXp+6u5OiYWxrvb86AnnqiwIKgmgVOb/5kr7RCMBsd1hFQW6wqXkKwKbvrk4UiciTPVu4y+YVfxqhcnwflwfWofLjFaT8Q/2EbAoGANkdtr+5iRYhfr1BKmKwvRqDHtNtGGNlJZecCWAwC1p7C0I5FsyK3m9AyJlPcmxE2MSA/jv3qLWdG2JeH9ODcLuzy6C7hgB1X07H6lJBeANXd0Uz6ba96kdeZHGlzkY7xI0MbQl4kKkXiUvVijzgs8y5HfVi8SgHm7HxGCDASehcCgYEAnw1yu4eaWqsq7ECyjEBM7sQcMVGypiG3VupzLKA75iPkg/E+peUZyDRg7LPCiX/UcW22bliUw1ASRzY+thuVlGWC2CPah95Z4m+H4cJVSEEqKUbYRGfsDlDIJNxPihGvhoTniKZwvpUacbAhop7rbiAVGx+RJ+tFG8P56AbvBVE="
+  is_guest_manifest = true
+}
+
+accessibility_strings("accessibility_strings") {
+  out_dir = accessibility_out_dir
+}
+
+group("browser_tests") {
+  testonly = true
+  if (is_chromeos) {
+    deps = [
+      "autoclick:browser_tests",
+      "chromevox:browser_tests",
+      "common:browser_tests",
+      "select_to_speak:browser_tests",
+      "switch_access:browser_tests",
+    ]
+  }
+}

@@ -1,0 +1,72 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/compiler/compiler.gni")
+import("//build/config/ui.gni")
+import("//third_party/blink/public/public_features.gni")
+
+if (is_android) {
+  import("//build/config/android/config.gni")
+}
+if (current_cpu == "arm") {
+  import("//build/config/arm.gni")
+}
+
+declare_args() {
+  # If true, use PFFFT for WebAudio FFT support. Do not use for Mac because the
+  # FFT library there is much faster.
+  use_webaudio_pffft = target_os != "mac"
+}
+
+declare_args() {
+  # How many symbols to include in the build of blink. This affects
+  # the performance of the build since the symbols are large and dealing with
+  # them is slow.
+  #   2 means regular build with symbols.
+  #   1 means minimal symbols, usually enough for backtraces only. Symbols with
+  # internal linkage (static functions or those in anonymous namespaces) may not
+  # appear when using this level.
+  #   0 means no symbols.
+  #   -1 means auto-set according to debug/release and platform.
+  blink_symbol_level = -1
+
+  # If true, defaults image interpolation to low quality.
+  use_low_quality_image_interpolation = is_android
+
+  # If true, ffmpeg will be used for computing FFTs for WebAudio
+  use_webaudio_ffmpeg = !is_mac && !is_android && !use_webaudio_pffft
+
+  # If true, webgl2-compute context will be supported.
+  support_webgl2_compute_context = !is_android
+}
+
+# feature_defines_list ---------------------------------------------------------
+
+feature_defines_list = []
+
+if (use_low_quality_image_interpolation) {
+  feature_defines_list += [ "WTF_USE_LOW_QUALITY_IMAGE_INTERPOLATION=1" ]
+}
+
+if (use_webaudio_ffmpeg) {
+  feature_defines_list += [ "WTF_USE_WEBAUDIO_FFMPEG=1" ]
+}
+
+if (support_webgl2_compute_context) {
+  feature_defines_list += [ "SUPPORT_WEBGL2_COMPUTE_CONTEXT=1" ]
+}
+
+if (use_webaudio_pffft) {
+  feature_defines_list += [ "WTF_USE_WEBAUDIO_PFFFT=1" ]
+}
+
+if (blink_symbol_level == 2) {
+  blink_symbols_config = [ "//build/config/compiler:symbols" ]
+} else if (blink_symbol_level == 1) {
+  blink_symbols_config = [ "//build/config/compiler:minimal_symbols" ]
+} else if (blink_symbol_level == 0) {
+  blink_symbols_config = [ "//build/config/compiler:no_symbols" ]
+} else {
+  blink_symbols_config = [ "//build/config/compiler:default_symbols" ]
+}

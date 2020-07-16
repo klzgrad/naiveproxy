@@ -1,0 +1,60 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/external_libraries.gni")
+import("//build_overrides/build.gni")
+
+# Define the executable target only when the build is configured to use the
+# standalone platform implementation; since this is itself a standalone
+# application.
+if (!build_with_chromium) {
+  executable("cast_receiver") {
+    sources = [
+      "cast_agent.cc",
+      "cast_agent.h",
+      "cast_socket_message_port.cc",
+      "cast_socket_message_port.h",
+      "main.cc",
+      "streaming_playback_controller.cc",
+      "streaming_playback_controller.h",
+    ]
+    deps = [
+      "../../platform",
+      "../../third_party/jsoncpp",
+      "../common:public",
+      "../common/channel/proto:channel_proto",
+      "../receiver:channel",
+      "../streaming:receiver",
+    ]
+
+    defines = []
+    include_dirs = []
+    lib_dirs = []
+    libs = []
+    if (have_ffmpeg && have_libsdl2) {
+      defines += [ "CAST_STANDALONE_RECEIVER_HAVE_EXTERNAL_LIBS" ]
+      sources += [
+        "avcodec_glue.h",
+        "decoder.cc",
+        "decoder.h",
+        "sdl_audio_player.cc",
+        "sdl_audio_player.h",
+        "sdl_glue.cc",
+        "sdl_glue.h",
+        "sdl_player_base.cc",
+        "sdl_player_base.h",
+        "sdl_video_player.cc",
+        "sdl_video_player.h",
+      ]
+      include_dirs += ffmpeg_include_dirs + libsdl2_include_dirs
+      lib_dirs += ffmpeg_lib_dirs + libsdl2_lib_dirs
+      libs += ffmpeg_libs + libsdl2_libs
+    } else {
+      sources += [
+        "dummy_player.cc",
+        "dummy_player.h",
+      ]
+    }
+  }
+}

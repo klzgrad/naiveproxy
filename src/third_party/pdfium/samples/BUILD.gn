@@ -1,0 +1,71 @@
+# Copyright 2014 PDFium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/sanitizers/sanitizers.gni")
+import("../pdfium.gni")
+
+group("samples") {
+  testonly = true
+  deps = [ ":pdfium_test" ]
+}
+
+config("pdfium_samples_config") {
+  cflags = []
+  ldflags = []
+  defines = [
+    "PNG_PREFIX",
+    "PNG_USE_READ_MACROS",
+  ]
+  include_dirs = [ ".." ]
+  if (pdf_use_skia) {
+    defines += [ "PDF_ENABLE_SKIA" ]
+  } else if (pdf_use_skia_paths) {
+    defines += [ "PDF_ENABLE_SKIA_PATHS" ]
+  }
+  if (is_asan) {
+    defines += [ "PDF_ENABLE_ASAN" ]
+  }
+
+  if (enable_callgrind) {
+    defines += [ "ENABLE_CALLGRIND" ]
+  }
+}
+
+executable("pdfium_test") {
+  testonly = true
+  sources = [
+    "pdfium_test.cc",
+    "pdfium_test_dump_helper.cc",
+    "pdfium_test_dump_helper.h",
+    "pdfium_test_event_helper.cc",
+    "pdfium_test_event_helper.h",
+    "pdfium_test_write_helper.cc",
+    "pdfium_test_write_helper.h",
+  ]
+
+  # Note: One should write programs that depend on ../:pdfium. Whereas this
+  # sample program does not set a good example, and depends on PDFium internals,
+  # as well as test support code, for convenience.
+  deps = [
+    "../:pdfium_public_headers",
+    "../fpdfsdk",
+    "../testing/:test_support",
+    "../testing/image_diff",
+    "../third_party:pdfium_base",
+    "//build/win:default_exe_manifest",
+  ]
+  configs += [ ":pdfium_samples_config" ]
+
+  if (pdf_enable_v8) {
+    deps += [
+      "//v8:v8_headers",
+      "//v8:v8_libplatform",
+    ]
+    include_dirs = [ "//v8" ]
+    configs += [ "//v8:external_startup_data" ]
+  }
+  if (pdf_use_skia || pdf_use_skia_paths) {
+    deps += [ "//skia" ]
+  }
+}

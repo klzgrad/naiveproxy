@@ -1,0 +1,386 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# ==============================================================================
+# TEST SETUP
+# ==============================================================================
+
+if (is_android) {
+  import("//build/config/android/config.gni")
+  import("//build/config/android/extract_unwind_tables.gni")
+  import("//build/config/android/rules.gni")
+  import("//build/config/sanitizers/sanitizers.gni")
+}
+
+if (is_fuchsia) {
+  import("//build/config/chromecast_build.gni")
+  import("//build/config/fuchsia/generate_runner_scripts.gni")
+  import("//build/config/fuchsia/package.gni")
+}
+
+if (is_chromeos) {
+  import("//build/config/chromeos/rules.gni")
+}
+
+if (is_ios) {
+  import("//build/config/ios/ios_sdk.gni")
+  import("//build/config/ios/ios_test_runner_wrapper.gni")
+  import("//build/config/ios/rules.gni")
+}
+
+# Define a test as an executable (or apk on Android) with the "testonly" flag
+# set.
+# Variable:
+#   use_raw_android_executable: Use executable() rather than android_apk().
+#   use_native_activity: Test implements ANativeActivity_onCreate().
+template("test") {
+  if (is_android) {
+    _use_raw_android_executable = defined(invoker.use_raw_android_executable) &&
+                                  invoker.use_raw_android_executable
+
+    # output_name is used to allow targets with the same name but in different
+    # packages to still produce unique runner scripts.
+    _output_name = invoker.target_name
+    if (defined(invoker.output_name)) {
+      _output_name = invoker.output_name
+    }
+
+    _test_runner_target = "${_output_name}__test_runner_script"
+    _wrapper_script_vars = [
+      "ignore_all_data_deps",
+      "shard_timeout",
+    ]
+
+    assert(_use_raw_android_executable || enable_java_templates)
+
+    if (_use_raw_android_executable) {
+      _exec_target = "${target_name}__exec"
+      _dist_target = "${target_name}__dist"
+      _exec_output =
+          "$target_out_dir/${invoker.target_name}/${invoker.target_name}"
+
+      executable(_exec_target) {
+        # Configs will always be defined since we set_defaults in BUILDCONFIG.gn.
+        configs = []
+        data_deps = []
+        forward_variables_from(invoker,
+                               "*",
+                               _wrapper_script_vars + [ "extra_dist_files" ])
+        testonly = true
+
+        # Thanks to the set_defaults() for test(), configs are initialized with
+        # the default shared_library configs rather than executable configs.
+        configs -= [
+          "//build/config:shared_library_config",
+          "//build/config/android:hide_all_but_jni",
+        ]
+        configs += [ "//build/config:executable_config" ]
+
+        # Don't output to the root or else conflict with the group() below.
+        output_name = rebase_path(_exec_output, root_out_dir)
+      }
+
+      create_native_executable_dist(_dist_target) {
+        testonly = true
+        dist_dir = "$root_out_dir/$target_name"
+        binary = _exec_output
+        deps = [ ":$_exec_target" ]
+        if (defined(invoker.extra_dist_files)) {
+          extra_files = invoker.extra_dist_files
+        }
+      }
+    } else {
+      _library_target = "${target_name}__library"
+      _apk_target = "${target_name}__apk"
+      _apk_specific_vars = [
+        "android_manifest",
+        "android_manifest_dep",
+        "enable_multidex",
+        "product_config_java_packages",
+        "min_sdk_version",
+        "proguard_configs",
+        "proguard_enabled",
+        "shared_resources",
+        "srcjar_deps",
+        "target_sdk_version",
+        "use_default_launcher",
+        "use_native_activity",
+      ]
+
+      # Adds the unwind tables from unstripped binary as an asset file in the
+      # apk, if |add_unwind_tables_in_apk| is specified by the test.
+      if (defined(invoker.add_unwind_tables_in_apk) &&
+          invoker.add_unwind_tables_in_apk) {
+        _unwind_table_asset_name = "${target_name}_unwind_assets"
+        unwind_table_asset(_unwind_table_asset_name) {
+          testonly = true
+          library_target = _library_target
+          deps = [ ":$_library_target" ]
+        }
+      }
+
+      shared_library(_library_target) {
+        # Configs will always be defined since we set_defaults in BUILDCONFIG.gn.
+        configs = []  # Prevent list overwriting warning.
+        configs = invoker.configs
+        testonly = true
+
+        deps = []
+        forward_variables_from(
+            invoker,
+            "*",
+            _apk_specific_vars + _wrapper_script_vars + [ "visibility" ])
+
+        if (!defined(invoker.use_default_launcher) ||
+            invoker.use_default_launcher) {
+          deps += [ "//testing/android/native_test:native_test_native_code" ]
+        }
+      }
+      unittest_apk(_apk_target) {
+        forward_variables_from(invoker, _apk_specific_vars)
+        shared_library = ":$_library_target"
+        apk_name = invoker.target_name
+        if (defined(invoker.output_name)) {
+          apk_name = invoker.output_name
+          install_script_name = "install_${invoker.output_name}"
+        }
+
+        if (defined(invoker.deps)) {
+          deps = invoker.deps
+        } else {
+          deps = []
+        }
+
+        # Add the Java classes so that each target does not have to do it.
+        deps += [ "//base/test:test_support_java" ]
+
+        if (defined(_unwind_table_asset_name)) {
+          deps += [ ":${_unwind_table_asset_name}" ]
+        }
+      }
+    }
+
+    test_runner_script(_test_runner_target) {
+      forward_variables_from(invoker, _wrapper_script_vars)
+
+      if (_use_raw_android_executable) {
+        executable_dist_dir = "$root_out_dir/$_dist_target"
+        data_deps = [ ":$_exec_target" ]
+      } else {
+        apk_target = ":$_apk_target"
+        incremental_apk = incremental_install
+
+        # Dep needed for the test runner .runtime_deps file to pick up data
+        # deps from the forward_variables_from(invoker, "*") on the library.
+        data_deps = [ ":$_library_target" ]
+      }
+      test_name = _output_name
+      test_suite = _output_name
+      test_type = "gtest"
+    }
+
+    # Create a wrapper script rather than using a group() in order to ensure
+    # "ninja $target_name" always works. If this was a group(), then GN would
+    # not create a top-level alias for it if a target exists in another
+    # directory with the same $target_name.
+    # Also - bots run this script directly for "components_perftests".
+    generate_wrapper(target_name) {
+      testonly = true
+      executable = "$root_build_dir/bin/run_$_output_name"
+      wrapper_script = "$root_build_dir/$_output_name"
+      deps = [ ":$_test_runner_target" ]
+      if (_use_raw_android_executable) {
+        deps += [ ":$_dist_target" ]
+      } else {
+        # Dep needed for the swarming .isolate file to pick up data
+        # deps from the forward_variables_from(invoker, "*") on the library.
+        deps += [
+          ":$_apk_target",
+          ":$_library_target",
+        ]
+      }
+    }
+  } else if (is_fuchsia) {
+    _output_name = invoker.target_name
+    _pkg_target = "${_output_name}_pkg"
+    _exec_target = "${_output_name}__exec"
+
+    fuchsia_package_runner(target_name) {
+      testonly = true
+      forward_variables_from(invoker,
+                             [
+                               "use_test_server",
+                               "package_deps",
+                             ])
+      runner_script = "//build/fuchsia/test_runner.py"
+      package = ":$_pkg_target"
+      package_name_override = _output_name
+
+      data_deps = [ "//testing/buildbot/filters:fuchsia_filters" ]
+    }
+
+    cr_fuchsia_package(_pkg_target) {
+      testonly = true
+      forward_variables_from(invoker, [ "manifest" ])
+      binary = ":$_exec_target"
+      package_name_override = _output_name
+    }
+
+    executable(_exec_target) {
+      forward_variables_from(invoker, "*")
+      testonly = true
+      output_name = _exec_target
+    }
+  } else if (is_ios) {
+    declare_args() {
+      # Keep the unittest-as-xctest functionality defaulted to off until the
+      # bots are updated to handle it properly.
+      # TODO(crbug.com/1001667): Remove this arg once the iOS test runner
+      # supports running unittests with xctest.
+      enable_run_ios_unittests_with_xctest = false
+    }
+
+    _test_target = target_name
+    _wrapper_output_name = "run_${target_name}"
+    ios_test_runner_wrapper(_wrapper_output_name) {
+      forward_variables_from(invoker,
+                             [
+                               "data",
+                               "data_deps",
+                               "deps",
+                               "executable_args",
+                               "retries",
+                               "shards",
+                             ])
+
+      _root_build_dir = rebase_path("${root_build_dir}", root_build_dir)
+
+      if (!defined(executable_args)) {
+        executable_args = []
+      }
+      executable_args += [
+        "--app",
+        "@WrappedPath(${_root_build_dir}/${_test_target}.app)",
+      ]
+
+      wrapper_output_name = "${_wrapper_output_name}"
+    }
+
+    _resources_bundle_data = target_name + "_resources_bundle_data"
+
+    bundle_data(_resources_bundle_data) {
+      visibility = [ ":$_test_target" ]
+      sources = [ "//testing/gtest_ios/Default.png" ]
+      outputs = [ "{{bundle_resources_dir}}/{{source_file_part}}" ]
+    }
+
+    if (enable_run_ios_unittests_with_xctest) {
+      ios_test_target_type = "ios_xctest_test"
+    } else {
+      ios_test_target_type = "ios_app_bundle"
+    }
+
+    target(ios_test_target_type, _test_target) {
+      testonly = true
+
+      if (enable_run_ios_unittests_with_xctest) {
+        xctest_module_target = "//base/test:google_test_runner"
+      }
+
+      # See above call.
+      set_sources_assignment_filter([])
+      forward_variables_from(invoker, "*", [ "testonly" ])
+
+      # Provide sensible defaults in case invoker did not define any of those
+      # required variables.
+      if (!defined(info_plist) && !defined(info_plist_target)) {
+        info_plist = "//testing/gtest_ios/unittest-Info.plist"
+      }
+
+      _gtest_bundle_id_suffix = "${target_name}"
+      xcode_product_bundle_id = "gtest.$_gtest_bundle_id_suffix"
+
+      if (!defined(extra_substitutions)) {
+        extra_substitutions = []
+      }
+      extra_substitutions +=
+          [ "GTEST_BUNDLE_ID_SUFFIX=$_gtest_bundle_id_suffix" ]
+
+      if (!defined(bundle_deps)) {
+        bundle_deps = []
+      }
+      bundle_deps += [ ":$_resources_bundle_data" ]
+
+      if (!defined(data_deps)) {
+        data_deps = []
+      }
+
+      # Include the generate_wrapper as part of data_deps
+      data_deps += [ ":${_wrapper_output_name}" ]
+    }
+  } else if (is_chromeos && cros_board != "") {
+    # Building for a cros board (ie: not linux-chromeos).
+
+    _gen_runner_target = "${target_name}__runner"
+    _runtime_deps_file =
+        "$root_out_dir/gen.runtime/" + get_label_info(target_name, "dir") +
+        "/" + get_label_info(target_name, "name") + ".runtime_deps"
+
+    generate_runner_script(_gen_runner_target) {
+      testonly = true
+      generated_script = "$root_build_dir/bin/run_" + invoker.target_name
+      test_exe = invoker.target_name
+      runtime_deps_file = _runtime_deps_file
+    }
+
+    executable(target_name) {
+      forward_variables_from(invoker, "*")
+      if (!defined(deps)) {
+        deps = []
+      }
+      if (!defined(data)) {
+        data = []
+      }
+
+      # We use a special trigger script for CrOS hardware tests.
+      data += [ "//testing/trigger_scripts/chromeos_device_trigger.py" ]
+
+      testonly = true
+      output_name = target_name
+      write_runtime_deps = _runtime_deps_file
+      data += [ _runtime_deps_file ]
+      deps += [ ":$_gen_runner_target" ]
+    }
+  } else {
+    executable(target_name) {
+      forward_variables_from(invoker, "*")
+      if (!defined(deps)) {
+        deps = []
+      }
+
+      if (is_win) {
+        # Initializing CFG data during process creation is a significant
+        # bottleneck for large test binaries, and CFG is not needed for tests,
+        # so disable it. See https://crbug.com/950923 for details.
+        configs -= [ "//build/config/win:cfi_linker" ]
+      }
+      testonly = true
+      deps += [
+        # Give tests the default manifest on Windows (a no-op elsewhere).
+        "//build/win:default_exe_manifest",
+      ]
+    }
+  }
+}
+
+# Test defaults.
+set_defaults("test") {
+  if (is_android) {
+    configs = default_shared_library_configs
+    configs -= [ "//build/config/android:hide_all_but_jni_onload" ]
+    configs += [ "//build/config/android:hide_all_but_jni" ]
+  } else {
+    configs = default_executable_configs
+  }
+}

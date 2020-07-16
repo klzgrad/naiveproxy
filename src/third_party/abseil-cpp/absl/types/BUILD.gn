@@ -1,0 +1,151 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build_overrides/build.gni")
+import("//third_party/abseil-cpp/absl.gni")
+
+# Usage of Abseil in Chromium is guarded by an explicit opt-in list, before
+# adding projects to this list please reach out to cxx@chromium.org and CC:
+# - https://cs.chromium.org/chromium/src/third_party/abseil-cpp/OWNERS
+#
+# More information can be found at:
+# https://docs.google.com/document/d/1DgS1-A3rzboTLjpf4m1sqkJgWjnY_Ru2dokk1X1vBDU
+if (build_with_chromium) {
+  default_visibility = absl_visibility
+  default_visibility += [
+    "//third_party/blink/renderer/platform:platform",
+    "//third_party/blink/renderer/modules/peerconnection:peerconnection",
+    "//third_party/openscreen/*",
+  ]
+} else {
+  default_visibility = [ "*" ]
+}
+
+absl_source_set("any") {
+  public = [ "any.h" ]
+  deps = [
+    ":bad_any_cast",
+    "//third_party/abseil-cpp/absl/base:config",
+    "//third_party/abseil-cpp/absl/base:core_headers",
+    "//third_party/abseil-cpp/absl/base:fast_type_id",
+    "//third_party/abseil-cpp/absl/meta:type_traits",
+    "//third_party/abseil-cpp/absl/utility",
+  ]
+}
+
+absl_source_set("bad_any_cast") {
+  public = [ "bad_any_cast.h" ]
+  deps = [
+    ":bad_any_cast_impl",
+    "//third_party/abseil-cpp/absl/base:config",
+  ]
+}
+
+absl_source_set("bad_any_cast_impl") {
+  sources = [ "bad_any_cast.cc" ]
+  public = [ "bad_any_cast.h" ]
+  deps = [
+    "//third_party/abseil-cpp/absl/base:config",
+    "//third_party/abseil-cpp/absl/base:raw_logging_internal",
+  ]
+  visibility = []
+  visibility += [ ":*" ]
+}
+
+absl_source_set("span") {
+  public = [ "span.h" ]
+  sources = [ "internal/span.h" ]
+  deps = [
+    "//third_party/abseil-cpp/absl/algorithm",
+    "//third_party/abseil-cpp/absl/base:core_headers",
+    "//third_party/abseil-cpp/absl/base:throw_delegate",
+    "//third_party/abseil-cpp/absl/meta:type_traits",
+  ]
+}
+
+absl_source_set("optional") {
+  sources = [ "internal/optional.h" ]
+  public = [ "optional.h" ]
+  deps = [
+    ":bad_optional_access",
+    "//third_party/abseil-cpp/absl/base:base_internal",
+    "//third_party/abseil-cpp/absl/base:config",
+    "//third_party/abseil-cpp/absl/base:core_headers",
+    "//third_party/abseil-cpp/absl/memory",
+    "//third_party/abseil-cpp/absl/meta:type_traits",
+    "//third_party/abseil-cpp/absl/utility",
+  ]
+  visibility = default_visibility
+}
+
+absl_source_set("bad_optional_access") {
+  sources = [ "bad_optional_access.cc" ]
+  public = [ "bad_optional_access.h" ]
+  deps = [
+    "//third_party/abseil-cpp/absl/base:config",
+    "//third_party/abseil-cpp/absl/base:raw_logging_internal",
+  ]
+}
+
+absl_source_set("bad_variant_access") {
+  sources = [ "bad_variant_access.cc" ]
+  public = [ "bad_variant_access.h" ]
+  deps = [
+    "//third_party/abseil-cpp/absl/base:config",
+    "//third_party/abseil-cpp/absl/base:raw_logging_internal",
+  ]
+}
+
+absl_source_set("variant") {
+  sources = [ "internal/variant.h" ]
+  public = [ "variant.h" ]
+  deps = [
+    ":bad_variant_access",
+    "//third_party/abseil-cpp/absl/base:base_internal",
+    "//third_party/abseil-cpp/absl/base:config",
+    "//third_party/abseil-cpp/absl/base:core_headers",
+    "//third_party/abseil-cpp/absl/meta:type_traits",
+    "//third_party/abseil-cpp/absl/utility",
+  ]
+  visibility = default_visibility
+}
+
+absl_source_set("compare") {
+  public = [ "compare.h" ]
+  deps = [
+    "//third_party/abseil-cpp/absl/base:core_headers",
+    "//third_party/abseil-cpp/absl/meta:type_traits",
+  ]
+}
+# TODO(mbonadei): On iOS, gtest doesn't support death tests. Fix upstream
+# Abseil to use EXPECT_DEATH_IF_SUPPORTED instead of EXPECT_DEATH.
+# absl_source_set("optional_test") {
+#   testonly = true
+#   sources = [ "optional_test.cc" ]
+#   deps = [
+#     ":optional",
+#     "//third_party/abseil-cpp/absl/base:config",
+#     "//third_party/abseil-cpp/absl/base:raw_logging_internal",
+#     "//third_party/abseil-cpp/absl/meta:type_traits",
+#     "//third_party/abseil-cpp/absl/strings",
+#     "//third_party/googletest:gtest",
+#   ]
+#   visibility = [ "*" ]
+# }
+#
+# absl_source_set("variant_test") {
+#   testonly = true
+#   sources = [ "variant_test.cc" ]
+#   cflags_cc = [ "-Wno-unused-function" ]
+#   deps = [
+#     ":variant",
+#     "//third_party/abseil-cpp/absl/base:config",
+#     "//third_party/abseil-cpp/absl/base:core_headers",
+#     "//third_party/abseil-cpp/absl/memory",
+#     "//third_party/abseil-cpp/absl/meta:type_traits",
+#     "//third_party/abseil-cpp/absl/strings",
+#     "//third_party/googletest:gtest",
+#     "//third_party/googletest:gmock",
+#   ]
+# }

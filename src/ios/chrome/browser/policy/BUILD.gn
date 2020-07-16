@@ -1,0 +1,195 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+source_set("policy") {
+  sources = [
+    "browser_policy_connector_ios.h",
+    "browser_policy_connector_ios.mm",
+    "browser_state_policy_connector.h",
+    "browser_state_policy_connector.mm",
+    "browser_state_policy_connector_factory.h",
+    "browser_state_policy_connector_factory.mm",
+    "configuration_policy_handler_list_factory.h",
+    "configuration_policy_handler_list_factory.mm",
+    "policy_conversions_client_ios.h",
+    "policy_conversions_client_ios.mm",
+    "schema_registry_factory.h",
+    "schema_registry_factory.mm",
+  ]
+
+  deps = [
+    "//base",
+    "//components/autofill/core/browser",
+    "//components/bookmarks/common",
+    "//components/bookmarks/managed",
+    "//components/password_manager/core/common",
+    "//components/policy:generated",
+    "//components/policy/core/common",
+    "//components/safe_browsing/core/common:safe_browsing_policy_handler",
+    "//components/safe_browsing/core/common:safe_browsing_prefs",
+    "//components/search_engines",
+    "//components/translate/core/browser:translate_pref_names",
+    "//ios/chrome/browser",
+    "//ios/chrome/browser:pref_names",
+    "//ios/chrome/browser/browser_state",
+    "//services/network/public/cpp",
+  ]
+
+  public_deps = [
+    ":feature_flags",
+    "//components/policy/core/browser",
+  ]
+
+  configs += [ "//build/config/compiler:enable_arc" ]
+}
+
+source_set("feature_flags") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "policy_features.cc",
+    "policy_features.h",
+  ]
+  deps = [
+    "//base",
+    "//components/version_info",
+    "//ios/chrome/browser:utils",
+    "//ios/chrome/common",
+    "//ios/web/common:features",
+  ]
+}
+
+source_set("test_support") {
+  testonly = true
+  sources = [
+    "enterprise_policy_test_helper.cc",
+    "enterprise_policy_test_helper.h",
+    "test_platform_policy_provider.cc",
+    "test_platform_policy_provider.h",
+  ]
+
+  deps = [
+    "//base",
+    "//components/policy/core/common:common_constants",
+    "//components/policy/core/common:test_support",
+    "//components/pref_registry",
+    "//components/prefs",
+    "//components/sync_preferences",
+    "//ios/chrome/browser/browser_state:test_support",
+    "//ios/chrome/browser/policy",
+    "//ios/chrome/browser/policy_url_blocking",
+    "//ios/chrome/browser/prefs",
+    "//ios/chrome/browser/prefs:browser_prefs",
+  ]
+
+  public_deps = [
+    "//components/policy/core/common:test_support",
+    "//testing/gmock",
+  ]
+
+  configs += [ "//build/config/compiler:enable_arc" ]
+}
+
+bundle_data("test_resources") {
+  visibility = [
+    ":unit_tests",
+    ":eg2_tests",
+  ]
+  testonly = true
+  sources = [ "//ios/chrome/test/data/policy/policy_test_cases.json" ]
+  outputs = [
+    "{{bundle_resources_dir}}/ios/chrome/test/data/policy/{{source_file_part}}",
+  ]
+}
+
+source_set("unit_tests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  testonly = true
+  sources = [ "policy_unittest.mm" ]
+  deps = [
+    ":policy",
+    ":test_resources",
+    ":test_support",
+    "//base",
+    "//base/test:test_support",
+    "//components/policy/core/browser:test_support",
+    "//ios/chrome/browser:chrome_paths",
+    "//ios/chrome/browser:pref_names",
+    "//ios/chrome/browser:utils",
+    "//ios/chrome/browser/browser_state:test_support",
+    "//ios/chrome/browser/prefs",
+    "//testing/gtest",
+  ]
+}
+
+source_set("eg2_tests") {
+  defines = [ "CHROME_EARL_GREY_2" ]
+  configs += [
+    "//build/config/compiler:enable_arc",
+    "//build/config/ios:xctest_config",
+  ]
+  testonly = true
+
+  sources = [
+    "policy_egtest.mm",
+    "policy_platform_provider_egtest.mm",
+  ]
+
+  deps = [
+    ":eg_test_support+eg2",
+    ":test_resources",
+    "//base",
+    "//components/password_manager/core/common",
+    "//components/policy:generated",
+    "//components/policy/core/common:common_constants",
+    "//components/strings",
+    "//ios/chrome/browser:pref_names",
+    "//ios/chrome/browser:utils",
+    "//ios/chrome/browser/translate:eg_test_support+eg2",
+    "//ios/chrome/browser/ui/popup_menu:constants",
+    "//ios/chrome/test/earl_grey:eg_test_support+eg2",
+    "//ios/testing/earl_grey:eg_test_support+eg2",
+    "//ios/third_party/earl_grey2:test_lib",
+    "//net:test_support",
+    "//ui/base",
+  ]
+
+  libs = [ "UIKit.framework" ]
+}
+
+source_set("eg_app_support+eg2") {
+  defines = [ "CHROME_EARL_GREY_2" ]
+  configs += [ "//build/config/compiler:enable_arc" ]
+  testonly = true
+  sources = [
+    "policy_app_interface.h",
+    "policy_app_interface.mm",
+  ]
+  deps = [
+    ":policy",
+    ":test_support",
+    "//base",
+    "//components/policy:generated",
+    "//components/policy/core/browser",
+    "//components/policy/core/common",
+    "//ios/chrome/browser",
+  ]
+  libs = [ "Foundation.framework" ]
+}
+
+source_set("eg_test_support+eg2") {
+  defines = [ "CHROME_EARL_GREY_2" ]
+  configs += [
+    "//build/config/compiler:enable_arc",
+    "//build/config/ios:xctest_config",
+  ]
+  testonly = true
+  sources = [
+    "policy_app_interface.h",
+    "policy_app_interface_stub.mm",
+  ]
+  deps = [
+    "//ios/testing/earl_grey:eg_test_support+eg2",
+    "//ios/third_party/earl_grey2:test_lib",
+  ]
+}

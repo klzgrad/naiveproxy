@@ -1,0 +1,152 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module device.mojom;
+
+import "device/vr/public/mojom/browser_test_interfaces.mojom";
+import "device/vr/public/mojom/vr_service.mojom";
+import "mojo/public/mojom/base/time.mojom";
+import "ui/gfx/geometry/mojom/geometry.mojom";
+
+// The XRSessionController lives in the xr runtime service, and corresponds to
+// a set of the XRSession bindings.  The client is the browser process, which
+// will pause or stop sessions depending events/state such as focus or other
+// tabs requesting immersive sessions.
+// Sessions are stopped by closing the mojo connection.
+interface XRSessionController {
+  // A session may be paused temporarily for example when a non-presenting
+  // tab loses focus. When paused, a session will hand out null poses.
+  // Eventually we may hand out poses at a throttled rate instead.
+  SetFrameDataRestricted(bool restricted);
+};
+
+// The XRRuntimeEventListener lives in the xr runtime service, and allows the
+// browser to listen to state changes about a device.
+interface XRRuntimeEventListener {
+  // A device has changed its display information.
+  OnDisplayInfoChanged(device.mojom.VRDisplayInfo display_info);
+
+  // A device has indicated that the visibility of the content it's displaying
+  // has changed.
+  OnVisibilityStateChanged(device.mojom.XRVisibilityState visibility_state);
+
+  // Called when the device exits presentation.
+  OnExitPresent();
+};
+
+struct XRRuntimeSessionOptions {
+  // Represents the type of session that is being requested.
+  XRSessionMode mode;
+
+  // The enabled features combine the active required and optional features as
+  // resolved by BrowserXRRuntime and VRServiceImpl.
+  array<XRSessionFeature> enabled_features;
+
+  // The following options are used for permission requests and showing module
+  // install UI.
+  // TODO(crbug.com/854655): Remove these fields, and do permission checks, show
+  // module install UI in the browser process before calling out to devices.
+  int32 render_process_id;
+  int32 render_frame_id;
+};
+
+// An XRRuntime may live in the browser process or a utility process.  The
+// browser process is the client, and may in turn expose device information to
+// render processes using vr_service interfaces, such as XRDevice.
+interface XRRuntime {
+  // Attempt to start a session. Called by the browser process, but the result
+  // will probably be passed to the renderer process to allow getting data and
+  // possibly submitting graphics without going through an extra IPC hop through
+  // the browser process.
+  RequestSession(XRRuntimeSessionOptions options) => (
+                     XRSession? session,
+                     pending_remote<XRSessionController>? controller);
+
+  // Initiate shutdown of a session, and call the callback once the runtime
+  // is ready for starting a new session.
+  ShutdownSession() => ();
+
+  // The browser may register for changes to a device. Initial VRDisplayInfo
+  // will immediately be returned to the listener to prevent races.
+  ListenToDeviceChanges(
+      pending_associated_remote<XRRuntimeEventListener> listener) =>
+          (VRDisplayInfo? display_info);
+
+  SetInlinePosesEnabled(bool enable);
+};
+
+// Represents an overlay that the browser may show on top of or instead of WebXR
+// content.  Consumed in the browser process, and implemented in the XRRuntime
+// process.
+interface ImmersiveOverlay {
+  // Request a pose.  If there is WebXR and an overlay visible at the same time,
+  // the same pose will be given to both.
+  RequestNextOverlayPose() => (device.mojom.XRFrameData pose);
+
+  // Submit a frame to show in the headset.  Only can be called when an overlay
+  // is visible.  The frame will be composited on top of WebXR content.
+  SubmitOverlayTexture(int16 frame_id, handle<platform> texture,
+      gfx.mojom.RectF left_bounds, gfx.mojom.RectF right_bounds) =>
+      (bool success);
+
+  // Allows the browser to hide WebXR content or overlays temporarily.
+  SetOverlayAndWebXRVisibility(bool overlay_visible, bool webxr_visible);
+
+  // The browser may request to be notified the browser that the current page
+  // has submitted a frame.  This call returns when the current page submits a
+  // frame.
+  // If the current page's WebXR session is not visible because the browser has
+  // made its own UI visible, the page may receive one frame's worth of pose
+  // data to unblock rendering.  This allows frame-timeout UI to show while
+  // still allowing a timed-out page to recover and start submitting frames.
+  RequestNotificationOnWebXrSubmitted() => ();
+};
+
+// XRCompositorHost lives in the XRRuntime process, and allows the browser to
+// obtain an ImmersiveOverlay to show overlay UI.  The obtained overlay will
+// disconnect when presentation ends.
+interface XRCompositorHost {
+  CreateImmersiveOverlay(pending_receiver<ImmersiveOverlay> overlay);
+};
+
+// Notify the browser process about a set of runtimes.  The browser process
+// implements this interface to be notified about runtime changes from the XR
+// device service.
+interface IsolatedXRRuntimeProviderClient {
+  // Called when runtimes are initially enumerated, or when devices are later
+  // attached and become available.
+  OnDeviceAdded(pending_remote<XRRuntime> runtime,
+      pending_remote<XRCompositorHost> compositor_host,
+      device.mojom.XRDeviceId device_id);
+
+  // Called when runtimes become unavailable - for example if the hardware is
+  // disconnected or the APIs notify us that they are shutting down.
+  // device_index corresponds to display_info->index for a previously added
+  // device.
+  OnDeviceRemoved(device.mojom.XRDeviceId device_index);
+
+  // Called once after all the initial OnDeviceAdded calls are completed.
+  // This is a signal to the browser that it knows what hardware is available,
+  // and can unblock any callbacks/promises that WebXR APIs are blocked.
+  OnDevicesEnumerated();
+};
+
+// Provides access to XRRuntimes.  This is implemented in the XR device service,
+// and consumed by the browser.
+interface IsolatedXRRuntimeProvider {
+  // Register a client, and triggers OnDeviceAdded for all available runtimes,
+  // followed by OnDevicesEnumerated.
+  // Should only be called once.
+  RequestDevices(pending_remote<IsolatedXRRuntimeProviderClient> client);
+};
+
+// The main interface for the XR Device Service.
+interface XRDeviceService {
+  // Binds a IsolatedXRRuntimeProvider pipe in the service.
+  BindRuntimeProvider(pending_receiver<IsolatedXRRuntimeProvider> receiver);
+
+  // Binds the main testing interface pipe in the service. Only used by
+  // browser tests.
+  BindTestHook(pending_receiver<device_test.mojom.XRServiceTestHook> receiver);
+};

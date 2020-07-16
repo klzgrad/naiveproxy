@@ -1,0 +1,178 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/features.gni")
+import("//tools/json_to_struct/json_to_struct.gni")
+if (is_android) {
+  import("//build/config/android/config.gni")
+  import("//build/config/android/rules.gni")
+}
+
+static_library("search_engines") {
+  sources = [
+    "default_search_manager.cc",
+    "default_search_manager.h",
+    "default_search_policy_handler.cc",
+    "default_search_policy_handler.h",
+    "keyword_table.cc",
+    "keyword_table.h",
+    "keyword_web_data_service.cc",
+    "keyword_web_data_service.h",
+    "search_engines_pref_names.cc",
+    "search_engines_pref_names.h",
+    "search_engines_switches.cc",
+    "search_engines_switches.h",
+    "search_host_to_urls_map.cc",
+    "search_host_to_urls_map.h",
+    "search_terms_data.cc",
+    "search_terms_data.h",
+    "template_url.cc",
+    "template_url.h",
+    "template_url_data.cc",
+    "template_url_data.h",
+    "template_url_data_util.cc",
+    "template_url_data_util.h",
+    "template_url_fetcher.cc",
+    "template_url_fetcher.h",
+    "template_url_id.h",
+    "template_url_parser.cc",
+    "template_url_parser.h",
+    "template_url_prepopulate_data.cc",
+    "template_url_prepopulate_data.h",
+    "template_url_service.cc",
+    "template_url_service.h",
+    "template_url_service_client.h",
+    "template_url_service_observer.h",
+    "util.cc",
+    "util.h",
+  ]
+
+  public_deps = [
+    ":search_engine_type",
+    "//base",
+    "//components/google/core/common",
+    "//components/keyed_service/core",
+    "//components/prefs",
+    "//components/sync",
+    "//components/webdata/common",
+    "//third_party/metrics_proto",
+  ]
+
+  deps = [
+    ":prepopulated_engines",
+    "//base:i18n",
+    "//components/country_codes",
+    "//components/history/core/browser",
+    "//components/infobars/core",
+    "//components/policy:generated",
+    "//components/policy/core/browser",
+    "//components/pref_registry",
+    "//components/strings",
+    "//components/url_formatter",
+    "//components/variations",
+    "//google_apis",
+    "//net",
+    "//services/data_decoder/public/cpp",
+    "//services/network/public/cpp",
+    "//sql",
+    "//third_party/metrics_proto",
+    "//ui/base",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+    "//url",
+  ]
+
+  if (is_android) {
+    sources += [
+      "android/template_url_android.cc",
+      "android/template_url_android.h",
+      "android/template_url_service_android.cc",
+      "android/template_url_service_android.h",
+    ]
+
+    deps += [
+      "//components/search_engines/android:jni_headers",
+      "//url:gurl_android",
+    ]
+  }
+}
+
+source_set("search_engine_type") {
+  sources = [ "search_engine_type.h" ]
+}
+
+static_library("test_support") {
+  testonly = true
+  sources = [
+    "search_engines_test_util.cc",
+    "search_engines_test_util.h",
+    "testing_search_terms_data.cc",
+    "testing_search_terms_data.h",
+  ]
+
+  public_deps = [
+    ":search_engines",
+    "//base",
+    "//components/sync_preferences:test_support",
+    "//testing/gtest",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "default_search_manager_unittest.cc",
+    "keyword_table_unittest.cc",
+    "search_host_to_urls_map_unittest.cc",
+    "template_url_data_unittest.cc",
+    "template_url_prepopulate_data_unittest.cc",
+    "template_url_service_util_unittest.cc",
+    "template_url_unittest.cc",
+  ]
+
+  deps = [
+    ":prepopulated_engines",
+    ":test_support",
+    "//base",
+    "//base/test:test_support",
+    "//components/country_codes",
+    "//components/google/core/common",
+    "//components/pref_registry:pref_registry",
+    "//components/prefs",
+    "//components/sync:test_support",
+    "//components/sync_preferences:test_support",
+    "//components/webdata/common",
+    "//net:net",
+    "//services/network:test_support",
+    "//services/network/public/cpp",
+    "//sql",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//url",
+  ]
+
+  if (!is_ios) {
+    sources += [ "default_search_policy_handler_unittest.cc" ]
+
+    deps += [
+      "//components/policy:generated",
+      "//components/policy/core/browser:test_support",
+    ]
+  }
+}
+
+json_to_struct("prepopulated_engines") {
+  visibility = [ ":*" ]
+
+  source = "prepopulated_engines.json"
+  schema_file = "prepopulated_engines_schema.json"
+  namespace = "TemplateURLPrepopulateData"
+  deps = [ ":search_engine_type" ]
+}
+
+if (is_android) {
+  java_cpp_enum("search_engine_type_java") {
+    sources = [ "search_engine_type.h" ]
+  }
+}

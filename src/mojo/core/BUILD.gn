@@ -1,0 +1,408 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/compiler/compiler.gni")
+import("//build/config/nacl/config.gni")
+import("//testing/libfuzzer/fuzzer_test.gni")
+import("//testing/test.gni")
+
+if (is_mac) {
+  import("//third_party/protobuf/proto_library.gni")
+}
+
+component("embedder_internal") {
+  output_name = "mojo_core_embedder_internal"
+  public_deps = [ ":impl_for_embedder" ]
+  visibility = [
+    ":test_sources",
+    "//mojo:*",
+    "//mojo/core/embedder",
+  ]
+}
+
+# Bits of the EDK library which do not depend on public API linkage. It is
+# not allowed for this target or any of its transitive dependencies to depend
+# on anything under //mojo/public beyond strict C type definitions.
+#
+# This is templated because it's consumed by both the ":embedder_internal"
+# component library as well as the ":mojo_core" shared library. In the former
+# case we want to export symbols, but in the latter case we don't. The template
+# stamps out two nearly identical targets which differ only in what symbols they
+# export.
+template("core_impl_source_set") {
+  source_set(target_name) {
+    if (invoker.for_shared_library) {
+      visibility = [ ":shared_library" ]
+    } else {
+      visibility = [
+        ":core_impl_for_fuzzers",
+        ":embedder_internal",
+      ]
+    }
+
+    public = [
+      "channel.h",
+      "configuration.h",
+      "connection_params.h",
+      "core.h",
+      "data_pipe_consumer_dispatcher.h",
+      "data_pipe_control_message.h",
+      "data_pipe_producer_dispatcher.h",
+      "dispatcher.h",
+      "embedder/configuration.h",
+      "embedder/process_error_callback.h",
+      "entrypoints.h",
+      "handle_signals_state.h",
+      "handle_table.h",
+      "invitation_dispatcher.h",
+      "message_pipe_dispatcher.h",
+      "node_controller.h",
+      "options_validation.h",
+      "platform_handle_dispatcher.h",
+      "platform_handle_utils.h",
+      "platform_shared_memory_mapping.h",
+      "request_context.h",
+      "scoped_process_handle.h",
+      "shared_buffer_dispatcher.h",
+      "user_message_impl.h",
+    ]
+
+    sources = [
+      "atomic_flag.h",
+      "broker.h",
+      "broker_win.cc",
+      "channel.cc",
+      "channel_win.cc",
+      "configuration.cc",
+      "connection_params.cc",
+      "core.cc",
+      "data_pipe_consumer_dispatcher.cc",
+      "data_pipe_control_message.cc",
+      "data_pipe_producer_dispatcher.cc",
+      "dispatcher.cc",
+      "entrypoints.cc",
+      "handle_table.cc",
+      "invitation_dispatcher.cc",
+      "message_pipe_dispatcher.cc",
+      "node_channel.cc",
+      "node_channel.h",
+      "node_controller.cc",
+      "platform_handle_dispatcher.cc",
+      "platform_handle_in_transit.cc",
+      "platform_handle_in_transit.h",
+      "platform_handle_utils.cc",
+      "platform_shared_memory_mapping.cc",
+      "request_context.cc",
+      "scoped_process_handle.cc",
+      "shared_buffer_dispatcher.cc",
+      "user_message_impl.cc",
+      "watch.cc",
+      "watch.h",
+      "watcher_dispatcher.cc",
+      "watcher_dispatcher.h",
+      "watcher_set.cc",
+      "watcher_set.h",
+    ]
+
+    public_deps = [
+      "//base",
+      "//mojo/core/ports",
+      "//mojo/public/c/system:headers",
+      "//mojo/public/cpp/platform",
+    ]
+
+    if (is_fuchsia) {
+      sources += [ "channel_fuchsia.cc" ]
+
+      public_deps += [ "//third_party/fuchsia-sdk/sdk/pkg/fdio" ]
+    }
+
+    if (is_posix && !is_mac) {
+      if (!is_nacl || is_nacl_nonsfi) {
+        sources += [
+          "broker_posix.cc",
+          "channel_posix.cc",
+        ]
+      }
+    }
+
+    if (is_mac) {
+      sources += [ "channel_mac.cc" ]
+    }
+
+    if (!is_nacl || is_nacl_nonsfi) {
+      sources += [
+        "broker_host.cc",
+        "broker_host.h",
+      ]
+    }
+
+    defines = []
+    if (invoker.for_shared_library) {
+      defines += [ "MOJO_CORE_SHARED_LIBRARY" ]
+    } else {
+      defines += [ "MOJO_SYSTEM_IMPL_IMPLEMENTATION" ]
+    }
+
+    deps = []
+    if (is_android) {
+      deps += [ "//third_party/ashmem" ]
+    }
+    if (!is_nacl) {
+      deps += [ "//crypto" ]
+    }
+
+    if (is_win) {
+      cflags = [ "/wd4324" ]  # Structure was padded due to __declspec(align()),
+                              # which is uninteresting.
+    }
+
+    # Use target_os == "chromeos" instead of is_chromeos because we need to
+    # build NaCl targets (i.e. IRT) for ChromeOS the same as the rest of ChromeOS.
+    if (is_android || target_os == "chromeos") {
+      defines += [ "MOJO_CORE_LEGACY_PROTOCOL" ]
+    }
+
+    configs += [ "//build/config/compiler:noshadowing" ]
+    if (!is_debug && !optimize_for_size) {
+      configs -= [ "//build/config/compiler:default_optimization" ]
+      configs += [ "//build/config/compiler:optimize_max" ]
+    }
+  }
+}
+
+core_impl_source_set("impl_for_embedder") {
+  for_shared_library = false
+}
+
+if (is_chromeos || is_linux || is_android || is_win) {
+  core_impl_source_set("impl_for_shared_library") {
+    for_shared_library = true
+  }
+
+  shared_library("shared_library") {
+    output_name = "mojo_core"
+    sources = [ "mojo_core.cc" ]
+    defines = [ "MOJO_CORE_SHARED_LIBRARY" ]
+    deps = [
+      ":impl_for_shared_library",
+      "//mojo/public/c/system:headers",
+    ]
+    if (is_win) {
+      sources += [ "mojo_core.def" ]
+    } else {
+      configs += [ ":export_only_thunks_api" ]
+    }
+  }
+
+  if (is_chromeos) {
+    if (target_cpu == "arm" || target_cpu == "arm64") {
+      android32_toolchain = "android_clang_arm"
+      android64_toolchain = "android_clang_arm64"
+    } else {
+      android32_toolchain = "android_clang_x86"
+      android64_toolchain = "android_clang_x64"
+    }
+
+    group("shared_libraries_for_arc") {
+      deps = [
+        ":shared_library_arc32",
+        ":shared_library_arc64",
+      ]
+    }
+
+    copy("shared_library_arc32") {
+      sources = [ "${root_out_dir}/${android32_toolchain}/libmojo_core.so" ]
+      outputs = [ "${root_out_dir}/libmojo_core_arc32.so" ]
+      deps = [
+        ":shared_library(//build/toolchain/android:${android32_toolchain})",
+      ]
+    }
+
+    copy("shared_library_arc64") {
+      sources = [ "${root_out_dir}/${android64_toolchain}/libmojo_core.so" ]
+      outputs = [ "${root_out_dir}/libmojo_core_arc64.so" ]
+      deps = [
+        ":shared_library(//build/toolchain/android:${android64_toolchain})",
+      ]
+    }
+  }
+
+  config("export_only_thunks_api") {
+    inputs = [ "export_only_thunks_api.lst" ]
+    ldflags = [ "-Wl,--version-script=" +
+                rebase_path("//mojo/core/export_only_thunks_api.lst",
+                            root_build_dir) ]
+  }
+
+  if (is_chromeos || is_linux || is_win) {
+    test("mojo_core_unittests") {
+      sources = [
+        "mojo_core_unittest.cc",
+        "run_all_core_unittests.cc",
+      ]
+
+      deps = [
+        "//base",
+        "//base/test:test_support",
+        "//mojo/public/c/system",
+        "//mojo/public/cpp/platform",
+        "//mojo/public/cpp/system",
+        "//testing/gtest",
+      ]
+
+      data_deps = [ ":shared_library" ]
+    }
+  }
+}
+
+source_set("test_utils") {
+  testonly = true
+
+  sources = [
+    "test_utils.cc",
+    "test_utils.h",
+  ]
+
+  public_deps = [
+    "//mojo/public/c/system",
+    "//mojo/public/cpp/system",
+  ]
+
+  deps = [
+    "//base",
+    "//base/test:test_support",
+    "//mojo/core/test:test_support",
+    "//testing/gtest:gtest",
+  ]
+}
+
+source_set("test_sources") {
+  testonly = true
+  sources = [
+    "channel_unittest.cc",
+    "core_test_base.cc",
+    "core_test_base.h",
+    "core_unittest.cc",
+    "embedder_unittest.cc",
+    "handle_table_unittest.cc",
+    "message_pipe_unittest.cc",
+    "message_unittest.cc",
+    "options_validation_unittest.cc",
+    "platform_handle_dispatcher_unittest.cc",
+    "quota_unittest.cc",
+    "shared_buffer_dispatcher_unittest.cc",
+    "shared_buffer_unittest.cc",
+    "signals_unittest.cc",
+    "trap_unittest.cc",
+  ]
+
+  if (!is_ios) {
+    sources += [
+      "data_pipe_unittest.cc",
+      "invitation_unittest.cc",
+      "multiprocess_message_pipe_unittest.cc",
+      "platform_wrapper_unittest.cc",
+    ]
+  }
+
+  deps = [
+    ":test_utils",
+    "//base",
+    "//base/test:test_support",
+    "//mojo/core:embedder_internal",
+    "//mojo/core/embedder",
+    "//mojo/core/ports:tests",
+    "//mojo/core/test:run_all_unittests",
+    "//mojo/core/test:test_support",
+    "//mojo/public/cpp/system",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+}
+
+group("core_impl_for_fuzzers") {
+  public_deps = [ ":impl_for_embedder" ]
+}
+
+fuzzer_test("mojo_core_channel_fuzzer") {
+  sources = [ "channel_fuzzer.cc" ]
+  deps = [
+    ":core_impl_for_fuzzers",
+    "//base",
+    "//mojo/public/cpp/platform",
+  ]
+}
+
+if (is_mac) {
+  protoc_convert("mojo_core_channel_mac_fuzzer_convert_corpus") {
+    sources = [
+      "test/data/channel_mac/bad_handshake1.textproto",
+      "test/data/channel_mac/bad_handshake2.textproto",
+      "test/data/channel_mac/bad_handshake3.textproto",
+      "test/data/channel_mac/bad_message1.textproto",
+      "test/data/channel_mac/complex_messages.textproto",
+      "test/data/channel_mac/double_handshake.textproto",
+      "test/data/channel_mac/handshake.textproto",
+      "test/data/channel_mac/invalid_handles.textproto",
+      "test/data/channel_mac/non_complex_with_descriptor_count.textproto",
+      "test/data/channel_mac/ool_type_mismatch.textproto",
+      "test/data/channel_mac/simple_message1.textproto",
+      "test/data/channel_mac/simple_message2.textproto",
+    ]
+
+    inputs = [
+      "test/data/channel_mac/channel_mac.proto",
+      "//testing/libfuzzer/fuzzers/mach/mach_message.proto",
+    ]
+
+    output_pattern = "$target_gen_dir/mojo_core_channel_mac_corpus/{{source_name_part}}.binarypb"
+
+    args = [
+      "--encode=mojo_fuzzer.ChannelMac",
+      "-I",
+      rebase_path("//"),
+      "mojo/core/test/data/channel_mac/channel_mac.proto",
+    ]
+  }
+
+  fuzzer_test("mojo_core_channel_mac_fuzzer") {
+    sources = [ "channel_mac_fuzzer.cc" ]
+    seed_corpus = "$target_gen_dir/mojo_core_channel_mac_corpus"
+    seed_corpus_deps = [ ":mojo_core_channel_mac_fuzzer_convert_corpus" ]
+    deps = [
+      ":core_impl_for_fuzzers",
+      "test:channel_mac_proto",
+      "//base",
+      "//base/test:test_support",
+      "//testing/libfuzzer/fuzzers/mach:converter",
+      "//third_party/libprotobuf-mutator",
+    ]
+  }
+}
+
+fuzzer_test("mojo_core_node_channel_fuzzer") {
+  sources = [ "node_channel_fuzzer.cc" ]
+  deps = [
+    ":core_impl_for_fuzzers",
+    "//base",
+    "//mojo/public/cpp/platform",
+  ]
+}
+
+fuzzer_test("mojo_core_port_event_fuzzer") {
+  sources = [ "port_event_fuzzer.cc" ]
+  deps = [
+    ":core_impl_for_fuzzers",
+    "//base",
+  ]
+}
+
+fuzzer_test("mojo_core_user_message_fuzzer") {
+  sources = [ "user_message_fuzzer.cc" ]
+  deps = [
+    ":core_impl_for_fuzzers",
+    "//base",
+  ]
+}

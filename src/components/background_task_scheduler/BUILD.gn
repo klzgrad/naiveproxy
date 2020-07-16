@@ -1,0 +1,136 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+if (is_android) {
+  import("//build/config/android/config.gni")
+  import("//build/config/android/rules.gni")
+}
+
+if (is_android) {
+  java_group("background_task_scheduler_java") {
+    deps = [
+      "//components/background_task_scheduler:factory_java",
+      "//components/background_task_scheduler:public_java",
+      "//components/background_task_scheduler/internal:native_task_java",
+    ]
+  }
+}
+
+group("background_task_scheduler") {
+  public_deps = [
+    ":factory",
+    ":public",
+  ]
+}
+
+static_library("public") {
+  sources = [
+    "background_task.h",
+    "background_task_scheduler.h",
+    "task_ids.h",
+    "task_info.cc",
+    "task_info.h",
+    "task_parameters.cc",
+    "task_parameters.h",
+  ]
+
+  public_deps = [
+    "//base",
+    "//components/keyed_service/core",
+  ]
+}
+
+static_library("factory") {
+  sources = [
+    "background_task_scheduler_factory.cc",
+    "background_task_scheduler_factory.h",
+  ]
+
+  deps = [ ":public" ]
+
+  if (is_android) {
+    deps += [ "internal:native_task" ]
+  }
+}
+
+if (is_android) {
+  # This is shared between WebView and Chrome. We do not want to add GCM
+  # related permissions for WebView while still wanting to avoid collision
+  # between WebView and Chrome.
+  android_library("background_task_scheduler_task_ids_java") {
+    srcjar_deps = [ ":jni_enums" ]
+    deps = [ "//third_party/android_deps:androidx_annotation_annotation_java" ]
+  }
+
+  java_cpp_enum("jni_enums") {
+    visibility = [ "*" ]
+
+    sources = [ "task_ids.h" ]
+  }
+
+  android_library("public_java") {
+    sources = [
+      "android/java/src/org/chromium/components/background_task_scheduler/BackgroundTask.java",
+      "android/java/src/org/chromium/components/background_task_scheduler/BackgroundTaskFactory.java",
+      "android/java/src/org/chromium/components/background_task_scheduler/BackgroundTaskScheduler.java",
+      "android/java/src/org/chromium/components/background_task_scheduler/BackgroundTaskSchedulerExternalUma.java",
+      "android/java/src/org/chromium/components/background_task_scheduler/NativeBackgroundTask.java",
+      "android/java/src/org/chromium/components/background_task_scheduler/NativeBackgroundTaskDelegate.java",
+      "android/java/src/org/chromium/components/background_task_scheduler/TaskInfo.java",
+      "android/java/src/org/chromium/components/background_task_scheduler/TaskParameters.java",
+    ]
+
+    deps = [
+      ":background_task_scheduler_task_ids_java",
+      "//base:base_java",
+      "//content/public/android:content_java",
+      "//third_party/android_deps:androidx_annotation_annotation_java",
+    ]
+  }
+
+  android_library("factory_java") {
+    sources = [ "android/java/src/org/chromium/components/background_task_scheduler/BackgroundTaskSchedulerFactory.java" ]
+
+    deps = [
+      ":public_java",
+      "internal:internal_java",
+    ]
+  }
+
+  java_library("components_background_task_scheduler_junit_tests") {
+    # Platform checks are broken for Robolectric. See https://crbug.com/1071638.
+    bypass_platform_checks = true
+    testonly = true
+    sources = [
+      "internal/android/junit/src/org/chromium/components/background_task_scheduler/internal/BackgroundTaskGcmTaskServiceTest.java",
+      "internal/android/junit/src/org/chromium/components/background_task_scheduler/internal/BackgroundTaskJobServiceTest.java",
+      "internal/android/junit/src/org/chromium/components/background_task_scheduler/internal/BackgroundTaskSchedulerAlarmManagerTest.java",
+      "internal/android/junit/src/org/chromium/components/background_task_scheduler/internal/BackgroundTaskSchedulerGcmNetworkManagerTest.java",
+      "internal/android/junit/src/org/chromium/components/background_task_scheduler/internal/BackgroundTaskSchedulerImplTest.java",
+      "internal/android/junit/src/org/chromium/components/background_task_scheduler/internal/BackgroundTaskSchedulerPrefsTest.java",
+      "internal/android/junit/src/org/chromium/components/background_task_scheduler/internal/BackgroundTaskSchedulerUmaTest.java",
+      "internal/android/junit/src/org/chromium/components/background_task_scheduler/internal/BroadcastReceiverRobolectricTest.java",
+      "internal/android/junit/src/org/chromium/components/background_task_scheduler/internal/ExtrasToProtoConverterTest.java",
+      "internal/android/junit/src/org/chromium/components/background_task_scheduler/internal/ShadowGcmNetworkManager.java",
+      "internal/android/junit/src/org/chromium/components/background_task_scheduler/internal/TaskInfoTest.java",
+      "internal/android/junit/src/org/chromium/components/background_task_scheduler/internal/TestBackgroundTask.java",
+      "internal/android/junit/src/org/chromium/components/background_task_scheduler/internal/TestBackgroundTaskFactory.java",
+    ]
+
+    deps = [
+      "$google_play_services_package:google_play_services_auth_base_java",
+      "$google_play_services_package:google_play_services_base_java",
+      "$google_play_services_package:google_play_services_basement_java",
+      "$google_play_services_package:google_play_services_gcm_java",
+      "$google_play_services_package:google_play_services_tasks_java",
+      "internal:internal_java",
+      "internal:proto_java",
+      "//base:base_java",
+      "//base:base_java_test_support",
+      "//base:base_junit_test_support",
+      "//components/background_task_scheduler:public_java",
+      "//third_party/junit",
+    ]
+  }
+}

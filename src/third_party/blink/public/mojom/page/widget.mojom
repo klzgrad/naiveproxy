@@ -1,0 +1,90 @@
+// Copyright 2020 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module blink.mojom;
+
+import "third_party/blink/public/mojom/frame/intrinsic_sizing_info.mojom";
+import "ui/gfx/geometry/mojom/geometry.mojom";
+import "cc/mojom/touch_action.mojom";
+import "ui/base/cursor/mojom/cursor.mojom";
+
+// Implemented in Blink, this interface defines frame-widget-specific methods that
+// will be invoked from the browser process (e.g. blink::WebFrameWidget).
+interface FrameWidget {
+  // Notifies the Widget that the system drag and drop operation has ended.
+  DragSourceSystemDragEnded();
+
+  // Makes the Widget background transparent or opaque.
+  SetBackgroundOpaque(bool opaque);
+
+  // Only valid for sub frame local roots.
+  //
+  // Sets the inherited effective touch action on an out-of-process iframe.
+  SetInheritedEffectiveTouchActionForSubFrame(cc.mojom.TouchAction touch_action);
+
+  // Toggles render throttling for an out-of-process iframe.
+  UpdateRenderThrottlingStatusForSubFrame(bool is_throttled, bool subtree_throttled);
+
+  // When the browser receives a call to RenderFrameProxyHost::SetIsInert
+  // from the parent widget's embedding renderer changing its inertness,
+  // it sets the same inertness value to the renderer of the child subframe.
+  // When a widget is inert, it is unable to process input events.
+  // https://html.spec.whatwg.org/multipage/interaction.html#inert
+  SetIsInertForSubFrame(bool inert);
+};
+
+// Implemented in Browser, this interface defines frame-widget-specific methods that
+// will be invoked from the render process (e.g. content::RenderWidgetHostImpl).
+interface FrameWidgetHost {
+  // Sent by a widget to the browser to request a page scale animation in the
+  // main-frame's widget.
+  AnimateDoubleTapZoomInMainFrame(
+                    gfx.mojom.Point tap_point,
+                    gfx.mojom.Rect rect_to_zoom);
+
+  // Sent by a widget to the browser to request a page scale animation in the
+  // main-frame's widget for find-in-page zoom.
+  ZoomToFindInPageRectInMainFrame(gfx.mojom.Rect rect_to_zoom);
+
+  // Notifies whether there are JavaScript touch event handlers or not.
+  SetHasTouchEventHandlers(bool has_handlers);
+
+  // Sent by a widget to the browser to be used for SVGs inside of <object> and
+  // not for iframes. Informs the browser that the current frame's intrinsic
+  // sizing info has changed. The browser can then notify a containing frame
+  // that the frame may need to trigger a new layout.
+  //
+  // Also see blink::mojom::RemoteFrame::IntrinsicSizingInfoOfChildChanged.
+  IntrinsicSizingInfoChanged(IntrinsicSizingInfo sizing_info);
+
+  // Requests a non-decelerating synthetic fling animation to be latched on the
+  // scroller at the start point, and whose velocity can be changed over time by
+  // sending multiple AutoscrollFling gestures. Used for features like
+  // middle-click autoscroll.
+  //
+  // Sent by a widget to the browser to notify the start point for the
+  // autoscroll.
+  AutoscrollStart(gfx.mojom.PointF position);
+
+  // Sent by a widget to the browser to notify the velocity for the autoscroll
+  // fling animation.
+  AutoscrollFling(gfx.mojom.Vector2dF velocity);
+
+  // Sent by a widget to the browser to notify the end of the autoscroll.
+  AutoscrollEnd();
+};
+
+// Implemented in Blink, this interface defines widget-specific methods that
+// will be invoked from the browser process (e.g. blink::WebWidget).
+interface Widget {
+  //TODO(dtapuska): Implement more methods.
+};
+
+// Implemented in Browser, this interface defines widget-specific methods that
+// will be invoked from the render process (e.g. content::RenderWidgetHostImpl).
+interface WidgetHost {
+  // Updates the current cursor to be used by the browser for indicating the
+  // location of a pointing device.
+  SetCursor(ui.mojom.Cursor cursor);
+};

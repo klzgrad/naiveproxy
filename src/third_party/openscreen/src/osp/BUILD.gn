@@ -1,0 +1,76 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("build/config/services.gni")
+
+source_set("osp") {
+  public_deps = [
+    "public",
+  ]
+  deps = [
+    "impl",
+  ]
+}
+
+if (use_chromium_quic) {
+  source_set("osp_with_chromium_quic") {
+    public_deps = [
+      ":osp",
+    ]
+    deps = [
+      "impl:chromium_quic_integration",
+    ]
+  }
+}
+
+source_set("unittests") {
+  testonly = true
+
+  sources = [
+    "impl/presentation/presentation_connection_unittest.cc",
+    "impl/presentation/presentation_controller_unittest.cc",
+    "impl/presentation/presentation_receiver_unittest.cc",
+    "impl/presentation/testing/mock_connection_delegate.h",
+    "impl/presentation/url_availability_requester_unittest.cc",
+    "impl/quic/quic_client_unittest.cc",
+    "impl/quic/quic_server_unittest.cc",
+    "impl/receiver_list_unittest.cc",
+    "impl/service_listener_impl_unittest.cc",
+    "impl/service_publisher_impl_unittest.cc",
+    "public/endpoint_request_ids_unittest.cc",
+    "public/message_demuxer_unittest.cc",
+    "public/service_info_unittest.cc",
+  ]
+
+  deps = [
+    "../platform:test",
+    "../third_party/abseil",
+    "../third_party/googletest:gmock",
+    "../third_party/googletest:gtest",
+    "impl",
+    "impl/quic:test_support",
+    "public",
+    "public:test_support",
+  ]
+
+  if (use_mdns_responder) {
+    sources += [ "impl/mdns_responder_service_unittest.cc" ]
+
+    deps += [ "impl/testing" ]
+  }
+}
+
+if (use_chromium_quic && use_mdns_responder) {
+  executable("osp_demo") {
+    sources = [
+      "demo/osp_demo.cc",
+    ]
+    deps = [
+      ":osp_with_chromium_quic",
+      "//osp/impl/discovery/mdns",
+      "//platform",
+      "//util",
+    ]
+  }
+}

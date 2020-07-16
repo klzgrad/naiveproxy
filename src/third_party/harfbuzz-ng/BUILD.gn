@@ -1,0 +1,340 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/buildflags_paint_preview.gni")
+import("//build/config/chrome_build.gni")
+import("//build/config/features.gni")
+import("//build/config/freetype/freetype.gni")
+import("//build/config/ui.gni")
+import("//testing/libfuzzer/fuzzer_test.gni")
+import("//third_party/harfbuzz-ng/harfbuzz.gni")
+
+if (use_system_harfbuzz) {
+  import("//build/config/linux/pkg_config.gni")
+  pkg_config("harfbuzz_from_pkgconfig") {
+    visibility = [
+      "//third_party:freetype_harfbuzz",
+      "//third_party/freetype:freetype_source",
+    ]
+    packages = [
+      "harfbuzz",
+      "harfbuzz-subset",
+    ]
+  }
+} else {
+  config("harfbuzz_config") {
+    include_dirs = [ "src/src" ]
+  }
+
+  config("harfbuzz_warnings") {
+    if (is_win) {
+      # Result of 32-bit shift implicitly converted to 64 bits.
+      cflags = [ "/wd4334" ]
+    }
+  }
+
+  source_set("harfbuzz_source") {
+    visibility = [ "//third_party:freetype_harfbuzz" ]
+
+    public = [
+      "src/src/hb-blob.h",
+      "src/src/hb-buffer.h",
+      "src/src/hb-common.h",
+      "src/src/hb-deprecated.h",
+      "src/src/hb-face.h",
+      "src/src/hb-font.h",
+      "src/src/hb-ft.h",
+      "src/src/hb-icu.h",
+      "src/src/hb-map.h",
+      "src/src/hb-ot-font.h",
+      "src/src/hb-ot-layout.h",
+      "src/src/hb-ot-math.h",
+      "src/src/hb-ot-shape.h",
+      "src/src/hb-ot-var.h",
+      "src/src/hb-ot.h",
+      "src/src/hb-set.h",
+      "src/src/hb-shape-plan.h",
+      "src/src/hb-shape.h",
+      "src/src/hb-subset.h",
+      "src/src/hb-unicode.h",
+      "src/src/hb-version.h",
+      "src/src/hb.h",
+    ]
+
+    sources = [
+      "src/src/hb-aat-fdsc-table.hh",
+      "src/src/hb-aat-layout-ankr-table.hh",
+      "src/src/hb-aat-layout-bsln-table.hh",
+      "src/src/hb-aat-layout-feat-table.hh",
+      "src/src/hb-aat-layout-kerx-table.hh",
+      "src/src/hb-aat-layout-morx-table.hh",
+      "src/src/hb-aat-layout-trak-table.hh",
+      "src/src/hb-aat-layout.cc",
+      "src/src/hb-aat-ltag-table.hh",
+      "src/src/hb-aat-map.cc",
+      "src/src/hb-aat-map.hh",
+      "src/src/hb-algs.hh",
+      "src/src/hb-array.hh",
+      "src/src/hb-atomic.hh",
+      "src/src/hb-bimap.hh",
+      "src/src/hb-blob.cc",
+      "src/src/hb-blob.hh",
+      "src/src/hb-buffer-deserialize-json.hh",
+      "src/src/hb-buffer-deserialize-text.hh",
+      "src/src/hb-buffer-serialize.cc",
+      "src/src/hb-buffer.cc",
+      "src/src/hb-buffer.hh",
+      "src/src/hb-cache.hh",
+      "src/src/hb-cff-interp-common.hh",
+      "src/src/hb-cff-interp-cs-common.hh",
+      "src/src/hb-cff-interp-dict-common.hh",
+      "src/src/hb-cff1-interp-cs.hh",
+      "src/src/hb-cff2-interp-cs.hh",
+      "src/src/hb-common.cc",
+      "src/src/hb-config.hh",
+      "src/src/hb-debug.hh",
+      "src/src/hb-dispatch.hh",
+      "src/src/hb-draw.cc",
+      "src/src/hb-draw.h",
+      "src/src/hb-draw.hh",
+      "src/src/hb-face.cc",
+      "src/src/hb-face.hh",
+      "src/src/hb-font.cc",
+      "src/src/hb-font.hh",
+      "src/src/hb-ft.cc",
+      "src/src/hb-gdi.cc",
+      "src/src/hb-gdi.h",
+      "src/src/hb-icu.cc",
+      "src/src/hb-map.cc",
+      "src/src/hb-map.hh",
+      "src/src/hb-meta.hh",
+      "src/src/hb-mutex.hh",
+      "src/src/hb-number-parser.hh",
+      "src/src/hb-number.cc",
+      "src/src/hb-number.hh",
+      "src/src/hb-object.hh",
+      "src/src/hb-open-file.hh",
+      "src/src/hb-open-type.hh",
+      "src/src/hb-ot-cff-common.hh",
+      "src/src/hb-ot-cff1-table.cc",
+      "src/src/hb-ot-cff1-table.hh",
+      "src/src/hb-ot-cff2-table.cc",
+      "src/src/hb-ot-cff2-table.hh",
+      "src/src/hb-ot-color-cbdt-table.hh",
+      "src/src/hb-ot-color-colr-table.hh",
+      "src/src/hb-ot-color-cpal-table.hh",
+      "src/src/hb-ot-face-table-list.hh",
+      "src/src/hb-ot-face.cc",
+      "src/src/hb-ot-face.hh",
+      "src/src/hb-ot-font.cc",
+      "src/src/hb-ot-gasp-table.hh",
+      "src/src/hb-ot-hdmx-table.hh",
+      "src/src/hb-ot-head-table.hh",
+      "src/src/hb-ot-hhea-table.hh",
+      "src/src/hb-ot-hmtx-table.hh",
+      "src/src/hb-ot-kern-table.hh",
+      "src/src/hb-ot-layout-base-table.hh",
+      "src/src/hb-ot-layout-common.hh",
+      "src/src/hb-ot-layout-gdef-table.hh",
+      "src/src/hb-ot-layout-gpos-table.hh",
+      "src/src/hb-ot-layout-gsub-table.hh",
+      "src/src/hb-ot-layout-gsubgpos.hh",
+      "src/src/hb-ot-layout.cc",
+      "src/src/hb-ot-layout.hh",
+      "src/src/hb-ot-map.cc",
+      "src/src/hb-ot-map.hh",
+      "src/src/hb-ot-math-table.hh",
+      "src/src/hb-ot-math.cc",
+      "src/src/hb-ot-maxp-table.hh",
+      "src/src/hb-ot-meta-table.hh",
+      "src/src/hb-ot-meta.cc",
+      "src/src/hb-ot-meta.h",
+      "src/src/hb-ot-metrics.cc",
+      "src/src/hb-ot-metrics.h",
+      "src/src/hb-ot-metrics.hh",
+      "src/src/hb-ot-name-language-static.hh",
+      "src/src/hb-ot-name-language.hh",
+      "src/src/hb-ot-name-table.hh",
+      "src/src/hb-ot-name.cc",
+      "src/src/hb-ot-os2-unicode-ranges.hh",
+      "src/src/hb-ot-post-macroman.hh",
+      "src/src/hb-ot-shape-complex-arabic-fallback.hh",
+      "src/src/hb-ot-shape-complex-arabic-table.hh",
+      "src/src/hb-ot-shape-complex-arabic.cc",
+      "src/src/hb-ot-shape-complex-arabic.hh",
+      "src/src/hb-ot-shape-complex-default.cc",
+      "src/src/hb-ot-shape-complex-hangul.cc",
+      "src/src/hb-ot-shape-complex-hebrew.cc",
+      "src/src/hb-ot-shape-complex-indic-machine.hh",
+      "src/src/hb-ot-shape-complex-indic-table.cc",
+      "src/src/hb-ot-shape-complex-indic.cc",
+      "src/src/hb-ot-shape-complex-indic.hh",
+      "src/src/hb-ot-shape-complex-khmer-machine.hh",
+      "src/src/hb-ot-shape-complex-khmer.cc",
+      "src/src/hb-ot-shape-complex-khmer.hh",
+      "src/src/hb-ot-shape-complex-myanmar-machine.hh",
+      "src/src/hb-ot-shape-complex-myanmar.cc",
+      "src/src/hb-ot-shape-complex-myanmar.hh",
+      "src/src/hb-ot-shape-complex-thai.cc",
+      "src/src/hb-ot-shape-complex-use-machine.hh",
+      "src/src/hb-ot-shape-complex-use-table.cc",
+      "src/src/hb-ot-shape-complex-use.cc",
+      "src/src/hb-ot-shape-complex-use.hh",
+      "src/src/hb-ot-shape-complex-vowel-constraints.cc",
+      "src/src/hb-ot-shape-complex-vowel-constraints.hh",
+      "src/src/hb-ot-shape-complex.hh",
+      "src/src/hb-ot-shape-fallback.cc",
+      "src/src/hb-ot-shape-fallback.hh",
+      "src/src/hb-ot-shape-normalize.cc",
+      "src/src/hb-ot-shape-normalize.hh",
+      "src/src/hb-ot-shape.cc",
+      "src/src/hb-ot-shape.hh",
+      "src/src/hb-ot-tag.cc",
+      "src/src/hb-ot-var-avar-table.hh",
+      "src/src/hb-ot-var-fvar-table.hh",
+      "src/src/hb-ot-var-hvar-table.hh",
+      "src/src/hb-ot-var-mvar-table.hh",
+      "src/src/hb-ot-var.cc",
+      "src/src/hb-pool.hh",
+      "src/src/hb-sanitize.hh",
+      "src/src/hb-serialize.hh",
+      "src/src/hb-set-digest.hh",
+      "src/src/hb-set.cc",
+      "src/src/hb-set.hh",
+      "src/src/hb-shape-plan.cc",
+      "src/src/hb-shape-plan.hh",
+      "src/src/hb-shape.cc",
+      "src/src/hb-shaper-impl.hh",
+      "src/src/hb-shaper-list.hh",
+      "src/src/hb-shaper.cc",
+      "src/src/hb-shaper.hh",
+      "src/src/hb-static.cc",
+      "src/src/hb-string-array.hh",
+      "src/src/hb-subset-cff-common.cc",
+      "src/src/hb-subset-cff-common.hh",
+      "src/src/hb-subset-cff1.cc",
+      "src/src/hb-subset-cff2.cc",
+      "src/src/hb-subset-input.cc",
+      "src/src/hb-subset-input.hh",
+      "src/src/hb-subset-plan.cc",
+      "src/src/hb-subset-plan.hh",
+      "src/src/hb-subset.cc",
+      "src/src/hb-subset.hh",
+      "src/src/hb-ucd-table.hh",
+      "src/src/hb-ucd.cc",
+      "src/src/hb-unicode-emoji-table.hh",
+      "src/src/hb-unicode.cc",
+      "src/src/hb-unicode.hh",
+      "src/src/hb-utf.hh",
+      "src/src/hb.hh",
+    ]
+
+    defines = [
+      "HAVE_OT",
+      "HAVE_FREETYPE",
+      "HAVE_ICU",
+      "HAVE_ICU_BUILTIN",
+      "HAVE_INTEL_ATOMIC_PRIMITIVES",
+      "HAVE_ROUNDF",
+      "HB_NO_MMAP",
+      "HB_NO_RESOURCE_FORK",
+
+      # Size reductions by disabling parts that we do not currently require:
+
+      # SkPDF needs subsetting but does not require subsetting of layout or CFF tables.
+      "HB_NO_SUBSET_LAYOUT",
+      "HB_NO_SUBSET_CFF",
+
+      # Fallback shaper not required, we only use the HarfBuzz internal OT shaper.
+      "HB_NO_FALLBACK_SHAPE",
+
+      # Tells HarfBuzz to use ICU instead of the own mini UCDN implementation
+      # that is part of HarfBuzz.
+      "HB_NO_UCD",
+
+      # TODO(https://crbug.com/992390): Don't use the HarfBuzz metrics
+      # implementation, as we're retrieving metrics from Skia. Consider using this
+      # implementation at least for vertical metrics.
+      "HB_NO_METRICS",
+
+      # Disable .fon file support, not needed for Chrome, and code behind this
+      # flag produces warnings in Clang. Compare https://crbug.com/1002945.
+      "HB_NO_WIN1256",
+
+      # TODO(https://crbug.com/949962): Remove once this is fixed upstream.
+      "U_DISABLE_VERSION_SUFFIX=0",
+    ]
+
+    if (enable_paint_preview) {
+      # Paint Previews make use of CFF subsetting. However, enabling this is
+      # expensive for binary size so only compile it when Paint Previews are
+      # compiled.
+      defines -= [ "HB_NO_SUBSET_CFF" ]
+    }
+
+    if (is_component_build) {
+      if (is_win) {
+        defines += [ "HB_EXTERN=__declspec (dllexport) extern" ]
+      } else {
+        configs -= [ "//build/config/gcc:symbol_visibility_hidden" ]
+        configs += [ "//build/config/gcc:symbol_visibility_default" ]
+      }
+    }
+
+    if (use_system_freetype) {
+      configs += [ "//build/linux:freetype_from_pkgconfig" ]
+    } else {
+      configs += [ "//third_party/freetype:freetype_config" ]
+    }
+    configs -= [ "//build/config/compiler:chromium_code" ]
+    configs += [
+      "//build/config/compiler:no_chromium_code",
+
+      # Must be after no_chromium_code for warning flags to be ordered
+      # correctly.
+      ":harfbuzz_warnings",
+    ]
+
+    # This allows the compiler to do further optimizations in the code.
+    if (!is_debug) {
+      configs -= [ "//build/config/compiler:default_optimization" ]
+      configs += [ "//build/config/compiler:optimize_speed" ]
+    }
+
+    public_configs = [ ":harfbuzz_config" ]
+
+    deps = [ "//third_party/icu:icuuc" ]
+
+    if (use_glib) {
+      configs += [ "//build/config/linux:glib" ]
+      public += [ "src/src/hb-glib.h" ]
+      sources += [ "src/src/hb-glib.cc" ]
+    }
+  }
+}
+
+source_set("hb_scoped_util") {
+  sources = [ "utils/hb_scoped.h" ]
+  deps = [ "//third_party:freetype_harfbuzz" ]
+}
+
+fuzzer_test("hb_shape_fuzzer") {
+  sources = [ "fuzz/hb_shape_fuzzer.cc" ]
+  deps = [
+    ":hb_scoped_util",
+    "//base",
+    "//third_party:freetype_harfbuzz",
+  ]
+  seed_corpus = "fuzz/seed_corpus"
+}
+
+fuzzer_test("hb_subset_fuzzer") {
+  sources = [ "fuzz/hb_subset_fuzzer.cc" ]
+  deps = [
+    ":hb_scoped_util",
+    "//base",
+    "//third_party:freetype_harfbuzz",
+  ]
+  seed_corpus = "fuzz/seed_corpus"
+}

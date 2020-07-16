@@ -1,0 +1,88 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build_overrides/build.gni")
+import("BUILD.generated.gni")
+import("BUILD.generated_tests.gni")
+
+if (build_with_chromium) {
+  group("boringssl") {
+    public_configs = [ "//build/config/compiler:default_include_dirs" ]
+    public_deps = [
+      "//third_party/boringssl",
+    ]
+  }
+} else {
+  # Config for us and everybody else depending on BoringSSL.
+  config("external_config") {
+    include_dirs = [ "src/include" ]
+    cflags = []
+    if (is_clang) {
+      cflags += [ "-Wno-extra-semi" ]
+    }
+  }
+
+  # Config internal to this build file, shared by boringssl and boringssl_fuzzer.
+  config("internal_config") {
+    visibility = [ ":*" ]  # Only targets in this file can depend on this.
+    defines = [
+      "BORINGSSL_ALLOW_CXX_RUNTIME",
+      "BORINGSSL_IMPLEMENTATION",
+      "BORINGSSL_NO_STATIC_INITIALIZER",
+      "OPENSSL_SMALL",
+    ]
+    cflags = [ "-w" ]  # Disable all warnings.
+    cflags_c = [ "-std=c99" ]
+
+    defines += [ "_XOPEN_SOURCE=700" ]
+  }
+
+  config("no_asm_config") {
+    visibility = [ ":*" ]  # Only targets in this file can depend on this.
+    defines = [ "OPENSSL_NO_ASM" ]
+  }
+
+  all_sources = crypto_sources + ssl_sources
+  all_headers = crypto_headers + ssl_headers
+
+  # This has no sources on some platforms so must be a source_set.
+  source_set("boringssl_asm") {
+    visibility = [ ":*" ]  # Only targets in this file can depend on this.
+
+    sources = []
+    asmflags = []
+
+    if (is_linux) {
+      if (current_cpu == "x64") {
+        sources += crypto_sources_linux_x86_64
+      } else if (current_cpu == "x86") {
+        sources += crypto_sources_linux_x86
+      } else {
+        public_configs = [ ":no_asm_config" ]
+      }
+    } else if (is_mac) {
+      if (current_cpu == "x64") {
+        sources += crypto_sources_mac_x86_64
+      } else if (current_cpu == "x86") {
+        sources += crypto_sources_mac_x86
+      } else {
+        public_configs = [ ":no_asm_config" ]
+      }
+    } else {
+      public_configs = [ ":no_asm_config" ]
+    }
+  }
+
+  source_set("boringssl") {
+    sources = all_sources
+    public = all_headers
+    deps = [
+      ":boringssl_asm",
+      "src/third_party/fiat:fiat_license",
+    ]
+
+    public_configs = [ ":external_config" ]
+    configs += [ ":internal_config" ]
+  }
+}

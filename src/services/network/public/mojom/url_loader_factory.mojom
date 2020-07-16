@@ -1,0 +1,52 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module network.mojom;
+
+import "services/network/public/mojom/mutable_network_traffic_annotation_tag.mojom";
+import "services/network/public/mojom/url_loader.mojom";
+
+const uint32 kURLLoadOptionNone = 0;
+// Sends the net::SSLInfo struct in OnReceiveResponse.
+const uint32 kURLLoadOptionSendSSLInfoWithResponse = 1;
+// Enables mime sniffing.
+const uint32 kURLLoadOptionSniffMimeType = 2;
+// Indicates that execution is blocking on the completion of the request.
+const uint32 kURLLoadOptionSynchronous = 4;
+// Sends the net::SSLInfo struct in OnComplete when the connection had a major
+// certificate error.
+const uint32 kURLLoadOptionSendSSLInfoForCertificateError = 8;
+// Uses the header client set in URLLoaderFactoryParams for this request.
+const uint32 kURLLoadOptionUseHeaderClient = 16;
+// Disallow the request from sending cookies. Disallow the response from writing
+// cookies.
+const uint32 kURLLoadOptionBlockAllCookies = 32;
+// Similar to |kURLLoadOptionBlockAllCookies|, but only for third party cookies.
+const uint32 kURLLoadOptionBlockThirdPartyCookies = 64;
+// This request is for CORS preflight. This is used in the network service.
+// This is set and used only in the network service, no callsites outside the
+// service must set this.
+const uint32 kURLLoadOptionAsCorsPreflight = 128;
+
+interface URLLoaderFactory {
+  // Creates a URLLoader and starts loading with the given |request|. |client|'s
+  // method will be called when certain events related to that loading
+  // (e.g., response arrival) happen.
+  // |routing_id| is the routing_id for subframe requests, and is the
+  // frame_tree_node_id for frame requests.
+  // TODO: once MojoLoading is only codepath and we have one factory per frame,
+  // remove this.
+  // |request_id| is for compatibility with the existing Chrome IPC.
+  // A pair (routing_id, request_id) is assumed to be unique within one factory.
+  CreateLoaderAndStart(pending_receiver<URLLoader> loader,
+                       int32 routing_id,
+                       int32 request_id,
+                       uint32 options,
+                       URLRequest request,
+                       pending_remote<URLLoaderClient> client,
+                       MutableNetworkTrafficAnnotationTag traffic_annotation);
+
+  // Connects a new pipe to this instance of the URLLoaderFactory interface.
+  Clone(pending_receiver<URLLoaderFactory> factory);
+};

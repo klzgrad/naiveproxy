@@ -1,0 +1,264 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+assert(is_fuchsia)
+
+import("//build/buildflag_header.gni")
+import("//build/config/fuchsia/generate_runner_scripts.gni")
+import("//build/config/fuchsia/symbol_archive.gni")
+import("//fuchsia/release_channel.gni")
+import("//testing/test.gni")
+
+declare_args() {
+  # Set to a non-zero value to enable remote debugging on that port in WebRunner.
+  web_runner_remote_debugging_port = 0
+}
+
+_cast_runner_package_name = "cast_runner${release_channel_suffix}"
+_web_runner_package_name = "web_runner${release_channel_suffix}"
+
+buildflag_header("buildflags") {
+  header = "buildflags.h"
+  flags =
+      [ "WEB_RUNNER_REMOTE_DEBUGGING_PORT=$web_runner_remote_debugging_port" ]
+  visibility = [ ":*" ]
+}
+
+# Files common to both cast_runner and web_runner targets.
+source_set("common") {
+  sources = [
+    "common/web_component.cc",
+    "common/web_component.h",
+    "common/web_content_runner.cc",
+    "common/web_content_runner.h",
+  ]
+  deps = [
+    ":buildflags",
+    "//base",
+    "//fuchsia/base",
+    "//fuchsia/base:modular",
+    "//ui/gfx/geometry",
+    "//url",
+  ]
+  public_deps = [
+    "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.camera3",
+    "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.media",
+    "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.modular",
+    "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.sys",
+    "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.ui.app",
+    "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.web",
+    "//third_party/fuchsia-sdk/sdk/pkg/sys_cpp",
+  ]
+  visibility = [ ":*" ]
+}
+
+source_set("cast_runner_core") {
+  sources = [
+    "cast/api_bindings_client.cc",
+    "cast/api_bindings_client.h",
+    "cast/application_controller_impl.cc",
+    "cast/application_controller_impl.h",
+    "cast/cast_component.cc",
+    "cast/cast_component.h",
+    "cast/cast_runner.cc",
+    "cast/cast_runner.h",
+    "cast/named_message_port_connector.cc",
+    "cast/named_message_port_connector.h",
+    "cast/pending_cast_component.cc",
+    "cast/pending_cast_component.h",
+  ]
+  data_deps = [ "//chromecast/bindings:named_message_port_connector_resources" ]
+  deps = [
+    "//base",
+    "//fuchsia/base",
+    "//fuchsia/base:modular",
+    "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.modular",
+    "//third_party/fuchsia-sdk/sdk/pkg/sys_cpp",
+    "//url",
+  ]
+  public_deps = [
+    ":common",
+    "//fuchsia:cast_fidl",
+    "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.legacymetrics",
+    "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.web",
+  ]
+  visibility = [ ":*" ]
+}
+
+executable("cast_runner_exe") {
+  sources = [ "cast/main.cc" ]
+  deps = [
+    ":buildflags",
+    ":cast_runner_core",
+    ":common",
+    "//base",
+    "//fuchsia/base",
+  ]
+  visibility = [ ":*" ]
+}
+
+cr_fuchsia_package("cast_runner_pkg") {
+  binary = ":cast_runner_exe"
+  package_name_override = _cast_runner_package_name
+  archive_name_override = "cast_runner"
+  component_name_override = "cast_runner"
+  manifest = "cast/cast_runner.cmx"
+}
+
+fuchsia_package_runner("cast_runner") {
+  package = ":cast_runner_pkg"
+  archive_name_override = "cast_runner"
+  install_only = true
+  package_deps = [ [
+        "//fuchsia/engine:web_engine",
+        "web_engine${release_channel_suffix}",
+      ] ]
+}
+
+source_set("cast_runner_test_core") {
+  testonly = true
+  sources = [
+    "cast/fake_application_config_manager.cc",
+    "cast/fake_application_config_manager.h",
+    "cast/test_api_bindings.cc",
+    "cast/test_api_bindings.h",
+  ]
+  deps = [ ":cast_runner_core" ]
+  public_deps = [
+    "//base",
+    "//fuchsia:cast_fidl",
+    "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.sys",
+    "//url",
+  ]
+  visibility = [ ":*" ]
+}
+
+test("cast_runner_unittests") {
+  sources = [ "cast/application_controller_impl_unittest.cc" ]
+  deps = [
+    ":cast_runner_core",
+    ":cast_runner_test_core",
+    "//base",
+    "//base/test:run_all_unittests",
+    "//base/test:test_support",
+    "//fuchsia/base:test_support",
+    "//net:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.web",
+  ]
+}
+
+test("cast_runner_integration_tests") {
+  sources = [ "cast/cast_runner_integration_test.cc" ]
+  data = [ "cast/testdata" ]
+  deps = [
+    ":cast_runner_core",
+    ":cast_runner_test_core",
+    "//base/test:run_all_unittests",
+    "//base/test:test_support",
+    "//fuchsia/base:test_support",
+    "//net:test_support",
+    "//testing/gtest",
+    "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.camera3",
+    "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.media",
+    "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.modular",
+    "//third_party/fuchsia-sdk/sdk/pkg/scenic_cpp",
+    "//third_party/fuchsia-sdk/sdk/pkg/sys_cpp",
+  ]
+  package_deps = [ [
+        "//fuchsia/engine:web_engine",
+        "web_engine",
+      ] ]
+}
+
+test("cast_runner_browsertests") {
+  sources = [
+    "cast/api_bindings_client_browsertest.cc",
+    "cast/named_message_port_connector_browsertest.cc",
+  ]
+  defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+  data = [ "cast/testdata" ]
+  deps = [
+    ":cast_runner_core",
+    ":cast_runner_test_core",
+    "//base/test:test_support",
+    "//content/public/browser",
+    "//content/test:test_support",
+    "//fuchsia/base",
+    "//fuchsia/base:test_support",
+    "//fuchsia/engine:browsertest_core",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//ui/ozone",
+  ]
+}
+
+executable("web_runner_exe") {
+  sources = [ "web/main.cc" ]
+  deps = [
+    ":buildflags",
+    ":common",
+    "//base",
+    "//fuchsia/base",
+  ]
+  visibility = [ ":*" ]
+}
+
+cr_fuchsia_package("web_runner_pkg") {
+  binary = ":web_runner_exe"
+  package_name_override = _web_runner_package_name
+  component_name_override = "web_runner"
+  archive_name_override = "web_runner"
+  manifest = "web/web_runner.cmx"
+}
+
+fuchsia_package_runner("web_runner") {
+  package = ":web_runner_pkg"
+  archive_name_override = "web_runner"
+  install_only = true
+  package_deps = [ [
+        "//fuchsia/engine:web_engine",
+        "web_engine${release_channel_suffix}",
+      ] ]
+}
+
+test("web_runner_integration_tests") {
+  sources = [ "web/web_runner_smoke_test.cc" ]
+  deps = [
+    "//base",
+    "//base/test:run_all_unittests",
+    "//base/test:test_support",
+    "//fuchsia/base:modular",
+    "//net:test_support",
+    "//testing/gtest",
+    "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.sys",
+  ]
+  package_deps = [
+    [
+      "//fuchsia/engine:web_engine",
+      "web_engine",
+    ],
+    [
+      ":web_runner_pkg",
+      "web_runner",
+    ],
+  ]
+}
+
+if (is_official_build) {
+  symbol_archive("cast_runner_symbol_archive") {
+    deps = [ ":cast_runner_pkg" ]
+    ids_txt = "$root_gen_dir/fuchsia/runners/cast_runner/ids.txt"
+    archive_name =
+        "$root_gen_dir/fuchsia/runners/cast_runner/cast_runner.symbols.tar.bz2"
+  }
+
+  symbol_archive("web_runner_symbol_archive") {
+    deps = [ ":web_runner_pkg" ]
+    ids_txt = "$root_gen_dir/fuchsia/runners/web_runner/ids.txt"
+    archive_name =
+        "$root_gen_dir/fuchsia/runners/web_runner/web_runner.symbols.tar.bz2"
+  }
+}  # is_official_build

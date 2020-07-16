@@ -1,0 +1,204 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module blink.mojom;
+
+import "mojo/public/mojom/base/file.mojom";
+import "mojo/public/mojom/base/file_path.mojom";
+import "mojo/public/mojom/base/time.mojom";
+import "mojo/public/mojom/base/unguessable_token.mojom";
+import "services/network/public/mojom/chunked_data_pipe_getter.mojom";
+import "services/network/public/mojom/data_pipe_getter.mojom";
+import "services/network/public/mojom/fetch_api.mojom";
+import "services/network/public/mojom/url_loader.mojom";
+import "third_party/blink/public/mojom/blob/serialized_blob.mojom";
+import "third_party/blink/public/mojom/loader/request_context_frame_type.mojom";
+import "third_party/blink/public/mojom/referrer.mojom";
+import "url/mojom/url.mojom";
+
+
+// Type of the context associated with a request.
+// https://fetch.spec.whatwg.org/#concept-request-destination.
+// TODO(https://crbug.com/889751): Fetch now defines this concept as a request's
+// "destination", represented as the enum
+// network::mojom::RequestDestination. We should use that enum rather
+// than this one.
+enum RequestContextType {
+  UNSPECIFIED,
+  AUDIO,
+  BEACON,
+  CSP_REPORT,
+  DOWNLOAD,
+  EMBED,
+  EVENT_SOURCE,
+  FAVICON,
+  FETCH,
+  FONT,
+  FORM,
+  FRAME,
+  HYPERLINK,
+  IFRAME,
+  IMAGE,
+  IMAGE_SET,
+  IMPORT,
+  INTERNAL,
+  LOCATION,
+  MANIFEST,
+  OBJECT,
+  PING,
+  PLUGIN,
+  PREFETCH,
+  SCRIPT,
+  SERVICE_WORKER,
+  SHARED_WORKER,
+  SUBRESOURCE,
+  STYLE,
+  TRACK,
+  VIDEO,
+  WORKER,
+  XML_HTTP_REQUEST,
+  XSLT,
+};
+
+// https://fetch.spec.whatwg.org/#concept-request-cache-mode
+enum FetchCacheMode {
+  // "default": Fetch will inspect the HTTP cache on the way to the network. If
+  // there is a fresh response it will be used. If there is a stale response a
+  // conditional request will be created, and a normal request otherwise. It
+  // then updates the HTTP cache with the response.
+  kDefault,
+
+  // "no-store": Fetch behaves as if there is no HTTP cache at all.
+  kNoStore,
+
+  // "reload": Fetch behaves as if there is no HTTP cache on the way to the
+  // network. Ergo, it creates a normal request and updates the HTTP cache with
+  // the response.
+  kBypassCache,
+
+  // "no-cache": Fetch creates a conditional request if there is a response in
+  // the HTTP cache and a normal request otherwise. It then updates the HTTP
+  // cache with the response.
+  kValidateCache,
+
+  // "force-cache": Fetch uses any response in the HTTP cache matching the
+  // request, not paying attention to staleness. If there was no response, it
+  // creates a normal request and updates the HTTP cache with the response.
+  kForceCache,
+
+  // "only-if-cached": Fetch uses any response in the HTTP cache matching the
+  // request, not paying attention to staleness. If there was no response, it
+  // returns a network error.
+  kOnlyIfCached,
+
+  // Unspecified ones
+  // Similar to ONLY_IF_CACHED, but checks freshness strictly.
+  kUnspecifiedOnlyIfCachedStrict,
+  // Used by devtools to trigger a request which ends up in CACHE_MISS.
+  kUnspecifiedForceCacheMiss,
+};
+
+// Corresponds to Fetch request's "importance mode"
+// Currently discussed at: https://github.com/WICG/priority-hints
+// TODO(domfarolino): add a spec link to this once specified.
+enum FetchImportanceMode {
+  kImportanceLow,
+  kImportanceAuto,
+  kImportanceHigh
+};
+
+// Request headers for FetchAPIRequest. This is typemapped to a container with a
+// case insensitive compare or hash function.
+struct FetchAPIRequestHeaders {
+  map<string, string> headers;
+};
+
+// Represents part of an upload body. This could be either one of bytes, file or
+// a data pipe.
+struct FetchAPIDataElement {
+  // The type of the internal contents of network::DataElement.
+  network.mojom.DataElementType type;
+  // For kBytes.
+  array<uint8> buf;
+  // For kFile and kRawFile
+  mojo_base.mojom.FilePath path;
+  // For kRawFile
+  mojo_base.mojom.File? file;
+  // For kBlob
+  string? blob_uuid;
+  // For kDataPipe
+  pending_remote<network.mojom.DataPipeGetter>? data_pipe_getter;
+  // For kChunkedDataPipe
+  pending_remote<network.mojom.ChunkedDataPipeGetter>? chunked_data_pipe_getter;
+
+  uint64 offset;
+  uint64 length;
+  mojo_base.mojom.Time expected_modification_time;
+};
+
+// Struct representing a Body for a Request:
+// https://fetch.spec.whatwg.org/#body
+// This has the same members definition with network.mojom.URLRequestBody, which
+// aims to pass around body for network.mojom.URLRequest. Both of them are
+// typemapped to scoped_refptr<network::ResourceRequestBody> for the default
+// variant, the only difference is for the Blink variant that
+// network.mojom.URLRequestBody still is typemapped to
+// scoped_refptr<network::ResourceRequestBody> but this is typemapped to
+// scoped_refptr<blink::EncodedFormData>.
+struct FetchAPIRequestBody {
+  // Store upload bodies
+  array<FetchAPIDataElement> elements;
+
+  // Identifies a particular upload instance, which is used by the cache to
+  // formulate a cache key.
+  uint64 identifier;
+
+  // Indicates whether the post data contains sensitive information like
+  // passwords.
+  bool contains_sensitive_info;
+};
+
+// Struct representing a Request:
+// https://fetch.spec.whatwg.org/#request-class
+// Compared to network.mojom.URLRequest which is kind of internal data in the
+// loading stack, FetchAPIRequest acts as a direct representation of the JS
+// Request object in all API implementations like Background Fetch, Cache
+// Storage and Service Worker, with no need to care how the loading logic
+// happens.
+// Note: When updating this struct, also update
+// content/common/fetch/fetch_request_type_converters.cc.
+struct FetchAPIRequest {
+  network.mojom.RequestMode mode = network.mojom.RequestMode.kNoCors;
+  bool is_main_resource_load = false;
+  network.mojom.RequestDestination destination = network.mojom.RequestDestination.kEmpty;
+  RequestContextFrameType frame_type = RequestContextFrameType.kNone;
+  url.mojom.Url url;
+  string method;
+  FetchAPIRequestHeaders headers;
+
+  // Note: |blob| and |body| are mutually exclusive.
+  // |blob| is used in implementing Background Fetch APIs.
+  // |body| is used to represent the FetchEvent#request#body dispatched to
+  // service workers.
+  // TODO(crbug.com/911930): Remove |blob| and use |body| instead everywhere.
+  SerializedBlob? blob;
+  FetchAPIRequestBody? body;
+
+  Referrer? referrer;
+  network.mojom.CredentialsMode credentials_mode =
+    network.mojom.CredentialsMode.kOmit;
+  FetchCacheMode cache_mode = FetchCacheMode.kDefault;
+  network.mojom.RedirectMode redirect_mode =
+    network.mojom.RedirectMode.kFollow;
+  string? integrity;
+  network.mojom.RequestPriority priority = network.mojom.RequestPriority.kIdle;
+
+  // Id of the original requestor window.
+  // See network::ResourceRequest::fetch_window_id.
+  mojo_base.mojom.UnguessableToken? fetch_window_id;
+
+  bool keepalive = false;
+  bool is_reload = false;
+  bool is_history_navigation = false;
+};

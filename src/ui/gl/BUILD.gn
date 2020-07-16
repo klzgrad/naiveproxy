@@ -1,0 +1,625 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/buildflag_header.gni")
+import("//build/config/chrome_build.gni")
+import("//build/config/jumbo.gni")
+import("//build/config/linux/pkg_config.gni")
+import("//build/config/ui.gni")
+import("//testing/test.gni")
+import("//ui/gl/features.gni")
+import("//ui/ozone/ozone.gni")
+
+declare_args() {
+  # Whether service side logging (actual calls into the GL driver) is enabled
+  # or not.
+  enable_gpu_service_logging = false
+}
+
+use_glx = use_x11 || ozone_platform_x11
+
+if (is_android) {
+  import("//build/config/android/config.gni")
+  import("//build/config/android/rules.gni")
+}
+
+# Reset sources_assignment_filter for the BUILD.gn file to prevent
+# regression during the migration of Chromium away from the feature.
+# See docs/no_sources_assignment_filter.md for more information.
+# TODO(crbug.com/1018739): remove this when migration is done.
+set_sources_assignment_filter([])
+
+buildflag_header("buildflags") {
+  header = "buildflags.h"
+  flags = [
+    "ENABLE_SWIFTSHADER=$enable_swiftshader",
+    "USE_DAWN=$use_dawn",
+    "USE_STATIC_ANGLE=$use_static_angle",
+  ]
+}
+
+config("gl_config") {
+  defines = []
+  if (use_glx) {
+    defines += [
+      "GL_GLEXT_PROTOTYPES",
+      "USE_GLX",
+    ]
+  }
+  if (use_egl) {
+    defines += [ "USE_EGL" ]
+  }
+}
+
+jumbo_component("gl") {
+  output_name = "gl_wrapper"  # Avoid colliding with OS X"s libGL.dylib.
+
+  sources = [
+    "buffer_format_utils.cc",
+    "buffer_format_utils.h",
+    "ca_renderer_layer_params.cc",
+    "ca_renderer_layer_params.h",
+    "dc_renderer_layer_params.cc",
+    "dc_renderer_layer_params.h",
+    "dual_gpu_state.cc",
+    "dual_gpu_state.h",
+    "egl_timestamps.h",
+    "gl_bindings.cc",
+    "gl_bindings.h",
+    "gl_bindings_autogen_gl.cc",
+    "gl_bindings_autogen_gl.h",
+    "gl_context.cc",
+    "gl_context.h",
+    "gl_context_stub.cc",
+    "gl_context_stub.h",
+    "gl_enums.cc",
+    "gl_enums.h",
+    "gl_enums_implementation_autogen.h",
+    "gl_export.h",
+    "gl_features.cc",
+    "gl_features.h",
+    "gl_fence.cc",
+    "gl_fence.h",
+    "gl_fence_arb.cc",
+    "gl_fence_arb.h",
+    "gl_fence_nv.cc",
+    "gl_fence_nv.h",
+    "gl_gl_api_implementation.cc",
+    "gl_gl_api_implementation.h",
+    "gl_helper.cc",
+    "gl_helper.h",
+    "gl_image.cc",
+    "gl_image.h",
+    "gl_image_memory.cc",
+    "gl_image_memory.h",
+    "gl_image_ref_counted_memory.cc",
+    "gl_image_ref_counted_memory.h",
+    "gl_image_shared_memory.cc",
+    "gl_image_shared_memory.h",
+    "gl_image_stub.cc",
+    "gl_image_stub.h",
+    "gl_implementation.cc",
+    "gl_implementation.h",
+    "gl_implementation_wrapper.h",
+    "gl_share_group.cc",
+    "gl_share_group.h",
+    "gl_state_restorer.cc",
+    "gl_state_restorer.h",
+    "gl_stub_api.cc",
+    "gl_stub_api.h",
+    "gl_stub_api_base.h",
+    "gl_stub_autogen_gl.cc",
+    "gl_stub_autogen_gl.h",
+    "gl_surface.cc",
+    "gl_surface.h",
+    "gl_surface_format.cc",
+    "gl_surface_format.h",
+    "gl_surface_overlay.cc",
+    "gl_surface_overlay.h",
+    "gl_surface_presentation_helper.cc",
+    "gl_surface_presentation_helper.h",
+    "gl_surface_stub.cc",
+    "gl_surface_stub.h",
+    "gl_switches.cc",
+    "gl_switches.h",
+    "gl_utils.cc",
+    "gl_utils.h",
+    "gl_version_info.cc",
+    "gl_version_info.h",
+    "gl_workarounds.h",
+    "gpu_switching_manager.cc",
+    "gpu_switching_manager.h",
+    "gpu_timing.cc",
+    "gpu_timing.h",
+    "progress_reporter.h",
+    "scoped_binders.cc",
+    "scoped_binders.h",
+    "scoped_make_current.cc",
+    "scoped_make_current.h",
+    "shader_tracking.cc",
+    "shader_tracking.h",
+    "sync_control_vsync_provider.cc",
+    "sync_control_vsync_provider.h",
+    "trace_util.cc",
+    "trace_util.h",
+  ]
+
+  if (is_android) {
+    sources += [
+      "android/android_surface_control_compat.cc",
+      "android/android_surface_control_compat.h",
+      "android/scoped_java_surface.cc",
+      "android/scoped_java_surface.h",
+      "android/surface_texture.cc",
+      "android/surface_texture.h",
+      "android/surface_texture_listener.cc",
+      "android/surface_texture_listener.h",
+    ]
+  }
+
+  configs += [ "//build/config:precompiled_headers" ]
+  defines = [ "GL_IMPLEMENTATION" ]
+  if (enable_gpu_service_logging) {
+    defines += [ "GPU_ENABLE_SERVICE_LOGGING" ]
+  }
+
+  include_dirs = [ "//third_party/mesa_headers" ]
+
+  all_dependent_configs = [ ":gl_config" ]
+
+  public_configs = [ "//third_party/khronos:khronos_headers" ]
+
+  deps = [
+    ":buildflags",
+    "//base/third_party/dynamic_annotations",
+
+    # ANGLE includes are used cross-platform.
+    "//third_party/angle:includes",
+  ]
+  public_deps = [
+    "//base",
+    "//third_party/mesa_headers",
+    "//ui/events/platform",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+  ]
+
+  data_deps = []
+  if (enable_swiftshader) {
+    data_deps += [ "//third_party/swiftshader" ]
+  }
+  if (use_egl) {
+    sources += [
+      "angle_platform_impl.cc",
+      "angle_platform_impl.h",
+      "egl_util.cc",
+      "egl_util.h",
+      "gl_bindings_autogen_egl.cc",
+      "gl_bindings_autogen_egl.h",
+      "gl_context_egl.cc",
+      "gl_context_egl.h",
+      "gl_display_egl_util.cc",
+      "gl_display_egl_util.h",
+      "gl_egl_api_implementation.cc",
+      "gl_egl_api_implementation.h",
+      "gl_fence_egl.cc",
+      "gl_fence_egl.h",
+      "gl_image_egl.cc",
+      "gl_image_egl.h",
+      "gl_surface_egl.cc",
+      "gl_surface_egl.h",
+      "shared_gl_fence_egl.cc",
+      "shared_gl_fence_egl.h",
+    ]
+
+    if (is_linux || use_ozone) {
+      sources += [
+        "gl_image_native_pixmap.cc",
+        "gl_image_native_pixmap.h",
+      ]
+    }
+
+    if (is_android) {
+      sources += [
+        "gl_image_ahardwarebuffer.cc",
+        "gl_image_ahardwarebuffer.h",
+        "gl_surface_egl_surface_control.cc",
+        "gl_surface_egl_surface_control.h",
+      ]
+    }
+
+    if (is_posix && !is_fuchsia && !is_mac) {
+      # Windows has USE_EGL but doesn't support base::FileDescriptor.
+      # libsync isn't supported or needed on MacOSX.
+      # Fuchsia is excluded due to a libsync dependency and because it's
+      # unknown if the required EGL_ANDROID_native_fence_sync extension works
+      # there. If it does and there's a use case, this could be revisited.
+      sources += [
+        "gl_fence_android_native_fence_sync.cc",
+        "gl_fence_android_native_fence_sync.h",
+      ]
+
+      deps += [ "//third_party/libsync" ]
+    }
+  }
+  if (is_mac || use_egl) {
+    sources += [
+      "yuv_to_rgb_converter.cc",
+      "yuv_to_rgb_converter.h",
+    ]
+  }
+
+  if (use_x11 || ozone_platform_x11) {
+    sources += [
+      "gl_surface_egl_x11.cc",
+      "gl_surface_egl_x11.h",
+      "gl_surface_egl_x11_gles2.cc",
+      "gl_surface_egl_x11_gles2.h",
+      "gl_surface_glx_x11.cc",
+      "gl_surface_glx_x11.h",
+    ]
+
+    deps += [
+      "//ui/base/x",
+      "//ui/events/platform/x11:x11",
+    ]
+
+    assert(use_egl)
+    data_deps += [
+      "//third_party/angle:libEGL",
+      "//third_party/angle:libGLESv2",
+    ]
+  }
+  if (use_glx) {
+    sources += [
+      "gl_bindings_autogen_glx.cc",
+      "gl_bindings_autogen_glx.h",
+      "gl_context_glx.cc",
+      "gl_context_glx.h",
+      "gl_glx_api_implementation.cc",
+      "gl_glx_api_implementation.h",
+      "gl_image_glx.cc",
+      "gl_image_glx.h",
+      "gl_image_glx_native_pixmap.cc",
+      "gl_image_glx_native_pixmap.h",
+      "gl_surface_glx.cc",
+      "gl_surface_glx.h",
+      "gl_visual_picker_glx.cc",
+      "gl_visual_picker_glx.h",
+    ]
+
+    deps += [
+      "//ui/base/x",
+      "//ui/gfx/x",
+    ]
+  }
+  if (is_win) {
+    sources += [
+      "child_window_win.cc",
+      "child_window_win.h",
+      "dc_layer_tree.cc",
+      "dc_layer_tree.h",
+      "direct_composition_child_surface_win.cc",
+      "direct_composition_child_surface_win.h",
+      "direct_composition_surface_win.cc",
+      "direct_composition_surface_win.h",
+      "gl_angle_util_win.cc",
+      "gl_angle_util_win.h",
+      "gl_bindings_autogen_wgl.cc",
+      "gl_bindings_autogen_wgl.h",
+      "gl_context_wgl.cc",
+      "gl_context_wgl.h",
+      "gl_image_d3d.cc",
+      "gl_image_d3d.h",
+      "gl_image_dxgi.cc",
+      "gl_image_dxgi.h",
+      "gl_surface_wgl.cc",
+      "gl_surface_wgl.h",
+      "gl_wgl_api_implementation.cc",
+      "gl_wgl_api_implementation.h",
+      "swap_chain_presenter.cc",
+      "swap_chain_presenter.h",
+      "vsync_observer.h",
+      "vsync_provider_win.cc",
+      "vsync_provider_win.h",
+      "vsync_thread_win.cc",
+      "vsync_thread_win.h",
+    ]
+
+    libs = [
+      "dxgi.lib",
+      "dwmapi.lib",
+    ]
+    ldflags = [
+      "/DELAYLOAD:dwmapi.dll",
+      "/DELAYLOAD:dxgi.dll",
+    ]
+
+    assert(use_egl)
+    data_deps += [
+      "//third_party/angle:libEGL",
+      "//third_party/angle:libGLESv2",
+      "//third_party/swiftshader",
+    ]
+  }
+  if (is_mac) {
+    sources += [
+      "dual_gpu_state_mac.cc",
+      "dual_gpu_state_mac.h",
+      "gl_context_cgl.cc",
+      "gl_context_cgl.h",
+      "gl_fence_apple.cc",
+      "gl_fence_apple.h",
+      "gl_image_io_surface.h",
+      "gl_image_io_surface.mm",
+      "scoped_cgl.cc",
+      "scoped_cgl.h",
+    ]
+
+    libs = [
+      "CoreFoundation.framework",
+      "IOSurface.framework",
+      "OpenGL.framework",
+      "Quartz.framework",
+    ]
+
+    if (use_egl) {
+      sources += [
+        "gl_image_io_surface_egl.h",
+        "gl_image_io_surface_egl.mm",
+      ]
+
+      data_deps += [
+        "//third_party/angle:libEGL",
+        "//third_party/angle:libGLESv2",
+        "//third_party/mesa_headers",
+      ]
+      if (enable_swiftshader) {
+        data_deps += [ "//third_party/swiftshader" ]
+      }
+    }
+  }
+  if (is_android) {
+    sources += [
+      "gl_image_surface_texture.cc",
+      "gl_image_surface_texture.h",
+    ]
+
+    defines += [
+      "GL_GLEXT_PROTOTYPES",
+      "EGL_EGLEXT_PROTOTYPES",
+    ]
+
+    libs = [ "android" ]
+
+    deps += [ ":gl_jni_headers" ]
+  }
+}
+
+if (is_mac && use_egl) {
+  # We need to copy the ANGLE and SwiftShader libraries so that the
+  # bundle_data dependencies have a "copy" target type. Otherwise for
+  # "shared_library" target types it will try to link things into
+  # Chromium Framework when we want to keep the ANGLE and SwiftShader
+  # libraries separate instead.
+  copy("angle_library_copy") {
+    sources = [
+      "$root_out_dir/libEGL.dylib",
+      "$root_out_dir/libGLESv2.dylib",
+    ]
+    outputs = [ "$root_out_dir/egl_intermediates/{{source_file_part}}" ]
+    deps = [
+      "//third_party/angle:libEGL",
+      "//third_party/angle:libGLESv2",
+    ]
+  }
+
+  if (enable_swiftshader) {
+    copy("swiftshader_egl_library_copy") {
+      sources = [
+        "$root_out_dir/libswiftshader_libEGL.dylib",
+        "$root_out_dir/libswiftshader_libGLESv2.dylib",
+      ]
+      outputs = [ "$root_out_dir/egl_intermediates/{{source_file_part}}" ]
+      deps = [
+        "//third_party/swiftshader/src/OpenGL/libEGL:swiftshader_libEGL",
+        "//third_party/swiftshader/src/OpenGL/libGLESv2:swiftshader_libGLESv2",
+      ]
+    }
+    copy("swiftshader_vk_library_copy") {
+      sources = [
+        "$root_out_dir/libvk_swiftshader.dylib",
+        "$root_out_dir/vk_swiftshader_icd.json",
+      ]
+      outputs = [ "$root_out_dir/vk_intermediates/{{source_file_part}}" ]
+      deps = [
+        "//third_party/swiftshader/src/Vulkan:icd_file",
+        "//third_party/swiftshader/src/Vulkan:swiftshader_libvulkan",
+      ]
+    }
+  }
+}
+
+jumbo_static_library("gl_unittest_utils") {
+  testonly = true
+  sources = [
+    "egl_bindings_autogen_mock.cc",
+    "egl_bindings_autogen_mock.h",
+    "egl_mock.cc",
+    "egl_mock.h",
+    "gl_bindings_autogen_mock.cc",
+    "gl_bindings_autogen_mock.h",
+    "gl_mock.cc",
+    "gl_mock.h",
+    "gl_mock_autogen_egl.h",
+    "gl_mock_autogen_gl.h",
+    "gpu_timing_fake.cc",
+    "gpu_timing_fake.h",
+  ]
+
+  configs += [ "//third_party/khronos:khronos_headers" ]
+
+  deps = [
+    ":gl",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+}
+
+jumbo_static_library("test_support") {
+  testonly = true
+  sources = [
+    "test/gl_image_bind_test_template.h",
+    "test/gl_image_test_support.cc",
+    "test/gl_image_test_support.h",
+    "test/gl_image_test_template.cc",
+    "test/gl_image_test_template.h",
+    "test/gl_image_zero_initialize_test_template.h",
+    "test/gl_surface_test_support.cc",
+    "test/gl_surface_test_support.h",
+    "test/gl_test_helper.cc",
+    "test/gl_test_helper.h",
+  ]
+
+  configs += [ "//third_party/khronos:khronos_headers" ]
+
+  public_deps = [
+    ":gl",
+    "//ui/gl/init",
+  ]
+  deps = [
+    "//base/test:test_support",
+    "//testing/gtest",
+    "//ui/base",
+  ]
+
+  if (is_linux) {
+    deps += [ "//ui/platform_window/common" ]
+  }
+
+  if (use_x11) {
+    deps += [
+      "//ui/gfx/x",
+      "//ui/platform_window/x11",
+    ]
+  }
+
+  if (use_ozone) {
+    deps += [ "//ui/ozone" ]
+  }
+}
+
+source_set("run_all_unittests") {
+  testonly = true
+
+  sources = [ "test/run_all_unittests.cc" ]
+
+  deps = [ "//base" ]
+
+  public_deps = [ "//base/test:test_support" ]
+
+  if (use_ozone) {
+    deps += [
+      "//mojo/core/embedder",
+      "//services/service_manager/public/cpp/test:test_support",
+      "//ui/ozone",
+    ]
+  }
+}
+
+test("gl_unittests") {
+  sources = [
+    "gl_api_unittest.cc",
+    "gl_image_ref_counted_memory_unittest.cc",
+    "gl_image_shared_memory_unittest.cc",
+    "gl_surface_format_unittest.cc",
+    "gl_version_info_unittest.cc",
+    "gpu_timing_unittest.cc",
+  ]
+
+  if (use_egl && !use_ozone) {
+    sources += [ "gl_surface_egl_unittest.cc" ]
+  }
+
+  if (use_egl) {
+    sources += [
+      "egl_api_unittest.cc",
+      "test/egl_initialization_displays_unittest.cc",
+    ]
+  }
+
+  if (use_glx) {
+    sources += [ "glx_api_unittest.cc" ]
+  }
+
+  if (is_mac) {
+    sources += [ "gl_image_io_surface_unittest.cc" ]
+    libs = [ "IOSurface.framework" ]
+  }
+
+  if (is_win) {
+    sources += [
+      "direct_composition_surface_win_unittest.cc",
+      "gl_image_d3d_unittest.cc",
+      "gl_image_dxgi_unittest.cc",
+      "wgl_api_unittest.cc",
+    ]
+  }
+
+  if (is_android) {
+    sources += [ "gl_image_ahardwarebuffer_unittest.cc" ]
+  }
+
+  if (is_desktop_linux) {
+    sources += [ "gl_image_native_pixmap_unittest.cc" ]
+  }
+
+  include_dirs = [ "//third_party/khronos" ]
+
+  deps = [
+    ":gl",
+    ":gl_unittest_utils",
+    ":run_all_unittests",
+    ":test_support",
+    "//base",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//ui/base:base",
+    "//ui/gfx",
+    "//ui/gfx:test_support",
+    "//ui/gfx/geometry",
+    "//ui/gl/init",
+    "//ui/platform_window",
+    "//ui/platform_window:platform_impls",
+  ]
+
+  data_deps = [ "//third_party/mesa_headers" ]
+
+  # TODO(https://crbug.com/789065): this must be moved to Ozone.
+  if (use_x11) {
+    sources += [ "gl_context_glx_unittest.cc" ]
+    deps += [ "//ui/gfx/x" ]
+  }
+}
+
+# We can't run this test on real Chrome OS hardware for Ozone, so new target.
+group("gl_unittests_ozone") {
+  testonly = true
+  data_deps = [ ":gl_unittests" ]
+}
+
+if (is_android) {
+  generate_jar_jni("surface_jni_headers") {
+    classes = [ "android/view/Surface.class" ]
+    always_mangle = true
+  }
+
+  generate_jni("gl_jni_headers") {
+    sources = [
+      "../android/java/src/org/chromium/ui/gl/SurfaceTextureListener.java",
+      "../android/java/src/org/chromium/ui/gl/SurfaceTexturePlatformWrapper.java",
+    ]
+    public_deps = [ ":surface_jni_headers" ]
+  }
+}

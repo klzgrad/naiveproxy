@@ -1,0 +1,121 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ios/templates/merge_plist.gni")
+
+# Template to create an Apple bundle containing a binary file (e.g. .app or
+# .framework bundle).
+#
+# Arguments
+#
+#   - bundle_extension
+#
+#       extension of the bundle (e.g. "app", "framework", ...); must not
+#       include the dot preceding the extension
+#
+#   - bundle_type
+#
+#       four letter code corresponding to the bundle type ("FMWK", "AAPL",
+#       ...); used to fill the "Bundle OS Type code" value in the generated
+#       Info.plist for the bundle
+#
+#   - bundle_identitier
+#
+#       bundle identitifier
+#
+#   - product_type
+#
+#       type of the generated bundle (used for Xcode project)
+#
+#   - output_name (optional)
+#
+#       name of the bundle without the extension; the bundle binary (i.e.
+#       the application or the library) must have the same name; defaults
+#       to $target_name
+#
+#   - display_name (optional)
+#
+#       display name of the bundle (e.g. the name that is displayed to the
+#       user); defaults to $output_name
+#
+#   - info_plist (optional)
+#
+#       path to additional Info.plist to merge into the final bundle Info.plist
+#
+template("ios_binary_bundle") {
+  assert(
+      defined(invoker.bundle_extension),
+      "bundle_extension must be defined for ios_binary_bundle ($target_name)")
+  assert(
+      defined(invoker.bundle_identifier),
+      "bundle_identifier must be defined for ios_binary_bundle ($target_name)")
+  assert(defined(invoker.bundle_type),
+         "bundle_type must be defined for ios_binary_bundle ($target_name)")
+  assert(defined(invoker.product_type),
+         "product_type must be defined for ios_binary_bundle ($target_name)")
+
+  _output_name = target_name
+  if (defined(invoker.output_name)) {
+    _output_name = invoker.output_name
+  }
+
+  _display_name = _output_name
+  if (defined(invoker.display_name)) {
+    _display_name = invoker.display_name
+  }
+
+  _plist_target = target_name + "_plist"
+  _plist_bundle = target_name + "_plist_bundle"
+
+  merge_plist(_plist_target) {
+    substitutions = {
+      CURRENT_PROJECT_VERSION = "1"
+      DEVELOPMENT_LANGUAGE = "en"
+      EXECUTABLE_NAME = "$_output_name"
+      PRODUCT_BUNDLE_IDENTIFIER = invoker.bundle_identifier
+      PRODUCT_BUNDLE_PACKAGE_TYPE = invoker.bundle_type
+      PRODUCT_NAME = "$_display_name"
+    }
+
+    format = "binary1"
+    output = "$target_out_dir/$_plist_target/Info.plist"
+    plists = [
+      get_label_info("//build/config/ios:compiler_plist", "target_out_dir") +
+          "/compiler_plist/Info.plist",
+      "//build/config/ios/resources/Info.plist",
+    ]
+
+    if (defined(invoker.info_plist)) {
+      plists += [ invoker.info_plist ]
+    }
+
+    deps = [ "//build/config/ios:compiler_plist" ]
+  }
+
+  bundle_data(_plist_bundle) {
+    public_deps = [ ":$_plist_target" ]
+    sources = [ "$target_out_dir/$_plist_target/Info.plist" ]
+    outputs = [ "{{bundle_contents_dir}}/Info.plist" ]
+  }
+
+  create_bundle(target_name) {
+    forward_variables_from(invoker,
+                           "*",
+                           [
+                             "display_name",
+                             "output_name",
+                             "bundle_extension",
+                             "bundle_type",
+                           ])
+
+    if (!defined(public_deps)) {
+      public_deps = []
+    }
+    public_deps += [ ":$_plist_bundle" ]
+    bundle_root_dir = "$root_out_dir/$_output_name.${invoker.bundle_extension}"
+    bundle_contents_dir = bundle_root_dir
+    bundle_executable_dir = bundle_contents_dir
+    bundle_resources_dir = bundle_contents_dir
+  }
+}

@@ -1,0 +1,102 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/buildflag_header.gni")
+import("//build/config/jumbo.gni")
+import("//testing/test.gni")
+import("//ui/base/ui_features.gni")
+
+source_set("color_headers") {
+  sources = [
+    "color_id.h",
+    "color_id_macros.inc",
+    "color_mixer.h",
+    "color_provider.h",
+    "color_set.h",
+  ]
+
+  public_deps = [
+    "//base:base",
+    "//skia:skia",
+  ]
+}
+
+jumbo_component("color") {
+  sources = [
+    "color_mixer.cc",
+    "color_provider.cc",
+    "color_provider_manager.cc",
+    "color_provider_manager.h",
+    "color_recipe.cc",
+    "color_recipe.h",
+    "color_set.cc",
+    "color_transform.cc",
+    "color_transform.h",
+  ]
+
+  defines = [ "IS_COLOR_IMPL" ]
+
+  public_deps = [
+    ":color_headers",
+    "//base:base",
+    "//skia:skia",
+    "//ui/gfx:color_utils",
+  ]
+}
+
+test("color_unittests") {
+  testonly = true
+
+  sources = [
+    "color_mixer_unittest.cc",
+    "color_provider_manager_unittest.cc",
+    "color_provider_unittest.cc",
+    "color_recipe_unittest.cc",
+    "color_test_ids.h",
+    "color_transform_unittest.cc",
+    "run_all_unittests.cc",
+  ]
+
+  deps = [
+    ":color",
+    "//base/test:test_support",
+    "//testing/gtest",
+  ]
+}
+
+jumbo_component("mixers") {
+  sources = [
+    "color_mixers.h",
+    "core_default_color_mixer.cc",
+    "ui_color_mixer.cc",
+  ]
+
+  defines = [ "IS_COLOR_IMPL" ]
+
+  deps = [
+    ":color",
+    ":color_headers",
+    "//skia",
+    "//ui/gfx:color_utils",
+  ]
+
+  public_deps = [ "//base" ]
+
+  if (is_chromeos) {
+    sources += [ "cros/native_color_mixers.cc" ]
+  } else if (is_fuchsia) {
+    sources += [ "fuchsia/native_color_mixers.cc" ]
+  } else if (is_linux) {
+    sources += [ "linux/native_color_mixers.cc" ]
+  } else if (is_mac) {
+    libs = [ "AppKit.framework" ]
+    sources += [
+      "mac/native_color_mixers.mm",
+      "mac/scoped_current_nsappearance.h",
+      "mac/scoped_current_nsappearance.mm",
+    ]
+  } else if (is_win) {
+    sources += [ "win/native_color_mixers.cc" ]
+  }
+}

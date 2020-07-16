@@ -1,0 +1,101 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ui.gni")
+
+if (is_mac) {
+  import("//build/config/mac/rules.gni")
+}
+
+# Reset sources_assignment_filter for the BUILD.gn file to prevent
+# regression during the migration of Chromium away from the feature.
+# See docs/no_sources_assignment_filter.md for more information.
+# TODO(crbug.com/1018739): remove this when migration is done.
+set_sources_assignment_filter([])
+
+component("idle") {
+  output_name = "ui_base_idle"
+
+  defines = [ "IS_UI_BASE_IDLE_IMPL" ]
+
+  # All targets in this file are allowed to access any of the headers.
+  friend = [ ":*" ]
+
+  public = [ "idle.h" ]
+
+  deps = [
+    "//base",
+    "//ui/base",
+  ]
+
+  if (is_chromeos) {
+    deps += [ "//chromeos/dbus/session_manager" ]
+  }
+
+  sources = [
+    "idle.cc",
+    "idle.h",
+    "idle_internal.cc",
+    "idle_internal.h",
+  ]
+
+  if (is_chromeos) {
+    sources += [ "idle_chromeos.cc" ]
+  }
+
+  if (is_mac) {
+    sources += [ "idle_mac.mm" ]
+  }
+
+  if (is_win) {
+    sources += [ "idle_win.cc" ]
+  }
+
+  if (is_fuchsia) {
+    sources += [ "idle_fuchsia.cc" ]
+  }
+
+  if (is_linux && !is_chromeos) {
+    sources += [ "idle_linux.cc" ]
+  }
+
+  if (use_x11 && !is_chromeos) {
+    configs += [ "//build/config/linux:xscrnsaver" ]
+    deps += [ "//ui/gfx/x" ]
+    sources += [
+      "idle_query_x11.cc",
+      "idle_query_x11.h",
+      "screensaver_window_finder_x11.cc",
+      "screensaver_window_finder_x11.h",
+    ]
+  }
+
+  if (is_android) {
+    deps += [ "//ui/base:ui_base_jni_headers" ]
+    sources -= [ "idle.cc" ]
+    sources += [ "idle_android.cc" ]
+  }
+
+  if (is_mac) {
+    libs = [
+      "AppKit.framework",
+      "Carbon.framework",
+      "Foundation.framework",
+    ]
+  }
+}
+
+static_library("test_support") {
+  testonly = true
+
+  sources = [
+    "scoped_set_idle_state.cc",
+    "scoped_set_idle_state.h",
+  ]
+
+  deps = [
+    ":idle",
+    "//base",
+  ]
+}

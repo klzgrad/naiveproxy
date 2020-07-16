@@ -1,0 +1,327 @@
+// Copyright 2019 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// Definitions for the probe API exposed by the cros_healthd daemon. This API is
+// normally consumed by the browser.
+
+// NOTE: This mojom should be kept in sync with the copy in Chromium OS's repo
+// in src/platform2/diagnostics/mojo/cros_healthd_probe.mojom.
+
+module chromeos.cros_healthd.mojom;
+
+// An enumeration of CPU architectures.
+[Extensible]
+enum CpuArchitectureEnum {
+  kUnknown,
+  kX86_64,
+};
+
+// An enumeration of each category of information that cros_healthd can report.
+[Extensible]
+enum ProbeCategoryEnum {
+  kBattery,
+  kNonRemovableBlockDevices,
+  kCachedVpdData,
+  kCpu,
+  kTimezone,
+  kMemory,
+  kBacklight,
+  kFan,
+  kStatefulPartition,
+};
+
+// An enumeration of the different categories of errors that can occur when
+// probing telemetry information.
+[Extensible]
+enum ErrorType {
+  // An error reading a system file.
+  kFileReadError,
+  // An error parsing data into a consumable form.
+  kParseError,
+  // An error using a system utility.
+  kSystemUtilityError,
+};
+
+// Structure that contains error information for a telemetry probe.
+struct ProbeError {
+  // The type of error that occurred.
+  ErrorType type;
+  // A debug message with more information about the error. This string is not
+  // intended to be shown to the user.
+  string msg;
+};
+
+// Optional uint64 field. Since primitives numeric types cannot be optional,
+// wrap uint64 in a struct that can be nulled.
+struct UInt64Value {
+  // The value of the uint64.
+  uint64 value;
+};
+
+// Battery probe result. Can either be populated with the BatteryInfo or an
+// error retrieving the information.
+union BatteryResult {
+  // Valid BatteryInfo. Null value if a battery is not present.
+  BatteryInfo? battery_info;
+  // The error that occurred attempting to retrieve the BatteryInfo.
+  ProbeError error;
+};
+
+// Information related to the main battery.
+struct BatteryInfo {
+  // TODO(https://crbug.com/979245): Update "smart" cycle count.
+  int64 cycle_count;
+  // Current battery voltage (V)
+  double voltage_now;
+  // Manufacturer of the battery
+  string vendor;
+  // Serial number of the battery
+  string serial_number;
+  // Design capacity (Ah)
+  double charge_full_design;
+  // Full capacity (Ah)
+  double charge_full;
+  // Desired minimum output voltage (V)
+  double voltage_min_design;
+  // Model name.
+  string model_name;
+  // Current battery charge (Ah)
+  double charge_now;
+  // Current battery current (A)
+  double current_now;
+  // Technology of the battery
+  string technology;
+  // Status of the battery
+  string status;
+
+  // The fields below are optionally included if the main battery is a Smart
+  // Battery as defined in http://sbs-forum.org/specs/sbdat110.pdf.
+
+  // Manufacture date converted to yyyy-mm-dd format.
+  string? manufacture_date;
+  // Temperature in 0.1K. Included when the main battery is a Smart Battery.
+  UInt64Value? temperature;
+};
+
+// Non-removable block device probe result. Can either be populated with the
+// NonRemovableBlockDeviceInfo or an error retrieving the information.
+union NonRemovableBlockDeviceResult {
+  // Valid NonRemovableBlockDeviceInfo.
+  array<NonRemovableBlockDeviceInfo> block_device_info;
+  // The error that occurred attempting to retrieve the
+  // NonRemovableBlockDeviceInfo.
+  ProbeError error;
+};
+
+// Information related to a specific non-removable block device.
+struct NonRemovableBlockDeviceInfo {
+  // The path of this storage on the system. It is useful if caller needs to
+  // correlate with other information.
+  string path;
+  // Exact size of this storage, reported in bytes
+  uint64 size;
+  // Storage type, could be MMC / NVMe / ATA, based on udev subsystem.
+  string type;
+  // Manufacturer ID, 8 bits.
+  uint8 manufacturer_id;
+  // PNM: Product name, ASCII characters for 6 bytes.
+  string name;
+  // PSN: Product serial number, 32 bits
+  uint32 serial;
+};
+
+// Cached VPD probe result. Can either be populated with the CachedVpdInfo or an
+// error retrieving the information.
+union CachedVpdResult {
+  // Valid CachedVpdInfo.
+  CachedVpdInfo vpd_info;
+  // The error that occurred attempting to retrieve the CachedVpdInfo.
+  ProbeError error;
+};
+
+// Cached VPD read from sysfs.
+struct CachedVpdInfo {
+  // Contents of /sys/firmware/vpd/ro/sku_number, if the device supports it.
+  string? sku_number;
+};
+
+// CPU probe result. Can either be populated with the CpuInfo or an error
+// retrieving the information.
+union CpuResult {
+  // Valid CpuInfo.
+  CpuInfo cpu_info;
+  // The error that occurred attempting to retrieve the CpuInfo.
+  ProbeError error;
+};
+
+// Information about the device's CPUs.
+struct CpuInfo {
+  // Number of total threads available.
+  uint32 num_total_threads;
+  // The CPU architecture - it's assumed all of a device's CPUs share an
+  // architecture.
+  CpuArchitectureEnum architecture;
+  // Information about the device's physical CPUs.
+  array<PhysicalCpuInfo> physical_cpus;
+};
+
+// Information related to a particular physical CPU.
+struct PhysicalCpuInfo {
+  // The CPU model name.
+  string model_name;
+  // Logical CPUs corresponding to this physical CPU.
+  array<LogicalCpuInfo> logical_cpus;
+};
+
+// Information related to a particular logical CPU.
+struct LogicalCpuInfo {
+  // The max CPU clock speed in kHz.
+  uint32 max_clock_speed_khz;
+  // Maximum frequency the CPU is allowed to run at, by policy.
+  uint32 scaling_max_frequency_khz;
+  // Current frequency the CPU is running at.
+  uint32 scaling_current_frequency_khz;
+  // Idle time since last boot. USER_HZ can be converted to seconds with the
+  // conversion factor given by sysconf(_SC_CLK_TCK).
+  uint32 idle_time_user_hz;
+  // Information about the logical CPU's time in various C-states.
+  array<CpuCStateInfo> c_states;
+};
+
+// Information about a CPU's C-states.
+struct CpuCStateInfo {
+  // Name of the state.
+  string name;
+  // Time spent in the state since the last reboot, in microseconds.
+  uint64 time_in_state_since_last_boot_us;
+};
+
+// Timezone probe result. Can either be populated with the TimezoneInfo or an
+// error retrieving the information.
+union TimezoneResult {
+  // Valid TimezoneInfo.
+  TimezoneInfo timezone_info;
+  // The error that occurred attempting to retrieve the TimezoneInfo.
+  ProbeError error;
+};
+
+// Timezone information.
+struct TimezoneInfo {
+  // The timezone of the device in POSIX standard.
+  string posix;
+  // The timezone region of the device.
+  string region;
+};
+
+// Memory probe result. Can either be populated with the MemoryInfo or an
+// error retrieving the information.
+union MemoryResult {
+  // Valid MemoryInfo.
+  MemoryInfo memory_info;
+  // The error that occurred attempting to retrieve the MemoryInfo.
+  ProbeError error;
+};
+
+// Memory information.
+struct MemoryInfo {
+  // Total memory, in KiB.
+  uint32 total_memory_kib;
+  // Free memory, in KiB.
+  uint32 free_memory_kib;
+  // Available memory, in KiB.
+  uint32 available_memory_kib;
+  // Number of page faults since the last boot.
+  uint32 page_faults_since_last_boot;
+};
+
+// Backlight probe result. Can either be populated with the BacklightInfo or an
+// error retrieving the information.
+union BacklightResult {
+  // Valid BacklightInfo.
+  array<BacklightInfo> backlight_info;
+  // The error that occurred attempting to retrieve the BacklightInfo.
+  ProbeError error;
+};
+
+// Backlight information.
+struct BacklightInfo {
+  // Path to this backlight on the system. Useful if the caller needs to
+  // correlate with other information.
+  string path;
+  // Maximum brightness for the backlight.
+  uint32 max_brightness;
+  // Current brightness of the backlight, between 0 and max_brightness.
+  uint32 brightness;
+};
+
+// Fan probe result. Can either be populated with the FanInfo or an error
+// retrieving the information
+union FanResult {
+  // A list of valid FanInfo.
+  array<FanInfo> fan_info;
+  // The error that occurred attempting to retrieve the FanInfo.
+  ProbeError error;
+};
+
+// Fan information.
+struct FanInfo {
+  // Fan speed in RPM.
+  uint32 speed_rpm;
+};
+
+// Stateful partition probe result. Can either be populated with a valid
+// StatefulPartitionInfo or an error retrieving the information.
+union StatefulPartitionResult {
+  // A valid StatefulPartitionInfo.
+  StatefulPartitionInfo partition_info;
+  // The error that occurred attempting to retrieve the StatefulPartitionInfo.
+  ProbeError error;
+};
+
+// Stateful partition info
+struct StatefulPartitionInfo {
+  // Available space for user data storage in the device in bytes.
+  uint64 available_space;
+  // Total space for user data storage in the device in bytes.
+  uint64 total_space;
+};
+
+// A collection of all the device's telemetry information that cros_healthd is
+// capable of reporting. Note that every field in TelemetryInfo is nullable, and
+// the response for a particular ProbeTelemetryInfo request will only contain
+// fields corresponding to the categories passed to the ProbeTelemetryInfo
+// request. All optional array members will be null if cros_healthd did not
+// attempt to fetch that information, and size zero if cros_healthd did attempt
+// to fetch that information, but was unable to.
+struct TelemetryInfo {
+  // Information about the device's main battery. Only present when kBattery was
+  // included in the categories input to ProbeTelemetryInfo.
+  BatteryResult? battery_result;
+  // Information about all of the device's non-removable block devices. Only
+  // present when kNonRemovableBlockDevices was included in the categories input
+  // to ProbeTelemetryInfo.
+  NonRemovableBlockDeviceResult? block_device_result;
+  // Only present when kCachedVpdData was included in the categories input to
+  // ProbeTelemetryInfo.
+  CachedVpdResult? vpd_result;
+  // Information about each of the device's CPUs. Only present when kCpu was
+  // included in the categories input to ProbeTelemetryInfo.
+  CpuResult? cpu_result;
+  // Information about the device's timezone. Only present when kTimezone was
+  // included in the categories input to ProbeTelemetryInfo.
+  TimezoneResult? timezone_result;
+  // Information about the system's memory. Only present when kMemory was
+  // included in the categories input to ProbeTelemetryInfo.
+  MemoryResult? memory_result;
+  // Information about all of the device's backlights. Only present when
+  // kBacklight was included in the categories input to ProbeTelemetryInfo.
+  BacklightResult? backlight_result;
+  // Information about each of the device's fans. Only present when kFan was
+  // included in the categories input to ProbeTelemetryInfo.
+  FanResult? fan_result;
+  // Information about the stateful partition. Only present when
+  // kStatefulPartition was included in the categories input to
+  // ProbeTelemetryInfo.
+  StatefulPartitionResult? stateful_partition_result;
+};

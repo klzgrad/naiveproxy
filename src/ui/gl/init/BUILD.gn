@@ -1,0 +1,83 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/jumbo.gni")
+import("//build/config/ui.gni")
+import("//ui/gl/features.gni")
+
+jumbo_component("init") {
+  output_name = "gl_init"
+
+  public = [
+    "create_gr_gl_interface.h",
+    "gl_factory.h",
+  ]
+
+  sources = [
+    "create_gr_gl_interface.cc",
+    "create_gr_gl_interface.h",
+    "gl_factory.cc",
+    "gl_factory.h",
+    "gl_init_export.h",
+    "gl_initializer.h",
+  ]
+  defines = [ "GL_INIT_IMPLEMENTATION" ]
+
+  deps = [
+    "//base",
+    "//ui/gfx",
+    "//ui/gl:buildflags",
+  ]
+
+  public_deps = [ "//ui/gl" ]
+
+  if (is_android) {
+    sources += [
+      "gl_factory_android.cc",
+      "gl_initializer_android.cc",
+    ]
+
+    if (use_static_angle) {
+      deps += [ "//third_party/angle:libEGL_static" ]
+    }
+  } else if (is_win && !use_ozone) {
+    sources += [
+      "gl_factory_win.cc",
+      "gl_initializer_win.cc",
+    ]
+
+    libs = [ "dwmapi.lib" ]
+    ldflags = [ "/DELAYLOAD:dwmapi.dll" ]
+  } else if (is_mac) {
+    sources += [
+      "gl_factory_mac.cc",
+      "gl_initializer_mac.cc",
+    ]
+
+    libs = [ "OpenGL.framework" ]
+  } else if (use_x11) {
+    sources += [
+      "gl_display_egl_util_x11.cc",
+      "gl_display_egl_util_x11.h",
+      "gl_factory_x11.cc",
+      "gl_initializer_x11.cc",
+    ]
+
+    deps += [
+      "//ui/base/x",
+      "//ui/base/x:gl",
+      "//ui/gfx/x",
+    ]
+  } else if (use_ozone) {
+    sources += [
+      "gl_display_egl_util_ozone.cc",
+      "gl_display_egl_util_ozone.h",
+      "gl_factory_ozone.cc",
+      "gl_initializer_ozone.cc",
+      "ozone_util.h",
+    ]
+
+    deps += [ "//ui/ozone" ]
+  }
+}

@@ -1,0 +1,82 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# This file contains the definition of the template absl_source_set which
+# should be the only type of target needed in abseil's BUILD.gn files.
+# This template will correctly set "configs" and "public_configs" in order
+# to correctly compile abseil in Chromium.
+#
+# Targets that set visibility should set it to something more restrictive than
+# `absl_visibility` (defined below).
+#
+# Usage:
+# Most of the times its usage will be similar to the example below but all
+# the arguments avilable in source_set are also available for absl_source_set.
+#
+#  absl_source_set("foo") {
+#    sources = [ "foo.cc" ]
+#    public = [ "foo.h" ]
+#    deps = [ ":bar" ]
+#  }
+
+import("//build_overrides/build.gni")
+
+# Usage of Abseil in Chromium is guarded by an explicit opt-in list, before
+# adding projects to this list please reach out to cxx@chromium.org and CC:
+# - https://cs.chromium.org/chromium/src/third_party/abseil-cpp/OWNERS
+#
+# More information can be found at:
+# https://docs.google.com/document/d/1DgS1-A3rzboTLjpf4m1sqkJgWjnY_Ru2dokk1X1vBDU
+declare_args() {
+  # Additional targets that can depend on absl.
+  # ** DISCLAIMER **
+  #
+  # Using "additional_absl_clients" is highly discouraged because it will break
+  # the component build since Abseil doesn't have export annotations and WebRTC
+  # is already depending on it. Any CL that use "additional_absl_clients" will
+  # have a really high probability of being reverted.
+  additional_absl_clients = []
+}
+assert(!is_component_build || additional_absl_clients == [])
+
+_chromium_absl_clients = [
+  "//libassistant/*",
+  "//third_party/webrtc/*",
+  "//third_party/abseil-cpp/*",
+  "//third_party/googletest:gtest",
+  "//third_party/shell-encryption/*",
+  "//third_party/private_membership/*",
+]
+
+absl_visibility = _chromium_absl_clients + additional_absl_clients
+
+template("absl_source_set") {
+  source_set(target_name) {
+    forward_variables_from(invoker, "*")
+    configs -= [ "//build/config/compiler:chromium_code" ]
+    configs += [
+      "//build/config/compiler:no_chromium_code",
+      "//third_party/abseil-cpp:absl_default_cflags_cc",
+    ]
+
+    if (!defined(public_configs)) {
+      public_configs = []
+    }
+    public_configs += [ "//third_party/abseil-cpp:absl_include_config" ]
+
+    # Usage of Abseil in Chromium is guarded by an explicit opt-in list, before
+    # adding projects to this list please reach out to cxx@chromium.org and CC:
+    # - https://cs.chromium.org/chromium/src/third_party/abseil-cpp/OWNERS
+    #
+    # More information can be found at:
+    # https://docs.google.com/document/d/1DgS1-A3rzboTLjpf4m1sqkJgWjnY_Ru2dokk1X1vBDU
+    if (!defined(visibility)) {
+      if (build_with_chromium) {
+        visibility = absl_visibility
+      } else {
+        visibility = [ "*" ]
+      }
+    }
+  }
+}

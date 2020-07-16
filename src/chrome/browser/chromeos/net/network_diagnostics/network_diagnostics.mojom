@@ -1,0 +1,72 @@
+// Copyright 2020 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module chromeos.network_diagnostics.mojom;
+
+// Each routine can result in one of the possible verdicts.
+[Extensible]
+enum RoutineVerdict {
+  // Routine ran successfully and no connectivity problem found.
+  kNoProblem,
+  // Routine ran successfully and connectivity problem found.
+  kProblem,
+  // Routine has not been run.
+  kNotRun,
+};
+
+// Problems related to the SignalStrength routine.
+[Extensible]
+enum SignalStrengthProblem {
+  kSignalNotFound,
+  kWeakSignal,
+};
+
+// Problems related to the GatewayCanBePinged routine.
+[Extensible]
+enum GatewayCanBePingedProblem {
+  // All gateways are unreachable, hence cannot be pinged.
+  kUnreachableGateway,
+  // The default network cannot be pinged.
+  kFailedToPingDefaultNetwork,
+  // The default network has a latency above the threshold.
+  kDefaultNetworkAboveLatencyThreshold,
+  // One or more of the non-default networks has failed pings.
+  kUnsuccessfulNonDefaultNetworksPings,
+  // One of more of the non-default networks has a latency above the threshold.
+  kNonDefaultNetworksAboveLatencyThreshold,
+};
+
+// Messages related to the HasSecureWiFiConnection routine.
+[Extensible]
+enum HasSecureWiFiConnectionProblem {
+  kSecurityTypeNone,
+  kSecurityTypeWep8021x,
+  kSecurityTypeWepPsk,
+  kUnknownSecurityType,
+};
+
+// This interface is to be used by any clients that need to run specific
+// network-related diagnostics. Expected clients of this interface are
+// NetworkHealth, cros_healthd, and a connectivity diagnostics Web UI (to name
+// a few). The bound implementation is intended to live in the browser process.
+interface NetworkDiagnosticsRoutines {
+  // Tests whether the device is connected to a LAN. It is possible that the
+  // device may be trapped in a captive portal yet pass this test successfully.
+  // Captive portal checks are done separately and are outside of the scope of
+  // this routine.
+  LanConnectivity() => (RoutineVerdict verdict);
+
+  // Tests whether there is an acceptable signal strength on wireless networks.
+  SignalStrength() => (RoutineVerdict verdict,
+      array<SignalStrengthProblem> problems);
+
+  // Tests whether the gateway of connected networks is pingable.
+  GatewayCanBePinged() => (RoutineVerdict verdict,
+      array<GatewayCanBePingedProblem> problems);
+
+  // Tests whether the WiFi connection is secure. Note that if WiFi is not
+  // connected, the routine will result in a |kNotRun| verdict.
+  HasSecureWiFiConnection() => (RoutineVerdict verdict,
+      array<HasSecureWiFiConnectionProblem> problems);
+};
