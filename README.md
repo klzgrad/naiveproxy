@@ -9,7 +9,7 @@ The following traffic attacks are mitigated in NaïveProxy:
 * [Active probing](https://ensa.fi/active-probing/): defeated by *application fronting*, i.e. hiding proxy servers behind a commonly used frontend with application-layer routing.
 * Length-based traffic analysis: mitigated by length padding.
 
-The code consists of a patch series morphed and rebased onto every new Chrome release. It's normal to see the latest commit being old, while most recent activities happen in [project releases](https://github.com/klzgrad/naiveproxy/releases).
+The code consists of a patch series morphed and rebased onto every new Chrome release.
 
 ## Architecture
 
@@ -31,7 +31,7 @@ Note: On Linux libnss3 must be installed before using the prebuilt binary.
 
 ## Setup
 
-On the server, build and run Caddy v2 with naïve fork of forwardproxy:
+On the server, build and run Caddy v2 with naïve fork of forwardproxy: (Golang v1.14+ required)
 ```sh
 git clone -b naive https://github.com/klzgrad/forwardproxy
 go get -u github.com/caddyserver/xcaddy/cmd/xcaddy
