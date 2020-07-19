@@ -35,7 +35,7 @@ On the server, build and run Caddy v2 with naïve fork of forwardproxy: (Golang 
 ```sh
 git clone -b naive https://github.com/klzgrad/forwardproxy
 go get -u github.com/caddyserver/xcaddy/cmd/xcaddy
-~/go/bin/xcaddy build --with github.com/caddyserver/forwardproxy=./forwardproxy
+~/go/bin/xcaddy build --with github.com/caddyserver/forwardproxy=$PWD/forwardproxy
 sudo setcap cap_net_bind_service=+ep ./caddy
 ./caddy run --config caddy.json
 ```
