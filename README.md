@@ -159,3 +159,7 @@ The browser will introduce an extra 1RTT delay during proxied connection setup b
 Thus, traffic obfuscation, HTTP Fast CONNECT, and auto-authentication are the crucial last 20% provided by NaïveProxy. These can't be really achieved inside Chrome as extensions/apps because they don't have access to sockets. NaïveProxy extracts Chromium's network stack without all the other baggage to build a small binary (4% of a full Chrome build).
 
 But if you don't need the best performance, and unobfuscated TLS-in-TLS somehow still works for you, you can just keep using Caddy proxy with your browser.
+
+### Why no "CDN support"?
+
+Take Cloudflare for example. https://www.cloudflare.com/terms/ says: "Use of the Service for serving video (unless purchased separately as a Paid Service) or a disproportionate percentage of pictures, audio files, or other non-HTML content, is prohibited." Proxying traffic is definitely prohibited by the terms in this context.
