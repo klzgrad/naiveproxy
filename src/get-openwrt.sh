@@ -11,6 +11,9 @@ fi
 mkdir -p $sysroot
 
 SDK_PATH=openwrt-sdk-$release-$target-${subtarget}_gcc-${gcc_ver}_${abi}.Linux-x86_64
+if [ "$target" = bcm53xx ]; then
+  SDK_PATH=openwrt-sdk-$release-${target}_gcc-${gcc_ver}_${abi}.Linux-x86_64
+fi
 SDK_URL=https://downloads.openwrt.org/releases/$release/targets/$target/$subtarget/$SDK_PATH.tar.xz
 rm -rf $SDK_PATH
 curl $SDK_URL | tar xJf -
