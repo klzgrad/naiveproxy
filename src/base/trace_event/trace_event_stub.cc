@@ -6,6 +6,7 @@
 
 #include <string>
 
+#include "base/trace_event/memory_usage_estimator.h"
 #include "base/trace_event/trace_event_stub.h"
 
 namespace base {
@@ -16,6 +17,14 @@ ConvertableToTraceFormat::~ConvertableToTraceFormat() = default;
 void TracedValue::AppendAsTraceFormat(std::string* out) const {}
 
 MemoryDumpProvider::~MemoryDumpProvider() = default;
+
+MemoryDumpManager g_stub_memory_dump_manager;
+MemoryDumpManager* MemoryDumpManager::GetInstance() {
+  return &g_stub_memory_dump_manager;
+}
+
+template size_t EstimateMemoryUsage(const std::string&);
+template size_t EstimateMemoryUsage(const string16&);
 
 }  // namespace trace_event
 }  // namespace base
