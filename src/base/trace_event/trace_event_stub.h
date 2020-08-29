@@ -10,7 +10,10 @@
 #include <string>
 
 #include "base/base_export.h"
+#include "base/check.h"
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/string_piece.h"
 #include "base/trace_event/common/trace_event_common.h"
 #include "base/trace_event/memory_allocator_dump_guid.h"
@@ -168,6 +171,51 @@ class BASE_EXPORT MemoryDumpProvider {
   MemoryDumpProvider() = default;
 
   DISALLOW_COPY_AND_ASSIGN(MemoryDumpProvider);
+};
+
+class BASE_EXPORT MemoryAllocatorDump {
+ public:
+  static constexpr char* kNameSize = nullptr;
+  static constexpr char* kNameObjectCount = nullptr;
+  static constexpr char* kUnitsBytes = nullptr;
+  static constexpr char* kUnitsObjects = nullptr;
+  static constexpr char* kTypeScalar = nullptr;
+  static constexpr char* kTypeString = nullptr;
+  void AddScalar(const char* name, const char* units, uint64_t value) {}
+  void AddString(const char* name,
+                 const char* units,
+                 const std::string& value) {}
+  const std::string& absolute_name() const { return absolute_name_; }
+  const MemoryAllocatorDumpGuid& guid() const { return guid_; }
+
+ private:
+  const std::string absolute_name_;
+  MemoryAllocatorDumpGuid guid_;
+};
+
+class BASE_EXPORT ProcessMemoryDump {
+ public:
+  MemoryAllocatorDump* CreateAllocatorDump(const std::string& absolute_name) {
+    CHECK(false);
+    return nullptr;
+  }
+  MemoryAllocatorDump* GetAllocatorDump(
+      const std::string& absolute_name) const {
+    CHECK(false);
+    return nullptr;
+  }
+  void AddOwnershipEdge(const MemoryAllocatorDumpGuid& source,
+                        const MemoryAllocatorDumpGuid& target) {}
+};
+
+class BASE_EXPORT MemoryDumpManager {
+ public:
+  static MemoryDumpManager* GetInstance();
+  void RegisterDumpProvider(MemoryDumpProvider* mdp,
+                            const char* name,
+                            scoped_refptr<SingleThreadTaskRunner> task_runner) {
+  }
+  void UnregisterDumpProvider(MemoryDumpProvider* mdp) {}
 };
 
 }  // namespace trace_event
