@@ -5,6 +5,8 @@
 #ifndef BASE_TRACE_EVENT_TRACE_EVENT_H_
 #define BASE_TRACE_EVENT_TRACE_EVENT_H_
 
+#include "base/trace_event/trace_event_stub.h"
+#if 0
 // This header file defines implementation details of how the trace macros in
 // trace_event_common.h collect and store trace events. Anything not
 // implementation-specific should go in trace_event_common.h instead of here.
@@ -793,4 +795,5 @@ class TraceScopedTrackableObject {
 }  // namespace trace_event
 }  // namespace base
 
+#endif
 #endif  // BASE_TRACE_EVENT_TRACE_EVENT_H_
