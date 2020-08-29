@@ -1,0 +1,146 @@
+// Copyright 2020 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// cros_healthd daemon implements ProbeService interface, but since callers are
+// third-party Telemetry Extensions, we have PII filtering and data post
+// processing service in the middle that lives in Chrome.
+
+// Currently we expose this interface to WebUI only in Chrome OS and on
+// non-official builds so that we can prototype Telemetry Extension, while we
+// decide how to expose API to third parties.
+
+// This Mojo interface will go through security review before shipping.
+
+// This is a subset of the cros_healthd probe service interface which is
+// located in src/platform2/diagnostics/mojo/cros_healthd_probe.mojom.
+//
+// What is different:
+//   1) Introduced DoubleValue and Int64Value structs since numeric primitives
+//      are not nullable in Mojo.
+//   2) Make all fields in BatteryInfo optional in case we want to filter them
+//      out later.
+
+module chromeos.health.mojom;
+
+// Interface for getting device telemetry information.
+interface ProbeService {
+  // Returns telemetry information for the desired categories.
+  //
+  // The request:
+  // * |categories| - list of each of the categories that ProbeTelemetryInfo
+  //                  should return information for.
+  //
+  // The response:
+  // * |telemetry_info| - information for each of the requested categories. Only
+  //                      the fields corresponding to the requested categories
+  //                      will be non-null.
+  ProbeTelemetryInfo(array<ProbeCategoryEnum> categories)
+      => (TelemetryInfo telemetry_info);
+};
+
+// An enumeration of each category of information that cros_healthd can report.
+[Extensible]
+enum ProbeCategoryEnum {
+  kBattery,
+};
+
+// An enumeration of the different categories of errors that can occur when
+// probing telemetry information.
+[Extensible]
+enum ErrorType {
+  // An error reading a system file.
+  kFileReadError,
+  // An error parsing data into a consumable form.
+  kParseError,
+  // An error using a system utility.
+  kSystemUtilityError,
+};
+
+// Structure that contains error information for a telemetry probe.
+struct ProbeError {
+  // The type of error that occurred.
+  ErrorType type;
+  // A debug message with more information about the error. This string is not
+  // intended to be shown to the user.
+  string msg;
+};
+
+// Optional double field. Since primitives numeric types cannot be optional,
+// wrap double in a struct that can be nulled.
+struct DoubleValue {
+  // The value of the double.
+  double value;
+};
+
+// Optional int64 field. Since primitives numeric types cannot be optional,
+// wrap int64 in a struct that can be nulled.
+struct Int64Value {
+  // The value of the int64.
+  int64 value;
+};
+
+// Optional uint64 field. Since primitives numeric types cannot be optional,
+// wrap uint64 in a struct that can be nulled.
+struct UInt64Value {
+  // The value of the uint64.
+  uint64 value;
+};
+
+// Information related to the main battery.
+struct BatteryInfo {
+  // Cycle count.
+  Int64Value? cycle_count;
+  // Current battery voltage (V)
+  DoubleValue? voltage_now;
+  // Manufacturer of the battery
+  string? vendor;
+  // Serial number of the battery
+  string? serial_number;
+  // Design capacity (Ah)
+  DoubleValue? charge_full_design;
+  // Full capacity (Ah)
+  DoubleValue? charge_full;
+  // Desired minimum output voltage (V)
+  DoubleValue? voltage_min_design;
+  // Model name.
+  string? model_name;
+  // Current battery charge (Ah)
+  DoubleValue? charge_now;
+  // Current battery current (A)
+  DoubleValue? current_now;
+  // Technology of the battery
+  string? technology;
+  // Status of the battery
+  string? status;
+
+  // The fields below are optionally included if the main battery is a Smart
+  // Battery as defined in http://sbs-forum.org/specs/sbdat110.pdf.
+
+  // Manufacture date converted to yyyy-mm-dd format.
+  string? manufacture_date;
+  // Temperature in 0.1K. Included when the main battery is a Smart Battery.
+  UInt64Value? temperature;
+};
+
+// Battery probe result. Can either be populated with the BatteryInfo or an
+// error retrieving the information.
+union BatteryResult {
+  // Valid BatteryInfo. Null value if a battery is not present.
+  BatteryInfo? battery_info;
+  // The error that occurred attempting to retrieve the BatteryInfo.
+  ProbeError error;
+};
+
+// A collection of all the device's telemetry information that cros_healthd is
+// capable of reporting. Note that every field in TelemetryInfo is nullable, and
+// the response for a particular ProbeTelemetryInfo request will only contain
+// fields corresponding to the categories passed to the ProbeTelemetryInfo
+// request. All optional array members will be null if cros_healthd did not
+// attempt to fetch that information, and size zero if cros_healthd did attempt
+// to fetch that information, but was unable to.
+struct TelemetryInfo {
+  // Information about the device's main battery. Only present when kBattery was
+  // included in the categories input to ProbeTelemetryInfo.
+  BatteryResult? battery_result;
+};

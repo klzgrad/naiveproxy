@@ -1,0 +1,67 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//third_party/closure_compiler/compile_js.gni")
+import("//tools/grit/grit_rule.gni")
+
+js_type_check("closure_compile") {
+  uses_js_modules = true
+  deps = [
+    ":omnibox",
+    ":omnibox_element",
+    ":omnibox_input",
+    ":omnibox_output",
+    ":omnibox_popup",
+  ]
+}
+
+js_library("omnibox") {
+  deps = [
+    ":omnibox_input",
+    ":omnibox_output",
+    "//chrome/browser/ui/webui/omnibox:mojo_bindings_js_library_for_compile",
+    "//ui/webui/resources/js:cr.m",
+    "//ui/webui/resources/js:load_time_data.m",
+    "//ui/webui/resources/js:util.m",
+  ]
+}
+
+js_library("omnibox_element") {
+  deps = [ "//ui/webui/resources/js:assert.m" ]
+}
+
+js_library("omnibox_input") {
+  deps = [ ":omnibox_element" ]
+}
+
+js_library("omnibox_output") {
+  deps = [
+    ":omnibox_element",
+    ":omnibox_input",
+    "//chrome/browser/ui/webui/omnibox:mojo_bindings_js_library_for_compile",
+  ]
+  externs_list = [ "$externs_path/pending.js" ]
+}
+
+js_library("omnibox_popup") {
+  deps = [
+    "//chrome/browser/ui/webui/omnibox:mojo_bindings_js_library_for_compile",
+    "//ui/webui/resources/cr_components/omnibox:cr_autocomplete_match_list",
+  ]
+}
+
+grit("resources") {
+  source = "resources.grd"
+
+  outputs = [
+    "grit/omnibox_resources.h",
+    "omnibox_resources.pak",
+  ]
+  output_dir = "$root_gen_dir/chrome"
+  grit_flags = [
+    "-E",
+    "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
+  ]
+  deps = [ "//chrome/browser/ui/webui/omnibox:mojo_bindings_js" ]
+}

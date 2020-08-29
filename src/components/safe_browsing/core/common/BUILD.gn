@@ -1,0 +1,125 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/features.gni")
+import("//components/safe_browsing/buildflags.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
+
+static_library("safe_browsing_prefs") {
+  sources = [
+    "safe_browsing_prefs.cc",
+    "safe_browsing_prefs.h",
+  ]
+
+  deps = [
+    "//base:base",
+    "//components/pref_registry:pref_registry",
+    "//components/prefs",
+    "//components/safe_browsing/core:features",
+    "//components/safe_browsing/core/common:thread_utils",
+    "//net:net",
+  ]
+}
+
+source_set("safe_browsing_policy_handler") {
+  sources = [
+    "safe_browsing_policy_handler.cc",
+    "safe_browsing_policy_handler.h",
+  ]
+
+  deps = [
+    ":safe_browsing_prefs",
+    "//base:base",
+    "//components/policy:generated",
+    "//components/policy/core/browser",
+    "//components/prefs",
+    "//components/strings:components_strings_grit",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "safe_browsing_policy_handler_unittest.cc",
+    "safe_browsing_prefs_unittest.cc",
+  ]
+  deps = [
+    ":safe_browsing_policy_handler",
+    ":safe_browsing_prefs",
+    ":test_support",
+    "//base:base",
+    "//base/test:test_support",
+    "//components/policy/core/browser:browser",
+    "//components/policy/core/browser:test_support",
+    "//components/prefs:test_support",
+    "//components/safe_browsing/core:features",
+    "//testing/gtest",
+    "//url:url",
+  ]
+}
+
+source_set("common") {
+  sources = [
+    "safebrowsing_constants.cc",
+    "safebrowsing_constants.h",
+    "safebrowsing_switches.cc",
+    "safebrowsing_switches.h",
+    "utils.cc",
+    "utils.h",
+  ]
+
+  deps = [
+    "//base",
+    "//components/policy/core/browser:browser",
+    "//components/prefs:prefs",
+    "//components/safe_browsing/core:csd_proto",
+    "//components/safe_browsing/core:features",
+    "//crypto:crypto",
+    "//ipc",
+    "//net",
+    "//url/ipc:url_ipc",
+  ]
+
+  public_deps = [ ":interfaces" ]
+
+  if (!is_ios) {
+    sources += [ "//components/safe_browsing/content/common/safebrowsing_constants_content.cc" ]
+    deps += [ "//third_party/blink/public/mojom:mojom_platform_headers" ]
+  }
+}
+
+mojom("interfaces") {
+  sources = [ "safe_browsing_url_checker.mojom" ]
+
+  public_deps = [ "//url/mojom:url_mojom_gurl" ]
+}
+
+source_set("thread_utils") {
+  sources = [ "thread_utils.h" ]
+
+  deps = [ "//base" ]
+
+  if (is_ios) {
+    sources += [ "//components/safe_browsing/ios/thread_utils_ios.cc" ]
+    deps += [ "//ios/web/public/thread" ]
+  } else {
+    sources += [ "//components/safe_browsing/content/common/thread_utils.cc" ]
+    deps += [ "//content/public/browser" ]
+  }
+}
+
+source_set("test_support") {
+  testonly = true
+  sources = [ "test_task_environment.h" ]
+  deps = [ "//base/test:test_support" ]
+
+  if (is_ios) {
+    sources += [ "//components/safe_browsing/ios/test_task_environment_ios.cc" ]
+    deps += [ "//ios/web/public/test" ]
+  } else {
+    sources +=
+        [ "//components/safe_browsing/content/common/test_task_environment.cc" ]
+    deps += [ "//content/test:test_support" ]
+  }
+}

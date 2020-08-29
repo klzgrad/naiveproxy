@@ -1,0 +1,110 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/android/config.gni")
+import("//build/config/android/rules.gni")
+
+android_library("safe_browsing_java") {
+  deps = [
+    "//base:base_java",
+    "//base:jni_java",
+    "//third_party/android_deps:androidx_annotation_annotation_java",
+  ]
+  annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
+  sources = [
+    "java/src/org/chromium/components/safe_browsing/SafeBrowsingApiBridge.java",
+    "java/src/org/chromium/components/safe_browsing/SafeBrowsingApiHandler.java",
+  ]
+}
+
+generate_jni("jni_headers") {
+  sources = [
+    "java/src/org/chromium/components/safe_browsing/SafeBrowsingApiBridge.java",
+  ]
+}
+
+# This target is for the mobile version.
+group("safe_browsing_mobile") {
+  deps = [
+    ":remote_database_manager",
+    ":safe_browsing_api_handler",
+    ":safe_browsing_api_handler_util",
+    "//components/safe_browsing/core/db:safe_browsing_db_shared",
+  ]
+}
+
+static_library("remote_database_manager") {
+  sources = [
+    "remote_database_manager.cc",
+    "remote_database_manager.h",
+  ]
+  deps = [
+    ":safe_browsing_api_handler",
+    "//base:base",
+    "//components/safe_browsing/core/db:database_manager",
+    "//components/safe_browsing/core/db:v4_get_hash_protocol_manager",
+    "//components/safe_browsing/core/db:v4_protocol_manager_util",
+    "//components/variations",
+    "//content/public/browser",
+    "//net",
+    "//url",
+  ]
+}
+
+static_library("safe_browsing_api_handler_util") {
+  sources = [
+    "safe_browsing_api_handler_util.cc",
+    "safe_browsing_api_handler_util.h",
+  ]
+  deps = [
+    "//base",
+    "//components/safe_browsing/core/db:metadata_proto",
+    "//components/safe_browsing/core/db:util",
+  ]
+}
+
+source_set("safe_browsing_api_handler") {
+  sources = [
+    "safe_browsing_api_handler.cc",
+    "safe_browsing_api_handler.h",
+  ]
+  deps = [
+    ":safe_browsing_api_handler_util",
+    "//base",
+    "//components/safe_browsing/core:features",
+    "//components/safe_browsing/core/db:util",
+    "//content/public/browser:browser",
+    "//url",
+  ]
+
+  if (is_android) {
+    deps += [ ":jni_headers" ]
+    sources += [
+      "safe_browsing_api_handler_bridge.cc",
+      "safe_browsing_api_handler_bridge.h",
+    ]
+  }
+}
+
+source_set("unit_tests_mobile") {
+  testonly = true
+  sources = [
+    "remote_database_manager_unittest.cc",
+    "safe_browsing_api_handler_unittest.cc",
+  ]
+  deps = [
+    ":remote_database_manager",
+    ":safe_browsing_api_handler",
+    ":safe_browsing_api_handler_util",
+    "//base",
+    "//components/safe_browsing/core/db:metadata_proto",
+    "//components/safe_browsing/core/db:unit_tests_shared",
+    "//components/safe_browsing/core/db:util",
+    "//components/safe_browsing/core/db:v4_test_util",
+    "//components/variations",
+    "//content/test:test_support",
+    "//testing/gtest",
+    "//url",
+  ]
+}

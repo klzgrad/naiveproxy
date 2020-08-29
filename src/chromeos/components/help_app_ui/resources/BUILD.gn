@@ -1,0 +1,29 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//third_party/closure_compiler/compile_js.gni")
+
+assert(is_chromeos, "Help App is Chrome OS only")
+
+# Note we compile with reportUnknownTypes while it works, but if dependencies
+# get more complex, we should remove it and only enable in developer builds.
+js_type_check("closure_compile") {
+  closure_flags = default_closure_args + [
+                    "jscomp_error=strictCheckTypes",
+                    "jscomp_error=reportUnknownTypes",
+                    "language_in=ECMASCRIPT_2018",
+
+                    # TODO(crbug/1048973): Remove these when the mojo bindings
+                    # js is updated to pass a closure compile check.
+                    "hide_warnings_for=mojo/public/js/",
+                    "hide_warnings_for=chromeos/components/help_app_ui/help_app_ui.mojom-lite-for-compile.js",
+                  ]
+  deps = [ ":browser_proxy" ]
+}
+
+js_library("browser_proxy") {
+  deps = [
+    "//chromeos/components/help_app_ui:mojo_bindings_js_library_for_compile",
+  ]
+}

@@ -1,0 +1,125 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/jumbo.gni")
+import("//build/config/ui.gni")
+import("//testing/test.gni")
+
+# Reset sources_assignment_filter for the BUILD.gn file to prevent
+# regression during the migration of Chromium away from the feature.
+# See docs/no_sources_assignment_filter.md for more information.
+# TODO(crbug.com/1018739): remove this when migration is done.
+set_sources_assignment_filter([])
+
+jumbo_component("snapshot") {
+  sources = [
+    "screenshot_grabber.cc",
+    "screenshot_grabber.h",
+    "snapshot.cc",
+    "snapshot.h",
+  ]
+
+  if (is_android) {
+    sources += [ "snapshot_android.cc" ]
+  }
+
+  if (is_mac) {
+    sources += [ "snapshot_mac.mm" ]
+  }
+
+  if (is_win) {
+    sources += [
+      "snapshot_win.cc",
+      "snapshot_win.h",
+    ]
+  }
+
+  if (is_ios) {
+    sources += [ "snapshot_ios.mm" ]
+  }
+
+  defines = [ "SNAPSHOT_IMPLEMENTATION" ]
+
+  deps = [
+    ":snapshot_export",
+    "//base",
+    "//components/viz/common",
+    "//skia",
+    "//ui/base",
+    "//ui/display",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+  ]
+
+  if (is_android) {
+    deps += [ "//ui/android" ]
+  }
+
+  if (use_aura || is_android) {
+    sources += [
+      "snapshot_async.cc",
+      "snapshot_async.h",
+    ]
+    deps += [
+      "//cc",
+      "//gpu/command_buffer/common",
+    ]
+  }
+
+  if (use_aura) {
+    sources += [
+      "snapshot_aura.cc",
+      "snapshot_aura.h",
+    ]
+    deps += [
+      "//ui/aura",
+      "//ui/compositor",
+    ]
+  }
+
+  if (is_mac) {
+    libs = [
+      "AppKit.framework",
+      "CoreGraphics.framework",
+    ]
+  }
+}
+
+jumbo_source_set("snapshot_export") {
+  sources = [ "snapshot_export.h" ]
+  visibility = [ ":*" ]
+}
+
+test("snapshot_unittests") {
+  sources = [ "test/run_all_unittests.cc" ]
+
+  if (is_mac) {
+    sources += [ "snapshot_mac_unittest.mm" ]
+  }
+
+  deps = [
+    ":snapshot",
+    "//base",
+    "//base/test:test_support",
+    "//mojo/core/embedder",
+    "//skia",
+    "//testing/gtest",
+    "//ui/base",
+    "//ui/base:test_support",
+    "//ui/compositor:test_support",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+    "//ui/gl",
+  ]
+
+  if (use_aura) {
+    sources += [ "snapshot_aura_unittest.cc" ]
+    deps += [
+      "//ui/aura:test_support",
+      "//ui/compositor",
+      "//ui/compositor:test_support",
+      "//ui/wm",
+    ]
+  }
+}

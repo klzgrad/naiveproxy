@@ -1,0 +1,61 @@
+// Copyright 2019 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module network.mojom;
+
+import "url/mojom/url.mojom";
+
+// Reports potential COOP violations. Implemented in the browser process.
+// TODO(ahemery, pmeuleman): Add extra coop breakage cases as listed in
+// https://docs.google.com/document/d/1zWqwI8PFrezwQpBSejIMUfdtsIYl9-h8epasdrDXVIM/edit
+interface CrossOriginOpenerPolicyReporter {
+
+  // When COOP triggers a browsing context group swap during a navigation, we
+  // lose the existing opener, which can create page breakage. We report such
+  // cases using this function.
+  // |is_reported_from_document| is true if the report is coming from the
+  // document begin navigated from. It is false if the report originates from
+  // the document we are navigating to.
+  // |is_report_only| is true if we are reporting a breakage that would have
+  // occurred if we enforced the reporting only values of COOP.
+  QueueOpenerBreakageReport(url.mojom.Url other_url,
+                            bool is_reported_from_document,
+                            bool is_report_only);
+
+  // Connects a new pipe to this instance.
+  Clone(pending_receiver<CrossOriginOpenerPolicyReporter> receiver);
+};
+
+// Cross-Origin-Opener-Policy enum representing parsed values.
+enum CrossOriginOpenerPolicyValue {
+  // Severs the opener relationship with openers/opened documents that are not
+  // same-origin.
+  kSameOrigin,
+
+  // Severs the opener relationship with openers that are not same-origin while
+  // keeping the relationship with opened documents, provided they don't have a
+  // Cross-Origin-Opener-Policy themselves.
+  kSameOriginAllowPopups,
+
+  // No restriction is applied, the relationship is kept with openers and
+  // opened documents.
+  kUnsafeNone
+};
+
+// Cross-Origin-Opener-Policy enum representing parsed values.
+// Following spec draft:
+// https://gist.github.com/annevk/6f2dd8c79c77123f39797f6bdac43f3e
+struct CrossOriginOpenerPolicy {
+    // The value of the policy.
+    CrossOriginOpenerPolicyValue value =
+        CrossOriginOpenerPolicyValue.kUnsafeNone;
+    // The reporting endpoint for the policy.
+    string? reporting_endpoint;
+    // The value for the "report only" mode.
+    CrossOriginOpenerPolicyValue report_only_value =
+        CrossOriginOpenerPolicyValue.kUnsafeNone;
+    // The reporting endpoint for the "report only" mode.
+    string? report_only_reporting_endpoint;
+};
+

@@ -1,0 +1,39 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//chrome/common/extensions/api/api_sources.gni")
+import("//chrome/common/features.gni")
+import("//extensions/buildflags/buildflags.gni")
+import("//tools/json_schema_compiler/json_schema_api.gni")
+
+assert(enable_extensions,
+       "Cannot depend on extensions because enable_extensions=false.")
+
+function_registration("api_registration") {
+  sources = chrome_extensions_api_schema_sources +
+            chrome_extensions_api_uncompiled_sources
+  impl_dir = "//chrome/browser/extensions/api"
+  configs = [ "//build/config:precompiled_headers" ]
+  bundle_name = "Chrome"
+  root_namespace = chrome_extensions_api_root_namespace
+  schema_include_rules = chrome_extensions_api_schema_include_rules
+
+  deps = [
+    # Different APIs include headers from these targets.
+    "//chrome/common:mojo_bindings",
+    "//components/zoom",
+    "//content/public/browser",
+    "//extensions/browser",
+
+    # Different APIs include some headers from chrome/common that in turn
+    # include generated headers from these targets.
+    # TODO(brettw) this should be made unnecessary if possible.
+    "//chrome/common/extensions/api",
+    "//components/sync",
+    "//skia",
+    "//third_party/metrics_proto",
+    "//ui/accessibility:ax_enums_mojo",
+  ]
+  deps += [ "//extensions/common/api" ]
+}

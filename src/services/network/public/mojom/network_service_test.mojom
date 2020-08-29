@@ -1,0 +1,115 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module network.mojom;
+
+import "mojo/public/mojom/base/memory_pressure_level.mojom";
+import "services/network/public/mojom/network_change_manager.mojom";
+import "services/network/public/mojom/network_param.mojom";
+import "services/network/public/mojom/network_types.mojom";
+
+// Maps to net::RuleBasedHostResolverProc::Rule::ResolverType.
+enum ResolverType {
+  kResolverTypeFail,
+  kResolverTypeFailTimeout,
+  kResolverTypeSystem,
+  kResolverTypeIPLiteral,
+  kResolverTypeDirectLookup,
+};
+
+struct Rule {
+  ResolverType resolver_type;
+  string host_pattern;
+  string replacement;
+  int32 host_resolver_flags;
+  string canonical_name;
+};
+
+// Testing interface to the network service.
+// Methods are sometimes synchronous to avoid race conditions since this test
+// interface is on a different pipe than interfaces which are impacted.
+interface NetworkServiceTest {
+  // Adds the given host resolver rules in the process where the network service
+  // is running.
+  [Sync]
+  AddRules(array<Rule> rules) => ();
+
+  // Simulates a network connection type change. The new connection type will be
+  // updated to |type| and broadcasts will be sent to
+  // NetworkConnectionManagerClient implementations.
+  SimulateNetworkChange(ConnectionType type) => ();
+
+  // Simulates a network quality change. The new effective connection type will
+  // be updated to |type| and broadcasts will be sent to
+  // NetworkQualityEstimatorManagerClient implementations.
+  SimulateNetworkQualityChange(EffectiveConnectionType type) => ();
+
+  // Crash the process where network service is running.
+  SimulateCrash();
+
+  // These methods mirror the net::MockCertVerifier interface.
+  [Sync]
+  MockCertVerifierSetDefaultResult(int32 default_result) => ();
+
+  [Sync]
+  MockCertVerifierAddResultForCertAndHost(
+      X509Certificate cert,
+      string host_pattern,
+      CertVerifyResult verify_result,
+      int32 rv) => ();
+
+  // Toggles requiring CT for testing
+  enum RequireCT {
+    DEFAULT = 0,
+    REQUIRE = 1,
+  };
+
+  [Sync]
+  SetRequireCT(RequireCT required) => ();
+
+  // Set the global transport security state preloaded static data source to
+  // the unittest_default source, with the reporting URIs rewritten to use
+  // |reporting_port|.  If |reporting_port| is 0, the source will be reset to
+  // the default.
+  [Sync]
+  SetTransportSecurityStateSource(uint16 reporting_port) => ();
+
+  // Allow host resolutions to reach the network. Since going to the network
+  // can be a source of flakiness, this should only be called in tests that
+  // can tolerate this, such as those run manually or on an FYI bot.
+  [Sync]
+  SetAllowNetworkAccessToHostResolutions() => ();
+
+  // Causes the next host resolve to the given hostname to crash the process.
+  CrashOnResolveHost(string host);
+
+  // Causes the next CookieManager::GetCookieList call to crash.
+  CrashOnGetCookieList();
+
+  // Gets the latest memory pressure level reported by the
+  // MemoryPressureListener.
+  [Sync]
+  GetLatestMemoryPressureLevel()
+      => (mojo_base.mojom.MemoryPressureLevel memory_pressure_level);
+
+  // Gets the current count of peer to peer connections that may require low
+  // latency.
+  [Sync]
+  GetPeerToPeerConnectionsCountChange()
+      => (uint32 connection_count);
+
+  // Returns the value of an environment variable in the network service's
+  // process, or an empty string if it's not set.
+  [Sync]
+  GetEnvironmentVariableValue(string name) => (string value);
+
+  // Logs the given string in the network service. This is used to test log
+  // redirection.
+  [Sync]
+  Log(string message) => ();
+
+  // Activates the specified field trial. Intended for use verifying that the
+  // network service informs the main process when a field trial is activated.
+  ActivateFieldTrial(string field_trial_name);
+};

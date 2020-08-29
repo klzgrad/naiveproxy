@@ -1,0 +1,34 @@
+// Copyright 2020 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module location.nearby.connections.mojom;
+
+import "chrome/services/sharing/public/mojom/nearby_connections_types.mojom";
+import "device/bluetooth/public/mojom/adapter.mojom";
+
+// Main interface to control the NearbyConnections library. Implemented in a
+// sandboxed process. This interface is used by the browser process to connect
+// to remote devices and send / receive raw data packets. Parsing of those
+// packets is not part of the NearbyConnections library and is done in a
+// separate interface.
+interface NearbyConnections {
+};
+
+// Provides all runtime dependencies for the NearbyConnections library. Not all
+// methods need to return valid Mojo remotes if a particular interface is not
+// supported by the current hardware or OS version. Implemented in the browser
+// process and called from a sandboxed process typically at startup to get all
+// available mediums.
+interface NearbyConnectionsHost {
+  // Gets the current Bluetooth adapter from the host.
+  // There are three cases for the return value:
+  // 1) If Bluetooth is not supported by Chrome on the OS (see
+  //    BluetoothAdapterFactory::IsBluetoothSupported) we return a null remote.
+  // 2) If Bluetooth is supported by Chrome on the OS but there is not a valid
+  //    adapter, we return an adapter with the AdapterInfo.present=false because
+  //    this is the way BluetoothAdapterFactory currently behaves.
+  // 3) If Bluetooth is supported by Chrome on the OS and there is valid adapter
+  //    we return an adapter instance with the AdapterInfo.present=true.
+  GetBluetoothAdapter() => (pending_remote<bluetooth.mojom.Adapter>? adapter);
+};

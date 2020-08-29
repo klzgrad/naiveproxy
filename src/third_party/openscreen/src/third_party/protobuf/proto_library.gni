@@ -1,0 +1,115 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+template("proto_library") {
+  assert(defined(invoker.sources), "Need sources for proto_library")
+  proto_sources = invoker.sources
+
+  # Don't apply OS-specific sources filtering to the assignments later on.
+  # Platform files should have gotten filtered out in the sources assignment
+  # when this template was invoked. If they weren't, it was on purpose and
+  # this template shouldn't re-apply the filter.
+  set_sources_assignment_filter([])
+
+  proto_in_dir = rebase_path(get_path_info(proto_sources[0], "dir"), ".")
+
+  if (defined(invoker.proto_out_dir)) {
+    proto_out_dir = rebase_path(invoker.proto_out_dir, "//")
+  } else {
+    # Absolute path to the directory of current BUILD.gn file excluding "//".
+    proto_out_dir = rebase_path(".", "//")
+    if (proto_in_dir != ".") {
+      proto_out_dir += "/$proto_in_dir"
+    }
+  }
+  cc_out_dir = "$root_gen_dir/" + proto_out_dir
+  rel_cc_out_dir = rebase_path(cc_out_dir, root_build_dir)
+
+  protos = rebase_path(invoker.sources, proto_in_dir)
+  protogens_cc = []
+
+  # List output files.
+  foreach(proto, protos) {
+    proto_dir = get_path_info(proto, "dir")
+    proto_name = get_path_info(proto, "name")
+    proto_path = proto_dir + "/" + proto_name
+
+    protogens_cc += [
+      "$cc_out_dir/$proto_path.pb.h",
+      "$cc_out_dir/$proto_path.pb.cc",
+    ]
+  }
+
+  action_name = "${target_name}_gen"
+  source_set_name = "$target_name"
+  action(action_name) {
+    visibility = [ ":$source_set_name" ]
+    script = "//third_party/protobuf/protoc_wrapper.py"
+    sources = proto_sources
+    outputs = get_path_info(protogens_cc, "abspath")
+    args = protos
+
+    protoc_label = "//third_party/protobuf:protoc($host_toolchain)"
+    protoc_path = get_label_info(protoc_label, "root_out_dir") + "/protoc"
+    args += [
+      # Wrapper should never pick a system protoc.
+      # Path should be rebased because |root_build_dir| for current toolchain
+      # may be different from |root_out_dir| of protoc built on host toolchain.
+      "--protoc",
+      "./" + rebase_path(protoc_path, root_build_dir),
+      "--proto-in-dir",
+      rebase_path(proto_in_dir, root_build_dir),
+      "--cc-out-dir",
+      rel_cc_out_dir,
+    ]
+
+    inputs = [
+      protoc_path,
+    ]
+    deps = [
+      protoc_label,
+    ]
+  }
+
+  config_name = "${target_name}_config"
+  config(config_name) {
+    include_dirs = []
+  }
+
+  source_set(source_set_name) {
+    forward_variables_from(invoker,
+                           [
+                             "defines",
+                             "testonly",
+                             "visibility",
+                           ])
+
+    sources = get_path_info(protogens_cc, "abspath")
+    public_configs = [
+      "//third_party/protobuf:using_proto",
+      ":$config_name",
+    ]
+    public_deps = [
+      ":$action_name",
+    ]
+    if (defined(invoker.use_protobuf_full) &&
+        invoker.use_protobuf_full == true) {
+      public_deps += [ "//third_party/protobuf:protobuf_full" ]
+    } else {
+      public_deps += [ "//third_party/protobuf:protobuf_lite" ]
+    }
+
+    deps = []
+    if (defined(invoker.deps)) {
+      deps += invoker.deps
+    }
+
+    if (defined(invoker.removed_configs)) {
+      configs -= invoker.removed_configs
+    }
+    if (defined(invoker.extra_configs)) {
+      configs += invoker.extra_configs
+    }
+  }
+}

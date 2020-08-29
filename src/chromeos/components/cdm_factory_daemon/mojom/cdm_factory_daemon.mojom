@@ -1,0 +1,39 @@
+// Copyright 2020 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// This defines the mojo interface used between Chrome and the Chrome OS for
+// remoting of the Widevine CE CDM and the underlying OEMCrypto implementation.
+// This CdmFactoryDaemon interface is bootstrapped over D-Bus and then methods
+// can be invoked on it to create a factory and then CDM instance, that same
+// interface can also be used to connect directly to the OEMCrypto
+// implementation for ARC.
+
+module chromeos.cdm.mojom;
+
+import "components/arc/mojom/oemcrypto.mojom";
+import "components/arc/mojom/protected_buffer_manager.mojom";
+
+// Next Method ID: 1
+interface CdmFactory {
+  // TODO(jkardatzke): Implement this interface.
+};
+
+// Next Method ID: 2
+// Used for bootstrapping the connection between Chrome and the daemon, then
+// methods can be invoked to obtain interfaces to perform CDM or OEMCrypto
+// operations.
+interface CdmFactoryDaemon {
+  // Used to create CdmFactory interfaces which are then used to create a CDM
+  // interface. |key_system| should specify what key system we are using,
+  // currently only com.widevine.alpha is supported. Returns null if we can't
+  // get the interface from the daemon.
+  CreateFactory@0(string key_system) => (pending_remote<CdmFactory>? factory);
+
+  // Used to establish a connection to the OEMCrypto implementation to provide
+  // that service to ARC.
+  ConnectOemCrypto@1(
+      arc.mojom.OemCryptoService& oemcryptor,
+      pending_remote<arc.mojom.ProtectedBufferManager>
+          protected_buffer_manager);
+};

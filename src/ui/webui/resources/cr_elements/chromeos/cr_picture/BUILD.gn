@@ -1,0 +1,65 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//third_party/closure_compiler/compile_js.gni")
+import("//ui/webui/resources/tools/js_modulizer.gni")
+
+js_type_check("closure_compile") {
+  deps = [
+    ":cr_camera",
+    ":cr_picture_list",
+    ":cr_picture_pane",
+    ":cr_picture_types",
+    ":png",
+  ]
+}
+
+js_library("cr_camera") {
+  deps = [ ":png" ]
+}
+
+js_library("cr_picture_list") {
+  deps = [
+    ":cr_picture_types",
+    ":png",
+    "//third_party/polymer/v1_0/components-chromium/iron-selector:iron-selector-extracted",
+    "//ui/webui/resources/js:assert",
+  ]
+}
+
+js_library("cr_picture_pane") {
+  deps = [
+    ":cr_camera",
+    ":cr_picture_types",
+    ":png",
+  ]
+}
+
+js_library("cr_picture_types") {
+}
+
+js_library("png") {
+  deps = [ "//ui/webui/resources/js:cr" ]
+}
+
+js_modulizer("modulize") {
+  input_files = [ "png.js" ]
+}
+
+js_type_check("closure_compile_module") {
+  uses_js_modules = true
+  deps = [ ":png.m" ]
+}
+
+js_library("png.m") {
+  # Need to turn off default sources filtering by GN, otherwise |sources| is
+  # filtered on non-CrOS, because it contains the term "chromeos". This
+  # js_library() target is needed in non-CrOS builds as well (see
+  # chrome/browser/resources/settings/people_page:people_page.m)
+  set_sources_assignment_filter([])
+  sources = [
+    "$root_gen_dir/ui/webui/resources/cr_elements/chromeos/cr_picture/png.m.js",
+  ]
+  extra_deps = [ ":modulize" ]
+}

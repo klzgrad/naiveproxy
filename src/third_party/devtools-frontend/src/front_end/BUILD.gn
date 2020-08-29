@@ -1,0 +1,63 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("../third_party/typescript/typescript.gni")
+
+resources_out_dir = "$root_out_dir/resources/inspector"
+
+group("front_end") {
+  public_deps = [
+    ":front_end_html_entrypoints",
+    ":ts_library-verification",
+    "component_docs",
+  ]
+}
+
+copy("front_end_html_entrypoints") {
+  sources = [
+    "devtools_app.html",
+    "inspector.html",
+    "integration_test_runner.html",
+    "js_app.html",
+    "ndb_app.html",
+    "node_app.html",
+    "toolbox.html",
+    "worker_app.html",
+  ]
+
+  outputs = [ "$resources_out_dir/{{source_file_part}}" ]
+}
+
+# This target is used to perform checks on all generated `.d.ts` files.
+# Previously we would only run these checks when `is_debug=false`, but
+# this complicated debugging. Therefore, this target now always perform
+# the check, but we only check the `.d.ts` files once (rather than for
+# every single defined `ts_library`).
+#
+# Whenever a folder is fully checked by the TypeScript compiler, add
+# the folder to the `deps` of this target AND add a corresponding
+# `import`-statement to the `verification.ts` file. Without adding
+# the `import`-statement, TypeScript will be "smart" and ignore all
+# declaration files it doesn't have to use.
+ts_library("ts_library-verification") {
+  verify_lib_check = true
+
+  sources = [ "verification.ts" ]
+
+  deps = [
+    "bindings",
+    "browser_sdk",
+    "color_picker",
+    "common",
+    "elements",
+    "formatter_worker",
+    "host",
+    "inspector_overlay",
+    "issues",
+    "protocol_client",
+    "root",
+    "sdk",
+    "workspace",
+  ]
+}
