@@ -82,24 +82,16 @@ struct Params {
 
 std::unique_ptr<base::Value> GetConstants(
     const base::CommandLine::StringType& command_line_string) {
-  auto constants_dict = net::GetNetConstants();
-  DCHECK(constants_dict);
-
-  // Add a dictionary with the version of the client and its command line
-  // arguments.
-  auto dict = std::make_unique<base::DictionaryValue>();
-
-  // We have everything we need to send the right values.
+  auto constants_dict = std::make_unique<base::Value>(net::GetNetConstants());
+  base::DictionaryValue dict;
   std::string os_type = base::StringPrintf(
       "%s: %s (%s)", base::SysInfo::OperatingSystemName().c_str(),
       base::SysInfo::OperatingSystemVersion().c_str(),
       base::SysInfo::OperatingSystemArchitecture().c_str());
-  dict->SetString("os_type", os_type);
-  dict->SetString("command_line", command_line_string);
-
-  constants_dict->Set("clientInfo", std::move(dict));
-
-  return std::move(constants_dict);
+  dict.SetString("os_type", os_type);
+  dict.SetString("command_line", command_line_string);
+  constants_dict->SetKey("clientInfo", std::move(dict));
+  return constants_dict;
 }
 
 // Builds a URLRequestContext assuming there's only a single loop.
