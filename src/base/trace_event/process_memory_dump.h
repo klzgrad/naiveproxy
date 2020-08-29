@@ -5,6 +5,8 @@
 #ifndef BASE_TRACE_EVENT_PROCESS_MEMORY_DUMP_H_
 #define BASE_TRACE_EVENT_PROCESS_MEMORY_DUMP_H_
 
+#include "base/trace_event/trace_event_stub.h"
+#if 0
 #include <stddef.h>
 
 #include <map>
@@ -295,4 +297,5 @@ class BASE_EXPORT ProcessMemoryDump {
 }  // namespace trace_event
 }  // namespace base
 
+#endif
 #endif  // BASE_TRACE_EVENT_PROCESS_MEMORY_DUMP_H_
