@@ -5,6 +5,8 @@
 #ifndef BASE_TRACE_EVENT_MEMORY_DUMP_PROVIDER_H_
 #define BASE_TRACE_EVENT_MEMORY_DUMP_PROVIDER_H_
 
+#include "base/trace_event/trace_event_stub.h"
+#if 0
 #include "base/base_export.h"
 #include "base/process/process_handle.h"
 #include "base/trace_event/memory_dump_request_args.h"
@@ -48,4 +50,5 @@ class BASE_EXPORT MemoryDumpProvider {
 }  // namespace trace_event
 }  // namespace base
 
+#endif
 #endif  // BASE_TRACE_EVENT_MEMORY_DUMP_PROVIDER_H_
