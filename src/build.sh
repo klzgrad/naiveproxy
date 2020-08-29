@@ -82,6 +82,20 @@ if [ "$(uname)" = Linux ]; then
   fi
 fi
 
+case "$(uname)" in
+  MINGW*|MSYS*)
+    case "$(uname -m)" in
+      x86_64) PGO_NAME=win64;;
+      *) PGO_NAME=win32;;
+    esac;;
+  Darwin) PGO_NAME=mac;;
+esac
+if [ "$PGO_NAME" ]; then
+  profile=$(cat chrome/build/$PGO_NAME.pgo.txt)
+  flags="$flags
+    pgo_data_path=\"../../chrome/build/pgo_profiles/$profile\""
+fi
+
 rm -rf "./$out"
 mkdir -p out
 

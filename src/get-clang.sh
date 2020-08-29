@@ -47,6 +47,23 @@ if [ "$ARCH" = Linux -a ! -f chrome/android/profiles/afdo.prof ]; then
   curl "$afdo_url" | bzip2 -cd >chrome/android/profiles/afdo.prof
 fi
 
+# Profiles (Windows, Mac)
+case "$ARCH" in
+  Windows)
+    case "$(uname -m)" in
+      x86_64) PGO_NAME=win64;;
+      *) PGO_NAME=win32;;
+    esac;;
+  Darwin) PGO_NAME=mac;;
+esac
+if [ "$PGO_NAME" ]; then
+  mkdir -p chrome/build/pgo_profiles
+  profile=$(cat chrome/build/$PGO_NAME.pgo.txt)
+  cd chrome/build/pgo_profiles
+  curl -LO "https://storage.googleapis.com/chromium-optimization-profiles/pgo_profiles/$profile"
+  cd ../../..
+fi
+
 # dsymutil (Mac)
 if [ "$ARCH" = Darwin ]; then
   mkdir -p tools/clang/dsymutil
