@@ -11,6 +11,7 @@
 
 // Needed not for this file, but for every user of the TRACE_EVENT macros for
 // the lambda definition. So included here for convenience.
+#if 0
 #include "base/tracing/protos/chrome_track_event.pbzero.h"
 #include "third_party/perfetto/include/perfetto/tracing/event_context.h"
 #include "third_party/perfetto/include/perfetto/tracing/string_helpers.h"
@@ -97,4 +98,5 @@
                                    ##__VA_ARGS__)
 
 #endif  // !BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
+#endif
 #endif  // BASE_TRACE_EVENT_TYPED_MACROS_H_
