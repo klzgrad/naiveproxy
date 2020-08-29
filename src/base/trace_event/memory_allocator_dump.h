@@ -5,6 +5,8 @@
 #ifndef BASE_TRACE_EVENT_MEMORY_ALLOCATOR_DUMP_H_
 #define BASE_TRACE_EVENT_MEMORY_ALLOCATOR_DUMP_H_
 
+#include "base/trace_event/trace_event_stub.h"
+#if 0
 #include <stdint.h>
 
 #include <memory>
@@ -149,4 +151,5 @@ void BASE_EXPORT PrintTo(const MemoryAllocatorDump::Entry&, std::ostream*);
 }  // namespace trace_event
 }  // namespace base
 
+#endif
 #endif  // BASE_TRACE_EVENT_MEMORY_ALLOCATOR_DUMP_H_
