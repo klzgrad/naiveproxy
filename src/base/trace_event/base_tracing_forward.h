@@ -10,7 +10,7 @@
 
 #include "base/tracing_buildflags.h"
 
-#if BUILDFLAG(ENABLE_BASE_TRACING)
+#if 1
 #include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"  // nogncheck
 #else
 
