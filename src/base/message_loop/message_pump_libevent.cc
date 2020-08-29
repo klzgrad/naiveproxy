@@ -13,6 +13,7 @@
 #include "base/compiler_specific.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/notreached.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/third_party/libevent/event.h"
 #include "base/time/time.h"
