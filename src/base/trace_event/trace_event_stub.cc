@@ -6,6 +6,7 @@
 
 #include <string>
 
+#include "base/trace_event/memory_usage_estimator.h"
 #include "base/trace_event/trace_event_stub.h"
 
 namespace base {
@@ -19,6 +20,9 @@ MemoryDumpProvider::~MemoryDumpProvider() = default;
 
 // static
 constexpr const char* const MemoryDumpManager::kTraceCategory;
+
+template size_t EstimateMemoryUsage(const std::string&);
+template size_t EstimateMemoryUsage(const std::u16string&);
 
 }  // namespace trace_event
 }  // namespace base
