@@ -45,6 +45,11 @@ sudo setcap cap_net_bind_service=+ep ./caddy
   
 ```json
 {
+  "admin": {"disabled": true},
+  "logging": {
+    "sink": {"writer": {"output": "discard"}},
+    "logs": {"default": {"writer": {"output": "discard"}}}
+  },
   "apps": {
     "http": {
       "servers": {
