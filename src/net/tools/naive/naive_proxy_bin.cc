@@ -19,6 +19,7 @@
 #include "base/macros.h"
 #include "base/rand_util.h"
 #include "base/run_loop.h"
+#include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -30,6 +31,7 @@
 #include "components/version_info/version_info.h"
 #include "net/base/auth.h"
 #include "net/base/network_isolation_key.h"
+#include "net/base/url_util.h"
 #include "net/cert/cert_verifier.h"
 #include "net/cert_net/cert_net_fetcher_url_request.h"
 #include "net/dns/host_resolver.h"
@@ -98,8 +100,8 @@ struct Params {
   int concurrency;
   net::HttpRequestHeaders extra_headers;
   std::string proxy_url;
-  std::string proxy_user;
-  std::string proxy_pass;
+  base::string16 proxy_user;
+  base::string16 proxy_pass;
   std::string host_resolver_rules;
   net::IPAddress resolver_range;
   size_t resolver_prefix;
@@ -281,8 +283,7 @@ bool ParseCommandLine(const CommandLine& cmdline, Params* params) {
       return false;
     }
     params->proxy_url = GetProxyFromURL(url_no_auth);
-    params->proxy_user = url.username();
-    params->proxy_pass = url.password();
+    net::GetIdentityFromURL(url, &params->proxy_user, &params->proxy_pass);
   }
 
   if (!cmdline.concurrency.empty()) {
@@ -437,8 +438,7 @@ std::unique_ptr<URLRequestContext> BuildURLRequestContext(
       proxy_url.replace(0, 4, "https");
     }
     GURL auth_origin(proxy_url);
-    AuthCredentials credentials(base::ASCIIToUTF16(params.proxy_user),
-                                base::ASCIIToUTF16(params.proxy_pass));
+    AuthCredentials credentials(params.proxy_user, params.proxy_pass);
     auth_cache->Add(auth_origin, HttpAuth::AUTH_PROXY,
                     /*realm=*/{}, HttpAuth::AUTH_SCHEME_BASIC, {},
                     /*challenge=*/"Basic", credentials, /*path=*/"/");
