@@ -31,10 +31,9 @@ class ClientPaddingDetectorDelegate;
 // This StreamSocket is used to setup a HTTP CONNECT tunnel.
 class HttpProxySocket : public StreamSocket {
  public:
-  HttpProxySocket(
-      std::unique_ptr<StreamSocket> transport_socket,
-      ClientPaddingDetectorDelegate* padding_detector_delegate,
-      const NetworkTrafficAnnotationTag& traffic_annotation);
+  HttpProxySocket(std::unique_ptr<StreamSocket> transport_socket,
+                  ClientPaddingDetectorDelegate* padding_detector_delegate,
+                  const NetworkTrafficAnnotationTag& traffic_annotation);
 
   // On destruction Disconnect() is called.
   ~HttpProxySocket() override;

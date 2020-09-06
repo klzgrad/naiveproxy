@@ -1,3 +1,6 @@
+// Copyright 2020 klzgrad <kizdiv@gmail.com>. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 #include "net/tools/naive/naive_proxy_delegate.h"
 
 #include <string>

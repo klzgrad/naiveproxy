@@ -1,3 +1,6 @@
+// Copyright 2020 klzgrad <kizdiv@gmail.com>. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
 #ifndef NET_TOOLS_NAIVE_NAIVE_PROXY_DELEGATE_H_
 #define NET_TOOLS_NAIVE_NAIVE_PROXY_DELEGATE_H_
 
@@ -31,7 +34,7 @@ enum class PaddingSupport {
 
 class NaiveProxyDelegate : public ProxyDelegate {
  public:
-  NaiveProxyDelegate(const HttpRequestHeaders& extra_headers);
+  explicit NaiveProxyDelegate(const HttpRequestHeaders& extra_headers);
   ~NaiveProxyDelegate() override;
 
   void OnResolveProxy(const GURL& url,
