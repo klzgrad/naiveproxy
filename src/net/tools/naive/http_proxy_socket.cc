@@ -148,16 +148,17 @@ int HttpProxySocket::Read(IOBuffer* buf,
   DCHECK(callback);
 
   if (!buffer_.empty()) {
+    was_ever_used_ = true;
     int data_len = buffer_.size();
     if (data_len <= buf_len) {
       std::memcpy(buf->data(), buffer_.data(), data_len);
       buffer_.clear();
+      return data_len;
     } else {
       std::memcpy(buf->data(), buffer_.data(), buf_len);
       buffer_ = buffer_.substr(buf_len);
+      return buf_len;
     }
-    was_ever_used_ = true;
-    return OK;
   }
 
   int rv = transport_->Read(
