@@ -37,63 +37,21 @@ git clone -b naive https://github.com/klzgrad/forwardproxy
 go get -u github.com/caddyserver/xcaddy/cmd/xcaddy
 ~/go/bin/xcaddy build --with github.com/caddyserver/forwardproxy=$PWD/forwardproxy
 sudo setcap cap_net_bind_service=+ep ./caddy
-./caddy run --config caddy.json
 ```
-
-<details>
-<summary>Example caddy.json using Let's Encrypt (replace example values accordingly)</summary>
-  
-```json
-{
-  "admin": {"disabled": true},
-  "logging": {
-    "sink": {"writer": {"output": "discard"}},
-    "logs": {"default": {"writer": {"output": "discard"}}}
-  },
-  "apps": {
-    "http": {
-      "servers": {
-        "srv0": {
-          "listen": [":443"],
-          "routes": [{
-            "handle": [{
-              "handler": "forward_proxy",
-              "hide_ip": true,
-              "hide_via": true,
-              "auth_user": "username",
-              "auth_pass": "password",
-              "probe_resistance": {"domain": "use a secret name or empty string here:0"}
-            }]
-          }, {
-            "match": [{"host": ["example.com", "www.example.com"]}],
-            "handle": [{
-              "handler": "file_server",
-              "root": "/var/www/html"
-            }],
-            "terminal": true
-          }],
-          "tls_connection_policies": [{
-            "match": {"sni": ["example.com", "www.example.com"]}
-          }]
-        }
-      }
-    },
-    "tls": {
-      "automation": {
-        "policies": [{
-          "subjects": ["example.com", "www.example.com"],
-          "issuer": {
-            "email": "admin@example.com",
-            "module": "acme"
-          }
-        }]
-      }
-    }
+Then `./caddy run` with the following Caddyfile (replace the example values accordingly):
+```
+:443, example.com
+tls me@example.com
+route {
+  forward_proxy {
+    basicauth user pass
+    hide_ip
+    hide_via
+    probe_resistance secret.com
   }
+  file_server { root /var/www/html }
 }
 ```
-</details>
-
 
 Locally run `./naive` with the following `config.json` to get a SOCKS5 proxy at local port 1080.
 ```json
