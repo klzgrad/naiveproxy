@@ -99,9 +99,9 @@ fi
 rm -rf "./$out"
 mkdir -p out
 
-python2=$(which python2 2>/dev/null || which python 2>/dev/null)
+python=$(which python2 2>/dev/null || which python 2>/dev/null || which python3 2>/dev/null)
 export DEPOT_TOOLS_WIN_TOOLCHAIN=0
 
-./gn/out/gn gen "$out" --args="$flags $EXTRA_FLAGS" --script-executable=$python2
+./gn/out/gn gen "$out" --args="$flags $EXTRA_FLAGS" --script-executable=$python
 
 ninja -C "$out" naive

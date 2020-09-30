@@ -26,8 +26,8 @@ if [ "$ARCH" = Linux ]; then
 fi
 
 # Clang
-python2=$(which python2 2>/dev/null || which python 2>/dev/null)
-CLANG_REVISION=$($python2 tools/clang/scripts/update.py --print-revision)
+python=$(which python2 2>/dev/null || which python 2>/dev/null || which python3 2>/dev/null)
+CLANG_REVISION=$($python tools/clang/scripts/update.py --print-revision)
 CLANG_PATH="clang-$CLANG_REVISION.tgz"
 case "$ARCH" in
   Linux) clang_url="https://commondatastorage.googleapis.com/chromium-browser-clang/Linux_x64/$CLANG_PATH";;
