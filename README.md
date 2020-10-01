@@ -61,7 +61,7 @@ Locally run `./naive` with the following `config.json` to get a SOCKS5 proxy at 
 }
 ```
 
-See [USAGE.txt](https://github.com/klzgrad/naiveproxy/blob/master/USAGE.txt) for more parameters in `config.json`. See also [Parameter Tuning](https://github.com/klzgrad/naiveproxy/wiki/Parameter-Tuning) to improve client-side performance.
+See [USAGE.txt](https://github.com/klzgrad/naiveproxy/blob/master/USAGE.txt) for more parameters in `config.json`. See also [Performance Tuning](https://github.com/klzgrad/naiveproxy/wiki/Performance-Tuning).
 
 ## Build
 
