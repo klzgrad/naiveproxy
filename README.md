@@ -33,9 +33,8 @@ Note: On Linux libnss3 must be installed before using the prebuilt binary.
 
 On the server, build and run Caddy v2 with naïve fork of forwardproxy: (Golang v1.14+ required)
 ```sh
-git clone -b naive https://github.com/klzgrad/forwardproxy
 go get -u github.com/caddyserver/xcaddy/cmd/xcaddy
-~/go/bin/xcaddy build --with github.com/caddyserver/forwardproxy=$PWD/forwardproxy
+~/go/bin/xcaddy build --with github.com/caddyserver/forwardproxy@caddy2=github.com/klzgrad/forwardproxy@naive
 sudo setcap cap_net_bind_service=+ep ./caddy
 ```
 Then `./caddy start` with the following Caddyfile (replace the example values accordingly):
