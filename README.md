@@ -38,13 +38,13 @@ go get -u github.com/caddyserver/xcaddy/cmd/xcaddy
 ~/go/bin/xcaddy build --with github.com/caddyserver/forwardproxy=$PWD/forwardproxy
 sudo setcap cap_net_bind_service=+ep ./caddy
 ```
-Then `./caddy run` with the following Caddyfile (replace the example values accordingly):
+Then `./caddy start` with the following Caddyfile (replace the example values accordingly):
 ```
 :443, example.com
 tls me@example.com
 route {
   forward_proxy {
-    basicauth user pass
+    basic_auth user pass
     hide_ip
     hide_via
     probe_resistance secret.com
