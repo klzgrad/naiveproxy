@@ -371,7 +371,8 @@ int QuicProxyClientSocket::DoSendRequest() {
                                            &proxy_delegate_headers);
     if (proxy_delegate_headers.HasHeader("fastopen")) {
       proxy_delegate_headers.RemoveHeader("fastopen");
-      use_fastopen_ = true;
+      // TODO(klzgrad): look into why Fast Open does not work.
+      // use_fastopen_ = true;
     }
     request_.extra_headers.MergeFrom(proxy_delegate_headers);
   }
@@ -465,9 +466,11 @@ int QuicProxyClientSocket::DoReadReplyComplete(int result) {
 }
 
 void QuicProxyClientSocket::OnReadResponseHeadersComplete(int result) {
-  if (use_fastopen_ && read_headers_pending_ &&
-      next_state_ == STATE_CONNECT_COMPLETE) {
-    next_state_ = STATE_READ_REPLY_COMPLETE;
+  if (use_fastopen_ && read_headers_pending_) {
+    if (next_state_ == STATE_DISCONNECTED)
+      return;
+    if (next_state_ == STATE_CONNECT_COMPLETE)
+      next_state_ = STATE_READ_REPLY_COMPLETE;
   }
 
   // Convert the now-populated spdy::SpdyHeaderBlock to HttpResponseInfo

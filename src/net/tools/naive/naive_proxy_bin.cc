@@ -56,6 +56,7 @@
 #include "net/socket/tcp_server_socket.h"
 #include "net/socket/udp_server_socket.h"
 #include "net/ssl/ssl_key_logger_impl.h"
+#include "net/third_party/quiche/src/quic/core/quic_versions.h"
 #include "net/tools/naive/naive_protocol.h"
 #include "net/tools/naive/naive_proxy.h"
 #include "net/tools/naive/naive_proxy_delegate.h"
@@ -436,6 +437,11 @@ std::unique_ptr<URLRequestContext> BuildURLRequestContext(
     std::string proxy_url = params.proxy_url;
     if (proxy_url.compare(0, 7, "quic://") == 0) {
       proxy_url.replace(0, 4, "https");
+      auto* quic = context->quic_context()->params();
+      quic->supported_versions.assign(quic::SupportedVersions().begin(),
+                                      quic::SupportedVersions().end());
+      quic->origins_to_force_quic_on.insert(
+          net::HostPortPair::FromURL(GURL(proxy_url)));
     }
     GURL auth_origin(proxy_url);
     AuthCredentials credentials(params.proxy_user, params.proxy_pass);
