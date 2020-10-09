@@ -16,7 +16,7 @@ MAX_ALLOWED_GLIBC_VERSION = [2, 17]
 
 
 def get_replacements(nm_file, max_allowed_glibc_version):
-  symbol_format = re.compile('\S+ \S+ ([^@]+)@@?(\S+)\n')
+  symbol_format = re.compile('\S+ \S+ ([^@]+)@@?([^@]+)')
   version_format = re.compile('GLIBC_[0-9\.]+')
   symbols = {}
   for line in nm_file:
