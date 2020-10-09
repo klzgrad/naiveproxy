@@ -289,7 +289,7 @@ bool ParseCommandLine(const CommandLine& cmdline, Params* params) {
 
   if (!cmdline.concurrency.empty()) {
     if (!base::StringToInt(cmdline.concurrency, &params->concurrency) ||
-        params->concurrency < 1) {
+        params->concurrency < 1 || params->concurrency > 4) {
       std::cerr << "Invalid concurrency" << std::endl;
       return false;
     }
