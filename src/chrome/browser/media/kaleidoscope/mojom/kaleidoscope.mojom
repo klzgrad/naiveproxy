@@ -1,0 +1,77 @@
+// Copyright 2019 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module media.mojom;
+
+import "chrome/browser/media/feeds/media_feeds_store.mojom";
+import "url/mojom/origin.mojom";
+
+// The result of getting the credentials.
+enum CredentialsResult {
+  kSuccess,
+  kFailedIncognito,
+  kFailedChild,
+};
+
+// The credentials required to make Google API calls from JS.
+struct Credentials {
+  // Chrome's API Key.
+  string api_key;
+
+  // An OAuth access token scoped to the Kaleidoscope API for the currently
+  // logged in user. If the user is not signed in then this will be empty.
+  string? access_token;
+};
+
+enum KaleidoscopeTab {
+  // The content will include content of all different types.
+  kForYou,
+
+  // The content will contain only TV shows.
+  kTVShows,
+
+  // The content will contain only Movies.
+  kMovies,
+};
+
+// Provides data for the kaleidoscope page.
+interface KaleidoscopeDataProvider {
+  // Returns all the Media Feeds that Kaleidoscope might decide to show.
+  // Returned feeds will be appropriate for the |tab|.
+  GetTopMediaFeeds(KaleidoscopeTab tab) => (array<media_feeds.mojom.MediaFeed> feeds);
+
+  // Returns all the items from a Media Feed that Kaleidoscope might decide to
+  // show. Returned items will be appropriate for the |tab|.
+  GetMediaFeedContents(int64 feed_id, KaleidoscopeTab tab) => (array<media_feeds.mojom.MediaFeedItem> items);
+
+  // Returns all the items from the Media Feeds Store that can be displayed for
+  // continue watching. Returned items will be appropriate for the |tab|.
+  GetContinueWatchingMediaFeedItems(KaleidoscopeTab tab) => (array<media_feeds.mojom.MediaFeedItem> items);
+
+  // Retrieves the current credentials.
+  GetCredentials() => (Credentials? credentials, CredentialsResult result);
+
+  // Returns true if the first run experience should be shown.
+  GetShouldShowFirstRunExperience() => (bool should_show_first_run);
+
+  // Called when the user successfully completes the first run experience.
+  SetFirstRunExperienceCompleted();
+
+  // Returns all the Media Feeds so the user can choose which ones they want to enable/disable.
+  GetAllMediaFeeds() => (array<media_feeds.mojom.MediaFeed> feeds);
+
+  // Called when the user completes the consent screen for Media Feeds.
+  SetMediaFeedsConsent(bool accepted_media_feeds,
+                       bool accepted_auto_select_media_feeds,
+                       array<int64> enabled_feed_ids,
+                       array<int64> disabled_feed_ids);
+
+  // Returns all the watch time origins from media history store that have
+  // watch time above a threshold.
+  GetHighWatchTimeOrigins() => (array<url.mojom.Origin> origins);
+
+  // Called when the user clicks the "Send Feedback" button in Kaleidoscope.
+  // Will trigger a feedback dialog to be displayed.
+  SendFeedback();
+};

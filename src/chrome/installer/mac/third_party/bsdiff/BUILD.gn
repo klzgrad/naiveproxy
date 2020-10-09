@@ -1,0 +1,58 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# Because size is a concern, don't link against all of base. Instead,
+# just bring in a copy of the one component that's needed, along with
+# the adapter that allows it to be called from C (not C++) code.
+static_library("goobsdiff_sha1_adapter") {
+  visibility = [ ":*" ]
+
+  check_includes = false
+
+  sources = [
+    "../../../../../base/hash/sha1.cc",
+    "sha1_adapter.cc",
+    "sha1_adapter.h",
+  ]
+
+  deps = [ "//base:logging_buildflags" ]  # Needed by sha1.cc
+}
+
+executable("goobsdiff") {
+  sources = [ "goobsdiff.c" ]
+
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [ "//build/config/compiler:no_chromium_code" ]
+
+  deps = [
+    ":goobsdiff_sha1_adapter",
+    "//chrome/installer/mac/third_party/xz:lzma",
+  ]
+
+  cflags = [ "-Os" ]
+
+  libs = [
+    "bz2",
+    "z",
+  ]
+}
+
+executable("goobspatch") {
+  sources = [ "goobspatch.c" ]
+
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [ "//build/config/compiler:no_chromium_code" ]
+
+  deps = [
+    ":goobsdiff_sha1_adapter",
+    "//chrome/installer/mac/third_party/xz:lzma_decompress",
+  ]
+
+  cflags = [ "-Os" ]
+
+  libs = [
+    "bz2",
+    "z",
+  ]
+}

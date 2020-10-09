@@ -1,0 +1,131 @@
+// Copyright 2020 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module crosapi.mojom;
+
+import "chromeos/crosapi/mojom/bitmap.mojom";
+import "mojo/public/mojom/base/string16.mojom";
+import "mojo/public/mojom/base/time.mojom";
+import "url/mojom/url.mojom";
+
+// Type of notification to show. See the chrome.notifications extension API:
+// https://developer.chrome.com/extensions/notifications#type-TemplateType
+[Extensible]
+enum NotificationType {
+  // Icon, title and message.
+  kSimple = 0,
+
+  // Icon, title and message with a large image.
+  kImage = 1,
+
+  // List of items. Note: C++ calls this type "multiple".
+  kList = 2,
+
+  // Progress bar.
+  kProgress = 3,
+};
+
+// How to display notifications when a fullscreen window is open. For example,
+// a child account time limit notification should appear over a fullscreen
+// video.
+[Extensible]
+enum FullscreenVisibility {
+  // Do not show over fullscreen windows.
+  kNone = 0,
+
+  // Show on top of user-created fullscreen windows.
+  kOverUser = 1,
+};
+
+// List items for NotificationType::kList.
+struct NotificationItem {
+  mojo_base.mojom.String16 title;
+  mojo_base.mojom.String16 message;
+};
+
+// Data for each button. Implemented as a struct for extensibility (e.g. so we
+// could add icon buttons).
+struct ButtonInfo {
+  mojo_base.mojom.String16 title;
+};
+
+// A notification to show in the system message center. Fields exist to support
+// both the web platform notification API and the chrome.notifications extension
+// API. See documentation at:
+// https://developer.mozilla.org/en-US/docs/Web/API/notification
+// https://developer.chrome.com/extensions/notifications#type-NotificationOptions
+struct Notification {
+  // Type of notification to show.
+  NotificationType type;
+
+  // The client decides the format of the ID.
+  string id;
+
+  // The title, usually just a few words.
+  mojo_base.mojom.String16 title;
+
+  // The message body. If long, will wrap inside the notification.
+  mojo_base.mojom.String16 message;
+
+  // Human-readable description of the source of the notification. For example,
+  // "Google Calendar".
+  mojo_base.mojom.String16 display_source;
+
+  // For web notifications, the URL of the website responsible for showing the
+  // notification. Otherwise empty.
+  url.mojom.Url? origin_url;
+
+  // Icon for the notification.
+  Bitmap? icon;
+
+  // Priority from -2 to 2. Zero is the default. Other values are clamped.
+  int32 priority;
+
+  // User must explicitly dismiss.
+  bool require_interaction;
+
+  // Time at which the notification is applicable (past, present or future).
+  // See web platform API "timestamp" and chrome.notifications "eventTime".
+  mojo_base.mojom.Time timestamp;
+
+  // For type kImage, the large image.
+  Bitmap? image;
+
+  // Badge to show the source of the notification (e.g. a 16x16 browser icon).
+  Bitmap? badge;
+
+  // Item list for type kList. Not displayed for other types.
+  array<NotificationItem> items;
+
+  // Progress from 0 to 100 for type kProgress. Negative values result in an
+  // animating "indefinite progress" indicator. Values above 100 are clamped.
+  int32 progress;
+
+  // Status message for type kProgress.
+  mojo_base.mojom.String16 progress_status;
+
+  // Up to 4 buttons. It is not guaranteed that all buttons will be visible,
+  // especially if the labels are long.
+  array<ButtonInfo> buttons;
+
+  // Pinned notifications cannot be closed by the user, only by a call to
+  // MessageCenter::CloseNotification.
+  bool pinned;
+
+  // Whether an announcement should occur (e.g. a popup or vibration) when an
+  // existing notification is updated. See web platform API
+  // Notification.renotify.
+  bool renotify;
+
+  // Whether all announcement mechanisms should be suppressed. See web platform
+  // API Notification.silent.
+  bool silent;
+
+  // Accessible description of the notification's contents. If empty, the
+  // message field will be used instead.
+  mojo_base.mojom.String16 accessible_name;
+
+  // Whether to show on top of fullscreen windows. See enum definition.
+  FullscreenVisibility fullscreen_visibility;
+};

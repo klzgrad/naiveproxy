@@ -1,0 +1,252 @@
+// Copyright 2019 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module printing.mojom;
+
+import "mojo/public/mojom/base/shared_memory.mojom";
+import "mojo/public/mojom/base/string16.mojom";
+import "mojo/public/mojom/base/values.mojom";
+import "mojo/public/mojom/base/unguessable_token.mojom";
+import "printing/mojom/print.mojom";
+import "ui/gfx/geometry/mojom/geometry.mojom";
+
+// Parameters required to print the content of an out-of-process subframe.
+struct PrintFrameContentParams {
+  // Physical printable area of the page in pixels according to dpi.
+  gfx.mojom.Rect printable_area;
+
+  // Cookie that is unique for each print request. It is used to associate the
+  // printed frame with its original print request.
+  int32 document_cookie;
+};
+
+// Parameters required to set options from a document.
+struct OptionsFromDocumentParams {
+  // Specifies whether print scaling is enabled or not.
+  bool is_scaling_disabled;
+  // Specifies number of copies to be printed.
+  int32 copies;
+  // Specifies paper handling option.
+  DuplexMode duplex;
+};
+
+// Holds the printed content information.
+// The printed content is in shared memory, and passed as a region.
+// A map on out-of-process subframe contents is also included so the printed
+// content can be composited as needed.
+struct DidPrintContentParams {
+  // A shared memory region for the metafile data.
+  mojo_base.mojom.ReadOnlySharedMemoryRegion metafile_data_region;
+  // Content id to render frame proxy token mapping for out-of-process
+  // subframes.
+  map<uint32, mojo_base.mojom.UnguessableToken> subframe_content_info;
+};
+
+// Parameters to describe the to-be-rendered preview document.
+struct DidStartPreviewParams {
+  // Total page count for the rendered preview. (Not the number of pages the
+  // user selected to print.)
+  int32 page_count;
+  // The list of 0-based page numbers that will be rendered.
+  array<int32> pages_to_render;
+  // number of pages per sheet and should be greater or equal to 1.
+  int32 pages_per_sheet;
+  // Physical size of the page, including non-printable margins.
+  gfx.mojom.Size page_size;
+  // Scaling % to fit to page
+  int32 fit_to_page_scaling;
+};
+
+// Parameters to describe a rendered preview page.
+struct DidPreviewPageParams {
+  // Page's content including metafile data and subframe info.
+  DidPrintContentParams content;
+  // |page_number| is zero-based and should not be negative.
+  uint32 page_number;
+  // Cookie for the document to ensure correctness.
+  int32 document_cookie;
+};
+
+// Parameters to describe the final rendered preview document.
+struct DidPreviewDocumentParams {
+  // Document's content including metafile data and subframe info.
+  DidPrintContentParams content;
+  // Cookie for the document to ensure correctness.
+  int32 document_cookie;
+  // Store the expected pages count.
+  uint32 expected_pages_count;
+};
+
+// Parameters for a render request.
+struct PrintParams{
+  // Physical size of the page, including non-printable margins,
+  // in pixels according to dpi.
+  gfx.mojom.Size page_size;
+  // In pixels according to dpi.
+  gfx.mojom.Size content_size;
+  // Physical printable area of the page in pixels according to dpi.
+  gfx.mojom.Rect printable_area;
+  // The y-offset of the printable area, in pixels according to dpi.
+  int32 margin_top = 0;
+  // The x-offset of the printable area, in pixels according to dpi.
+  int32 margin_left = 0;
+  // Specifies the page orientation.
+  PageOrientation page_orientation = kUpright;
+  // Specifies dots per inch in the x and y direction.
+  gfx.mojom.Size dpi;
+  // Specifies the scale factor in percent
+  double scale_factor = 1.0;
+  // Cookie for the document to ensure correctness.
+  int32 document_cookie = 0;
+  // Should only print currently selected text.
+  bool selection_only = false;
+  // Does the printer support alpha blending?
+  bool supports_alpha_blend = false;
+
+  // *** Parameters below are used only for print preview. ***
+  // The print preview ui associated with this request.
+  int32 preview_ui_id = -1;
+  // The id of the preview request.
+  int32 preview_request_id = 0;
+  // True if this is the first preview request.
+  bool is_first_request = false;
+  // Specifies the page scaling option for preview printing.
+  PrintScalingOption print_scaling_option = kSourceSize;
+  // True if print to pdf is requested.
+  bool print_to_pdf = false;
+  // Specifies if the header and footer should be rendered.
+  bool display_header_footer = false;
+  // Title string to be printed as header if requested by the user.
+  mojo_base.mojom.String16 title;
+  // URL string to be printed as footer if requested by the user.
+  mojo_base.mojom.String16 url;
+  // HTML template to use as a print header.
+  mojo_base.mojom.String16 header_template;
+  // HTML template to use as a print footer.
+  mojo_base.mojom.String16 footer_template;
+  // Whether to rasterize a PDF for printing
+  bool rasterize_pdf = false;
+  // True if print backgrounds is requested by the user.
+  bool should_print_backgrounds = false;
+  // The document type of printed page(s) from render.
+  SkiaDocumentType printed_doc_type = kPDF;
+  // True if page size defined by css should be preferred.
+  bool prefer_css_page_size = false;
+  // Number of pages per sheet.  This parameter is for N-up mode.
+  // Defaults to 1 if the feature is disabled, and some number greater
+  // than 1 otherwise.  See printing::NupParameters for supported values.
+  uint32 pages_per_sheet = 1;
+};
+
+// Parameters to describe a rendered page.
+struct DidPrintDocumentParams {
+  // Document's content including metafile data and subframe info.
+  DidPrintContentParams content;
+  // Cookie for the document to ensure correctness.
+  int32 document_cookie;
+  // The size of the page the page author specified.
+  gfx.mojom.Size page_size;
+  // The printable area the page author specified.
+  gfx.mojom.Rect content_area;
+  // The physical offsets of the printer in DPI. Used for PS printing.
+  gfx.mojom.Point physical_offsets;
+};
+
+// Interface implemented by a class that desires to render print documents for
+// Chrome print preview.
+interface PrintRenderer {
+  // Creates a preview document for print preview using the provided
+  // |job_settings|.
+  // The returned |preview_document_region| contains the preview document data
+  // as a flattened PDF. It will be invalid if errors occurred while rendering
+  // the preview document.
+  CreatePreviewDocument(mojo_base.mojom.DictionaryValue job_settings)
+      => (mojo_base.mojom.ReadOnlySharedMemoryRegion? preview_document_region);
+};
+
+// Browser process interface exposed to the renderer to handle the print
+// preview UI.
+interface PrintPreviewUI {
+  // Notifies the WebUI to set print preset options from source PDF.
+  // |request_id| comes from the chrome://print WebUI when it requests to update
+  // the print preview.
+  [EnableIf=enable_print_preview]
+  SetOptionsFromDocument(OptionsFromDocumentParams params, int32 request_id);
+
+  // Tells the browser print preview failed. |document_cookie| is the param to
+  // ensure correctness and |request_id| is the id for the preview request.
+  [EnableIf=enable_print_preview]
+  PrintPreviewFailed(int32 document_cookie, int32 request_id);
+
+  // Tell the browser print preview was cancelled. |document_cookie| is the
+  // param to ensure correctness and |request_id| is the id for the preview
+  // request.
+  [EnableIf=enable_print_preview]
+  PrintPreviewCancelled(int32 document_cookie, int32 request_id);
+
+  // Tell the browser print preview found the selected printer has invalid
+  // settings (which typically caused by disconnected network printer or
+  // printer driver is bogus).
+  [EnableIf=enable_print_preview]
+  PrinterSettingsInvalid(int32 document_cookie, int32 request_id);
+};
+
+// Render process interface exposed to the browser to handle most of the
+// printing grunt work for RenderView.
+interface PrintRenderFrame {
+  // Tells the RenderFrame to switch the CSS to print media type, render every
+  // requested page, and then switch back the CSS to display media type.
+  PrintRequestedPages();
+
+  // Tells the RenderFrame to switch the CSS to print media type, render every
+  // requested page using the print preview document's frame/node, and then
+  // switch the CSS back to display media type.
+  PrintForSystemDialog();
+
+  // Tells the RenderFrame to initiate print preview for the entire document.
+  // Optionally provides a |print_renderer| to render print documents.
+  [EnableIf=enable_print_preview]
+  InitiatePrintPreview(pending_associated_remote<PrintRenderer>? print_renderer,
+                       bool has_selection);
+
+  // Sets PrintPreviewUI interface to notify the browser of preview actions.
+  [EnableIf=enable_print_preview]
+  SetPrintPreviewUI(pending_associated_remote<PrintPreviewUI> preview);
+
+  // Tells the RenderFrame to switch the CSS to print media type and render
+  // every requested page for print preview using the given |settings|. This
+  // gets called multiple times as the user updates settings.
+  [EnableIf=enable_print_preview]
+  PrintPreview(mojo_base.mojom.DictionaryValue settings);
+
+  // Tells the RenderFrame that the print preview dialog was closed.
+  [EnableIf=enable_print_preview]
+  OnPrintPreviewDialogClosed();
+
+  // Prints the content of an out-of-process subframe. Replies back to the
+  // browser the rendered subframe content that was requested.
+  PrintFrameContent(PrintFrameContentParams params)
+      => (int32 document_cookie, DidPrintContentParams params);
+
+  // Tells the RenderFrame whether printing is enabled or not.
+  SetPrintingEnabled(bool enabled);
+
+  // Tells the RenderFrame that printing is done so it can clean up.
+  PrintingDone(bool success);
+
+  // Tells the RenderFrame to initiate printing or print preview for a
+  // particular node, depending on which mode the RenderFrame is in.
+  PrintNodeUnderContextMenu();
+};
+
+// Browser process interface exposed to the renderer to handle the general
+// print management.
+interface PrintManagerHost {
+  // Tells the browser that the renderer is done calculating the number of
+  // rendered pages according to the specified settings.
+  DidGetPrintedPagesCount(int32 cookie, int32 number_pages);
+
+  // Sends the document cookie of the current printer query to the browser.
+  DidGetDocumentCookie(int32 cookie);
+};

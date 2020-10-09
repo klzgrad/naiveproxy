@@ -1,0 +1,78 @@
+# Copyright (c) 2015 The Native Client Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/toolchain/toolchain.gni")
+
+# This is a special toolchain used solely for building GNU/AT&T-syntax
+# assembly files on Windows.  See src/trusted/asm.gni for more details.
+
+tool_wrapper_path =
+    rebase_path("//build/toolchain/win/tool_wrapper.py", root_build_dir)
+
+template("nacl_win_as_toolchain") {
+  toolchain(target_name) {
+    tool("asm") {
+      # For GCC we can just use the C compiler to compile assembly.
+      win_as_script =
+          rebase_path("//native_client/tools/win_as.py", root_build_dir)
+      clang_cl = rebase_path(
+              "//third_party/llvm-build/Release+Asserts/bin/clang-cl.exe",
+              root_build_dir)
+      if (invoker.toolchain_cpu == "x86") {
+        env = "environment.x86"
+        win_as_arch = "Win32"
+      } else {
+        env = "environment.x64"
+        win_as_arch = invoker.toolchain_cpu
+      }
+      top_srcdir = rebase_path("//", root_build_dir)
+      rspfile = "{{output}}.rsp"
+      rspfile_content = "\"$python_path\" $win_as_script -a $win_as_arch -p $top_srcdir -c $clang_cl -o {{output}} {{source}}"
+      command = "$python_path $tool_wrapper_path action-wrapper $env $rspfile"
+      depsformat = "msvc"
+      description = "GNU ASM {{output}}"
+      outputs = [
+        "{{target_out_dir}}/{{target_output_name}}/{{source_name_part}}.obj",
+      ]
+    }
+
+    # These two are really entirely generic, but have to be repeated in
+    # each toolchain because GN doesn't allow a template to be used here.
+    # See //build/toolchain/toolchain.gni for details.
+    tool("stamp") {
+      command = stamp_command
+      description = stamp_description
+    }
+    tool("copy") {
+      command = copy_command
+      description = copy_description
+    }
+
+    # This is necessary so that certain .gn files with static_libraries (e.g.
+    # //build/config/sanitizers/BUILD.gn) can be loaded in the context of this
+    # toolchain.
+    tool("alink") {
+      command = "fake"
+      outputs = [ "fake" ]
+    }
+
+    toolchain_args = {
+      current_os = "win"
+      current_cpu = invoker.toolchain_cpu
+
+      # These values need to be passed through unchanged.
+      host_toolchain = host_toolchain
+      target_os = target_os
+      target_cpu = target_cpu
+    }
+  }
+}
+
+nacl_win_as_toolchain("nacl_win_as_x86") {
+  toolchain_cpu = "x86"
+}
+
+nacl_win_as_toolchain("nacl_win_as_x64") {
+  toolchain_cpu = "x64"
+}

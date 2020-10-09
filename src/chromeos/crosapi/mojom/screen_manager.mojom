@@ -1,0 +1,54 @@
+// Copyright 2020 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module crosapi.mojom;
+
+import "chromeos/crosapi/mojom/bitmap.mojom";
+
+// A unique identifier and title for a window.
+struct WindowDetails {
+  // Guaranteed to be unique and never reused.
+  uint64 id;
+
+  // The title of the window in UTF-8 encoding.
+  string title;
+};
+
+// This interface is implemented by ash-chrome. It allows lacros-chrome to query
+// information about existing windows, screens, and displays.
+//
+// This interface cannot be used to make changes to screens, windows or
+// displays. That's because Wayland is the protocol for that, and attempting to
+// introduce another protocol would require careful synchronization between the
+// two, which we'd like to avoid.
+//
+// TODO(https://crbug.com/1094460): This is a very simple interface. We will
+// likely want to replace it with a more feature-complete and performant
+// interface in the future.
+interface ScreenManager {
+  // TODO(https://crbug.com/1094460): We will need to add more methods for
+  // querying screens, windows, etc. Details still TBD.
+
+  // TODO(https://crbug.com/1094460): Use a more performant transport
+  // mechanism.
+  // This method assumes that there's exactly one screen. The implementation
+  // of this method takes a screenshot and converts it into a bitmap. Each
+  // pixel is represented by 4 bytes [RGBA].
+  //
+  // The media screen capture implementation assumes that every platform
+  // provides a synchronous method to take a snapshot of the screen.
+  [Sync]
+  TakeScreenSnapshot@0() => (Bitmap snapshot);
+
+  // Synchronously returns a list of visible, focusable windows. This method
+  // needs to be synchronous to support cross-platform code that relies on the
+  // assumption that every OS provides a similar synchronous IPC.
+  [Sync]
+  ListWindows@1() => (array<WindowDetails> windows);
+
+  // Take a screenshot of a window with an id from ListWindows. If |success|
+  // is false, then the window no longer exists.
+  [Sync]
+  TakeWindowSnapshot@2(uint64 id) => (bool success, Bitmap snapshot);
+};

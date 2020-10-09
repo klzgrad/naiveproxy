@@ -1,0 +1,64 @@
+// Copyright 2020 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// API intended for retrieving a snapshot of the network health state. Returns
+// properties of any available network technologies and any connected or
+// connecting network when available.
+
+module chromeos.network_health.mojom;
+
+import "chromeos/services/network_config/public/mojom/network_types.mojom";
+
+enum NetworkState {
+  // The network type is available but not yet initialized.
+  kUninitialized,
+  // The network type is available but disabled or disabling.
+  kDisabled,
+  // The network type is prohibited by policy.
+  kProhibited,
+  // The network type is available and enabled or enabling, but no network
+  // connection has been established.
+  kNotConnected,
+  // The network type is available and enabled, and a network connection is
+  // in progress.
+  kConnecting,
+  // The network is in a portal state.
+  kPortal,
+  // The network is in a connected state, but connectivity is limited.
+  kConnected,
+  // The network is connected and online.
+  kOnline,
+};
+
+// Contains information for a single network connection and underlying
+// network technology e.g WiFi.
+struct Network {
+  chromeos.network_config.mojom.NetworkType type;
+  NetworkState state;
+  // The unique identifier for the network when a network service exists.
+  string? guid;
+  // The user facing name of the network if available.
+  string? name;
+  // Optional string for the network's mac_address.
+  string? mac_address;
+};
+
+// Aggregate structure for all of the network health state.
+struct NetworkHealthState {
+  // Networks will be sorted with active connections listed first.
+  array<Network> networks;
+};
+
+// Interface for retrieving aggregated information about the current network
+// state and health.
+interface NetworkHealthService {
+  // Returns a list of all the networks. Networks will be sorted with active
+  // connections listed first.
+  GetNetworkList() => (array<Network> networks);
+
+  // Returns the current network health state.
+  // This is currently the same information provided by GetNetworkList. More
+  // information will be added over time.
+  GetHealthSnapshot() => (NetworkHealthState state);
+};

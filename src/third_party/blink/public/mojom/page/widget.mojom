@@ -1,0 +1,200 @@
+// Copyright 2020 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module blink.mojom;
+
+import "cc/mojom/touch_action.mojom";
+import "third_party/blink/public/mojom/input/touch_event.mojom";
+import "mojo/public/mojom/base/string16.mojom";
+import "mojo/public/mojom/base/text_direction.mojom";
+import "services/viz/public/mojom/compositing/local_surface_id_allocation.mojom";
+import "third_party/blink/public/mojom/frame/intrinsic_sizing_info.mojom";
+import "third_party/blink/public/mojom/input/input_handler.mojom";
+import "third_party/blink/public/mojom/page/drag.mojom";
+import "third_party/blink/public/mojom/widget/device_emulation_params.mojom";
+import "third_party/blink/public/mojom/widget/visual_properties.mojom";
+import "ui/base/mojom/ui_base_types.mojom";
+import "ui/base/ime/mojom/text_input_state.mojom";
+import "ui/base/cursor/mojom/cursor.mojom";
+import "ui/gfx/geometry/mojom/geometry.mojom";
+
+[EnableIf=is_mac]
+import "ui/base/mojom/attributed_string.mojom";
+
+// Implemented in Blink, this interface defines frame-widget-specific methods that
+// will be invoked from the browser process (e.g. blink::WebFrameWidget).
+interface FrameWidget {
+  // Drag-and-drop methods:
+  // |point_in_viewport| is the position of the drag event in the viewport
+  // coordinates.
+  // |screen_point| is the absolute position of the mouse pointer.
+
+  // Notifies the Widget of a drag over operation.
+  DragTargetDragOver(gfx.mojom.PointF point_in_viewport,
+                     gfx.mojom.PointF screen_point,
+                     AllowedDragOperations operations_allowed,
+                     uint32 key_modifiers)
+      => (DragOperation operation);
+
+  // Notifies the Widget of a drag leave operation.
+  DragTargetDragLeave(gfx.mojom.PointF point_in_viewport,
+                      gfx.mojom.PointF screen_point);
+
+  // Notifies the Widget of a drag drop operation.
+  DragTargetDrop(DragData drag_data,
+                 gfx.mojom.PointF point_in_viewport,
+                 gfx.mojom.PointF screen_point,
+                 uint32 key_modifiers);
+
+  // Notifies the Widget that a drag has terminated.
+  DragSourceEndedAt(gfx.mojom.PointF point_in_viewport,
+                    gfx.mojom.PointF screen_point,
+                    DragOperation drag_operation);
+
+  // Notifies the Widget that the system drag and drop operation has ended.
+  DragSourceSystemDragEnded();
+
+  // Makes the Widget background transparent or opaque.
+  SetBackgroundOpaque(bool opaque);
+
+  // Changes the text direction of the currently selected input field (if any).
+  SetTextDirection(mojo_base.mojom.TextDirection direction);
+
+  // Only valid for sub frame local roots.
+  //
+  // Sets the inherited effective touch action on an out-of-process iframe.
+  SetInheritedEffectiveTouchActionForSubFrame(cc.mojom.TouchAction touch_action);
+
+  // Toggles render throttling for an out-of-process iframe.
+  UpdateRenderThrottlingStatusForSubFrame(bool is_throttled, bool subtree_throttled);
+
+  // When the browser receives a call to RenderFrameProxyHost::SetIsInert
+  // from the parent widget's embedding renderer changing its inertness,
+  // it sets the same inertness value to the renderer of the child subframe.
+  // When a widget is inert, it is unable to process input events.
+  // https://html.spec.whatwg.org/multipage/interaction.html#inert
+  SetIsInertForSubFrame(bool inert);
+
+  // Requests the word under the given point relative to the origin of the
+  // widget and its baseline point.
+  [EnableIf=is_mac]
+  GetStringAtPoint(gfx.mojom.Point point_in_local_root)
+      => (ui.mojom.AttributedString? string, gfx.mojom.Point baseline_point);
+
+  // Sent to inform the renderer to invoke a context menu.
+  // The parameter specifies the location in the render widget's coordinates.
+  ShowContextMenu(
+      ui.mojom.MenuSourceType source_type, gfx.mojom.Point location);
+
+  // Enables device emulator.
+  EnableDeviceEmulation(DeviceEmulationParams parameters);
+
+  // Disables device emulator.
+  DisableDeviceEmulation();
+
+  // Binds an WidgetCompositor interface.
+  BindWidgetCompositor(pending_receiver<WidgetCompositor> host);
+};
+
+// Implemented in Browser, this interface defines frame-widget-specific methods that
+// will be invoked from the render process (e.g. content::RenderWidgetHostImpl).
+interface FrameWidgetHost {
+  // Sent by a widget to the browser to request a page scale animation in the
+  // main-frame's widget.
+  AnimateDoubleTapZoomInMainFrame(
+                    gfx.mojom.Point tap_point,
+                    gfx.mojom.Rect rect_to_zoom);
+
+  // Sent by a widget to the browser to request a page scale animation in the
+  // main-frame's widget for find-in-page zoom.
+  ZoomToFindInPageRectInMainFrame(gfx.mojom.Rect rect_to_zoom);
+
+  // Notifies what type of touch event consumers, if any, exist in the renderer,
+  // e.g. JavaScript touch event handlers or hit testable scrollbars.
+  SetHasTouchEventConsumers(TouchEventConsumers touch_event_consumers);
+
+  // Sent by a widget to the browser to be used for SVGs inside of <object> and
+  // not for iframes. Informs the browser that the current frame's intrinsic
+  // sizing info has changed. The browser can then notify a containing frame
+  // that the frame may need to trigger a new layout.
+  //
+  // Also see blink::mojom::RemoteFrame::IntrinsicSizingInfoOfChildChanged.
+  IntrinsicSizingInfoChanged(IntrinsicSizingInfo sizing_info);
+
+  // Requests a non-decelerating synthetic fling animation to be latched on the
+  // scroller at the start point, and whose velocity can be changed over time by
+  // sending multiple AutoscrollFling gestures. Used for features like
+  // middle-click autoscroll.
+  //
+  // Sent by a widget to the browser to notify the start point for the
+  // autoscroll.
+  AutoscrollStart(gfx.mojom.PointF position);
+
+  // Sent by a widget to the browser to notify the velocity for the autoscroll
+  // fling animation.
+  AutoscrollFling(gfx.mojom.Vector2dF velocity);
+
+  // Sent by a widget to the browser to notify the end of the autoscroll.
+  AutoscrollEnd();
+
+  // Sent once a paint happens after the first non empty layout. In other words,
+  // after the frame widget has painted something.
+  DidFirstVisuallyNonEmptyPaint();
+};
+
+// Implemented in Blink, this interface defines widget-specific methods that
+// will be invoked from the browser process (e.g. blink::WebWidget).
+interface Widget {
+  // Sent by the browser to ask the renderer to redraw. Robust to events that
+  // can happen in renderer (abortion of the commit or draw, loss of output
+  // surface etc.).
+  ForceRedraw() => ();
+
+  // Setup the input channel for this widget. If the widget is a frame,
+  // then it can also obtain a FrameWidgetInputHandler from the
+  // WidgetInputHandler interface.
+  GetWidgetInputHandler(
+    pending_receiver<blink.mojom.WidgetInputHandler> request,
+    pending_remote<blink.mojom.WidgetInputHandlerHost> host);
+
+  // Update the visual properties of the widget.
+  UpdateVisualProperties(VisualProperties visual_properties);
+
+  // Informs the widget of its position on the user's screen, as well as
+  // the position of the native window holding the widget.
+  // TODO(danakj): These should be part of UpdateVisualProperties.
+  UpdateScreenRects(gfx.mojom.Rect widget_screen_rect,
+                    gfx.mojom.Rect window_screen_rect) => ();
+};
+
+// Implemented in Browser, this interface defines widget-specific methods that
+// will be invoked from the render process (e.g. content::RenderWidgetHostImpl).
+interface WidgetHost {
+  // Updates the current cursor to be used by the browser for indicating the
+  // location of a pointing device.
+  SetCursor(ui.mojom.Cursor cursor);
+
+  // Sent by a widget to the browser to set the tooltip text for the current
+  // mouse position. An empty |tooltip_text| will hide the tooltip view.
+  SetToolTipText(mojo_base.mojom.String16 tooltip_text,
+                 mojo_base.mojom.TextDirection text_direction_hint);
+
+  // Sent when the text input state is changed. This usually happens when
+  // a text input entry is focused.
+  TextInputStateChanged(ui.mojom.TextInputState state);
+
+  // Sent when the current selection bounds are changed.
+  SelectionBoundsChanged(gfx.mojom.Rect anchor_rect,
+             mojo_base.mojom.TextDirection anchor_dir,
+             gfx.mojom.Rect focus_rect,
+             mojo_base.mojom.TextDirection focus_dir,
+             bool is_anchor_first);
+};
+
+// This interface is bound on the compositor thread.
+interface WidgetCompositor {
+  // Requests that the RenderWidget sends back a response after the next main
+  // frame is generated and presented in the display compositor.
+  VisualStateRequest() => ();
+};

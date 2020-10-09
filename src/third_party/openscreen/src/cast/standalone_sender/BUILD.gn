@@ -1,0 +1,44 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/external_libraries.gni")
+import("//build_overrides/build.gni")
+
+# Define the executable target only when the build is configured to use the
+# standalone platform implementation; since this is itself a standalone
+# application.
+if (!build_with_chromium) {
+  executable("cast_sender") {
+    sources = [
+      "main.cc",
+    ]
+    deps = [
+      "../../platform",
+      "../../util",
+      "../streaming:sender",
+    ]
+
+    defines = []
+    include_dirs = []
+    lib_dirs = []
+    libs = []
+    if (have_ffmpeg && have_libopus && have_libvpx) {
+      defines += [ "CAST_STANDALONE_SENDER_HAVE_EXTERNAL_LIBS" ]
+      sources += [
+        "ffmpeg_glue.cc",
+        "ffmpeg_glue.h",
+        "simulated_capturer.cc",
+        "simulated_capturer.h",
+        "streaming_opus_encoder.cc",
+        "streaming_opus_encoder.h",
+        "streaming_vp8_encoder.cc",
+        "streaming_vp8_encoder.h",
+      ]
+      include_dirs +=
+          ffmpeg_include_dirs + libopus_include_dirs + libvpx_include_dirs
+      lib_dirs += ffmpeg_lib_dirs + libopus_lib_dirs + libvpx_lib_dirs
+      libs += ffmpeg_libs + libopus_libs + libvpx_libs
+    }
+  }
+}

@@ -1,0 +1,91 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+static_library("enterprise") {
+  sources = [
+    "browser/controller/browser_dm_token_storage.cc",
+    "browser/controller/browser_dm_token_storage.h",
+    "browser/controller/chrome_browser_cloud_management_helper.cc",
+    "browser/controller/chrome_browser_cloud_management_helper.h",
+    "browser/reporting/common_pref_names.cc",
+    "browser/reporting/common_pref_names.h",
+  ]
+
+  deps = [
+    "//base",
+    "//components/policy/core/common",
+    "//components/prefs",
+    "//services/network/public/cpp",
+  ]
+
+  if (!is_android) {
+    sources += [
+      "browser/reporting/browser_report_generator.cc",
+      "browser/reporting/browser_report_generator.h",
+      "browser/reporting/policy_info.cc",
+      "browser/reporting/policy_info.h",
+      "browser/reporting/profile_report_generator.cc",
+      "browser/reporting/profile_report_generator.h",
+      "browser/reporting/report_generator.cc",
+      "browser/reporting/report_generator.h",
+      "browser/reporting/report_request_definition.h",
+      "browser/reporting/report_request_queue_generator.cc",
+      "browser/reporting/report_request_queue_generator.h",
+      "browser/reporting/report_scheduler.cc",
+      "browser/reporting/report_scheduler.h",
+      "browser/reporting/report_uploader.cc",
+      "browser/reporting/report_uploader.h",
+      "browser/reporting/reporting_delegate_factory.h",
+    ]
+
+    deps += [
+      "//base/util/timer",
+      "//components/policy/core/browser",
+      "//components/policy/proto",
+      "//components/strings",
+      "//components/version_info",
+      "//net",
+    ]
+  }
+
+  if (!is_android && !is_chromeos) {
+    sources += [
+      "browser/controller/chrome_browser_cloud_management_controller.cc",
+      "browser/controller/chrome_browser_cloud_management_controller.h",
+    ]
+  }
+}
+
+static_library("test_support") {
+  testonly = true
+  sources = [
+    "browser/controller/fake_browser_dm_token_storage.cc",
+    "browser/controller/fake_browser_dm_token_storage.h",
+  ]
+  deps = [
+    ":enterprise",
+    "//base",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+
+  sources = [ "browser/controller/browser_dm_token_storage_unittest.cc" ]
+
+  deps = [
+    ":enterprise",
+    ":test_support",
+    "//base",
+    "//base/test:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+
+  if (!is_android) {
+    sources += [ "browser/reporting/report_uploader_unittest.cc" ]
+
+    deps += [ "//components/policy/core/common:test_support" ]
+  }
+}

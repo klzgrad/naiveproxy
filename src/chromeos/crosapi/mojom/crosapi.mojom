@@ -1,0 +1,43 @@
+// Copyright 2020 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module crosapi.mojom;
+
+import "chromeos/crosapi/mojom/attestation.mojom";
+import "chromeos/crosapi/mojom/message_center.mojom";
+import "chromeos/crosapi/mojom/screen_manager.mojom";
+import "chromeos/crosapi/mojom/select_file.mojom";
+
+// AshChromeService defines the APIs that live in ash-chrome and are
+// accessed from lacros-chrome.
+interface AshChromeService {
+  // Binds the Attestation interface for challenging keys.
+  BindAttestation@2(pending_receiver<Attestation> receiver);
+
+  // Binds the MessageCenter interface for showing notification messages.
+  BindMessageCenter@3(pending_receiver<MessageCenter> receiver);
+
+  // Binds the ScreenManager interface for interacting with windows, screens and
+  // displays.
+  BindScreenManager@1(pending_receiver<ScreenManager> receiver);
+
+  // Binds the SelectFile interface for open/save dialogs.
+  BindSelectFile@0(pending_receiver<SelectFile> receiver);
+};
+
+// LacrosChromeService defines the APIs that live in lacros-chrome and
+// are accessed from ash-chrome.
+interface LacrosChromeService {
+  // Returns the pending_receiver of AshChromeService.
+  // Ash-chrome is expected to call this method on initialization.
+  // Lacros-chrome may call AshChromeService APIs earlier than this
+  // invocation. In the case, the calls are queued, and processed
+  // sequentially, when ash-chrome binds the receiver to the service.
+  RequestAshChromeServiceReceiver@0() => (
+      pending_receiver<AshChromeService> receiver);
+
+  // Opens a new window in lacros-chrome with, currently, the last used profile.
+  // The callback is called on the command execution.
+  NewWindow@1() => ();
+};

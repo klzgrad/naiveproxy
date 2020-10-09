@@ -1,0 +1,43 @@
+// Copyright 2020 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module crosapi.mojom;
+
+import "chromeos/crosapi/mojom/notification.mojom";
+import "mojo/public/mojom/base/string16.mojom";
+
+// Handles notifications created via the Notifications web platform API and the
+// chrome.notifications() extension API. Shows the notifications in the
+// message center. Implemented in ash-chrome.
+interface MessageCenter {
+  // Displays a notification. If the notification's ID is the same as an
+  // existing notification, that notification is replaced. The delegate will be
+  // called with user actions.
+  DisplayNotification(Notification notification,
+                      pending_remote<NotificationDelegate> delegate);
+
+  // Closes a notification by the ID provided in |notification| above.
+  CloseNotification(string id);
+};
+
+// Handles responses to user actions on notifications. Multiple actions may
+// occur on a single notification. For example, clicking a notification button
+// may not close the notification. Implemented in lacros-chrome.
+interface NotificationDelegate {
+  // Called when a notification previously displayed by the client is closed.
+  OnNotificationClosed(bool by_user);
+
+  // Called when the body of a notification is clicked.
+  OnNotificationClicked();
+
+  // Called when a notification that has buttons (e.g., "Learn more") receives a
+  // click on one of the buttons.
+  OnNotificationButtonClicked(uint32 button_index);
+
+  // Called when a notification's settings button has been pressed.
+  OnNotificationSettingsButtonClicked();
+
+  // Called when a notification has been disabled (via inline settings).
+  OnNotificationDisabled();
+};

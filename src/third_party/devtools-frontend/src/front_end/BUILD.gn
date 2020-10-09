@@ -1,0 +1,144 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("../scripts/build/ninja/copy.gni")
+import("../third_party/typescript/typescript.gni")
+
+group("front_end") {
+  public_deps = [
+    ":front_end_html_entrypoints",
+    ":ts_library-verification",
+    "accessibility:bundle",
+    "animation:bundle",
+    "bindings:bundle",
+    "browser_sdk:bundle",
+    "changes:bundle",
+    "client_variations:bundle",
+    "cm_modes:bundle",
+    "color_picker:bundle",
+    "common:bundle",
+    "component_docs",
+    "component_helpers:bundle",
+    "components:bundle",
+    "console:bundle",
+    "console_counters:bundle",
+    "cookie_table:bundle",
+    "coverage:bundle",
+    "css_overview:bundle",
+    "data_grid:bundle",
+    "devices:bundle",
+    "diff:bundle",
+    "dom_extension:bundle",
+    "elements:bundle",
+    "emulation:bundle",
+    "event_listeners:bundle",
+    "extensions:bundle",
+    "formatter:bundle",
+    "formatter_worker:bundle",
+    "har_importer:bundle",
+    "heap_snapshot_model:bundle",
+    "help:bundle",
+    "i18n:bundle_i18n",
+    "inline_editor:bundle",
+    "input:bundle",
+    "inspector_main:bundle",
+    "issues:bundle",
+    "javascript_metadata:bundle",
+    "js_main:bundle",
+    "layer_viewer:bundle",
+    "layers:bundle",
+    "main:bundle",
+    "mobile_throttling:bundle",
+    "network:bundle",
+    "node_main:bundle",
+    "object_ui:bundle",
+    "perf_ui:bundle",
+    "performance_monitor:bundle",
+    "persistence:bundle",
+    "profiler:bundle",
+    "protocol_client:bundle",
+    "protocol_monitor:bundle",
+    "quick_open:bundle",
+    "resources:bundle",
+    "screencast:bundle",
+    "sdk:bundle",
+    "search:bundle",
+    "security:bundle",
+    "services:bundle",
+    "settings:bundle",
+    "snippets:bundle",
+    "source_frame:bundle",
+    "sources:bundle",
+    "text_editor:bundle",
+    "text_utils:bundle",
+    "theme_support:bundle",
+    "third_party/lighthouse",
+    "timeline:bundle",
+    "timeline_model:bundle",
+    "toolbox_bootstrap:bundle",
+    "ui:bundle",
+    "web_audio:bundle",
+    "worker_main:bundle",
+    "worker_service:bundle",
+    "workspace:bundle",
+    "workspace_diff:bundle",
+  ]
+
+  data_deps = [
+    ":embedder-scripts",
+    ":front_end_html_entrypoints",
+  ]
+}
+
+copy_sources_to_resources("front_end_html_entrypoints") {
+  sources = [
+    "devtools_app.html",
+    "formatter_worker_entrypoint.js",
+    "inspector.html",
+    "integration_test_runner.html",
+    "js_app.html",
+    "ndb_app.html",
+    "node_app.html",
+    "toolbox.html",
+    "worker_app.html",
+  ]
+}
+
+copy_sources_to_resources("embedder-scripts") {
+  sources = [
+    "Tests.js",
+    "devtools_compatibility.js",
+  ]
+}
+
+# This target is used to perform checks on all generated `.d.ts` files.
+# Previously we would only run these checks when `is_debug=false`, but
+# this complicated debugging. Therefore, this target now always perform
+# the check, but we only check the `.d.ts` files once (rather than for
+# every single defined `ts_library`).
+#
+# Whenever a folder is fully checked by the TypeScript compiler, add
+# the folder to the `deps` of this target AND add a corresponding
+# `import`-statement to the `verification.ts` file. Without adding
+# the `import`-statement, TypeScript will be "smart" and ignore all
+# declaration files it doesn't have to use.
+ts_library("ts_library-verification") {
+  verify_lib_check = true
+
+  sources = [ "verification.ts" ]
+
+  deps = [
+    "bindings:bundle",
+    "browser_sdk:bundle",
+    "color_picker:bundle",
+    "common:bundle",
+    "dom_extension:bundle",
+    "host:bundle",
+    "inspector_overlay",
+    "protocol_client:bundle",
+    "root:bundle",
+    "sdk:bundle",
+    "workspace:bundle",
+  ]
+}

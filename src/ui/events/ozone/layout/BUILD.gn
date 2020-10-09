@@ -1,0 +1,73 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/linux/pkg_config.gni")
+import("//ui/base/ui_features.gni")
+
+# Chromedriver uses this in X11 builds for StubKeyboardLayoutEngine.
+assert(use_ozone || use_x11)
+
+if (use_xkbcommon) {
+  pkg_config("xkbcommon") {
+    packages = [ "xkbcommon" ]
+  }
+}
+
+component("layout") {
+  output_name = "events_ozone_layout"
+
+  sources = [
+    "keyboard_layout_engine.h",
+    "keyboard_layout_engine_manager.cc",
+    "keyboard_layout_engine_manager.h",
+    "no/no_keyboard_layout_engine.cc",
+    "no/no_keyboard_layout_engine.h",
+    "scoped_keyboard_layout_engine.cc",
+    "scoped_keyboard_layout_engine.h",
+    "stub/stub_keyboard_layout_engine.cc",
+    "stub/stub_keyboard_layout_engine.h",
+  ]
+
+  defines = [ "IS_EVENTS_OZONE_LAYOUT_IMPL" ]
+
+  deps = [
+    "//base",
+    "//ui/events:dom_keycode_converter",
+    "//ui/events:events_base",
+  ]
+
+  if (use_xkbcommon) {
+    configs += [ ":xkbcommon" ]
+
+    sources += [
+      "xkb/xkb_evdev_codes.cc",
+      "xkb/xkb_evdev_codes.h",
+      "xkb/xkb_key_code_converter.h",
+      "xkb/xkb_keyboard_layout_engine.cc",
+      "xkb/xkb_keyboard_layout_engine.h",
+    ]
+
+    deps += [ "//ui/events/keycodes:xkb" ]
+  }
+}
+
+source_set("unittests") {
+  testonly = true
+
+  sources = []
+  if (use_xkbcommon) {
+    sources += [
+      "keyboard_layout_engine_unittest.cc",
+      "xkb/xkb_keyboard_layout_engine_unittest.cc",
+    ]
+  }
+
+  deps = [
+    ":layout",
+    "//base",
+    "//testing/gtest",
+    "//ui/events",
+    "//ui/events:dom_keycode_converter",
+  ]
+}

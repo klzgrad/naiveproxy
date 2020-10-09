@@ -1,0 +1,119 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+template("mac_toolchain") {
+  toolchain(target_name) {
+    assert(defined(invoker.toolchain_args),
+           "Toolchains must declare toolchain_args")
+
+    toolchain_args = {
+      forward_variables_from(invoker.toolchain_args, "*")
+    }
+
+    cc = "clang"
+    cxx = "clang++"
+
+    tool("link") {
+      output = "{{output_dir}}/{{target_output_name}}{{output_extension}}"
+      rspfile = output + ".rsp"
+      rspfile_content = "{{inputs_newline}}"
+
+      outputs = [ output ]
+      command = "$cxx {{ldflags}} -o $output -Wl,-filelist,$rspfile {{libs}} {{solibs}} {{frameworks}}"
+      description = "LINK {{output}}"
+
+      default_output_dir = "{{root_out_dir}}"
+      default_output_extension = ""
+      output_prefix = ""
+    }
+
+    tool("solink") {
+      dylib = "{{output_dir}}/{{target_output_name}}{{output_extension}}"
+      rspfile = dylib + ".rsp"
+      rspfile_content = "{{inputs_newline}}"
+
+      outputs = [ dylib ]
+      command = "$cxx -dynamiclib {{ldflags}} -o $dylib -Wl,-filelist,$rspfile {{libs}} {{solibs}} {{frameworks}}"
+      description = "SOLINK {{output}}"
+
+      default_output_dir = "{{root_out_dir}}"
+      default_output_extension = ".dylib"
+      output_prefix = "lib"
+    }
+
+    tool("cc") {
+      depfile = "{{output}}.d"
+      precompiled_header_type = "gcc"
+      command = "$cc -MMD -MF $depfile {{defines}} {{include_dirs}} {{cflags}} {{cflags_c}} -c {{source}} -o {{output}}"
+      depsformat = "gcc"
+      description = "CC {{output}}"
+      outputs = [ "{{target_out_dir}}/{{label_name}}/{{source_name_part}}.o" ]
+    }
+
+    tool("cxx") {
+      depfile = "{{output}}.d"
+      precompiled_header_type = "gcc"
+      command = "$cxx -MMD -MF $depfile {{defines}} {{include_dirs}} {{cflags}} {{cflags_cc}} -c {{source}} -o {{output}}"
+      depsformat = "gcc"
+      description = "CXX {{output}}"
+      outputs = [ "{{target_out_dir}}/{{label_name}}/{{source_name_part}}.o" ]
+    }
+
+    tool("objc") {
+      depfile = "{{output}}.d"
+      precompiled_header_type = "gcc"
+      command = "$cc -MMD -MF $depfile {{defines}} {{include_dirs}} {{framework_dirs}} {{cflags}} {{cflags_objc}} -c {{source}} -o {{output}}"
+      depsformat = "gcc"
+      description = "OBJC {{output}}"
+      outputs = [ "{{target_out_dir}}/{{label_name}}/{{source_name_part}}.o" ]
+    }
+
+    tool("objcxx") {
+      depfile = "{{output}}.d"
+      precompiled_header_type = "gcc"
+      command = "$cxx -MMD -MF $depfile {{defines}} {{include_dirs}} {{framework_dirs}} {{cflags}} {{cflags_objcc}} -c {{source}} -o {{output}}"
+      depsformat = "gcc"
+      description = "OBJCXX {{output}}"
+      outputs = [ "{{target_out_dir}}/{{label_name}}/{{source_name_part}}.o" ]
+    }
+
+    tool("stamp") {
+      command = "touch {{output}}"
+      description = "STAMP {{output}}"
+    }
+
+    tool("copy_bundle_data") {
+      command = "rm -rf {{output}} && cp -a {{source}} {{output}}"
+      description = "COPY_BUNDLE_DATA {{output}}"
+    }
+  }
+}
+
+mac_toolchain("clang_x86") {
+  toolchain_args = {
+    current_cpu = "x86"
+    current_os = "mac"
+  }
+}
+
+mac_toolchain("clang_x64") {
+  toolchain_args = {
+    current_cpu = "x64"
+    current_os = "mac"
+  }
+}
+
+mac_toolchain("clang_arm") {
+  toolchain_args = {
+    current_cpu = "arm"
+    current_os = "mac"
+  }
+}
+
+mac_toolchain("clang_arm64") {
+  toolchain_args = {
+    current_cpu = "arm64"
+    current_os = "mac"
+  }
+}

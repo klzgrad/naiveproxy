@@ -1,0 +1,70 @@
+// Copyright 2020 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module nearby_share.mojom;
+
+import "chrome/browser/ui/webui/nearby_share/nearby_share_target_types.mojom";
+import "mojo/public/mojom/base/unguessable_token.mojom";
+
+// Describes a nearby device that is able to receive data via Nearby Share.
+struct ShareTarget {
+  // Unique identifier during the current discovery session. The same physical
+  // device might have a different value each time StartDiscovery() is called.
+  mojo_base.mojom.UnguessableToken id;
+  // User defined name of this share target.
+  string name;
+  // Device type of this share target.
+  ShareTargetType type;
+};
+
+// Result of selecting a share target.
+enum SelectShareTargetResult {
+  // Successfully selected share target. Transfer will continue from here.
+  kOk,
+  // Unknown error while selecting the share target.
+  kError,
+  // Could not find the selected share target. It may have been lost in the
+  // mean time.
+  kInvalidShareTarget,
+};
+
+// Interface to be notified about nearby devices. The same ShareTarget might be
+// discovered multiple times but will have the same id during one session. This
+// is implemented in UI surfaces and called from the browser process.
+interface ShareTargetListener {
+  // Reports a nearby device found via Nearby Share.
+  OnShareTargetDiscovered(ShareTarget share_target);
+
+  // Reports that a previously discovered device is no longer available.
+  OnShareTargetLost(ShareTarget share_target);
+};
+
+// Manager interface for nearby device discovery. Implemented on the browser
+// process and used by UI surfaces.
+interface DiscoveryManager {
+  // Starts discovering nearby devices. The passed |listener| will be called
+  // with any discovered devices.
+  StartDiscovery(pending_remote<ShareTargetListener> listener)
+      => (bool success);
+
+  // Select a previously discovered |share_target_id| to send data to. If the
+  // selected target requires an additional confirmation of a shared connection
+  // id by the user it will return a valid ConfirmationManager interface to be
+  // used to accept or reject the transfer. |token| will contain the string to
+  // show to the user in that case.
+  SelectShareTarget(mojo_base.mojom.UnguessableToken share_target_id)
+      => (SelectShareTargetResult result,
+          string? token,
+          pending_remote<ConfirmationManager>? confirmation_manager);
+};
+
+// Manager interface for the Nearby Share confirmation screen. Implemented on
+// the browser process and used by UI surfaces.
+interface ConfirmationManager {
+  // Accepts a connection to the current Share Target.
+  Accept() => (bool success);
+
+  // Rejects a connection to the current Share Target.
+  Reject() => (bool success);
+};

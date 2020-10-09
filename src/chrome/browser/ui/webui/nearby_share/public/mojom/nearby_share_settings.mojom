@@ -1,0 +1,81 @@
+// Copyright 2020 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+module nearby_share.mojom;
+
+// TODO(crbug.com/1110098): Remove kUnknown.
+// Represents the data usage preference when sharing.
+enum DataUsage {
+  kUnknown = 0,
+  // User is never willing to use the Internet
+  kOffline = 1,
+  // User is always willing to use the Internet
+  kOnline = 2,
+  // User is willing to use the Internet on an un-metered connection.
+  // NOTE: This matches Android Nearby Share's naming for now.
+  kWifiOnly = 3
+};
+
+// TODO(crbug.com/1110098): Remove kUnknown.
+// Represents who the user has chosen to be visible to.
+enum Visibility {
+  kUnknown = 0,
+  // The user is not advertising to anyone.
+  kNoOne = 1,
+  // The user is visible to all contacts.
+  kAllContacts = 2,
+  // The user is only visible to selected contacts.
+  kSelectedContacts = 3
+};
+
+// This observer interface allows clients to be notified whenever key Nearby
+// Share settings are changed.
+interface NearbyShareSettingsObserver {
+  // Called when the nearby feature is enabled or disabled.
+  OnEnabledChanged(bool enabled);
+  // Called when the device name changes.
+  OnDeviceNameChanged(string device_name);
+  // Called when data usage changes.
+  OnDataUsageChanged(DataUsage data_usage);
+  // Called when visibility changed.
+  OnVisibilityChanged(Visibility visibility);
+  // Called when the contacts the user wants to be visible to changes.
+  OnAllowedContactsChanged(array<string> visible_contact_ids);
+};
+
+// An interface over Nearby Share's user settings which will need to be used
+// in browser settings, os_settings as well as during the on boarding flow which
+// is hosted in a separate WebUI where settingsPrivate is not available.
+interface NearbyShareSettings {
+  // Add an observer which can monitor settings changes and new contacts.
+  AddSettingsObserver(pending_remote<NearbyShareSettingsObserver> observer);
+
+  // Get the enabled state for the Nearby Share feature.
+  GetEnabled() => (bool enabled);
+  // Set the enabled state for the Nearby Share feature.
+  SetEnabled(bool enabled);
+
+  // Get the device name shown to a sender when this device is available as
+  // a share target. |device_name| is the new device name.
+  GetDeviceName() => (string device_name);
+  // Set the device name shown to a sender when this device is available as
+  // a share target.
+  SetDeviceName(string device_name);
+
+  // Get which type of network connectivity Nearby Share can operate on.
+  GetDataUsage() => (DataUsage data_usage);
+  // Set which type of network connectivity Nearby Share can operate on.
+  SetDataUsage(DataUsage data_usage);
+
+  // Get the visibility of this device with respect to the user's contacts.
+  GetVisibility() => (Visibility visibility);
+  // Set the visibility of this device with respect to the user's contacts.
+  SetVisibility(Visibility visibility);
+
+  // Get all contact ids that this device should be visible to when visibility
+  // is |kSelectedContacts|.
+  GetAllowedContacts() => (array<string> allowed_contacts);
+  // Set all contact ids that this device should be visible to when visibility
+  // is |kSelectedContacts|.
+  SetAllowedContacts(array<string> allowed_contacts);
+};
