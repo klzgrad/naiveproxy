@@ -51,7 +51,7 @@ route {
   file_server { root /var/www/html }
 }
 ```
-This is Caddy 2 syntax. it is not the same with Caddy 1.
+This is Caddy 2 syntax. It is not the same with Caddy 1.
 
 Locally run `./naive` with the following `config.json` to get a SOCKS5 proxy at local port 1080.
 ```json
