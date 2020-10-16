@@ -46,7 +46,7 @@ route {
     basic_auth user pass
     hide_ip
     hide_via
-    probe_resistance secret.com
+    probe_resistance
   }
   file_server { root /var/www/html }
 }
