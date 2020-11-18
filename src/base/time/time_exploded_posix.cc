@@ -124,11 +124,13 @@ void Time::Explode(bool is_local, Exploded* exploded) const {
   const int64_t millis_since_unix_epoch =
       ToRoundedDownMillisecondsSinceUnixEpoch();
 
+#if 0
   // For systems with a Y2038 problem, use ICU as the Explode() implementation.
   if (sizeof(SysTime) < 8) {
     ExplodeUsingIcu(millis_since_unix_epoch, is_local, exploded);
     return;
   }
+#endif
 
   // Split the |millis_since_unix_epoch| into separate seconds and millisecond
   // components because the platform calendar-explode operates at one-second
