@@ -791,6 +791,7 @@ class BASE_EXPORT Time : public time_internal::TimeBase<Time> {
 
   // Some platforms use the ICU library to provide To/FromExploded, when their
   // native library implementations are insufficient in some way.
+#if 0
   static void ExplodeUsingIcu(int64_t millis_since_unix_epoch,
                               bool is_local,
                               Exploded* exploded);
@@ -798,6 +799,7 @@ class BASE_EXPORT Time : public time_internal::TimeBase<Time> {
                                    const Exploded& exploded,
                                    int64_t* millis_since_unix_epoch)
       WARN_UNUSED_RESULT;
+#endif
 
   // Rounds down the time to the nearest day in either local time
   // |is_local = true| or UTC |is_local = false|.
