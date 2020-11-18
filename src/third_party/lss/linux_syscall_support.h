@@ -140,12 +140,14 @@ extern "C" {
 #pragma push_macro("stat64")
 #pragma push_macro("fstat64")
 #pragma push_macro("lstat64")
+#pragma push_macro("fstatat64")
 #pragma push_macro("pread64")
 #pragma push_macro("pwrite64")
 #pragma push_macro("getdents64")
 #undef stat64
 #undef fstat64
 #undef lstat64
+#undef fstatat64
 #undef pread64
 #undef pwrite64
 #undef getdents64
@@ -5363,6 +5365,7 @@ struct kernel_statx {
 #pragma pop_macro("stat64")
 #pragma pop_macro("fstat64")
 #pragma pop_macro("lstat64")
+#pragma pop_macro("fstatat64")
 #pragma pop_macro("pread64")
 #pragma pop_macro("pwrite64")
 #pragma pop_macro("getdents64")
