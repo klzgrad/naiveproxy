@@ -1,0 +1,221 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("../scripts/build/ninja/copy.gni")
+import("../scripts/build/ninja/vars.gni")
+import("../third_party/typescript/typescript.gni")
+
+group("front_end") {
+  public_deps = [
+    ":entrypoint_copy",
+    ":html_entrypoints",
+    ":ts_library-verification",
+    "accessibility:bundle",
+    "animation:bundle",
+    "bindings:bundle",
+    "browser_debugger:bundle",
+    "browser_sdk:bundle",
+    "changes:bundle",
+    "client_variations:bundle",
+    "cm_modes:bundle",
+    "color_picker:bundle",
+    "common:bundle",
+    "component_docs",
+    "component_helpers:bundle",
+    "components:bundle",
+    "console:bundle",
+    "console_counters:bundle",
+    "cookie_table:bundle",
+    "coverage:bundle",
+    "css_overview:bundle",
+    "data_grid:bundle",
+    "developer_resources:bundle",
+    "devices:bundle",
+    "diff:bundle",
+    "dom_extension:bundle",
+    "elements:bundle",
+    "emulated_devices/optimized:optimized_emulated_devices",
+    "emulation:bundle",
+    "event_listeners:bundle",
+    "extensions:bundle",
+    "formatter:bundle",
+    "formatter_worker:bundle",
+    "har_importer:bundle",
+    "heap_snapshot_model:bundle",
+    "heap_snapshot_worker:bundle",
+    "help:bundle",
+    "i18n:bundle",
+    "inline_editor:bundle",
+    "input:bundle",
+    "inspector_main:bundle",
+    "issues:bundle",
+    "javascript_metadata:bundle",
+    "js_main:bundle",
+    "layer_viewer:bundle",
+    "layers:bundle",
+    "lighthouse:bundle",
+    "lighthouse_worker:bundle",
+    "main:bundle",
+    "media:bundle",
+    "mobile_throttling:bundle",
+    "network:bundle",
+    "node_main:bundle",
+    "object_ui:bundle",
+    "perf_ui:bundle",
+    "performance_monitor:bundle",
+    "persistence:bundle",
+    "profiler:bundle",
+    "protocol_client:bundle",
+    "protocol_monitor:bundle",
+    "quick_open:bundle",
+    "resources:bundle",
+    "screencast:bundle",
+    "sdk:bundle",
+    "search:bundle",
+    "security:bundle",
+    "services:bundle",
+    "settings:bundle",
+    "snippets:bundle",
+    "source_frame:bundle",
+    "sources:bundle",
+    "test_runner:bundle",
+    "text_editor:bundle",
+    "text_utils:bundle",
+    "theme_support:bundle",
+    "third_party/lighthouse",
+    "third_party/puppeteer:bundle",
+    "timeline:bundle",
+    "timeline_model:bundle",
+    "toolbox_bootstrap:bundle",
+    "ui:bundle",
+    "wasmparser_worker:bundle",
+    "web_audio:bundle",
+    "webauthn:bundle",
+    "worker_main:bundle",
+    "worker_service:bundle",
+    "workspace:bundle",
+    "workspace_diff:bundle",
+  ]
+
+  data_deps = [
+    ":embedder-scripts",
+    ":html_entrypoints",
+    ":legacy_css",
+  ]
+}
+
+group("legacy_test-resources") {
+  public_deps = [
+    "accessibility_test_runner:bundle",
+    "application_test_runner:bundle",
+    "axe_core_test_runner:bundle",
+    "bindings_test_runner:bundle",
+    "console_test_runner:bundle",
+    "coverage_test_runner:bundle",
+    "cpu_profiler_test_runner:bundle",
+    "data_grid_test_runner:bundle",
+    "device_mode_test_runner:bundle",
+    "elements_test_runner:bundle",
+    "extensions_test_runner:bundle",
+    "heap_profiler_test_runner:bundle",
+    "layers_test_runner:bundle",
+    "lighthouse_test_runner:bundle",
+    "network_test_runner:bundle",
+    "performance_test_runner:bundle",
+    "sdk_test_runner:bundle",
+    "security_test_runner:bundle",
+    "sources_test_runner:bundle",
+  ]
+}
+
+group("legacy_css") {
+  public_deps = [
+    "cm:legacy_css",
+    "components:legacy_css",
+    "console:legacy_css",
+    "console_counters:legacy_css",
+    "data_grid:legacy_css",
+    "elements:legacy_css",
+    "emulation:legacy_css",
+    "help:legacy_css",
+    "inspector_main:legacy_css",
+    "mobile_throttling:legacy_css",
+    "object_ui:legacy_css",
+    "persistence:legacy_css",
+    "ui:legacy_css",
+  ]
+}
+
+copy_sources_to_resources("entrypoint_copy") {
+  sources = [
+    "formatter_worker_entrypoint.js",
+    "integration_test_runner.html",
+  ]
+}
+
+action("html_entrypoints") {
+  inputs = [
+    "entrypoint_template.html",
+    devtools_location_prepend + "scripts/build/generate_html_entrypoint.js",
+  ]
+
+  script = "//third_party/node/node.py"
+
+  args = [
+    rebase_path(
+        devtools_location_prepend + "scripts/build/generate_html_entrypoint.js",
+        root_build_dir),
+    "--template",
+    rebase_path("entrypoint_template.html", root_build_dir),
+    "--out-directory",
+    rebase_path(resources_out_dir, root_build_dir),
+  ]
+
+  outputs = [
+    "$resources_out_dir/devtools_app.html",
+    "$resources_out_dir/inspector.html",
+    "$resources_out_dir/js_app.html",
+    "$resources_out_dir/ndb_app.html",
+    "$resources_out_dir/node_app.html",
+    "$resources_out_dir/toolbox.html",
+    "$resources_out_dir/worker_app.html",
+  ]
+}
+
+copy_sources_to_resources("embedder-scripts") {
+  sources = [
+    "Tests.js",
+    "devtools_compatibility.js",
+  ]
+}
+
+# This target is used to perform checks on all generated `.d.ts` files.
+# Previously we would only run these checks when `is_debug=false`, but
+# this complicated debugging. Therefore, this target now always perform
+# the check, but we only check the `.d.ts` files once (rather than for
+# every single defined `ts_library`).
+#
+# Whenever a folder is fully checked by the TypeScript compiler, add
+# the folder to the `deps` of this target AND add a corresponding
+# `import`-statement to the `verification.ts` file. Without adding
+# the `import`-statement, TypeScript will be "smart" and ignore all
+# declaration files it doesn't have to use.
+ts_library("ts_library-verification") {
+  verify_lib_check = true
+
+  sources = [ "verification.ts" ]
+
+  deps = [
+    "bindings:bundle",
+    "browser_sdk:bundle",
+    "color_picker:bundle",
+    "common:bundle",
+    "dom_extension:bundle",
+    "host:bundle",
+    "protocol_client:bundle",
+    "root:bundle",
+    "sdk:bundle",
+    "workspace:bundle",
+  ]
+}

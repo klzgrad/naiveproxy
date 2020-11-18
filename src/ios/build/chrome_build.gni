@@ -1,0 +1,97 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/chrome_build.gni")
+import("//build/config/ios/ios_sdk.gni")
+import("//build/config/mac/symbols.gni")
+
+declare_args() {
+  # Enable widget extensions.
+  ios_enable_content_widget_extension = true
+  ios_enable_search_widget_extension = true
+
+  # Enable share extension.
+  ios_enable_share_extension = true
+
+  # Enable credential provider extension.
+  ios_enable_credential_provider_extension = true
+
+  # Label of the target providing implementation for AccountVerificationProvider.
+  # Overridden when using the Google-internal repository to build Chrome on iOS.
+  ios_account_verification_provider_target = "//ios/chrome/credential_provider_extension:account_verification_provider_implementation"
+
+  # Enable use of SceneDelegate-driven startup flow in
+  # Info.plist.
+  ios_enable_scene_startup = false
+
+  # Enable multi-window configuration in Info.plist. Includes all the effects of
+  # setting |ios_enable_scene_startup| to |true|.
+  ios_enable_multi_window = true
+
+  # When set the main plist CFBundleVersion will be set to ios_lock_to_version,
+  # followed by the milestone and patch in one tuple, e.g. 86.0.4240.8720 where
+  # 87 is the milestone and 20 is the stable patch.  Note that CFBundleVersion
+  # is mostly unused by Chrome and should not affect how the actual version
+  # number is handled internally by Chrome.
+  # TODO(crbug.com/1140474): Remove once iOS 14.2 reaches mass adoption.
+  ios_lock_to_version = ""
+
+  # Value of the encryption export compliance code. See "Cryptography and
+  # U.S. Export Compliance" in "Submitting the App to App Review" in the
+  # Apple developer documentation (https://goo.gl/yv1xEF).
+  ios_encryption_export_compliance_code = ""
+
+  # List of plist templates to merge when generating chrome Info.plist.
+  ios_chrome_info_plist_additions = []
+
+  # List of targets used to generate the plist listed in
+  # ios_chrome_info_plist_additions variable (if any).
+  ios_chrome_info_plist_addition_targets = []
+
+  # List of plist templates to merge when generating chrome entitlements.
+  ios_chrome_entitlements_additions = []
+
+  # List of plist templates to merge when generating EarlGrey tests
+  # entitlements.
+  ios_egtests_entitlements_additions = []
+
+  # Overridable list of dependencies that are forbidden for
+  # //ios/chrome/app:chrome target.
+  ios_chrome_extra_assert_no_deps = []
+
+  # List of plist templates to merge when generating chrome cpe entitlements.
+  ios_chrome_cpe_entitlements_additions = []
+}
+
+# Configure whether breakpad support is enabled.
+breakpad_enabled = is_official_build && is_chrome_branded
+
+if (breakpad_enabled) {
+  breakpad_enabled_as_int = 1
+  is_official_release = enable_dsyms && !use_ios_simulator &&
+                        current_toolchain == default_toolchain
+} else {
+  breakpad_enabled_as_int = 0
+  is_official_release = false
+}
+
+chromium_bundle_id = "chrome.ios.herebedragons"
+chromium_handoff_id = "$ios_app_bundle_id_prefix.chrome.handoff"
+ios_move_tab_activity_type = "$ios_app_bundle_id_prefix.chrome.move-tab"
+
+if (is_chrome_branded) {
+  chromium_short_name = "Chrome"
+  url_channel_scheme = "googlechrome-dev"
+  url_secure_scheme = "googlechromes"
+  url_ssoauth_scheme = "$ios_app_bundle_id_prefix.sso.chrome.stable"
+  url_unsecure_scheme = "googlechrome"
+  url_x_callback_scheme = "googlechrome-x-callback"
+} else {
+  chromium_short_name = "Chromium"
+  url_channel_scheme = "chromium-dev"
+  url_secure_scheme = "chromiums"
+  url_ssoauth_scheme = "$ios_app_bundle_id_prefix.sso.chromium"
+  url_unsecure_scheme = "chromium"
+  url_x_callback_scheme = "chromium-x-callback"
+}

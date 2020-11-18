@@ -1,0 +1,49 @@
+# Copyright 2020 The Chromium Authors.  All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("./vars.gni")
+
+template("rollup") {
+  assert(defined(invoker.entrypoint),
+         "You must define the 'entrypoint' for a rollup target")
+
+  action(target_name) {
+    script = "//third_party/node/node.py"
+
+    forward_variables_from(invoker,
+                           [
+                             "visibility",
+                             "deps",
+                             "public_deps",
+                           ])
+
+    inputs = [
+      invoker.entrypoint,
+      devtools_location_prepend + "node_modules/rollup/dist/bin/rollup",
+      devtools_location_prepend + "front_end/rollup.config.js",
+    ]
+
+    args = [
+      rebase_path(
+          devtools_location_prepend + "node_modules/rollup/dist/bin/rollup",
+          root_build_dir),
+
+      # TODO(crbug.com/1098074): We need to hide warnings that are written stderr,
+      # as Chromium does not process the returncode of the subprocess correctly
+      # and instead looks if `stderr` is empty.
+      "--silent",
+      "--plugin",
+      "terser",
+      "--config",
+      rebase_path(devtools_location_prepend + "front_end/rollup.config.js",
+                  root_build_dir),
+      "--input",
+      rebase_path(invoker.entrypoint, root_build_dir),
+      "--file",
+      rebase_path(invoker.output_file_location, root_build_dir),
+    ]
+
+    outputs = [ invoker.output_file_location ]
+  }
+}

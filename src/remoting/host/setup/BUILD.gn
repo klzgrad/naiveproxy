@@ -1,0 +1,66 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# This file depends on the legacy global sources assignment filter. It should
+# be converted to check target platform before assigning source files to the
+# sources variable. Remove this import and set_sources_assignment_filter call
+# when the file has been converted. See https://crbug.com/1018739 for details.
+import("//build/config/deprecated_default_sources_assignment_filter.gni")
+set_sources_assignment_filter(deprecated_default_sources_assignment_filter)
+
+source_set("setup") {
+  public_deps = [ ":common" ]
+  deps = [ "//remoting/host" ]
+}
+
+source_set("common") {
+  sources = [
+    "daemon_controller.cc",
+    "daemon_controller.h",
+    "daemon_controller_delegate_linux.cc",
+    "daemon_controller_delegate_linux.h",
+    "daemon_controller_delegate_mac.h",
+    "daemon_controller_delegate_mac.mm",
+    "daemon_controller_delegate_win.cc",
+    "daemon_controller_delegate_win.h",
+    "me2me_native_messaging_host.cc",
+    "me2me_native_messaging_host.h",
+    "pin_validator.cc",
+    "pin_validator.h",
+    "service_client.cc",
+    "service_client.h",
+    "test_util.cc",
+    "test_util.h",
+  ]
+
+  configs += [
+    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+    "//build/config/compiler:no_size_t_to_int_warning",
+    "//build/config/compiler:wexit_time_destructors",
+    "//remoting/build/config:version",
+  ]
+
+  deps = [
+    "//base",
+    "//google_apis",
+    "//mojo/core/embedder",
+    "//remoting/base:authorization",
+    "//remoting/host:common",
+    "//remoting/host/native_messaging",
+    "//services/network/public/cpp",
+    "//services/network/public/mojom",
+  ]
+
+  if (is_mac) {
+    deps += [ "//remoting/host/mac:permission_checking" ]
+  }
+
+  if (is_apple) {
+    deps += [ "//remoting/host/mac:constants" ]
+  }
+
+  if (is_win) {
+    deps += [ "//remoting/host/win:remoting_lib_idl" ]
+  }
+}

@@ -1,0 +1,472 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//third_party/protobuf/proto_library.gni")
+
+# src/proto/connections
+
+proto_library("offline_wire_formats_proto") {
+  sources = [ "src/proto/connections/offline_wire_formats.proto" ]
+  proto_out_dir = "third_party/nearby/proto/connections"
+}
+
+proto_library("web_rtc_signaling_frames_proto") {
+  sources = [ "src/proto/mediums/web_rtc_signaling_frames.proto" ]
+  proto_out_dir = "location/nearby/mediums/proto"
+}
+
+# src/proto
+
+proto_library("connections_enums_proto") {
+  sources = [ "src/proto/connections_enums.proto" ]
+  proto_out_dir = "third_party/nearby/proto"
+}
+
+# Nearby Config
+
+config("nearby_include_config") {
+  include_dirs = [
+    "src/cpp",
+    "$root_gen_dir/third_party/nearby",
+
+    # For WebRTC APIs.
+    "//third_party",
+  ]
+}
+
+# src/cpp/platform_v2/impl/shared
+
+source_set("platform_v2_impl_shared_file") {
+  public_configs = [ ":nearby_include_config" ]
+  sources = [ "src/cpp/platform_v2/impl/shared/file.cc" ]
+  public = [ "src/cpp/platform_v2/impl/shared/file.h" ]
+  public_deps = [
+    ":platform_v2_api_platform",
+    ":platform_v2_public_types",
+    "//third_party/abseil-cpp:absl",
+  ]
+}
+
+# src/cpp/platform_v2/api
+
+source_set("platform_v2_api_comm") {
+  public_configs = [ ":nearby_include_config" ]
+  sources = [
+    "src/cpp/platform_v2/api/ble.h",
+    "src/cpp/platform_v2/api/ble_v2.h",
+    "src/cpp/platform_v2/api/bluetooth_adapter.h",
+    "src/cpp/platform_v2/api/bluetooth_classic.h",
+    "src/cpp/platform_v2/api/server_sync.h",
+    "src/cpp/platform_v2/api/webrtc.h",
+    "src/cpp/platform_v2/api/wifi.h",
+    "src/cpp/platform_v2/api/wifi_lan.h",
+  ]
+  public_deps = [
+    ":platform_v2_base",
+    "//third_party/abseil-cpp:absl",
+    "//third_party/webrtc_overrides:webrtc_component",
+  ]
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [ "//build/config/compiler:no_chromium_code" ]
+}
+
+source_set("platform_v2_api_types") {
+  public_configs = [ ":nearby_include_config" ]
+  sources = [
+    "src/cpp/platform_v2/api/atomic_boolean.h",
+    "src/cpp/platform_v2/api/atomic_reference.h",
+    "src/cpp/platform_v2/api/cancelable.h",
+    "src/cpp/platform_v2/api/condition_variable.h",
+    "src/cpp/platform_v2/api/count_down_latch.h",
+    "src/cpp/platform_v2/api/crypto.h",
+    "src/cpp/platform_v2/api/executor.h",
+    "src/cpp/platform_v2/api/future.h",
+    "src/cpp/platform_v2/api/input_file.h",
+    "src/cpp/platform_v2/api/listenable_future.h",
+    "src/cpp/platform_v2/api/log_message.h",
+    "src/cpp/platform_v2/api/mutex.h",
+    "src/cpp/platform_v2/api/output_file.h",
+    "src/cpp/platform_v2/api/scheduled_executor.h",
+    "src/cpp/platform_v2/api/settable_future.h",
+    "src/cpp/platform_v2/api/submittable_executor.h",
+    "src/cpp/platform_v2/api/system_clock.h",
+  ]
+  public_deps = [
+    ":platform_v2_base",
+    "//third_party/abseil-cpp:absl",
+  ]
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [ "//build/config/compiler:no_chromium_code" ]
+}
+
+source_set("platform_v2_api_platform") {
+  public_configs = [ ":nearby_include_config" ]
+  public = [ "src/cpp/platform_v2/api/platform.h" ]
+  public_deps = [
+    ":platform_v2_api_comm",
+    ":platform_v2_api_types",
+    ":platform_v2_base",
+    "//third_party/abseil-cpp:absl",
+  ]
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [ "//build/config/compiler:no_chromium_code" ]
+}
+
+# src/cpp/platform_v2/base
+
+source_set("platform_v2_base") {
+  public_configs = [ ":nearby_include_config" ]
+  sources = [
+    "src/cpp/platform_v2/base/base64_utils.cc",
+    "src/cpp/platform_v2/base/bluetooth_utils.cc",
+    "src/cpp/platform_v2/base/prng.cc",
+  ]
+  public = [
+    "src/cpp/platform_v2/base/base64_utils.h",
+    "src/cpp/platform_v2/base/bluetooth_utils.h",
+    "src/cpp/platform_v2/base/byte_array.h",
+    "src/cpp/platform_v2/base/callable.h",
+    "src/cpp/platform_v2/base/exception.h",
+    "src/cpp/platform_v2/base/input_stream.h",
+    "src/cpp/platform_v2/base/listeners.h",
+    "src/cpp/platform_v2/base/output_stream.h",
+    "src/cpp/platform_v2/base/payload_id.h",
+    "src/cpp/platform_v2/base/prng.h",
+    "src/cpp/platform_v2/base/runnable.h",
+    "src/cpp/platform_v2/base/socket.h",
+    "src/cpp/platform_v2/base/types.h",
+  ]
+  public_deps = [ "//third_party/abseil-cpp:absl" ]
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [ "//build/config/compiler:no_chromium_code" ]
+}
+
+source_set("platform_v2_base_util") {
+  public_configs = [ ":nearby_include_config" ]
+  sources = [
+    "src/cpp/platform_v2/base/base_input_stream.cc",
+    "src/cpp/platform_v2/base/base_pipe.cc",
+  ]
+  public = [
+    "src/cpp/platform_v2/base/base_input_stream.h",
+    "src/cpp/platform_v2/base/base_mutex_lock.h",
+    "src/cpp/platform_v2/base/base_pipe.h",
+  ]
+  public_deps = [
+    ":platform_v2_api_types",
+    ":platform_v2_base",
+    "//third_party/abseil-cpp:absl",
+  ]
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [ "//build/config/compiler:no_chromium_code" ]
+}
+
+source_set("platform_v2_base_logging") {
+  public_configs = [ ":nearby_include_config" ]
+  public = [ "src/cpp/platform_v2/base/logging.h" ]
+  public_deps = [
+    ":platform_v2_api_platform",
+    ":platform_v2_api_types",
+  ]
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [ "//build/config/compiler:no_chromium_code" ]
+}
+
+# src/cpp/platform_v2/public
+
+source_set("platform_v2_public_types") {
+  public_configs = [ ":nearby_include_config" ]
+  sources = [ "src/cpp/platform_v2/public/pipe.cc" ]
+  public = [
+    "src/cpp/platform_v2/public/atomic_boolean.h",
+    "src/cpp/platform_v2/public/atomic_reference.h",
+    "src/cpp/platform_v2/public/cancelable.h",
+    "src/cpp/platform_v2/public/cancelable_alarm.h",
+    "src/cpp/platform_v2/public/condition_variable.h",
+    "src/cpp/platform_v2/public/count_down_latch.h",
+    "src/cpp/platform_v2/public/crypto.h",
+    "src/cpp/platform_v2/public/file.h",
+    "src/cpp/platform_v2/public/future.h",
+    "src/cpp/platform_v2/public/logging.h",
+    "src/cpp/platform_v2/public/multi_thread_executor.h",
+    "src/cpp/platform_v2/public/mutex.h",
+    "src/cpp/platform_v2/public/mutex_lock.h",
+    "src/cpp/platform_v2/public/pipe.h",
+    "src/cpp/platform_v2/public/scheduled_executor.h",
+    "src/cpp/platform_v2/public/settable_future.h",
+    "src/cpp/platform_v2/public/single_thread_executor.h",
+    "src/cpp/platform_v2/public/submittable_executor.h",
+    "src/cpp/platform_v2/public/system_clock.h",
+  ]
+  public_deps = [
+    ":platform_v2_api_platform",
+    ":platform_v2_api_types",
+    ":platform_v2_base",
+    ":platform_v2_base_logging",
+    ":platform_v2_base_util",
+    ":platform_v2_public_logging",
+    "//third_party/abseil-cpp:absl",
+  ]
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [ "//build/config/compiler:no_chromium_code" ]
+}
+
+source_set("platform_v2_public_comm") {
+  public_configs = [ ":nearby_include_config" ]
+  sources = [
+    "src/cpp/platform_v2/public/ble.cc",
+    "src/cpp/platform_v2/public/bluetooth_classic.cc",
+    "src/cpp/platform_v2/public/wifi_lan.cc",
+  ]
+  public = [
+    "src/cpp/platform_v2/public/ble.h",
+    "src/cpp/platform_v2/public/bluetooth_adapter.h",
+    "src/cpp/platform_v2/public/bluetooth_classic.h",
+    "src/cpp/platform_v2/public/webrtc.h",
+    "src/cpp/platform_v2/public/wifi_lan.h",
+  ]
+  public_deps = [
+    ":platform_v2_api_comm",
+    ":platform_v2_api_platform",
+    ":platform_v2_base",
+    ":platform_v2_public_logging",
+    ":platform_v2_public_types",
+    "//third_party/abseil-cpp:absl",
+    "//third_party/webrtc_overrides:webrtc_component",
+  ]
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [ "//build/config/compiler:no_chromium_code" ]
+}
+
+source_set("platform_v2_public_logging") {
+  public_configs = [ ":nearby_include_config" ]
+  public = [ "src/cpp/platform_v2/public/logging.h" ]
+  public_deps = [ ":platform_v2_base_logging" ]
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [ "//build/config/compiler:no_chromium_code" ]
+}
+
+# src/cpp/core_v2
+
+source_set("core") {
+  public_configs = [ ":nearby_include_config" ]
+  sources = [ "src/cpp/core_v2/core.cc" ]
+  public = [ "src/cpp/core_v2/core.h" ]
+  public_deps = [
+    ":connections_enums_proto",
+    ":core_v2_internal",
+    ":core_v2_types",
+    ":platform_v2_public_comm",
+    ":platform_v2_public_logging",
+    ":platform_v2_public_types",
+    "//third_party/abseil-cpp:absl",
+  ]
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [ "//build/config/compiler:no_chromium_code" ]
+}
+
+source_set("core_v2_types") {
+  public_configs = [ ":nearby_include_config" ]
+  sources = [ "src/cpp/core_v2/strategy.cc" ]
+  public = [
+    "src/cpp/core_v2/listeners.h",
+    "src/cpp/core_v2/options.h",
+    "src/cpp/core_v2/params.h",
+    "src/cpp/core_v2/payload.h",
+    "src/cpp/core_v2/status.h",
+    "src/cpp/core_v2/strategy.h",
+  ]
+  public_deps = [
+    ":connections_enums_proto",
+    ":platform_v2_base",
+    ":platform_v2_public_comm",
+    ":platform_v2_public_logging",
+    ":platform_v2_public_types",
+    "//third_party/abseil-cpp:absl",
+  ]
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [ "//build/config/compiler:no_chromium_code" ]
+}
+
+# src/cpp/core_v2/internal
+
+source_set("core_v2_internal") {
+  public_configs = [ ":nearby_include_config" ]
+  sources = [
+    "src/cpp/core_v2/internal/base_endpoint_channel.cc",
+    "src/cpp/core_v2/internal/base_pcp_handler.cc",
+    "src/cpp/core_v2/internal/ble_advertisement.cc",
+    "src/cpp/core_v2/internal/ble_endpoint_channel.cc",
+    "src/cpp/core_v2/internal/bluetooth_device_name.cc",
+    "src/cpp/core_v2/internal/bluetooth_endpoint_channel.cc",
+    "src/cpp/core_v2/internal/bwu_manager.cc",
+    "src/cpp/core_v2/internal/client_proxy.cc",
+    "src/cpp/core_v2/internal/encryption_runner.cc",
+    "src/cpp/core_v2/internal/endpoint_channel_manager.cc",
+    "src/cpp/core_v2/internal/endpoint_manager.cc",
+    "src/cpp/core_v2/internal/internal_payload.cc",
+    "src/cpp/core_v2/internal/internal_payload_factory.cc",
+    "src/cpp/core_v2/internal/offline_frames.cc",
+    "src/cpp/core_v2/internal/offline_service_controller.cc",
+    "src/cpp/core_v2/internal/p2p_cluster_pcp_handler.cc",
+    "src/cpp/core_v2/internal/p2p_point_to_point_pcp_handler.cc",
+    "src/cpp/core_v2/internal/p2p_star_pcp_handler.cc",
+    "src/cpp/core_v2/internal/payload_manager.cc",
+    "src/cpp/core_v2/internal/pcp_manager.cc",
+    "src/cpp/core_v2/internal/service_controller_router.cc",
+    "src/cpp/core_v2/internal/webrtc_bwu_handler.cc",
+    "src/cpp/core_v2/internal/webrtc_endpoint_channel.cc",
+    "src/cpp/core_v2/internal/wifi_lan_endpoint_channel.cc",
+    "src/cpp/core_v2/internal/wifi_lan_service_info.cc",
+  ]
+  public = [
+    "src/cpp/core/internal/message_lite.h",
+    "src/cpp/core_v2/internal/base_bwu_handler.h",
+    "src/cpp/core_v2/internal/base_endpoint_channel.h",
+    "src/cpp/core_v2/internal/base_pcp_handler.h",
+    "src/cpp/core_v2/internal/ble_advertisement.h",
+    "src/cpp/core_v2/internal/ble_endpoint_channel.h",
+    "src/cpp/core_v2/internal/bluetooth_device_name.h",
+    "src/cpp/core_v2/internal/bluetooth_endpoint_channel.h",
+    "src/cpp/core_v2/internal/bwu_handler.h",
+    "src/cpp/core_v2/internal/bwu_manager.h",
+    "src/cpp/core_v2/internal/client_proxy.h",
+    "src/cpp/core_v2/internal/encryption_runner.h",
+    "src/cpp/core_v2/internal/endpoint_channel.h",
+    "src/cpp/core_v2/internal/endpoint_channel_manager.h",
+    "src/cpp/core_v2/internal/endpoint_manager.h",
+    "src/cpp/core_v2/internal/internal_payload.h",
+    "src/cpp/core_v2/internal/internal_payload_factory.h",
+    "src/cpp/core_v2/internal/offline_frames.h",
+    "src/cpp/core_v2/internal/offline_service_controller.h",
+    "src/cpp/core_v2/internal/p2p_cluster_pcp_handler.h",
+    "src/cpp/core_v2/internal/p2p_point_to_point_pcp_handler.h",
+    "src/cpp/core_v2/internal/p2p_star_pcp_handler.h",
+    "src/cpp/core_v2/internal/payload_manager.h",
+    "src/cpp/core_v2/internal/pcp.h",
+    "src/cpp/core_v2/internal/pcp_handler.h",
+    "src/cpp/core_v2/internal/pcp_manager.h",
+    "src/cpp/core_v2/internal/service_controller.h",
+    "src/cpp/core_v2/internal/service_controller_router.h",
+    "src/cpp/core_v2/internal/webrtc_bwu_handler.h",
+    "src/cpp/core_v2/internal/webrtc_endpoint_channel.h",
+    "src/cpp/core_v2/internal/wifi_lan_endpoint_channel.h",
+    "src/cpp/core_v2/internal/wifi_lan_service_info.h",
+  ]
+  public_deps = [
+    ":connections_enums_proto",
+    ":core_v2_internal_mediums",
+    ":core_v2_internal_mediums_webrtc",
+    ":core_v2_types",
+    ":offline_wire_formats_proto",
+    ":platform_v2_base",
+    ":platform_v2_base_util",
+    ":platform_v2_public_comm",
+    ":platform_v2_public_logging",
+    ":platform_v2_public_types",
+    "//third_party/abseil-cpp:absl",
+    "//third_party/protobuf:protobuf_lite",
+    "//third_party/ukey2",
+  ]
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [ "//build/config/compiler:no_chromium_code" ]
+}
+
+source_set("core_v2_internal_test") {
+  testonly = true
+  public_configs = [ ":nearby_include_config" ]
+  public = [ "src/cpp/core_v2/internal/mock_service_controller.h" ]
+  deps = [
+    ":core_v2_internal",
+    "//third_party/googletest:gmock",
+  ]
+}
+
+# src/cpp/core_v2/internal/mediums
+source_set("core_v2_internal_mediums") {
+  public_configs = [ ":nearby_include_config" ]
+  sources = [
+    "src/cpp/core_v2/internal/mediums/advertisement_read_result.cc",
+    "src/cpp/core_v2/internal/mediums/ble.cc",
+    "src/cpp/core_v2/internal/mediums/ble_advertisement.cc",
+    "src/cpp/core_v2/internal/mediums/ble_advertisement_header.cc",
+    "src/cpp/core_v2/internal/mediums/ble_packet.cc",
+    "src/cpp/core_v2/internal/mediums/bloom_filter.cc",
+    "src/cpp/core_v2/internal/mediums/bluetooth_classic.cc",
+    "src/cpp/core_v2/internal/mediums/bluetooth_radio.cc",
+    "src/cpp/core_v2/internal/mediums/mediums.cc",
+    "src/cpp/core_v2/internal/mediums/uuid.cc",
+    "src/cpp/core_v2/internal/mediums/webrtc.cc",
+    "src/cpp/core_v2/internal/mediums/wifi_lan.cc",
+  ]
+  public = [
+    "src/cpp/core_v2/internal/mediums/advertisement_read_result.h",
+    "src/cpp/core_v2/internal/mediums/ble.h",
+    "src/cpp/core_v2/internal/mediums/ble_advertisement.h",
+    "src/cpp/core_v2/internal/mediums/ble_advertisement_header.h",
+    "src/cpp/core_v2/internal/mediums/ble_packet.h",
+    "src/cpp/core_v2/internal/mediums/ble_peripheral.h",
+    "src/cpp/core_v2/internal/mediums/bloom_filter.h",
+    "src/cpp/core_v2/internal/mediums/bluetooth_classic.h",
+    "src/cpp/core_v2/internal/mediums/bluetooth_radio.h",
+    "src/cpp/core_v2/internal/mediums/lost_entity_tracker.h",
+    "src/cpp/core_v2/internal/mediums/mediums.h",
+    "src/cpp/core_v2/internal/mediums/uuid.h",
+    "src/cpp/core_v2/internal/mediums/webrtc.h",
+    "src/cpp/core_v2/internal/mediums/wifi_lan.h",
+  ]
+  public_deps = [
+    ":core_v2_internal_mediums_webrtc",
+    ":core_v2_types",
+    ":platform_v2_base",
+    ":platform_v2_base_util",
+    ":platform_v2_public_comm",
+    ":platform_v2_public_logging",
+    ":platform_v2_public_types",
+    ":web_rtc_signaling_frames_proto",
+    "//third_party/abseil-cpp:absl",
+    "//third_party/smhasher:murmurhash3",
+    "//third_party/webrtc_overrides:webrtc_component",
+  ]
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [ "//build/config/compiler:no_chromium_code" ]
+}
+
+source_set("core_v2_internal_mediums_webrtc") {
+  public_configs = [ ":nearby_include_config" ]
+  sources = [
+    "src/cpp/core_v2/internal/mediums/utils.cc",
+    "src/cpp/core_v2/internal/mediums/webrtc/connection_flow.cc",
+    "src/cpp/core_v2/internal/mediums/webrtc/data_channel_observer_impl.cc",
+    "src/cpp/core_v2/internal/mediums/webrtc/peer_connection_observer_impl.cc",
+    "src/cpp/core_v2/internal/mediums/webrtc/peer_id.cc",
+    "src/cpp/core_v2/internal/mediums/webrtc/signaling_frames.cc",
+    "src/cpp/core_v2/internal/mediums/webrtc/webrtc_socket.cc",
+  ]
+  public = [
+    "src/cpp/core_v2/internal/mediums/utils.h",
+    "src/cpp/core_v2/internal/mediums/webrtc/connection_flow.h",
+    "src/cpp/core_v2/internal/mediums/webrtc/data_channel_listener.h",
+    "src/cpp/core_v2/internal/mediums/webrtc/data_channel_observer_impl.h",
+    "src/cpp/core_v2/internal/mediums/webrtc/local_ice_candidate_listener.h",
+    "src/cpp/core_v2/internal/mediums/webrtc/peer_connection_observer_impl.h",
+    "src/cpp/core_v2/internal/mediums/webrtc/peer_id.h",
+    "src/cpp/core_v2/internal/mediums/webrtc/session_description_wrapper.h",
+    "src/cpp/core_v2/internal/mediums/webrtc/signaling_frames.h",
+    "src/cpp/core_v2/internal/mediums/webrtc/webrtc_socket.h",
+    "src/cpp/core_v2/internal/mediums/webrtc/webrtc_socket_wrapper.h",
+  ]
+  public_deps = [
+    ":core_v2_types",
+    ":platform_v2_base",
+    ":platform_v2_public_comm",
+    ":platform_v2_public_logging",
+    ":platform_v2_public_types",
+    ":web_rtc_signaling_frames_proto",
+    "//third_party/abseil-cpp:absl",
+    "//third_party/webrtc_overrides:webrtc_component",
+  ]
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [ "//build/config/compiler:no_chromium_code" ]
+}

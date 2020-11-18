@@ -1,0 +1,80 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//chrome/common/features.gni")
+import("//third_party/closure_compiler/compile_js.gni")
+import("//tools/grit/grit_rule.gni")
+import("//tools/polymer/html_to_js.gni")
+import("//tools/polymer/polymer.gni")
+import("//ui/webui/resources/tools/js_modulizer.gni")
+import("../../optimize_webui.gni")
+
+if (optimize_webui) {
+  bluetooth_dialog_pak_file = "bluetooth_pairing_dialog_resources.pak"
+  unpak_folder = "bluetooth_pairing_dialog_resources.unpak"
+
+  optimize_webui("build") {
+    host = "bluetooth-pairing"
+    js_out_files = [ "bluetooth_pairing_dialog.rollup.js" ]
+    js_module_in_files = [ "bluetooth_pairing_dialog.js" ]
+    input = rebase_path("$target_gen_dir/$unpak_folder", root_build_dir)
+
+    deps = [
+      ":unpak",
+      "../../../../../ui/webui/resources:preprocess",
+    ]
+
+    excludes = [ "chrome://resources/js/cr.m.js" ]
+  }
+
+  unpak("unpak") {
+    pak_file = bluetooth_dialog_pak_file
+    out_folder = unpak_folder
+
+    deps = [ ":flattened_resources" ]
+  }
+
+  grit("flattened_resources") {
+    source = "bluetooth_pairing_dialog_resources.grd"
+
+    deps = [ ":web_components" ]
+    defines = chrome_grit_defines
+    grit_flags = [
+      "-E",
+      "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
+    ]
+    outputs = [
+      "grit/bluetooth_pairing_dialog_resources.h",
+      "grit/bluetooth_pairing_dialog_resources_map.cc",
+      "grit/bluetooth_pairing_dialog_resources_map.h",
+      bluetooth_dialog_pak_file,
+    ]
+    output_dir = "$root_gen_dir/chrome/browser/resources/chromeos/bluetooth_pairing_dialog"
+  }
+}
+
+js_type_check("closure_compile") {
+  is_polymer3 = true
+  deps = [ ":bluetooth_pairing_dialog" ]
+}
+
+js_library("bluetooth_pairing_dialog") {
+  deps = [
+    "//ui/webui/resources/cr_components/chromeos/bluetooth:bluetooth_dialog.m",
+    "//ui/webui/resources/js:cr.m",
+    "//ui/webui/resources/js:i18n_behavior.m",
+  ]
+  externs_list = chrome_extension_public_externs + [
+                   "$externs_path/bluetooth.js",
+                   "$externs_path/bluetooth_private.js",
+                 ]
+  extra_sources = [
+    "$interfaces_path/bluetooth_interface.js",
+    "$interfaces_path/bluetooth_private_interface.js",
+  ]
+}
+
+html_to_js("web_components") {
+  js_files = [ "bluetooth_pairing_dialog.js" ]
+}

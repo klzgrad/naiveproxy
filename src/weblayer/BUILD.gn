@@ -1,0 +1,810 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+import("//components/captive_portal/core/features.gni")
+
+import("//build/config/features.gni")
+import("//build/config/locales.gni")
+import("//build/config/sanitizers/sanitizers.gni")
+import("//build/config/ui.gni")
+import("//build/config/win/console_app.gni")
+import("//build/config/win/manifest.gni")
+import("//components/spellcheck/spellcheck_build_features.gni")
+import("//gpu/vulkan/features.gni")
+import("//media/media_options.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
+import("//tools/grit/grit_rule.gni")
+import("//tools/grit/repack.gni")
+import("//tools/v8_context_snapshot/v8_context_snapshot.gni")
+if (is_android) {
+  import("//build/config/android/config.gni")
+  import("//build/config/android/rules.gni")
+} else if (is_mac) {
+  import("//build/apple/tweak_info_plist.gni")
+  import("//build/config/mac/rules.gni")
+  import("//content/public/app/mac_helpers.gni")
+  import("//third_party/icu/config.gni")
+  import("//ui/gl/features.gni")
+  import("//v8/gni/v8.gni")
+}
+
+# This file depends on the legacy global sources assignment filter. It should
+# be converted to check target platform before assigning source files to the
+# sources variable. Remove this import and set_sources_assignment_filter call
+# when the file has been converted. See https://crbug.com/1018739 for details.
+import("//build/config/deprecated_default_sources_assignment_filter.gni")
+set_sources_assignment_filter(deprecated_default_sources_assignment_filter)
+
+source_set("android_descriptors") {
+  sources = [ "browser/android_descriptors.h" ]
+  public_deps = [ "//content/public/common:content_descriptors" ]
+}
+
+if (is_android) {
+  weblayer_components_strings_java_resources =
+      [ "java/res/values/components_strings.xml" ] +
+      process_file_template(
+          android_bundle_locales_as_resources,
+          [ "java/res/values-{{source_name_part}}/components_strings.xml" ])
+
+  grit("generate_components_strings") {
+    source = "../components/components_strings.grd"
+
+    # components_strings contains strings from all components. WebLayer
+    # will never display most of them, so we try to limit the included
+    # strings.
+    allowlist = rebase_path("grit_strings_allowlist.txt", root_build_dir)
+    inputs = [ "//weblayer/grit_strings_allowlist.txt" ]
+    grit_flags = [
+      "-w",
+      allowlist,
+    ]
+    outputs =
+        weblayer_components_strings_java_resources +
+        [ "grit/components_strings.h" ] +
+        process_file_template(locales_with_fake_bidi,
+                              [ "components_strings_{{source_name_part}}.pak" ])
+  }
+
+  grit("generate_components_chromium_strings") {
+    source = "../components/components_chromium_strings.grd"
+
+    # components_chromium_strings contains Chromium-specific strings. WebLayer
+    # will never display most of them, so we try to limit the included
+    # strings.
+    allowlist = rebase_path("grit_strings_allowlist.txt", root_build_dir)
+    inputs = [ "//weblayer/grit_strings_allowlist.txt" ]
+    grit_flags = [
+      "-w",
+      allowlist,
+    ]
+    outputs = [ "grit/components_chromium_strings.h" ] +
+              process_file_template(
+                  locales_with_fake_bidi,
+                  [ "components_chromium_strings_{{source_name_part}}.pak" ])
+  }
+
+  repack_locales("weblayer_locales") {
+    input_locales = locales
+    output_locales = locales
+    source_patterns = [
+      "${root_gen_dir}/components/strings/components_locale_settings_",
+      "${root_gen_dir}/weblayer/components_chromium_strings_",
+      "${root_gen_dir}/weblayer/components_strings_",
+    ]
+    deps = [
+      ":generate_components_chromium_strings",
+      ":generate_components_strings",
+      "//components/strings:components_locale_settings",
+    ]
+    output_dir = "$root_out_dir/weblayer/locales"
+  }
+
+  android_assets("locale_pak_assets") {
+    disable_compression = true
+    renaming_sources = [ "$root_out_dir/weblayer/locales/en-US.pak" ]
+    renaming_destinations = [ "stored-locales/weblayer/en-US.pak" ]
+    treat_as_locale_paks = true
+    deps = [ ":weblayer_locales" ]
+  }
+
+  android_assets("bundle_locale_pak_assets") {
+    disable_compression = true
+    renaming_sources = []
+    renaming_destinations = []
+    foreach(_locale, locales) {
+      renaming_sources += [ "$root_out_dir/weblayer/locales/$_locale.pak" ]
+      renaming_destinations += [ "locales/$_locale.pak" ]
+    }
+    treat_as_locale_paks = true
+    deps = [ ":weblayer_locales" ]
+  }
+
+  java_strings_grd_prebuilt("components_java_strings") {
+    resource_overlay = true
+    grit_output_dir = "$root_gen_dir/weblayer/java/res"
+    generated_files =
+        rebase_path(weblayer_components_strings_java_resources, "java/res", ".")
+    deps = [ ":generate_components_strings" ]
+  }
+}
+
+mojom("common_mojom") {
+  disable_variants = true
+
+  sources = [
+    "common/error_page_helper.mojom",
+    "common/renderer_configuration.mojom",
+  ]
+  deps = [ "//components/content_settings/core/common:mojo_bindings" ]
+}
+
+source_set("weblayer_lib_base") {
+  sources = [
+    "app/content_main_delegate_impl.cc",
+    "app/content_main_delegate_impl.h",
+    "app/main.cc",
+    "browser/autofill_client_impl.cc",
+    "browser/autofill_client_impl.h",
+    "browser/browser_context_impl.cc",
+    "browser/browser_context_impl.h",
+    "browser/browser_impl.cc",
+    "browser/browser_impl.h",
+    "browser/browser_list.cc",
+    "browser/browser_list.h",
+    "browser/browser_list_observer.h",
+    "browser/browser_main_parts_impl.cc",
+    "browser/browser_main_parts_impl.h",
+    "browser/browser_process.cc",
+    "browser/browser_process.h",
+    "browser/browsing_data_remover_delegate.cc",
+    "browser/browsing_data_remover_delegate.h",
+    "browser/browsing_data_remover_delegate_factory.cc",
+    "browser/browsing_data_remover_delegate_factory.h",
+    "browser/client_hints_factory.cc",
+    "browser/client_hints_factory.h",
+    "browser/content_browser_client_impl.cc",
+    "browser/content_browser_client_impl.h",
+    "browser/content_browser_client_impl_receiver_bindings.cc",
+    "browser/content_settings_manager_delegate.cc",
+    "browser/content_settings_manager_delegate.h",
+    "browser/controls_visibility_reason.h",
+    "browser/cookie_manager_impl.cc",
+    "browser/cookie_manager_impl.h",
+    "browser/cookie_settings_factory.cc",
+    "browser/cookie_settings_factory.h",
+    "browser/default_search_engine.cc",
+    "browser/default_search_engine.h",
+    "browser/download_impl.cc",
+    "browser/download_impl.h",
+    "browser/download_manager_delegate_impl.cc",
+    "browser/download_manager_delegate_impl.h",
+    "browser/favicon/favicon_backend_wrapper.cc",
+    "browser/favicon/favicon_backend_wrapper.h",
+    "browser/favicon/favicon_fetcher_impl.cc",
+    "browser/favicon/favicon_fetcher_impl.h",
+    "browser/favicon/favicon_service_impl.cc",
+    "browser/favicon/favicon_service_impl.h",
+    "browser/favicon/favicon_service_impl_factory.cc",
+    "browser/favicon/favicon_service_impl_factory.h",
+    "browser/favicon/favicon_service_impl_observer.h",
+    "browser/favicon/favicon_tab_helper.cc",
+    "browser/favicon/favicon_tab_helper.h",
+    "browser/feature_list_creator.cc",
+    "browser/feature_list_creator.h",
+    "browser/file_select_helper.cc",
+    "browser/file_select_helper.h",
+    "browser/host_content_settings_map_factory.cc",
+    "browser/host_content_settings_map_factory.h",
+    "browser/i18n_util.cc",
+    "browser/i18n_util.h",
+    "browser/infobar_container_android.cc",
+    "browser/infobar_container_android.h",
+    "browser/insecure_form_controller_client.cc",
+    "browser/insecure_form_controller_client.h",
+    "browser/javascript_tab_modal_dialog_manager_delegate_android.cc",
+    "browser/javascript_tab_modal_dialog_manager_delegate_android.h",
+    "browser/js_communication/web_message_host_factory_wrapper.cc",
+    "browser/js_communication/web_message_host_factory_wrapper.h",
+    "browser/navigation_controller_impl.cc",
+    "browser/navigation_controller_impl.h",
+    "browser/navigation_error_navigation_throttle.cc",
+    "browser/navigation_error_navigation_throttle.h",
+    "browser/navigation_impl.cc",
+    "browser/navigation_impl.h",
+    "browser/navigation_ui_data_impl.cc",
+    "browser/navigation_ui_data_impl.h",
+    "browser/no_state_prefetch/prerender_controller_impl.cc",
+    "browser/no_state_prefetch/prerender_controller_impl.h",
+    "browser/no_state_prefetch/prerender_link_manager_factory.cc",
+    "browser/no_state_prefetch/prerender_link_manager_factory.h",
+    "browser/no_state_prefetch/prerender_manager_delegate_impl.cc",
+    "browser/no_state_prefetch/prerender_manager_delegate_impl.h",
+    "browser/no_state_prefetch/prerender_manager_factory.cc",
+    "browser/no_state_prefetch/prerender_manager_factory.h",
+    "browser/no_state_prefetch/prerender_processor_impl_delegate_impl.cc",
+    "browser/no_state_prefetch/prerender_processor_impl_delegate_impl.h",
+    "browser/no_state_prefetch/prerender_tab_helper.cc",
+    "browser/no_state_prefetch/prerender_tab_helper.h",
+    "browser/no_state_prefetch/prerender_utils.cc",
+    "browser/no_state_prefetch/prerender_utils.h",
+    "browser/page_load_metrics_initialize.cc",
+    "browser/page_load_metrics_initialize.h",
+    "browser/page_specific_content_settings_delegate.cc",
+    "browser/page_specific_content_settings_delegate.h",
+    "browser/password_manager_driver_factory.cc",
+    "browser/password_manager_driver_factory.h",
+    "browser/permissions/geolocation_permission_context_delegate.cc",
+    "browser/permissions/geolocation_permission_context_delegate.h",
+    "browser/permissions/permission_decision_auto_blocker_factory.cc",
+    "browser/permissions/permission_decision_auto_blocker_factory.h",
+    "browser/permissions/permission_manager_factory.cc",
+    "browser/permissions/permission_manager_factory.h",
+    "browser/permissions/weblayer_permissions_client.cc",
+    "browser/permissions/weblayer_permissions_client.h",
+    "browser/persistence/browser_persistence_common.cc",
+    "browser/persistence/browser_persistence_common.h",
+    "browser/persistence/browser_persister.cc",
+    "browser/persistence/browser_persister.h",
+    "browser/persistence/browser_persister_file_utils.cc",
+    "browser/persistence/browser_persister_file_utils.h",
+    "browser/persistence/minimal_browser_persister.cc",
+    "browser/persistence/minimal_browser_persister.h",
+    "browser/popup_navigation_delegate_impl.cc",
+    "browser/popup_navigation_delegate_impl.h",
+    "browser/profile_disk_operations.cc",
+    "browser/profile_disk_operations.h",
+    "browser/profile_impl.cc",
+    "browser/profile_impl.h",
+    "browser/signin_url_loader_throttle.cc",
+    "browser/signin_url_loader_throttle.h",
+    "browser/ssl_error_controller_client.cc",
+    "browser/ssl_error_controller_client.h",
+    "browser/stateful_ssl_host_state_delegate_factory.cc",
+    "browser/stateful_ssl_host_state_delegate_factory.h",
+    "browser/system_network_context_manager.cc",
+    "browser/system_network_context_manager.h",
+    "browser/tab_impl.cc",
+    "browser/tab_impl.h",
+    "browser/translate_accept_languages_factory.cc",
+    "browser/translate_accept_languages_factory.h",
+    "browser/translate_client_impl.cc",
+    "browser/translate_client_impl.h",
+    "browser/translate_ranker_factory.cc",
+    "browser/translate_ranker_factory.h",
+    "browser/ukm_page_load_metrics_observer.cc",
+    "browser/ukm_page_load_metrics_observer.h",
+    "browser/url_bar/autocomplete_scheme_classifier_impl.cc",
+    "browser/url_bar/autocomplete_scheme_classifier_impl.h",
+    "browser/url_bar/page_info_delegate_impl.cc",
+    "browser/url_bar/page_info_delegate_impl.h",
+    "browser/url_bar/url_bar_controller_impl.cc",
+    "browser/url_bar/url_bar_controller_impl.h",
+    "browser/user_agent.cc",
+    "browser/user_agent.h",
+    "browser/web_contents_view_delegate_impl.cc",
+    "browser/web_contents_view_delegate_impl.h",
+    "browser/weblayer_browser_interface_binders.cc",
+    "browser/weblayer_browser_interface_binders.h",
+    "browser/weblayer_features.cc",
+    "browser/weblayer_features.h",
+    "browser/weblayer_field_trials.cc",
+    "browser/weblayer_field_trials.h",
+    "browser/weblayer_security_blocking_page_factory.cc",
+    "browser/weblayer_security_blocking_page_factory.h",
+    "browser/weblayer_speech_recognition_manager_delegate.cc",
+    "browser/weblayer_speech_recognition_manager_delegate.h",
+    "browser/weblayer_variations_service_client.cc",
+    "browser/weblayer_variations_service_client.h",
+    "browser/webui/web_ui_controller_factory.cc",
+    "browser/webui/web_ui_controller_factory.h",
+    "browser/webui/weblayer_internals_ui.cc",
+    "browser/webui/weblayer_internals_ui.h",
+    "common/content_client_impl.cc",
+    "common/content_client_impl.h",
+    "common/features.cc",
+    "common/features.h",
+    "common/isolated_world_ids.h",
+    "common/weblayer_paths.cc",
+    "common/weblayer_paths.h",
+    "public/browser.cc",
+    "public/browser.h",
+    "public/browser_observer.h",
+    "public/browser_restore_observer.h",
+    "public/common/switches.cc",
+    "public/common/switches.h",
+    "public/cookie_manager.h",
+    "public/download.h",
+    "public/download_delegate.h",
+    "public/error_page.h",
+    "public/error_page_delegate.h",
+    "public/favicon_fetcher.h",
+    "public/favicon_fetcher_delegate.h",
+    "public/fullscreen_delegate.h",
+    "public/google_accounts_delegate.h",
+    "public/js_communication/web_message.cc",
+    "public/js_communication/web_message.h",
+    "public/js_communication/web_message_host.h",
+    "public/js_communication/web_message_host_factory.h",
+    "public/js_communication/web_message_reply_proxy.h",
+    "public/main.h",
+    "public/navigation.h",
+    "public/navigation_controller.h",
+    "public/navigation_observer.h",
+    "public/new_tab_delegate.h",
+    "public/prerender_controller.h",
+    "public/profile.h",
+    "public/tab.h",
+    "public/tab_observer.h",
+    "public/url_bar_controller.h",
+    "renderer/content_renderer_client_impl.cc",
+    "renderer/content_renderer_client_impl.h",
+    "renderer/error_page_helper.cc",
+    "renderer/error_page_helper.h",
+    "renderer/url_loader_throttle_provider.cc",
+    "renderer/url_loader_throttle_provider.h",
+    "renderer/weblayer_render_frame_observer.cc",
+    "renderer/weblayer_render_frame_observer.h",
+    "renderer/weblayer_render_thread_observer.cc",
+    "renderer/weblayer_render_thread_observer.h",
+    "utility/content_utility_client_impl.cc",
+    "utility/content_utility_client_impl.h",
+  ]
+
+  configs += [
+    "//build/config:precompiled_headers",
+
+    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+    "//build/config/compiler:no_size_t_to_int_warning",
+  ]
+
+  public_deps = [ ":android_descriptors" ]
+  deps = [
+    ":common_mojom",
+    "//base",
+    "//base:base_static",
+    "//base/third_party/dynamic_annotations",
+    "//cc",
+    "//components/autofill/content/browser",
+    "//components/autofill/content/renderer",
+    "//components/autofill/core/browser",
+    "//components/autofill/core/common",
+    "//components/base32",
+    "//components/blocked_content",
+    "//components/browsing_data/content",
+    "//components/captive_portal/core:buildflags",
+    "//components/cdm/renderer",
+    "//components/client_hints/browser",
+    "//components/content_settings/browser",
+    "//components/content_settings/common:mojom",
+    "//components/content_settings/common:mojom",
+    "//components/content_settings/core/browser",
+    "//components/content_settings/renderer",
+    "//components/crash/content/browser",
+    "//components/crash/core/app",
+    "//components/crash/core/common",
+    "//components/embedder_support",
+    "//components/embedder_support/origin_trials",
+    "//components/error_page/common",
+    "//components/error_page/content/browser",
+    "//components/favicon/content",
+    "//components/favicon/core",
+    "//components/favicon/core:database",
+    "//components/favicon_base",
+    "//components/find_in_page",
+    "//components/infobars/core",
+    "//components/js_injection/browser",
+    "//components/js_injection/renderer",
+    "//components/keyed_service/content",
+    "//components/language/core/browser",
+    "//components/metrics",
+    "//components/metrics:content",
+    "//components/network_time",
+    "//components/omnibox/browser:location_bar",
+    "//components/page_info",
+    "//components/page_load_metrics/browser",
+    "//components/page_load_metrics/renderer",
+    "//components/password_manager/content/browser",
+    "//components/permissions",
+    "//components/policy/core/browser",
+    "//components/pref_registry:pref_registry",
+    "//components/prefs",
+    "//components/prerender/browser",
+    "//components/prerender/common",
+    "//components/prerender/common:mojo_bindings",
+    "//components/prerender/renderer",
+    "//components/safe_browsing/content/common:interfaces",
+    "//components/safe_browsing/content/renderer:throttles",
+    "//components/safe_browsing/core:features",
+    "//components/security_interstitials/content:security_interstitial_page",
+    "//components/security_interstitials/content/renderer:security_interstitial_page_controller",
+    "//components/security_interstitials/core",
+    "//components/security_state/content",
+    "//components/services/storage/public/mojom",
+    "//components/sessions",
+    "//components/signin/core/browser",
+    "//components/site_isolation",
+    "//components/spellcheck:buildflags",
+    "//components/ssl_errors",
+    "//components/startup_metric_utils/browser",
+    "//components/strings",
+    "//components/subresource_filter/content/browser",
+    "//components/subresource_filter/core/browser",
+    "//components/translate/content/browser",
+    "//components/translate/content/renderer",
+    "//components/translate/core/browser",
+    "//components/translate/core/common",
+    "//components/ukm",
+    "//components/ukm/content",
+    "//components/unified_consent:unified_consent",
+    "//components/user_prefs",
+    "//components/variations",
+    "//components/variations:variations_mojom",
+    "//components/variations/net",
+    "//components/variations/proto",
+    "//components/variations/service",
+    "//components/version_info",
+    "//components/viz/common",
+    "//components/web_cache/browser",
+    "//components/webrtc",
+    "//content:content_resources",
+    "//content:dev_ui_content_resources",
+    "//content/app/resources",
+    "//content/public/app",
+    "//content/public/browser",
+    "//content/public/child",
+    "//content/public/common",
+    "//content/public/common:service_names",
+    "//content/public/renderer",
+    "//content/public/utility",
+    "//gpu/config",
+    "//net",
+    "//net:net_resources",
+    "//sandbox",
+    "//services/metrics/public/cpp:metrics_cpp",
+    "//services/network/public/cpp",
+    "//services/network/public/mojom",
+    "//services/preferences/tracked",
+    "//skia",
+    "//third_party/blink/public:blink_headers",
+    "//third_party/blink/public/common",
+    "//third_party/blink/public/strings",
+    "//third_party/icu",
+    "//ui/base",
+    "//ui/base/clipboard",
+    "//ui/base/ime/init",
+    "//ui/display",
+    "//ui/events:events_base",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+    "//ui/gfx/ipc",
+    "//ui/gfx/ipc/geometry",
+    "//ui/gfx/ipc/skia",
+    "//ui/gl",
+    "//ui/platform_window",
+    "//ui/shell_dialogs",
+    "//ui/webui",
+    "//url",
+    "//v8",
+    "//weblayer:resources",
+    "//weblayer/browser/webui:mojo_bindings",
+  ]
+
+  if (enable_captive_portal_detection) {
+    sources += [
+      "browser/captive_portal_service_factory.cc",
+      "browser/captive_portal_service_factory.h",
+    ]
+    deps += [ "//components/captive_portal/content" ]
+  }
+
+  if (use_browser_spellchecker) {
+    deps += [
+      "//components/spellcheck/browser",
+      "//components/spellcheck/renderer",
+    ]
+  }
+
+  if (is_android) {
+    sources += [
+      "app/jni_onload.cc",
+      "app/jni_onload.h",
+      "browser/android/exception_filter.cc",
+      "browser/android/exception_filter.h",
+      "browser/android/metrics/uma_utils.cc",
+      "browser/android/metrics/uma_utils.h",
+      "browser/android/metrics/weblayer_metrics_service_client.cc",
+      "browser/android/metrics/weblayer_metrics_service_client.h",
+      "browser/android/permission_request_utils.cc",
+      "browser/android/permission_request_utils.h",
+      "browser/android/resource_mapper.cc",
+      "browser/android/resource_mapper.h",
+      "browser/browser_controls_container_view.cc",
+      "browser/browser_controls_container_view.h",
+      "browser/browser_controls_navigation_state_handler.cc",
+      "browser/browser_controls_navigation_state_handler.h",
+      "browser/browser_controls_navigation_state_handler_delegate.h",
+      "browser/browser_list_proxy.cc",
+      "browser/browser_list_proxy.h",
+      "browser/content_view_render_view.cc",
+      "browser/content_view_render_view.h",
+      "browser/devtools_manager_delegate_android.cc",
+      "browser/devtools_manager_delegate_android.h",
+      "browser/devtools_server_android.cc",
+      "browser/devtools_server_android.h",
+      "browser/download_callback_proxy.cc",
+      "browser/download_callback_proxy.h",
+      "browser/error_page_callback_proxy.cc",
+      "browser/error_page_callback_proxy.h",
+      "browser/favicon/favicon_callback_proxy.cc",
+      "browser/favicon/favicon_callback_proxy.h",
+      "browser/fullscreen_callback_proxy.cc",
+      "browser/fullscreen_callback_proxy.h",
+      "browser/google_accounts_callback_proxy.cc",
+      "browser/google_accounts_callback_proxy.h",
+      "browser/http_auth_handler_impl.cc",
+      "browser/http_auth_handler_impl.h",
+      "browser/infobar_service.cc",
+      "browser/infobar_service.h",
+      "browser/js_communication/web_message_host_factory_proxy.cc",
+      "browser/js_communication/web_message_host_factory_proxy.h",
+      "browser/js_communication/web_message_reply_proxy_impl.cc",
+      "browser/js_communication/web_message_reply_proxy_impl.h",
+      "browser/media/local_presentation_manager_factory.cc",
+      "browser/media/local_presentation_manager_factory.h",
+      "browser/media/media_router_factory.cc",
+      "browser/media/media_router_factory.h",
+      "browser/new_tab_callback_proxy.cc",
+      "browser/new_tab_callback_proxy.h",
+      "browser/proxying_url_loader_factory_impl.cc",
+      "browser/proxying_url_loader_factory_impl.h",
+      "browser/safe_browsing/real_time_url_lookup_service_factory.cc",
+      "browser/safe_browsing/real_time_url_lookup_service_factory.h",
+      "browser/safe_browsing/safe_browsing_blocking_page.cc",
+      "browser/safe_browsing/safe_browsing_blocking_page.h",
+      "browser/safe_browsing/safe_browsing_navigation_throttle.cc",
+      "browser/safe_browsing/safe_browsing_navigation_throttle.h",
+      "browser/safe_browsing/safe_browsing_service.cc",
+      "browser/safe_browsing/safe_browsing_service.h",
+      "browser/safe_browsing/safe_browsing_subresource_helper.cc",
+      "browser/safe_browsing/safe_browsing_subresource_helper.h",
+      "browser/safe_browsing/safe_browsing_ui_manager.cc",
+      "browser/safe_browsing/safe_browsing_ui_manager.h",
+      "browser/safe_browsing/url_checker_delegate_impl.cc",
+      "browser/safe_browsing/url_checker_delegate_impl.h",
+      "browser/tab_callback_proxy.cc",
+      "browser/tab_callback_proxy.h",
+      "browser/translate_compact_infobar.cc",
+      "browser/translate_compact_infobar.h",
+      "browser/tts_environment_android_impl.cc",
+      "browser/tts_environment_android_impl.h",
+      "browser/url_bar/page_info_client_impl.cc",
+      "browser/url_bar/page_info_client_impl.h",
+      "browser/verdict_cache_manager_factory.cc",
+      "browser/verdict_cache_manager_factory.h",
+      "browser/weblayer_factory_impl_android.cc",
+      "browser/weblayer_factory_impl_android.h",
+      "browser/weblayer_impl_android.cc",
+      "browser/weblayer_impl_android.h",
+      "browser/webrtc/media_stream_manager.cc",
+      "browser/webrtc/media_stream_manager.h",
+      "common/crash_reporter/crash_keys.cc",
+      "common/crash_reporter/crash_keys.h",
+      "common/crash_reporter/crash_reporter_client.cc",
+      "common/crash_reporter/crash_reporter_client.h",
+    ]
+    deps += [
+      "//android_webview:generate_aw_resources",
+      "//android_webview:generate_aw_strings",
+      "//components/android_system_error_page",
+      "//components/autofill/android/provider",
+      "//components/browser_ui/client_certificate/android",
+      "//components/browser_ui/contacts_picker/android",
+      "//components/browser_ui/photo_picker/android",
+      "//components/browser_ui/site_settings/android",
+      "//components/browser_ui/sms/android",
+      "//components/cdm/browser",
+      "//components/content_settings/android",
+      "//components/crash/android:crash_android",
+      "//components/crash/android:crashpad_main",
+      "//components/embedder_support/android:browser_context",
+      "//components/embedder_support/android:context_menu",
+      "//components/embedder_support/android:util",
+      "//components/embedder_support/android:web_contents_delegate",
+      "//components/embedder_support/android/metrics",
+      "//components/external_intents/android",
+      "//components/infobars/android",
+      "//components/infobars/content",
+      "//components/javascript_dialogs",
+      "//components/location/android:settings",
+      "//components/media_router/browser",
+      "//components/metrics",
+      "//components/minidump_uploader",
+      "//components/navigation_interception",
+      "//components/page_info/android",
+      "//components/permissions/android:native",
+      "//components/resources:android_resources",
+      "//components/safe_browsing/android:remote_database_manager",
+      "//components/safe_browsing/android:safe_browsing_api_handler",
+      "//components/safe_browsing/content",
+      "//components/safe_browsing/content/browser",
+      "//components/safe_browsing/core:ping_manager",
+      "//components/safe_browsing/core:verdict_cache_manager",
+      "//components/safe_browsing/core/browser",
+      "//components/safe_browsing/core/browser:network_context",
+      "//components/safe_browsing/core/common",
+      "//components/safe_browsing/core/db:database_manager",
+      "//components/safe_browsing/core/realtime:policy_engine",
+      "//components/safe_browsing/core/realtime:url_lookup_service",
+      "//components/security_interstitials/content:security_interstitial_page",
+      "//components/security_interstitials/core:unsafe_resource",
+      "//components/security_interstitials/core/",
+      "//components/security_state/content/android",
+      "//components/translate/content/android",
+      "//components/version_info/android:channel_getter",
+      "//services/resource_coordinator/public/cpp/memory_instrumentation:browser",
+      "//ui/android",
+      "//weblayer/browser/java:jni",
+    ]
+  } else {
+    deps += [ "//ui/views/controls/webview" ]
+  }
+
+  if (enable_vulkan) {
+    deps += [ "//gpu/vulkan/init" ]
+  }
+  if (mojo_media_host == "browser") {
+    deps += [ "//media/mojo/services" ]
+  }
+
+  if (is_win) {
+    deps += [ "//content:sandbox_helper_win" ]
+    if (win_console_app) {
+      defines = [ "WIN_CONSOLE_APP" ]
+    }
+  }
+
+  if (is_linux || is_chromeos) {
+    deps += [
+      "//build/config/freetype",
+      "//third_party/fontconfig",
+    ]
+  }
+
+  if (toolkit_views) {
+    deps += [ "//ui/views" ]
+  }
+
+  if (use_aura) {
+    deps += [
+      "//ui/aura",
+      "//ui/events",
+      "//ui/strings",
+      "//ui/wm",
+    ]
+  }
+}
+
+if (is_android) {
+  source_set("weblayer_android_test_jni_impl") {
+    testonly = true
+    sources = [
+      "browser/test/test_infobar.cc",
+      "browser/test/test_infobar.h",
+      "browser/test/test_weblayer_impl.cc",
+    ]
+    deps = [
+      ":weblayer_lib_base",
+      "//base",
+      "//components/infobars/android",
+      "//components/infobars/core",
+      "//components/translate/core/browser",
+      "//content/public/browser",
+      "//content/public/test/android:content_native_test_support",
+      "//content/test:test_support",
+      "//testing/gtest",
+      "//weblayer/browser/java:test_jni",
+    ]
+  }
+
+  # Lib used in standalone WebView which allows manual JNI registration.
+  static_library("weblayer_lib_webview") {
+    public_deps = [ ":weblayer_lib_base" ]
+    deps = [
+      "//base",
+      "//weblayer/browser/java:jni",
+      "//weblayer/browser/java:weblayer_jni_registration",
+    ]
+    sources = [
+      "$target_gen_dir/browser/java/weblayer_jni_registration.h",
+      "browser/web_view_compatibility_helper_impl.cc",
+      "browser/web_view_compatibility_helper_impl.h",
+    ]
+    defines = [ "WEBLAYER_MANUAL_JNI_REGISTRATION" ]
+
+    # Explicit dependency required for JNI registration to be able to
+    # find the native side functions.
+    if (is_component_build) {
+      deps += [
+        "//components/browser_ui/photo_picker/android",
+        "//device/gamepad",
+        "//media/midi",
+        "//ui/events/devices",
+      ]
+    }
+  }
+
+  static_library("weblayer_lib_webview_test") {
+    testonly = true
+    public_deps = [ ":weblayer_lib_base" ]
+    deps = [
+      ":weblayer_android_test_jni_impl",
+      "//base",
+      "//weblayer/browser/java:jni",
+      "//weblayer/browser/java:weblayer_jni_registration",
+    ]
+    sources = [
+      "$target_gen_dir/browser/java/weblayer_jni_registration.h",
+      "browser/web_view_compatibility_helper_impl.cc",
+      "browser/web_view_compatibility_helper_impl.h",
+    ]
+    defines = [ "WEBLAYER_MANUAL_JNI_REGISTRATION" ]
+
+    # Explicit dependency required for JNI registration to be able to
+    # find the native side functions.
+    if (is_component_build) {
+      deps += [
+        "//device/gamepad",
+        "//media/midi",
+        "//ui/events/devices",
+      ]
+    }
+  }
+
+  # Lib used in Monochrome which does not support manual JNI registration.
+  # Separate from the standalone WebView version to reduce APK size.
+  static_library("weblayer_lib") {
+    public_deps = [ ":weblayer_lib_base" ]
+    deps = [ "//weblayer/browser/java:jni" ]
+    sources = [
+      "browser/web_view_compatibility_helper_impl.cc",
+      "browser/web_view_compatibility_helper_impl.h",
+    ]
+  }
+
+  shared_library("libweblayer_test") {
+    testonly = true
+    sources = [
+      "$target_gen_dir/browser/java/test_weblayer_jni_registration.h",
+      "app/entry_point.cc",
+    ]
+    deps = [
+      ":weblayer_lib_webview_test",
+      "//base",
+      "//content/public/app",
+      "//weblayer/browser/java:test_weblayer_jni_registration",
+    ]
+    configs -= [ "//build/config/android:hide_all_but_jni_onload" ]
+    configs += [ "//build/config/android:hide_all_but_jni" ]
+  }
+} else {
+  source_set("weblayer_lib") {
+    public_deps = [ ":weblayer_lib_base" ]
+  }
+}
+
+grit("resources") {
+  source = "weblayer_resources.grd"
+
+  outputs = [
+    "grit/weblayer_resources.h",
+    "weblayer_resources.pak",
+  ]
+  grit_flags = [
+    "-E",
+    "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
+  ]
+  deps = [ "//weblayer/browser/webui:mojo_bindings_js" ]
+}
+# TODO(jam): move weblayer_shell_resources_grit and copy_shell_resources here in
+# a way that's shareable?

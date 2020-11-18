@@ -1,0 +1,380 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+group("web_app_group") {
+  public_configs = [ "//build/config/compiler:wexit_time_destructors" ]
+}
+
+group("web_app_test_group") {
+}
+
+# Implementations that are common to both BMO/Extensions backends.
+# TODO(alancutter): Migrate sources from :web_applications into here where
+# possible.
+# TODO(https://crbug.com/877898): Merge this into :web_applications once all
+# Extension codepaths have been removed.
+source_set("common") {
+  sources = [
+    "daily_metrics_helper.cc",
+    "daily_metrics_helper.h",
+    "manifest_update_manager.cc",
+    "manifest_update_manager.h",
+    "manifest_update_task.cc",
+    "manifest_update_task.h",
+    "system_web_app_manager.cc",
+    "system_web_app_manager.h",
+    "web_app_tab_helper.cc",
+    "web_app_tab_helper.h",
+  ]
+
+  deps = [
+    ":web_app_group",
+    "//base/util/values:values_util",
+    "//chrome/browser/web_applications/components",
+    "//chrome/common",
+    "//components/content_settings/core/browser",
+    "//components/pref_registry",
+    "//content/public/browser",
+    "//services/metrics/public/cpp:ukm_builders",
+    "//skia",
+  ]
+
+  if (is_chromeos) {
+    deps += [
+      "//ash/public/cpp",
+      "//chromeos/components/diagnostics_ui",
+      "//chromeos/components/help_app_ui",
+      "//chromeos/components/media_app_ui",
+      "//chromeos/components/print_management",
+      "//chromeos/components/scanning",
+      "//chromeos/constants",
+      "//chromeos/strings",
+    ]
+  }
+}
+
+source_set("web_applications") {
+  sources = [
+    "external_web_app_manager.cc",
+    "external_web_app_manager.h",
+    "external_web_app_utils.cc",
+    "external_web_app_utils.h",
+    "file_utils_wrapper.cc",
+    "file_utils_wrapper.h",
+    "pending_app_install_task.cc",
+    "pending_app_install_task.h",
+    "pending_app_manager_impl.cc",
+    "pending_app_manager_impl.h",
+    "pending_app_registration_task.cc",
+    "pending_app_registration_task.h",
+    "preinstalled_web_apps.cc",
+    "preinstalled_web_apps.h",
+    "web_app.cc",
+    "web_app.h",
+    "web_app_database.cc",
+    "web_app_database.h",
+    "web_app_database_factory.cc",
+    "web_app_database_factory.h",
+    "web_app_file_handler_manager.cc",
+    "web_app_file_handler_manager.h",
+    "web_app_icon_manager.cc",
+    "web_app_icon_manager.h",
+    "web_app_install_finalizer.cc",
+    "web_app_install_finalizer.h",
+    "web_app_install_manager.cc",
+    "web_app_install_manager.h",
+    "web_app_install_task.cc",
+    "web_app_install_task.h",
+    "web_app_installation_utils.cc",
+    "web_app_installation_utils.h",
+    "web_app_proto_utils.cc",
+    "web_app_proto_utils.h",
+    "web_app_registrar.cc",
+    "web_app_registrar.h",
+    "web_app_registry_update.cc",
+    "web_app_registry_update.h",
+    "web_app_shortcut_manager.cc",
+    "web_app_shortcut_manager.h",
+    "web_app_sync_bridge.cc",
+    "web_app_sync_bridge.h",
+    "web_app_sync_install_delegate.h",
+  ]
+
+  deps = [
+    ":common",
+    ":web_app_group",
+    "//chrome/browser/web_applications/components",
+    "//chrome/common",
+    "//components/performance_manager",
+    "//components/services/app_service/public/cpp:protocol_handling",
+    "//components/sync",
+    "//content/public/browser",
+    "//extensions/browser",
+    "//skia",
+  ]
+
+  if (is_chromeos) {
+    deps += [
+      "//chromeos/constants",
+      "//components/arc:arc_base",
+      "//components/arc/mojom",
+    ]
+
+    if (!is_official_build) {
+      deps += [
+        "//chromeos/components/file_manager:file_manager_ui",
+        "//chromeos/components/sample_system_web_app_ui",
+      ]
+    }
+  }
+
+  public_deps = [ "//chrome/browser/web_applications/proto" ]
+}
+
+# This test_support library doesn't use extensions.
+source_set("web_applications_test_support") {
+  testonly = true
+
+  sources = [
+    "test/service_worker_registration_waiter.cc",
+    "test/service_worker_registration_waiter.h",
+    "test/test_app_registrar.cc",
+    "test/test_app_registrar.h",
+    "test/test_app_registry_controller.cc",
+    "test/test_app_registry_controller.h",
+    "test/test_data_retriever.cc",
+    "test/test_data_retriever.h",
+    "test/test_file_handler_manager.cc",
+    "test/test_file_handler_manager.h",
+    "test/test_file_utils.cc",
+    "test/test_file_utils.h",
+    "test/test_install_finalizer.cc",
+    "test/test_install_finalizer.h",
+    "test/test_os_integration_manager.cc",
+    "test/test_os_integration_manager.h",
+    "test/test_pending_app_manager.cc",
+    "test/test_pending_app_manager.h",
+    "test/test_pending_app_manager_impl.cc",
+    "test/test_pending_app_manager_impl.h",
+    "test/test_system_web_app_manager.cc",
+    "test/test_system_web_app_manager.h",
+    "test/test_system_web_app_url_data_source.cc",
+    "test/test_system_web_app_url_data_source.h",
+    "test/test_system_web_app_web_ui_controller_factory.cc",
+    "test/test_system_web_app_web_ui_controller_factory.h",
+    "test/test_web_app_database_factory.cc",
+    "test/test_web_app_database_factory.h",
+    "test/test_web_app_registry_controller.cc",
+    "test/test_web_app_registry_controller.h",
+    "test/test_web_app_ui_manager.cc",
+    "test/test_web_app_ui_manager.h",
+    "test/test_web_app_url_loader.cc",
+    "test/test_web_app_url_loader.h",
+    "test/web_app_icon_test_utils.cc",
+    "test/web_app_icon_test_utils.h",
+    "test/web_app_install_observer.cc",
+    "test/web_app_install_observer.h",
+    "test/web_app_install_test_utils.cc",
+    "test/web_app_install_test_utils.h",
+    "test/web_app_registration_waiter.cc",
+    "test/web_app_registration_waiter.h",
+    "test/web_app_test.cc",
+    "test/web_app_test.h",
+    "test/web_app_uninstall_waiter.cc",
+    "test/web_app_uninstall_waiter.h",
+  ]
+
+  deps = [
+    ":common",
+    ":web_app_test_group",
+    ":web_applications",
+    "//base/test:test_support",
+    "//chrome/app/theme:chrome_unscaled_resources_grit",
+    "//chrome/browser",
+    "//chrome/browser/web_applications/components",
+    "//components/crx_file:crx_file",
+    "//components/sync:test_support_model",
+    "//content/test:test_support",
+    "//testing/gtest",
+  ]
+}
+
+source_set("web_applications_unit_tests") {
+  testonly = true
+
+  sources = [
+    "daily_metrics_helper_unittest.cc",
+    "external_web_app_manager_unittest.cc",
+    "external_web_app_utils_unittest.cc",
+    "pending_app_manager_impl_unittest.cc",
+    "preinstalled_web_apps_unittest.cc",
+    "system_web_app_manager_unittest.cc",
+    "web_app_database_unittest.cc",
+    "web_app_icon_manager_unittest.cc",
+    "web_app_install_manager_unittest.cc",
+    "web_app_install_task_unittest.cc",
+    "web_app_installation_utils_unittest.cc",
+    "web_app_proto_utils_unittest.cc",
+    "web_app_registrar_unittest.cc",
+    "web_app_sync_bridge_unittest.cc",
+    "web_app_unittest.cc",
+  ]
+
+  deps = [
+    ":common",
+    ":web_app_test_group",
+    ":web_applications",
+    ":web_applications_on_extensions_test_support",
+    ":web_applications_test_support",
+    "//base/test:test_support",
+    "//chrome/browser",
+    "//chrome/browser/web_applications/components",
+    "//chrome/common",
+    "//chrome/test:test_support",
+    "//components/services/app_service/public/cpp:protocol_handling",
+    "//content/public/browser",
+    "//content/test:test_support",
+    "//services/metrics/public/cpp:ukm_builders",
+    "//skia",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+
+  if (is_chromeos) {
+    deps += [
+      "//chrome/browser/chromeos",
+      "//chromeos/constants",
+      "//components/arc:arc",
+      "//components/arc:arc_test_support",
+      "//components/arc/mojom",
+    ]
+  }
+
+  if (is_win) {
+    deps +=
+        [ "//chrome/browser/web_applications/chrome_pwa_launcher:unit_tests" ]
+  }
+}
+
+source_set("web_applications_browser_tests") {
+  testonly = true
+
+  sources = [
+    "external_web_app_manager_browsertest.cc",
+    "external_web_app_migration_browsertest.cc",
+    "manifest_update_manager_browsertest.cc",
+    "pending_app_manager_impl_browsertest.cc",
+    "system_web_app_manager_browsertest.cc",
+    "system_web_app_manager_browsertest.h",
+    "web_app_audio_focus_browsertest.cc",
+    "web_app_icon_manager_browsertest.cc",
+    "web_app_migration_manager_browsertest.cc",
+    "web_app_migration_user_display_mode_clean_up_browsertest.cc",
+  ]
+
+  defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+
+  deps = [
+    ":common",
+    ":web_applications",
+    ":web_applications_on_extensions",
+    ":web_applications_on_extensions_test_support",
+    ":web_applications_test_support",
+    "//chrome/app:command_ids",
+    "//chrome/browser/apps/app_service:test_support",
+    "//chrome/browser/extensions:test_support",
+    "//chrome/browser/web_applications/components",
+    "//chrome/browser/web_applications/extensions",
+    "//chrome/test:test_support",
+    "//chrome/test:test_support_ui",
+    "//components/permissions:permissions",
+    "//components/services/app_service/public/cpp:app_update",
+    "//components/services/app_service/public/cpp:intents",
+    "//extensions/browser:test_support",
+  ]
+
+  if (is_chromeos) {
+    deps += [
+      "//chrome/browser/chromeos",
+      "//chrome/browser/ui",
+    ]
+  }
+}
+
+# TODO(crbug.com/877898): Erase this and move WebAppProvider into
+# web_applications set.
+source_set("web_applications_on_extensions") {
+  sources = [
+    "web_app_migration_manager.cc",
+    "web_app_migration_manager.h",
+    "web_app_migration_user_display_mode_clean_up.cc",
+    "web_app_migration_user_display_mode_clean_up.h",
+    "web_app_provider.cc",
+    "web_app_provider.h",
+    "web_app_provider_factory.cc",
+    "web_app_provider_factory.h",
+  ]
+
+  deps = [
+    ":common",
+    ":web_app_group",
+    ":web_applications",
+    "//chrome/browser/web_applications/components",
+    "//chrome/browser/web_applications/extensions",
+    "//chrome/common",
+    "//components/keyed_service/content",
+    "//components/pref_registry:pref_registry",
+    "//components/sync",
+    "//extensions/browser",
+  ]
+}
+
+# TODO(crbug.com/877898): Erase this and move TestWebAppProvider into
+# web_applications_test_support set.
+source_set("web_applications_on_extensions_test_support") {
+  testonly = true
+
+  sources = [
+    "test/test_system_web_app_installation.cc",
+    "test/test_system_web_app_installation.h",
+    "test/test_web_app_provider.cc",
+    "test/test_web_app_provider.h",
+  ]
+
+  deps = [
+    ":common",
+    ":web_app_test_group",
+    ":web_applications",
+    ":web_applications_on_extensions",
+    ":web_applications_test_support",
+    "//base",
+    "//base/test:test_support",
+    "//chrome/browser",
+    "//chrome/browser/web_applications/components",
+    "//components/keyed_service/content",
+    "//ui/webui",
+  ]
+}
+
+group("unit_tests") {
+  testonly = true
+
+  deps = [
+    ":common",
+    ":web_app_test_group",
+    ":web_applications_unit_tests",
+    "//chrome/browser/web_applications/components:unit_tests",
+    "//chrome/browser/web_applications/extensions:unit_tests",
+  ]
+}
+
+group("browser_tests") {
+  testonly = true
+
+  deps = [
+    ":web_app_test_group",
+    ":web_applications_browser_tests",
+    "//chrome/browser/web_applications/components:browser_tests",
+  ]
+}

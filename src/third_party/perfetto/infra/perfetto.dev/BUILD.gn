@@ -1,0 +1,350 @@
+# Copyright (C) 2020 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../gn/perfetto.gni")
+
+# Prevent that this file is accidentally included in embedder builds.
+assert(enable_perfetto_ui)
+
+dist_dir = "$root_build_dir/site"
+gen_dir = "$target_out_dir/gen"
+nodejs_root = "../buildtools/nodejs"
+nodejs_bin = rebase_path("$nodejs_root/bin", root_build_dir)
+
+# +----------------------------------------------------------------------------+
+# | The outer "ui" target to just ninja -C out/xxx ui                          |
+# +----------------------------------------------------------------------------+
+
+group("site") {
+  deps = [
+    ":assets_dist",
+    ":index_dist",
+    ":markdown",
+    ":scss",
+  ]
+}
+
+# +----------------------------------------------------------------------------+
+# | Runs NodeJS using the hermetic node toolchain.                             |
+# +----------------------------------------------------------------------------+
+template("node_bin") {
+  action(target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "inputs",
+                             "outputs",
+                             "depfile",
+                           ])
+    deps = [ ":node_modules" ]
+    if (defined(invoker.deps)) {
+      deps += invoker.deps
+    }
+    script = "../../gn/standalone/build_tool_wrapper.py"
+    _node_cmd = invoker.node_cmd
+    args = []
+    if (defined(invoker.suppress_stdout) && invoker.suppress_stdout) {
+      args += [ "--suppress_stdout" ]
+    }
+    if (defined(invoker.suppress_stderr) && invoker.suppress_stderr) {
+      args += [ "--suppress_stderr" ]
+    }
+    args += [
+              "--path=$nodejs_bin",
+              "node",
+              rebase_path("node_modules/.bin/$_node_cmd", root_build_dir),
+            ] + invoker.args
+  }
+}
+
+# +----------------------------------------------------------------------------+
+# | Installs the node modules secified in package.json                         |
+# +----------------------------------------------------------------------------+
+action("node_modules") {
+  script = "../../gn/standalone/build_tool_wrapper.py"
+  stamp_file = "$dist_dir/.$target_name.stamp"
+  cur_dir = rebase_path(".", root_build_dir)
+  args = [
+    "--stamp",
+    rebase_path(stamp_file, root_build_dir),
+    "--chdir=$cur_dir",
+    "--path=$nodejs_bin",
+    "npm",
+    "install",
+  ]
+  inputs = [
+    "package.json",
+    "package-lock.json",
+  ]
+  outputs = [ stamp_file ]
+}
+
+copy("assets_dist") {
+  sources = [
+    "node_modules/highlight.js/styles/tomorrow-night.css",
+    "node_modules/mermaid/dist/mermaid.min.js",
+    "src/assets/analysis.png",
+    "src/assets/app_tracing.png",
+    "src/assets/brand.png",
+    "src/assets/favicon.png",
+    "src/assets/home.png",
+    "src/assets/script.js",
+    "src/assets/sprite.png",
+    "src/assets/sys_profiling.png",
+    "src/assets/ui.png",
+  ]
+  outputs = [ "$dist_dir/assets/{{source_file_part}}" ]
+}
+
+node_bin("scss") {
+  inputs = [ "src/assets/style.scss" ]
+  outputs = [ "$dist_dir/assets/style.css" ]
+  node_cmd = "node-sass"
+  args = [
+    "--quiet",
+    rebase_path(inputs[0], root_build_dir),
+    rebase_path(outputs[0], root_build_dir),
+  ]
+}
+
+# +----------------------------------------------------------------------------+
+# | Markdown generation                                                        |
+# +----------------------------------------------------------------------------+
+
+html_templates = [
+  "src/template_header.html",
+  "src/template_footer.html",
+  "src/template_index.html",
+  "src/template_markdown.html",
+]
+
+# Renderers a markdown file into a HTML.
+# Args:
+#  markdown:        [in]  The source markdown file.
+#  html_template:   [in]  HTML template (optional).
+#  out_html:        [out] The generated HTML.
+template("md_to_html") {
+  action(target_name) {
+    js_src = "src/markdown_render.js"
+    script = "../../gn/standalone/build_tool_wrapper.py"
+    outputs = [ invoker.out_html ]
+    inputs = [ js_src ] + html_templates
+    args = [
+      "--path=$nodejs_bin",
+      "node",
+      rebase_path(js_src, root_build_dir),
+      "--odir",
+      rebase_path(dist_dir, root_build_dir),
+      "-o",
+      rebase_path(outputs[0], root_build_dir),
+    ]
+    if (defined(invoker.html_template)) {
+      args += [
+        "-t",
+        invoker.html_template,
+      ]
+      inputs += [ invoker.html_template ]
+    }
+    if (defined(invoker.markdown)) {
+      args += [
+        "-i",
+        rebase_path(invoker.markdown, root_build_dir),
+      ]
+      inputs += [ invoker.markdown ]
+    }
+    if (defined(invoker.deps)) {
+      deps = invoker.deps
+    }
+  }
+}
+
+# Generates a .md file from a .proto.
+# Args:
+#  proto_src: [in]
+#  proto_root_type: [in]
+#  markdown_out: [in]
+template("gen_proto_reference_md") {
+  action(target_name) {
+    js_src = "src/gen_proto_reference.js"
+    script = "../../gn/standalone/build_tool_wrapper.py"
+    inputs = [
+      invoker.proto_src,
+      js_src,
+    ]
+    outputs = [ invoker.markdown_out ]
+    args = [
+      "--path=$nodejs_bin",
+      "node",
+      rebase_path(js_src, root_build_dir),
+      "-o",
+      rebase_path(invoker.markdown_out, root_build_dir),
+      "-i",
+      rebase_path(invoker.proto_src, root_build_dir),
+      "-p",
+      invoker.proto_root_type,
+    ]
+  }
+}
+
+# +----------------------------------------------------------------------------+
+# | /reference/ auto-generated docs                                            |
+# +----------------------------------------------------------------------------+
+
+# Generates a .html from a proto (proto -> md -> html).
+template("gen_proto_reference_html") {
+  intermediate_md = "$target_out_dir/$target_name.md"
+  gen_proto_reference_md("${target_name}_md") {
+    proto_src = invoker.proto_src
+    proto_root_type = invoker.proto_root_type
+    markdown_out = intermediate_md
+  }
+  md_to_html(target_name) {
+    deps = [
+      ":${target_name}_md",
+      ":navmap",
+    ]
+    markdown = intermediate_md
+    out_html = invoker.out_html
+    html_template = rebase_path("src/template_markdown.html", root_build_dir)
+  }
+}
+
+gen_proto_reference_html("trace_config_reference") {
+  proto_src = "../../protos/perfetto/config/trace_config.proto"
+  proto_root_type = "perfetto.protos.TraceConfig"
+  out_html = "$dist_dir/docs/reference/trace-config-proto"
+}
+
+gen_proto_reference_html("trace_packet_reference") {
+  proto_src = "../../protos/perfetto/trace/trace_packet.proto"
+  proto_root_type = "perfetto.protos.TracePacket"
+  out_html = "$dist_dir/docs/reference/trace-packet-proto"
+}
+
+# Generates the HTML for the sidebar.
+md_to_html("navmap") {
+  markdown = "../../docs/toc.md"
+  out_html = "$dist_dir/docs/_nav.html"
+}
+
+# Generates the root index.html.
+md_to_html("index_dist") {
+  html_template = rebase_path("src/template_index.html", root_build_dir)
+  out_html = "$dist_dir/index.html"
+}
+
+tp_tables_list = "$target_out_dir/tables.deps"
+exec_script("../../gn/standalone/glob.py",
+            [
+              "--root=" + rebase_path("../../src/trace_processor/tables",
+                                      root_build_dir),
+              "--filter=*.h",
+              "--output=" + rebase_path(tp_tables_list),
+            ])
+
+action("sql_tables_reference_md") {
+  js_src = "src/gen_sql_tables_reference.js"
+  script = "../../gn/standalone/build_tool_wrapper.py"
+  tp_table_hdrs = read_file(tp_tables_list, "list lines")
+  inputs = tp_table_hdrs + [ js_src ]
+  outputs = [ "$target_out_dir/sql-tables.autogen" ]
+  args = [
+    "--path=$nodejs_bin",
+    "node",
+    rebase_path(js_src, root_build_dir),
+    "-o",
+    rebase_path(outputs[0], root_build_dir),
+  ]
+  foreach(table_hdr, tp_table_hdrs) {
+    args += [
+      "-i",
+      table_hdr,
+    ]
+  }
+}
+
+md_to_html("sql_tables_reference") {
+  deps = [
+    ":navmap",
+    ":sql_tables_reference_md",
+  ]
+  markdown = "$target_out_dir/sql-tables.autogen"
+  out_html = "$dist_dir/docs/analysis/sql-tables"
+  html_template = rebase_path("src/template_markdown.html", root_build_dir)
+}
+
+action("stats_reference_md") {
+  js_src = "src/gen_stats_reference.js"
+  script = "../../gn/standalone/build_tool_wrapper.py"
+  input = "../../src/trace_processor/storage/stats.h"
+  inputs = [
+    input,
+    js_src,
+  ]
+  outputs = [ "$target_out_dir/sql-stats.autogen" ]
+  args = [
+    "--path=$nodejs_bin",
+    "node",
+    rebase_path(js_src, root_build_dir),
+    "-o",
+    rebase_path(outputs[0], root_build_dir),
+    "-i",
+    "../../src/trace_processor/storage/stats.h",
+  ]
+}
+
+md_to_html("stats_reference") {
+  deps = [
+    ":navmap",
+    ":stats_reference_md",
+  ]
+  markdown = "$target_out_dir/sql-stats.autogen"
+  out_html = "$dist_dir/docs/analysis/sql-stats"
+  html_template = rebase_path("src/template_markdown.html", root_build_dir)
+}
+
+# Generates a HTML file for each //docs/**/*.md.
+md_file_list = "$target_out_dir/docs.deps"
+exec_script("../../gn/standalone/glob.py",
+            [
+              "--root=" + rebase_path("../../docs", root_build_dir),
+              "--filter=*.md",
+              "--output=" + rebase_path(md_file_list),
+            ],
+            "",
+            [ "../../docs/toc.md" ])
+all_md_targets = []
+foreach(source, read_file(md_file_list, "list lines")) {
+  target_name = "gen_$source"
+  all_md_targets += [ ":$target_name" ]
+  md_to_html(target_name) {
+    deps = [ ":navmap" ]
+    base_name = string_replace(rebase_path(source, "../../docs"), ".md", "")
+    if (base_name == "README") {
+      base_name = "index.html"
+    }
+    markdown = source
+    out_html = "$dist_dir/docs/$base_name"
+    html_template = rebase_path("src/template_markdown.html", root_build_dir)
+  }
+}
+
+group("markdown") {
+  deps = all_md_targets
+  deps += [
+    ":sql_tables_reference",
+    ":stats_reference",
+    ":trace_config_reference",
+    ":trace_packet_reference",
+  ]
+}

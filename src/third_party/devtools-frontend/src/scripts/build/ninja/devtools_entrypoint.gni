@@ -1,0 +1,230 @@
+# Copyright 2020 The Chromium Authors.  All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("../../../devtools_module_entrypoints.gni")
+import("../../../third_party/typescript/typescript.gni")
+import("./copy.gni")
+import("./rollup.gni")
+import("./vars.gni")
+
+# This defines an entrypoint for DevTools, which uses Rollup
+# in release mode, but creates an unbundled JavaScript file
+# in debug mode. This entrypoint should only be used if:
+# 1. it defines a file that is statically imported. E.g. in
+#    the form of "../entrypoint/entrypoint.js".
+# 2. it defines a file that is dynamically imported by the
+#    runtime. This uses the same notation, but uses a dynamic
+#    import in `root/Runtime.js`.
+template("devtools_entrypoint") {
+  assert(defined(invoker.entrypoint),
+         "You must define the 'entrypoint' for a rollup target")
+
+  _entrypoint_target_name = "devtools_entrypoint-" + target_name
+  _entrypoint_output_file_name = get_path_info(invoker.entrypoint, "name")
+  _entrypoint_gen_file_location =
+      "$target_gen_dir/$_entrypoint_output_file_name.js"
+
+  _ts_library_target_name = _entrypoint_target_name + "-typescript"
+
+  _is_web_worker = defined(invoker.is_web_worker) && invoker.is_web_worker
+
+  # In debug mode, the entrypoint is kept as-is. This means we only
+  # need to compile with TypeScript, which means it will fetch all
+  # of its files as separate network requests.
+  if (is_debug) {
+    _ts_library_target_name = _entrypoint_target_name + "-typescript"
+
+    ts_library(_ts_library_target_name) {
+      sources = [ invoker.entrypoint ]
+
+      deps = invoker.deps
+
+      is_web_worker = _is_web_worker
+    }
+
+    # In debug mode we also want to copy the sourcemap of the entrypoint into
+    # resources/inspector so that when you DevTools-on-DevTools it can find
+    # the sourcemaps. devtools_module takes care of copying all of the TS
+    # files but we also need the entrypoint's .js.map file copied from gen
+    # into resources/inspector
+    _typescript_target_dep = ":$_ts_library_target_name"
+    _copy_gen_name = _ts_library_target_name + "copy-source-maps"
+    copy_gen_to_resources(_copy_gen_name) {
+      sources = filter_include(get_target_outputs(_typescript_target_dep),
+                               [ "*.map" ])
+
+      public_deps = [ _typescript_target_dep ]
+    }
+  } else {
+    # In release mode, we are running Rollup and thus bundle all
+    # files in the (sub-)folder(s) into 1 file.
+    #
+    # To make sure that the build system can handle the Rollup
+    # bundle, we have to use several tasks. That's because we
+    # can't have 2 tasks generate a file to the same location.
+    #
+    # First, we need to compile the entrypoint with TypeScript
+    # as usual. However, we can't put the output into the
+    # location of the entrypoint, as that's where we are going
+    # to put the Rollup bundle output. Therefore, we need to
+    # create a separate file called the "entrypoint.prebundle.ts"
+    # file.
+    #
+    # We compile the "prebundle.ts" with TypeScript, to create
+    # the "prebundle.js" file. We pass in the "prebundle.js"
+    # into Rollup, which then outputs into the normal
+    # "entrypoint.js" location.
+    #
+    # Since TypeScript does not support renaming of files during
+    # compilation, we first have a "copy" task that copies (and
+    # essentially renames) the file to the output directory.
+    #
+    # Additionally, we need to fix the tsconfig renaming, to patch
+    # up the generated tsconfig.json as part of the second ts_library
+    # step.
+    #
+    # Since all of these tasks depend on each other, we have to
+    # make sure that the GN dependency graph correctly corresponds
+    # to that. Therefore, the graph looks like so:
+    #
+    #   copy -> ts_library -> fix-tsconfig -> rollup
+    #
+    _output_file_name =
+        "$target_gen_dir/$_entrypoint_output_file_name.prebundle"
+    _copy_output_file_name = "$_output_file_name.ts"
+    _prebundle_output_file_name = "$_output_file_name.js"
+
+    _copy_target_name = _entrypoint_target_name + "-copy"
+    _rollup_target_name = _entrypoint_target_name + "-rollup"
+    _prebundle_target_name = _entrypoint_target_name + "-tsconfig"
+
+    action(_copy_target_name) {
+      script = "//third_party/node/node.py"
+
+      inputs = [
+        devtools_location_prepend + "scripts/build/ninja/copy-file.js",
+        invoker.entrypoint,
+      ]
+
+      outputs = [ _copy_output_file_name ]
+
+      _copy_src = rebase_path(".", root_build_dir) + "/" + invoker.entrypoint
+      _copy_dest = rebase_path(_copy_output_file_name, root_build_dir)
+
+      args = [
+        rebase_path(
+            devtools_location_prepend + "scripts/build/ninja/copy-file.js",
+            root_build_dir),
+        _copy_src,
+        _copy_dest,
+      ]
+
+      public_deps = invoker.deps
+    }
+
+    ts_library(_prebundle_target_name) {
+      sources = [ _copy_output_file_name ]
+
+      rootdir = target_gen_dir
+
+      public_deps = [ ":$_copy_target_name" ]
+
+      is_web_worker = _is_web_worker
+    }
+
+    rollup(_rollup_target_name) {
+      entrypoint = _prebundle_output_file_name
+
+      output_file_location = _entrypoint_gen_file_location
+
+      # Since rollup bundles both the entrypoint and the files it imports,
+      # we have to make sure that, when you change a file it imports, we
+      # retrigger Rollup. Since the `invoker.deps` is a reference to the
+      # `ts_library` that compiles all of the files it imports, we have to
+      # explicitly add it here. If you don't, then the file change will
+      # retrigger the copy action above, but "the output of the copy action"
+      # is the same. So Ninja will detect that no output has changed for
+      # "_typescript_target_name" and bail out. This would then *also* skip
+      # the Rollup action.
+      public_deps = [ ":$_prebundle_target_name" ] + invoker.deps
+    }
+
+    # TypeScript requires a `module.d.ts` that describes
+    # the public API of the `module.js` entrypoint. To do so, we copy
+    # the generated `prebundle.d.ts` over, as the public API for a
+    # rolled up bundle remains the same.
+    action(_ts_library_target_name) {
+      script = "//third_party/node/node.py"
+
+      inputs = [ devtools_location_prepend +
+                 "scripts/build/ninja/generate-declaration.js" ]
+
+      args = [
+        rebase_path(devtools_location_prepend +
+                        "scripts/build/ninja/generate-declaration.js",
+                    root_build_dir),
+        rebase_path(target_gen_dir, root_build_dir),
+        invoker.entrypoint,
+      ]
+
+      public_deps = [
+        ":$_prebundle_target_name",
+        ":$_rollup_target_name",
+      ]
+
+      outputs = [ "$target_gen_dir/$_entrypoint_output_file_name.d.ts" ]
+    }
+  }
+
+  # Because we change the filename before rolling up the bundle,
+  # tsc can get upset when it uses the original `target_name` to
+  # reference a different `ts_library`. The `ts_library` action
+  # above generates a `tsconfig.json` which does not include the
+  # `target_name`, but instead uses `_ts_library_target_name`.
+  #
+  # For example, if the `target_name` is "module", the `ts_library`
+  # action above generates a
+  # `devtools_entrypoint-module-typescript-tsconfig.json`. However,
+  # if a different `ts_library` depends on this `devtools_entrypoint`,
+  # it depends on it as "../module:module". Therefore, the expected
+  # location of the `tsconfig.json` is instead `module-tsconfig.json`.
+  #
+  # Therefore, we need to generate a separate tsconfig.json which
+  # artificially mimics what `ts_library` would have generated.
+  _generated_tsconfig_location =
+      target_gen_dir + "/" + invoker.target_name + "-tsconfig.json"
+
+  action(_entrypoint_target_name) {
+    script = "//third_party/node/node.py"
+
+    inputs = [ devtools_location_prepend +
+               "scripts/build/ninja/generate-tsconfig.js" ]
+
+    args = [
+             rebase_path(devtools_location_prepend +
+                             "scripts/build/ninja/generate-tsconfig.js",
+                         root_build_dir),
+             rebase_path(_generated_tsconfig_location, root_build_dir),
+             rebase_path(invoker.entrypoint, root_build_dir),
+           ] + invoker.deps
+
+    public_deps = [ ":$_ts_library_target_name" ]
+
+    outputs = [ _generated_tsconfig_location ]
+  }
+
+  copy_gen_to_resources(target_name) {
+    sources = [ _entrypoint_gen_file_location ]
+
+    public_deps = [ ":$_entrypoint_target_name" ]
+  }
+
+  _target_outputs = get_target_outputs(":" + target_name + "-copy")
+  _target_name = invoker.entrypoint
+  _filtered_target_outputs =
+      filter_exclude(_target_outputs, generated_typescript_entrypoint_sources)
+  assert(
+      _filtered_target_outputs == [],
+      "Entrypoint ($_target_name) is not listed in devtools_module_entrypoint_sources")
+}

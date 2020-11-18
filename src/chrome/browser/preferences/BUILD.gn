@@ -1,0 +1,71 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/android/rules.gni")
+
+android_library("java") {
+  sources = [
+    "android/java/src/org/chromium/chrome/browser/preferences/BaseChromePreferenceKeyChecker.java",
+    "android/java/src/org/chromium/chrome/browser/preferences/ChromePreferenceKeyChecker.java",
+    "android/java/src/org/chromium/chrome/browser/preferences/ChromePreferenceKeys.java",
+    "android/java/src/org/chromium/chrome/browser/preferences/DeprecatedChromePreferenceKeys.java",
+    "android/java/src/org/chromium/chrome/browser/preferences/GrandfatheredChromePreferenceKeys.java",
+    "android/java/src/org/chromium/chrome/browser/preferences/KeyPrefix.java",
+    "android/java/src/org/chromium/chrome/browser/preferences/PrefChangeRegistrar.java",
+    "android/java/src/org/chromium/chrome/browser/preferences/SharedPreferencesManager.java",
+  ]
+  deps = [
+    "//base:base_java",
+    "//base:jni_java",
+    "//third_party/android_deps:androidx_annotation_annotation_java",
+  ]
+  annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
+  srcjar_deps = [ ":java_pref_names_srcjar" ]
+}
+
+# TODO(chouinard,estade): Consider breaking this target up into a different target for each pref file.
+java_cpp_strings("java_pref_names_srcjar") {
+  sources = [
+    "//chrome/common/pref_names.cc",
+    "//components/autofill/core/common/autofill_prefs.cc",
+    "//components/dom_distiller/core/pref_names.cc",
+    "//components/embedder_support/pref_names.cc",
+    "//components/feed/core/common/pref_names.cc",
+    "//components/feed/core/shared_prefs/pref_names.cc",
+    "//components/offline_pages/core/prefetch/prefetch_prefs.cc",
+    "//components/password_manager/core/common/password_manager_pref_names.cc",
+    "//components/payments/core/payment_prefs.cc",
+    "//components/safe_browsing/core/common/safe_browsing_prefs.cc",
+    "//components/signin/public/base/signin_pref_names.cc",
+    "//components/translate/core/browser/translate_pref_names.cc",
+  ]
+
+  template = "android/java_templates/Pref.java.tmpl"
+}
+
+generate_jni("jni_headers") {
+  sources = [ "android/java/src/org/chromium/chrome/browser/preferences/PrefChangeRegistrar.java" ]
+}
+
+java_library("preferences_junit_tests") {
+  # Skip platform checks since Robolectric depends on requires_android targets.
+  bypass_platform_checks = true
+  testonly = true
+  sources = [
+    "android/java/src/org/chromium/chrome/browser/preferences/ChromePreferenceKeyCheckerTest.java",
+    "android/java/src/org/chromium/chrome/browser/preferences/ChromePreferenceKeysTest.java",
+    "android/java/src/org/chromium/chrome/browser/preferences/KeyPrefixTest.java",
+    "android/java/src/org/chromium/chrome/browser/preferences/SharedPreferencesManagerTest.java",
+  ]
+  deps = [
+    ":java",
+    "//base:base_java",
+    "//base:base_java_test_support",
+    "//base:base_junit_test_support",
+    "//base/test:test_support_java",
+    "//third_party/android_deps:androidx_test_runner_java",
+    "//third_party/junit:junit",
+    "//third_party/mockito:mockito_java",
+  ]
+}

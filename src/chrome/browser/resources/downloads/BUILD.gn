@@ -1,0 +1,158 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//chrome/common/features.gni")
+import("//third_party/closure_compiler/compile_js.gni")
+import("//tools/grit/preprocess_grit.gni")
+import("//tools/polymer/html_to_js.gni")
+import("../optimize_webui.gni")
+
+if (optimize_webui) {
+  preprocess_folder = "preprocess"
+
+  optimize_webui("build") {
+    host = "downloads"
+    input = rebase_path("$target_gen_dir/$preprocess_folder", root_build_dir)
+    js_out_files = [ "downloads.rollup.js" ]
+    js_module_in_files = [ "downloads.js" ]
+    excludes = [
+      "chrome://resources/js/cr.m.js",
+      "chrome://resources/mojo/mojo/public/js/mojo_bindings_lite.js",
+    ]
+
+    deps = [
+      ":preprocess",
+      ":preprocess_generated",
+      ":preprocess_mojo",
+      "../../../../ui/webui/resources:preprocess",
+    ]
+  }
+
+  preprocess_grit("preprocess") {
+    in_folder = "./"
+    out_folder = "$target_gen_dir/$preprocess_folder"
+    in_files = [
+      "browser_proxy.js",
+      "constants.js",
+      "downloads.js",
+      "externs.js",
+      "icon_loader.js",
+      "search_service.js",
+    ]
+  }
+
+  preprocess_grit("preprocess_generated") {
+    deps = [ ":web_components" ]
+    in_folder = target_gen_dir
+    out_folder = "$target_gen_dir/$preprocess_folder"
+    in_files = [
+      "icons.js",
+      "item.js",
+      "manager.js",
+      "toolbar.js",
+    ]
+  }
+
+  copy("preprocess_mojo") {
+    deps = [ "//chrome/browser/ui/webui/downloads:mojo_bindings_js" ]
+    sources = [
+      "$root_gen_dir/chrome/browser/ui/webui/downloads/downloads.mojom-lite.js",
+    ]
+    outputs = [ "$target_gen_dir/$preprocess_folder/downloads.mojom-lite.js" ]
+  }
+}
+
+js_type_check("closure_compile") {
+  is_polymer3 = true
+  deps = [
+    ":browser_proxy",
+    ":constants",
+    ":item",
+    ":manager",
+    ":search_service",
+    ":toolbar",
+  ]
+}
+
+js_library("browser_proxy") {
+  deps = [
+    "//chrome/browser/ui/webui/downloads:mojo_bindings_js_library_for_compile",
+    "//ui/webui/resources/js:cr.m",
+  ]
+  externs_list = [ "externs.js" ]
+}
+
+js_library("constants") {
+}
+
+js_library("icon_loader") {
+  deps = [
+    "//ui/webui/resources/js:assert.m",
+    "//ui/webui/resources/js:cr.m",
+    "//ui/webui/resources/js:icon.m",
+    "//ui/webui/resources/js:promise_resolver.m",
+  ]
+}
+
+js_library("item") {
+  deps = [
+    ":browser_proxy",
+    ":constants",
+    ":icon_loader",
+    "//ui/webui/resources/cr_elements/cr_toast:cr_toast_manager.m",
+    "//ui/webui/resources/js:assert.m",
+    "//ui/webui/resources/js:load_time_data.m",
+    "//ui/webui/resources/js:util.m",
+    "//ui/webui/resources/js/cr/ui:focus_row_behavior.m",
+    "//ui/webui/resources/js/cr/ui:focus_without_ink.m",
+  ]
+}
+
+js_library("manager") {
+  deps = [
+    ":browser_proxy",
+    ":item",
+    ":search_service",
+    ":toolbar",
+    "//third_party/polymer/v3_0/components-chromium/iron-a11y-announcer",
+    "//third_party/polymer/v3_0/components-chromium/iron-list",
+    "//ui/webui/resources/cr_elements:find_shortcut_behavior.m",
+    "//ui/webui/resources/cr_elements/cr_toast:cr_toast_manager.m",
+    "//ui/webui/resources/js:assert.m",
+    "//ui/webui/resources/js:load_time_data.m",
+    "//ui/webui/resources/js:promise_resolver.m",
+    "//ui/webui/resources/js:util.m",
+  ]
+  externs_list = [ "$externs_path/chrome_send.js" ]
+}
+
+js_library("search_service") {
+  deps = [
+    ":browser_proxy",
+    "//ui/webui/resources/js:cr.m",
+    "//ui/webui/resources/js:load_time_data.m",
+  ]
+}
+
+js_library("toolbar") {
+  deps = [
+    ":browser_proxy",
+    ":search_service",
+    "//ui/webui/resources/cr_elements/cr_action_menu:cr_action_menu.m",
+    "//ui/webui/resources/cr_elements/cr_toast:cr_toast_manager.m",
+    "//ui/webui/resources/cr_elements/cr_toolbar:cr_toolbar.m",
+    "//ui/webui/resources/js:assert.m",
+    "//ui/webui/resources/js:load_time_data.m",
+    "//ui/webui/resources/js:util.m",
+  ]
+}
+
+html_to_js("web_components") {
+  js_files = [
+    "icons.js",
+    "item.js",
+    "manager.js",
+    "toolbar.js",
+  ]
+}

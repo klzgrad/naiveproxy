@@ -1,0 +1,59 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/toolchain/win/midl.gni")
+
+# TODO(crbug.com/1099904): this CLSID needs to be regenerated for every build.
+# TODO(crbug.com/1099904): we need to use an indirection mechanism for the
+# common GUIDs in the SxS versions.
+updater_clsid = "158428a4-6014-4978-83ba-9fad0dabe791"
+
+action("generate_updater_idl") {
+  script = "//build/util/version.py"
+
+  inputs = [ "updater_idl.template" ]
+  outputs = [ "$target_gen_dir/updater_idl.idl" ]
+
+  args = [
+    "-e",
+    "UPDATER_CLSID='$updater_clsid'",
+    rebase_path(inputs[0], root_build_dir),
+    rebase_path(outputs[0], root_build_dir),
+  ]
+}
+
+midl("updater_idl_idl") {
+  dynamic_guid = updater_clsid
+  deps = [ ":generate_updater_idl" ]
+  header_file = "updater_idl.h"
+  sources = get_target_outputs(":generate_updater_idl")
+
+  defines = [
+    "IUPDATESTATE_IID=46ACF70B-AC13-406D-B53B-B2C4BF091FF6",
+    "ICOMPLETESTATUS_IID=2FCD14AF-B645-4351-8359-E80A0E202A0B",
+    "IUPDATEROBSERVER_IID=7B416CFD-4216-4FD6-BD83-7C586054676E",
+    "IUPDATER_IID=63B8FFB1-5314-48C9-9C57-93EC8BC6184B",
+    "IUPDATERCONTROL_IID=526DA036-9BD3-4697-865A-DA12D37DFFCA",
+    "UPDATER_LIB_UUID=69464FF0-D9EC-4037-A35F-8AE4358106CC",
+    "ICURRENTSTATE_IID=247954F9-9EDC-4E68-8CC3-150C2B89EADF",
+    "IGOOGLEUPDATE3WEB_IID=494B20CF-282E-4BDD-9F5D-B70CB09D351E",
+    "IAPPBUNDLEWEB_IID=DD42475D-6D46-496a-924E-BD5630B4CBBA",
+    "IAPPWEB_IID=18D0F672-18B4-48e6-AD36-6E6BF01DBBC4",
+  ]
+
+  writes_tlb = true
+}
+
+# The COM server needs to work with Windows 7, so explicitly setting the defines
+# to reflect this. Otherwise, WRL uses APIs that are only available in later
+# Windows versions.
+config("winver") {
+  defines = [
+    "NTDDI_VERSION=NTDDI_WIN7",
+
+    # Hardcoding version 0x0601, since _WIN32_WINNT_WIN7 may not be defined.
+    "_WIN32_WINNT=0x0601",
+    "WINVER=0x0601",
+  ]
+}

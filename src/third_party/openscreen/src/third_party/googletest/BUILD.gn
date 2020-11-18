@@ -1,0 +1,108 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build_overrides/build.gni")
+
+if (build_with_chromium) {
+  source_set("gmock") {
+    testonly = true
+    public_configs = [
+      "//build/config/compiler:default_include_dirs",
+      "../../build:openscreen_include_dirs",
+    ]
+    public_deps = [
+      "//third_party/googletest:gmock",
+    ]
+  }
+
+  source_set("gtest") {
+    testonly = true
+    public_configs = [
+      "//build/config/compiler:default_include_dirs",
+      "../../build:openscreen_include_dirs",
+    ]
+    public_deps = [
+      "//third_party/googletest:gtest",
+    ]
+  }
+
+  source_set("gtest_main") {
+    testonly = true
+    public_configs = [
+      "//build/config/compiler:default_include_dirs",
+      "../../build:openscreen_include_dirs",
+    ]
+    public_deps = [
+      "//third_party/googletest:gtest_main",
+    ]
+  }
+} else {
+  config("gmock_config") {
+    visibility = [ ":*" ]
+
+    cflags_cc = []
+    if (is_clang) {
+      # NOTE(crbug.com/openscreen/15): GMock does not support the override
+      # keyword.
+      cflags_cc += [
+        "-Wno-exit-time-destructors",
+        "-Wno-inconsistent-missing-override",
+      ]
+    }
+
+    include_dirs = [ "src/googlemock/include" ]
+  }
+
+  config("gtest_config") {
+    visibility = [ ":*" ]
+
+    include_dirs = [ "src/googletest/include" ]
+
+    cflags_cc = []
+    if (is_clang) {
+      cflags_cc += [ "-Wno-exit-time-destructors" ]
+    }
+  }
+
+  source_set("gmock") {
+    testonly = true
+    sources = [
+      "src/googlemock/include/gmock.h",
+      "src/googlemock/src/gmock-all.cc",
+    ]
+
+    public_configs = [
+      ":gmock_config",
+      ":gtest_config",
+    ]
+
+    public_deps = [
+      ":gtest",
+    ]
+
+    include_dirs = [ "src/googlemock" ]
+  }
+
+  source_set("gtest") {
+    testonly = true
+    sources = [
+      "src/googletest/include/gtest.h",
+      "src/googletest/src/gtest-all.cc",
+    ]
+
+    public_configs = [ ":gtest_config" ]
+
+    include_dirs = [ "src/googletest" ]
+  }
+
+  source_set("gtest_main") {
+    testonly = true
+    sources = [
+      "src/googletest/src/gtest_main.cc",
+    ]
+    deps = [
+      ":gtest",
+    ]
+  }
+}

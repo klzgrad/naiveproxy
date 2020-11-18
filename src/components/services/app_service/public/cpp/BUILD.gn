@@ -1,0 +1,188 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+source_set("app_file_handling") {
+  sources = [
+    "file_handler.cc",
+    "file_handler.h",
+    "file_handler_info.cc",
+    "file_handler_info.h",
+  ]
+
+  deps = [
+    "//base",
+    "//url",
+  ]
+}
+
+source_set("app_share_target") {
+  sources = [
+    "share_target.cc",
+    "share_target.h",
+  ]
+
+  deps = [
+    "//base",
+    "//url",
+  ]
+}
+
+component("app_update") {
+  output_name = "APP_UPDATE"
+  sources = [
+    "app_registry_cache.cc",
+    "app_registry_cache.h",
+    "app_registry_cache_wrapper.cc",
+    "app_registry_cache_wrapper.h",
+    "app_update.cc",
+    "app_update.h",
+  ]
+
+  defines = [ "IS_APP_UPDATE_IMPL" ]
+
+  public_deps = [
+    "//components/account_id:account_id",
+    "//components/services/app_service/public/mojom",
+  ]
+}
+
+if (is_chromeos) {
+  source_set("instance_update") {
+    sources = [
+      "instance.cc",
+      "instance.h",
+      "instance_registry.cc",
+      "instance_registry.h",
+      "instance_update.cc",
+      "instance_update.h",
+    ]
+    deps = [
+      "//ash/public/cpp:cpp",
+      "//content/public/browser",
+      "//skia",
+      "//ui/aura",
+      "//ui/compositor",
+    ]
+  }
+}
+
+source_set("icon_loader") {
+  sources = [
+    "icon_cache.cc",
+    "icon_cache.h",
+    "icon_coalescer.cc",
+    "icon_coalescer.h",
+    "icon_loader.cc",
+    "icon_loader.h",
+  ]
+
+  public_deps = [ "//components/services/app_service/public/mojom" ]
+}
+
+source_set("icon_loader_test_support") {
+  sources = [
+    "stub_icon_loader.cc",
+    "stub_icon_loader.h",
+  ]
+
+  deps = [ ":icon_loader" ]
+}
+
+source_set("intents") {
+  sources = [
+    "intent_filter_util.cc",
+    "intent_filter_util.h",
+    "intent_util.cc",
+    "intent_util.h",
+  ]
+
+  deps = [
+    "//base",
+    "//components/services/app_service/public/mojom",
+    "//url",
+  ]
+}
+
+source_set("protocol_handling") {
+  sources = [
+    "protocol_handler_info.cc",
+    "protocol_handler_info.h",
+  ]
+
+  deps = [ "//url" ]
+}
+
+source_set("preferred_apps") {
+  sources = [
+    "preferred_apps_converter.cc",
+    "preferred_apps_converter.h",
+    "preferred_apps_list.cc",
+    "preferred_apps_list.h",
+  ]
+
+  deps = [
+    ":intents",
+    "//base",
+    "//components/services/app_service/public/mojom",
+    "//url",
+  ]
+}
+
+source_set("publisher") {
+  sources = [
+    "publisher_base.cc",
+    "publisher_base.h",
+  ]
+
+  deps = [ "//components/services/app_service/public/mojom" ]
+}
+
+source_set("test_support") {
+  testonly = true
+
+  sources = [
+    "intent_test_util.cc",
+    "intent_test_util.h",
+  ]
+
+  deps = [
+    ":intents",
+    "//components/services/app_service/public/mojom",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+
+  sources = [
+    "app_registry_cache_unittest.cc",
+    "app_update_unittest.cc",
+    "icon_cache_unittest.cc",
+    "icon_coalescer_unittest.cc",
+    "intent_util_unittest.cc",
+    "preferred_apps_converter_unittest.cc",
+    "preferred_apps_list_unittest.cc",
+  ]
+
+  deps = [
+    ":app_update",
+    ":icon_loader",
+    ":intents",
+    ":preferred_apps",
+    ":publisher",
+    ":test_support",
+    "//chrome/test:test_support",
+    "//content/test:test_support",
+    "//testing/gtest",
+  ]
+
+  if (is_chromeos) {
+    sources += [
+      "instance_registry_unittest.cc",
+      "instance_update_unittest.cc",
+    ]
+
+    deps += [ ":instance_update" ]
+  }
+}

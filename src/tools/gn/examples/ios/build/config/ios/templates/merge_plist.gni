@@ -1,0 +1,85 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# Template to merge multiple Apple Property List file into a single file.
+#
+# Arguments
+#
+#   - output
+#
+#       path of the file that will be generated (must be in a sub-directory
+#       of root_build_dir)
+#
+#   - plists
+#
+#       list of path to Apple Property List file to merge (the file may be
+#       in either "json", "binary1" or "xml1" format)
+#
+#   - format (optional)
+#
+#       format in which the file must be saved; must be one of "json",
+#       "binary1" or "xml1" (default to "json" if omitted)
+#
+#   - substitutions (optional)
+#
+#       a scope defining variable substitutions to perform when merging the
+#       Property List files (i.e. if scope define foo = "bar", occurences
+#       of $(foo) in any string in a property list will be replaced by
+#       bar)
+#
+template("merge_plist") {
+  assert(defined(invoker.output) && invoker.output != "",
+         "output must be defined for merge_plist ($target_name)")
+  assert(defined(invoker.plists) && invoker.plists != [],
+         "plists must be defined for merge_plist ($target_name)")
+
+  if (defined(invoker.substitutions)) {
+    assert(!defined(invoker.substitutions_json),
+           "cannot define both substitutions and substitutions_json")
+
+    _substitutions_json = "$target_out_dir/$target_name/substitutions.json"
+    write_file(_substitutions_json, invoker.substitutions, "json")
+  }
+
+  if (defined(invoker.substitutions_json)) {
+    _substitutions_json = invoker.substitutions_json
+  }
+
+  action(target_name) {
+    forward_variables_from(invoker,
+                           "*",
+                           [
+                             "args",
+                             "format",
+                             "inputs",
+                             "output",
+                             "plists",
+                             "script",
+                             "sources",
+                             "substitutions",
+                             "substitutions_json",
+                           ])
+
+    script = "//build/config/ios/scripts/merge_plist.py"
+    sources = invoker.plists
+    outputs = [ invoker.output ]
+
+    _format = "json"
+    if (defined(invoker.format)) {
+      _format = invoker.format
+    }
+
+    args = [
+      "-f=" + _format,
+      "-o=" + rebase_path(invoker.output, root_build_dir),
+    ]
+
+    if (defined(_substitutions_json)) {
+      inputs = [ _substitutions_json ]
+      args += [ "-s=" + rebase_path(_substitutions_json) ]
+    }
+
+    args += rebase_path(sources, root_build_dir)
+  }
+}

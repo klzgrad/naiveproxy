@@ -1,0 +1,259 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/util/process_version.gni")
+import("//chrome/process_version_rc_template.gni")
+import("//chrome/updater/branding.gni")
+import("//testing/libfuzzer/fuzzer_test.gni")
+import("//testing/test.gni")
+
+# This target builds the updater executable, its installer, and unittests.
+group("win") {
+  deps = [
+    ":updater",
+    "//chrome/updater/win/installer:installer",
+    "//chrome/updater/win/signing",
+  ]
+}
+
+config("wrl_strict") {
+  # This definition is used in <wrl/module.h> to specify that only COM
+  # support is provided by WRL, and thus, avoid a dependency on WinRT, which
+  # is not available in Windows 7.
+  defines = [ "__WRL_CLASSIC_COM_STRICT__" ]
+}
+
+executable("updater") {
+  sources = [
+    "main.cc",
+    "updater.rc",
+  ]
+
+  configs += [ "//build/config/win:windowed" ]
+
+  deps = [
+    ":app_install_controller",
+    ":lib",
+    ":version_resources",
+    "//build/win:default_exe_manifest",
+    "//chrome/updater:lib",
+    "//chrome/updater/win/ui:ui_resources",
+  ]
+
+  data_deps = [ ":uninstall.cmd" ]
+}
+
+process_version("uninstall.cmd") {
+  template_file = "setup/uninstall.cmd"
+  output = "$target_gen_dir/uninstall.cmd"
+  process_only = true
+  extra_args = [
+    "-e",
+    "PRODUCT_FULLNAME=\"$updater_product_full_name\"",
+    "-e",
+    "COMPANY_SHORTNAME=\"$updater_company_short_name\"",
+  ]
+}
+
+process_version_rc_template("version_resources") {
+  sources = [ "updater.ver" ]
+  output = "$target_gen_dir/updater_exe.rc"
+}
+
+source_set("constants") {
+  sources = [
+    "constants.cc",
+    "constants.h",
+  ]
+
+  deps = [
+    "//base",
+    "//chrome/updater:version_header",
+  ]
+}
+
+source_set("lib") {
+  sources = [
+    "action_handler.cc",
+    "control_service_out_of_process.cc",
+    "control_service_out_of_process.h",
+    "group_policy_manager.cc",
+    "group_policy_manager.h",
+    "net/net_util.cc",
+    "net/net_util.h",
+    "net/network.h",
+    "net/network_fetcher.cc",
+    "net/network_fetcher.h",
+    "net/network_winhttp.cc",
+    "net/network_winhttp.h",
+    "net/proxy_configuration.cc",
+    "net/proxy_configuration.h",
+    "net/proxy_info.cc",
+    "net/proxy_info.h",
+    "net/scoped_hinternet.h",
+    "net/scoped_winttp_proxy_info.h",
+    "scoped_handle.h",
+    "scoped_impersonation.cc",
+    "scoped_impersonation.h",
+    "setup/setup.cc",
+    "setup/setup.h",
+    "setup/setup_util.cc",
+    "setup/setup_util.h",
+    "setup/uninstall.cc",
+    "setup/uninstall.h",
+    "task_scheduler.cc",
+    "task_scheduler.h",
+    "update_service_out_of_process.cc",
+    "update_service_out_of_process.h",
+    "user_info.cc",
+    "user_info.h",
+    "util.cc",
+    "util.h",
+  ]
+
+  configs -= [ "//build/config/win:winver" ]
+  configs += [ "//chrome/updater/app/server/win:winver" ]
+
+  defines = [ "SECURITY_WIN32" ]
+
+  libs = [
+    "secur32.lib",
+    "taskschd.lib",
+    "winhttp.lib",
+  ]
+
+  deps = [
+    ":constants",
+    "//base",
+    "//chrome/installer/util:with_no_strings",
+    "//chrome/updater:base",
+    "//chrome/updater:version_header",
+    "//chrome/updater/app/server/win:updater_idl_idl",
+    "//components/update_client",
+    "//url:url",
+  ]
+}
+
+source_set("install_progress_observer") {
+  sources = [
+    "install_progress_observer.cc",
+    "install_progress_observer.h",
+  ]
+
+  deps = [ "//base" ]
+}
+
+# This build target is defined to minimize the impact of -Wno-missing-braces
+# compiler switch. In the future it might be possible to isolate the
+# dependency of ATL in the UI so ATL headers are not visible in the
+# compilation units outside the UI itself.
+# TODO(sorin): https://crbug.com/1014311
+source_set("app_install_controller") {
+  if (is_win) {
+    visibility = [ "//chrome/updater/win/*" ]
+    allow_circular_includes_from = [ "//chrome/updater:lib" ]
+
+    cflags_cc = [ "-Wno-missing-braces" ]
+
+    sources = [ "app_install_controller.cc" ]
+
+    deps = [
+      ":install_progress_observer",
+      ":lib",
+      "//base",
+      "//base:i18n",
+      "//chrome/updater:base",
+      "//chrome/updater:lib",
+      "//chrome/updater:version_header",
+      "//chrome/updater/win/ui",
+    ]
+  }
+}
+
+source_set("updater_tests") {
+  testonly = true
+
+  sources = [
+    "group_policy_manager_unittest.cc",
+    "net/network_unittest.cc",
+    "net/proxy_configuration_unittest.cc",
+    "net/proxy_info_unittest.cc",
+    "tag_extractor_unittest.cc",
+    "util_unittest.cc",
+  ]
+
+  deps = [
+    ":app_install_controller",
+    ":constants",
+    ":lib",
+    ":tag_extractor",
+    "//base/test:test_support",
+    "//testing/gtest",
+    "//url:url",
+  ]
+
+  data_deps = [
+    ":updater_unittests",
+    "//chrome/updater/win/installer:installer_unittest",
+  ]
+
+  data = [
+    "../test/data/signed.exe",
+    "../test/data/signed.exe.gz",
+    "../test/data/tagged_encode_utf8.exe",
+    "../test/data/tagged_magic_utf16.exe",
+  ]
+}
+
+# Specific tests which must run in their own process due to COM, security, or
+# test isolation requirements.
+test("updater_unittests") {
+  testonly = true
+
+  sources = [
+    "//chrome/updater/win/test/test_main.cc",
+    "setup/setup_util_unittest.cc",
+    "task_scheduler_unittest.cc",
+  ]
+
+  deps = [
+    ":app_install_controller",
+    ":lib",
+    "//base",
+    "//base/test:test_support",
+    "//chrome/updater:version_header",
+    "//chrome/updater/win/test:test_executables",
+    "//chrome/updater/win/test:test_strings",
+    "//testing/gtest",
+  ]
+
+  data = [ "//chrome/updater/test/data/updater.runtime_deps" ]
+}
+
+source_set("tag_extractor") {
+  public = [ "tag_extractor.h" ]
+
+  sources = [
+    "tag_extractor.cc",
+    "tag_extractor_impl.h",
+  ]
+
+  friend = [
+    ":updater_tests",
+    ":updater_fuzzer",
+  ]
+
+  # In the future, we want to rely on the base numerics headers and
+  # PeImageReader directly, but right now that isn't possible due to the
+  # visibility of the lib, so we depend on the entire base temporarily.
+  deps = [ "//base" ]
+}
+
+fuzzer_test("updater_fuzzer") {
+  sources = [ "tag_extractor_fuzzer.cc" ]
+
+  deps = [ ":tag_extractor" ]
+
+  seed_corpus = "../test/data/tag_extractor_corpus/"
+}

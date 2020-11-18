@@ -1,0 +1,72 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//mojo/public/tools/bindings/mojom.gni")
+
+mojom("mojom") {
+  sources = [
+    "pdf_nup_converter.mojom",
+    "pdf_render_settings.mojom",
+    "pdf_to_pwg_raster_converter.mojom",
+    "printing_service.mojom",
+  ]
+
+  deps = [
+    "//printing/mojom",
+    "//ui/gfx/geometry/mojom",
+  ]
+
+  public_deps = [
+    "//mojo/public/mojom/base",
+    "//url/mojom:url_mojom_gurl",
+  ]
+
+  if (is_chromeos) {
+    sources += [
+      "pdf_flattener.mojom",
+      "pdf_thumbnailer.mojom",
+    ]
+    deps += [ "//skia/public/mojom" ]
+  }
+
+  if (is_win) {
+    sources += [ "pdf_to_emf_converter.mojom" ]
+  }
+
+  cpp_typemaps = [
+    {
+      types = [
+        {
+          mojom = "printing.mojom.PdfRenderSettings"
+          cpp = "::printing::PdfRenderSettings"
+        },
+        {
+          mojom = "printing.mojom.PdfRenderSettings::Mode"
+          cpp = "::printing::PdfRenderSettings::Mode"
+        },
+      ]
+      traits_headers = [ "pdf_render_settings_mojom_traits.h" ]
+      traits_sources = [ "pdf_render_settings_mojom_traits.cc" ]
+      traits_public_deps = [ "//printing" ]
+    },
+    {
+      types = [
+        {
+          mojom = "printing.mojom.PwgRasterSettings::TransformType"
+          cpp = "::printing::PwgRasterTransformType"
+        },
+        {
+          mojom = "printing.mojom.PwgRasterSettings"
+          cpp = "::printing::PwgRasterSettings"
+        },
+      ]
+      traits_headers = [ "pdf_to_pwg_raster_converter_mojom_traits.h" ]
+      traits_sources = [ "pdf_to_pwg_raster_converter_mojom_traits.cc" ]
+      traits_public_deps = [
+        "//printing",
+        "//printing/mojom",
+      ]
+    },
+  ]
+}

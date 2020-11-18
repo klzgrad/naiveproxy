@@ -1,0 +1,384 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//testing/test.gni")
+import("pdfium.gni")
+
+group("freetype_common") {
+  public_deps = []
+  if (pdf_bundle_freetype) {
+    public_deps += [ "third_party:fx_freetype" ]
+  } else {
+    public_deps += [ "//build/config/freetype" ]
+  }
+}
+
+config("pdfium_common_config") {
+  cflags = []
+  ldflags = []
+  include_dirs = [ "." ]
+  defines = [
+    "PNG_PREFIX",
+    "PNG_USE_READ_MACROS",
+  ]
+
+  if (!use_system_libopenjpeg2) {
+    defines += [ "OPJ_STATIC" ]
+  }
+
+  if (pdf_enable_click_logging) {
+    defines += [ "PDF_ENABLE_CLICK_LOGGING" ]
+  }
+
+  if (pdf_use_skia) {
+    defines += [ "_SKIA_SUPPORT_" ]
+  }
+
+  if (pdf_use_skia_paths) {
+    defines += [ "_SKIA_SUPPORT_PATHS_" ]
+  }
+
+  if (is_win) {
+    # Assume UTF-8 by default to avoid code page dependencies.
+    cflags += [ "/utf-8" ]
+  }
+
+  if (is_clang) {
+    # Override -Wno-c++11-narrowing.
+    cflags += [ "-Wc++11-narrowing" ]
+  }
+
+  if (!is_win && !is_clang) {
+    # Override -Wno-narrowing.
+    cflags += [ "-Wnarrowing" ]
+  }
+}
+
+config("pdfium_implementation_config") {
+  defines = [ "FPDF_IMPLEMENTATION" ]
+  visibility = [ ":pdfium_public_headers" ]
+}
+
+config("pdfium_public_config") {
+  defines = []
+
+  if (pdf_enable_v8) {
+    defines += [ "PDF_ENABLE_V8" ]
+
+    if (pdf_enable_xfa) {
+      defines += [ "PDF_ENABLE_XFA" ]
+      if (pdf_enable_xfa_bmp) {
+        defines += [ "PDF_ENABLE_XFA_BMP" ]
+      }
+      if (pdf_enable_xfa_gif) {
+        defines += [ "PDF_ENABLE_XFA_GIF" ]
+      }
+      if (pdf_enable_xfa_png) {
+        defines += [ "PDF_ENABLE_XFA_PNG" ]
+      }
+      if (pdf_enable_xfa_tiff) {
+        defines += [ "PDF_ENABLE_XFA_TIFF" ]
+      }
+    }
+  }
+
+  if (pdf_use_win32_gdi) {
+    defines += [ "PDFIUM_PRINT_TEXT_WITH_GDI" ]
+  }
+}
+
+config("pdfium_core_config") {
+  cflags = []
+  configs = [
+    ":pdfium_common_config",
+    ":pdfium_public_config",
+    "//build/config/compiler:noshadowing",
+  ]
+  defines = []
+  if (is_linux || is_chromeos) {
+    if (current_cpu == "x64") {
+      defines += [ "_FX_CPU_=_FX_X64_" ]
+      cflags += [ "-fPIC" ]
+    } else if (current_cpu == "x86") {
+      defines += [ "_FX_CPU_=_FX_X86_" ]
+    }
+  }
+  if (is_win) {
+    cflags += [
+      "/wd4324",
+      "/wd4577",
+    ]
+  }
+  configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+}
+
+source_set("pdfium_public_headers_impl") {
+  sources = [
+    "public/cpp/fpdf_deleters.h",
+    "public/cpp/fpdf_scopers.h",
+    "public/fpdf_annot.h",
+    "public/fpdf_attachment.h",
+    "public/fpdf_catalog.h",
+    "public/fpdf_dataavail.h",
+    "public/fpdf_doc.h",
+    "public/fpdf_edit.h",
+    "public/fpdf_ext.h",
+    "public/fpdf_flatten.h",
+    "public/fpdf_formfill.h",
+    "public/fpdf_fwlevent.h",
+    "public/fpdf_javascript.h",
+    "public/fpdf_ppo.h",
+    "public/fpdf_progressive.h",
+    "public/fpdf_save.h",
+    "public/fpdf_searchex.h",
+    "public/fpdf_signature.h",
+    "public/fpdf_structtree.h",
+    "public/fpdf_sysfontinfo.h",
+    "public/fpdf_text.h",
+    "public/fpdf_transformpage.h",
+    "public/fpdfview.h",
+  ]
+}
+
+group("pdfium_public_headers") {
+  public_deps = [ ":pdfium_public_headers_impl" ]
+  public_configs = [
+    ":pdfium_public_config",
+    ":pdfium_implementation_config",
+  ]
+}
+
+component("pdfium") {
+  libs = []
+  configs += [ ":pdfium_core_config" ]
+  public_configs = [ ":pdfium_public_config" ]
+
+  deps = [
+    "constants",
+    "core/fpdfapi/page",
+    "core/fpdfapi/parser",
+    "core/fpdfdoc",
+    "core/fxcodec",
+    "core/fxcrt",
+    "core/fxge",
+    "fpdfsdk",
+    "fpdfsdk/formfiller",
+    "fxjs",
+    "third_party:pdfium_base",
+    "third_party:skia_shared",
+  ]
+
+  public_deps = [
+    ":pdfium_public_headers_impl",
+    "core/fxcrt",
+  ]
+
+  if (pdf_enable_xfa) {
+    deps += [
+      "fpdfsdk/fpdfxfa",
+      "xfa/fxfa",
+      "xfa/fxfa/parser",
+    ]
+  }
+
+  if (is_win) {
+    libs += [
+      "advapi32.lib",
+      "gdi32.lib",
+      "user32.lib",
+    ]
+  }
+
+  if (is_mac) {
+    frameworks = [
+      "AppKit.framework",
+      "CoreFoundation.framework",
+    ]
+  }
+
+  if (pdf_is_complete_lib) {
+    static_component_type = "static_library"
+    complete_static_lib = true
+    configs -= [ "//build/config/compiler:thin_archive" ]
+  }
+
+  if (is_component_build) {
+    deps += [ "testing/fuzzers:fuzzer_impls" ]
+  }
+}
+
+# Targets below this are only visible within this file (and to the
+# top-level gn_visibility target used to help gn_all build everything).
+visibility = [
+  ":*",
+  "//:gn_visibility",
+]
+
+group("pdfium_unittest_deps") {
+  testonly = true
+  public_deps = [
+    "core/fxcrt",
+    "testing:unit_test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+  visibility += [
+    "core/*",
+    "fpdfsdk/*",
+    "fxbarcode/*",
+    "fxjs/*",
+    "xfa/*",
+  ]
+}
+
+test("pdfium_unittests") {
+  testonly = true
+  sources = [ "testing/unit_test_main.cpp" ]
+  deps = [
+    "core/fdrm:unittests",
+    "core/fpdfapi/edit:unittests",
+    "core/fpdfapi/font:unittests",
+    "core/fpdfapi/page:unittests",
+    "core/fpdfapi/parser:unittests",
+    "core/fpdfapi/render:unittests",
+    "core/fpdfdoc:unittests",
+    "core/fpdftext:unittests",
+    "core/fxcodec:unittests",
+    "core/fxcrt",
+    "core/fxcrt:unittests",
+    "core/fxge:unittests",
+    "fpdfsdk:unittests",
+    "testing:unit_test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+  configs += [ ":pdfium_core_config" ]
+
+  if (is_android) {
+    use_raw_android_executable = true
+  }
+
+  if (pdf_enable_v8) {
+    configs += [ "//v8:external_startup_data" ]
+    deps += [
+      "fxjs:unittests",
+      "//v8",
+    ]
+
+    if (pdf_enable_xfa) {
+      deps += [
+        "core/fxcrt/css:unittests",
+        "fxbarcode:unittests",
+        "xfa/fde:unittests",
+        "xfa/fgas:unittests",
+        "xfa/fgas/layout:unittests",
+        "xfa/fxfa:unittests",
+        "xfa/fxfa/fm2js:unittests",
+        "xfa/fxfa/parser:unittests",
+      ]
+    }
+  }
+}
+
+group("pdfium_embeddertest_deps") {
+  testonly = true
+  public_deps = [
+    ":pdfium_public_headers",
+    "core/fxcrt",
+    "testing:embedder_test_support",
+    "third_party:pdfium_base_test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+  visibility += [
+    "core/*",
+    "fpdfsdk/*",
+    "fxjs/*",
+    "xfa/*",
+  ]
+}
+
+test("pdfium_embeddertests") {
+  testonly = true
+  sources = [ "testing/embedder_test_main.cpp" ]
+  deps = [
+    ":pdfium_embeddertest_deps",
+    "core/fpdfapi/edit:embeddertests",
+    "core/fpdfapi/parser:embeddertests",
+    "core/fpdfapi/render:embeddertests",
+    "core/fxcodec:embeddertests",
+    "core/fxcrt",
+    "core/fxge:embeddertests",
+    "fpdfsdk:embeddertests",
+    "fpdfsdk/pwl:embeddertests",
+    "testing/image_diff",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+  include_dirs = [ "testing/gmock/include" ]
+  configs += [ ":pdfium_core_config" ]
+
+  if (is_android) {
+    ignore_all_data_deps = true
+    use_raw_android_executable = true
+  }
+
+  if (pdf_enable_v8) {
+    deps += [
+      "fxjs:embeddertests",
+      "//v8",
+    ]
+    configs += [ "//v8:external_startup_data" ]
+  }
+
+  if (pdf_enable_xfa) {
+    deps += [
+      "fpdfsdk/fpdfxfa:embeddertests",
+      "xfa/fwl:embeddertests",
+      "xfa/fxfa/layout:embeddertests",
+      "xfa/fxfa/parser:embeddertests",
+    ]
+  }
+}
+
+executable("pdfium_diff") {
+  testonly = true
+  sources = [ "testing/image_diff/image_diff.cpp" ]
+  deps = [
+    "core/fxcrt",
+    "testing:path_service",
+    "testing/image_diff",
+    "//build/win:default_exe_manifest",
+  ]
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [ "//build/config/compiler:no_chromium_code" ]
+  configs += [ ":pdfium_core_config" ]
+}
+
+if (pdf_is_standalone) {
+  source_set("samples") {
+    testonly = true
+    deps = [ "//samples" ]
+  }
+
+  group("fuzzers") {
+    testonly = true
+    deps = [ "//testing/fuzzers" ]
+  }
+}
+
+group("pdfium_all") {
+  testonly = true
+  deps = [
+    ":pdfium_diff",
+    ":pdfium_embeddertests",
+    ":pdfium_unittests",
+  ]
+  if (pdf_is_standalone) {
+    deps += [
+      ":fuzzers",
+      ":samples",
+    ]
+  }
+}

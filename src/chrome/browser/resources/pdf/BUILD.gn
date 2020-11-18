@@ -1,0 +1,240 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//third_party/closure_compiler/compile_js.gni")
+import("//tools/polymer/html_to_js.gni")
+
+group("web_components") {
+  public_deps = [
+    ":web_components_local",
+    "elements:web_components",
+  ]
+}
+
+html_to_js("web_components_local") {
+  js_files = [
+    "pdf_viewer.js",
+    "pdf_viewer_pp.js",
+    "pdf_viewer_shared_style.js",
+  ]
+}
+
+group("closure_compile") {
+  deps = [
+    ":pdf_resources",
+    "elements:closure_compile",
+  ]
+  if (is_chromeos) {
+    deps += [ "ink:closure_compile" ]
+  }
+}
+
+js_library("annotation_tool") {
+}
+
+js_library("bookmark_type") {
+}
+
+js_library("browser_api") {
+  deps = [ "//ui/webui/resources/js:assert.m" ]
+  externs_list = [
+    "$externs_path/chrome_extensions.js",
+    "$externs_path/mime_handler_private.js",
+  ]
+}
+
+js_library("constants") {
+}
+
+js_library("gesture_detector") {
+  deps = [
+    ":constants",
+    "//ui/webui/resources/js/cr:event_target.m",
+  ]
+}
+
+js_library("open_pdf_params_parser") {
+  deps = [ ":constants" ]
+  externs_list = [ "$externs_path/pending.js" ]
+}
+
+js_library("pdf_scripting_api") {
+}
+
+js_library("viewport_scroller") {
+}
+
+js_library("viewport") {
+  deps = [
+    ":constants",
+    ":gesture_detector",
+    ":zoom_manager",
+    "//ui/webui/resources/js:assert.m",
+    "//ui/webui/resources/js:event_tracker.m",
+    "//ui/webui/resources/js:util.m",
+  ]
+  externs_list = [ "$externs_path/pending.js" ]
+}
+
+js_library("zoom_manager") {
+  deps = [
+    ":browser_api",
+    "//ui/webui/resources/js/cr:event_target.m",
+  ]
+}
+
+js_library("metrics") {
+  deps = [ ":constants" ]
+  externs_list = [ "$externs_path/metrics_private.js" ]
+}
+
+js_library("navigator") {
+  deps = [
+    ":open_pdf_params_parser",
+    ":viewport",
+  ]
+}
+
+js_library("toolbar_manager") {
+  deps = [
+    "elements:viewer-pdf-toolbar",
+    "elements:viewer-zoom-toolbar",
+    "//ui/webui/resources/js:util.m",
+  ]
+}
+
+js_library("ink_controller") {
+  deps = [
+    ":annotation_tool",
+    ":controller",
+    ":viewport",
+    "//ui/webui/resources/js/cr:event_target.m",
+  ]
+}
+
+js_library("local_storage_proxy") {
+  deps = [ "//ui/webui/resources/js:cr.m" ]
+}
+
+js_library("controller") {
+  deps = [
+    ":viewport",
+    "//ui/webui/resources/js:assert.m",
+    "//ui/webui/resources/js:load_time_data.m",
+    "//ui/webui/resources/js:promise_resolver.m",
+    "//ui/webui/resources/js/cr:event_target.m",
+  ]
+}
+
+js_library("pdf_viewer_base") {
+  deps = [
+    ":browser_api",
+    ":constants",
+    ":controller",
+    ":metrics",
+    ":pdf_scripting_api",
+    ":pdf_viewer_utils",
+    ":viewport",
+    ":viewport_scroller",
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+    "//ui/webui/resources/js:assert.m",
+    "//ui/webui/resources/js:event_tracker.m",
+    "//ui/webui/resources/js:load_time_data.m",
+    "//ui/webui/resources/js:promise_resolver.m",
+    "//ui/webui/resources/js:util.m",
+  ]
+  externs_list = [ "$externs_path/resources_private.js" ]
+}
+
+js_library("pdf_viewer") {
+  deps = [
+    ":bookmark_type",
+    ":browser_api",
+    ":constants",
+    ":controller",
+    ":ink_controller",
+    ":local_storage_proxy",
+    ":metrics",
+    ":navigator",
+    ":pdf_scripting_api",
+    ":pdf_viewer_base",
+    ":pdf_viewer_utils",
+    ":toolbar_manager",
+    "elements:viewer-error-screen",
+    "elements:viewer-password-screen",
+    "elements:viewer-pdf-sidenav",
+    "elements:viewer-pdf-toolbar",
+    "elements:viewer-pdf-toolbar-new",
+    "elements:viewer-thumbnail",
+    "elements:viewer-zoom-toolbar",
+    "//ui/webui/resources/js:assert.m",
+    "//ui/webui/resources/js:event_tracker.m",
+    "//ui/webui/resources/js:load_time_data.m",
+    "//ui/webui/resources/js:promise_resolver.m",
+    "//ui/webui/resources/js:util.m",
+    "//ui/webui/resources/js/cr/ui:focus_outline_manager.m",
+  ]
+  externs_list = [ "$externs_path/resources_private.js" ]
+}
+
+js_library("pdf_viewer_utils") {
+  deps = [
+    ":controller",
+    ":viewport",
+  ]
+}
+
+js_library("pdf_viewer_pp") {
+  deps = [
+    ":constants",
+    ":controller",
+    ":pdf_scripting_api",
+    ":pdf_viewer_base",
+    ":pdf_viewer_utils",
+    ":toolbar_manager",
+    ":viewport",
+    "elements:viewer-error-screen",
+    "elements:viewer-page-indicator",
+    "elements:viewer-zoom-toolbar",
+    "//ui/webui/resources/js:assert.m",
+    "//ui/webui/resources/js:event_tracker.m",
+    "//ui/webui/resources/js:load_time_data.m",
+    "//ui/webui/resources/js:promise_resolver.m",
+    "//ui/webui/resources/js:util.m",
+  ]
+  externs_list = [ "$externs_path/resources_private.js" ]
+}
+
+js_library("main") {
+  deps = [
+    ":browser_api",
+    ":pdf_viewer",
+  ]
+}
+
+js_type_check("pdf_resources") {
+  is_polymer3 = true
+  deps = [
+    ":annotation_tool",
+    ":browser_api",
+    ":constants",
+    ":controller",
+    ":gesture_detector",
+    ":ink_controller",
+    ":local_storage_proxy",
+    ":main",
+    ":metrics",
+    ":navigator",
+    ":open_pdf_params_parser",
+    ":pdf_scripting_api",
+    ":pdf_viewer",
+    ":pdf_viewer_base",
+    ":pdf_viewer_pp",
+    ":pdf_viewer_utils",
+    ":toolbar_manager",
+    ":viewport",
+    ":viewport_scroller",
+    ":zoom_manager",
+  ]
+}

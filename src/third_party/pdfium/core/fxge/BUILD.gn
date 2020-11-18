@@ -1,0 +1,238 @@
+# Copyright 2018 The PDFium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/freetype/freetype.gni")
+import("../../pdfium.gni")
+import("../../testing/test.gni")
+
+config("fxge_warnings") {
+  visibility = [ ":*" ]
+  if (is_clang) {
+    cflags = [
+      # http://code.google.com/p/pdfium/issues/detail?id=188
+      "-Wno-switch",
+    ]
+  }
+}
+
+source_set("fxge") {
+  sources = [
+    "cfx_cliprgn.cpp",
+    "cfx_cliprgn.h",
+    "cfx_color.cpp",
+    "cfx_color.h",
+    "cfx_defaultrenderdevice.h",
+    "cfx_drawutils.cpp",
+    "cfx_drawutils.h",
+    "cfx_face.cpp",
+    "cfx_face.h",
+    "cfx_fillrenderoptions.h",
+    "cfx_folderfontinfo.cpp",
+    "cfx_folderfontinfo.h",
+    "cfx_font.cpp",
+    "cfx_font.h",
+    "cfx_fontcache.cpp",
+    "cfx_fontcache.h",
+    "cfx_fontmapper.cpp",
+    "cfx_fontmapper.h",
+    "cfx_fontmgr.cpp",
+    "cfx_fontmgr.h",
+    "cfx_gemodule.cpp",
+    "cfx_gemodule.h",
+    "cfx_glyphbitmap.cpp",
+    "cfx_glyphbitmap.h",
+    "cfx_glyphcache.cpp",
+    "cfx_glyphcache.h",
+    "cfx_graphstate.cpp",
+    "cfx_graphstate.h",
+    "cfx_graphstatedata.cpp",
+    "cfx_graphstatedata.h",
+    "cfx_pathdata.cpp",
+    "cfx_pathdata.h",
+    "cfx_renderdevice.cpp",
+    "cfx_renderdevice.h",
+    "cfx_substfont.cpp",
+    "cfx_substfont.h",
+    "cfx_textrenderoptions.h",
+    "cfx_unicodeencoding.cpp",
+    "cfx_unicodeencoding.h",
+    "dib/cfx_bitmapcomposer.cpp",
+    "dib/cfx_bitmapcomposer.h",
+    "dib/cfx_bitmapstorer.cpp",
+    "dib/cfx_bitmapstorer.h",
+    "dib/cfx_cmyk_to_srgb.cpp",
+    "dib/cfx_cmyk_to_srgb.h",
+    "dib/cfx_dibbase.cpp",
+    "dib/cfx_dibbase.h",
+    "dib/cfx_dibitmap.cpp",
+    "dib/cfx_dibitmap.h",
+    "dib/cfx_imagerenderer.cpp",
+    "dib/cfx_imagerenderer.h",
+    "dib/cfx_imagestretcher.cpp",
+    "dib/cfx_imagestretcher.h",
+    "dib/cfx_imagetransformer.cpp",
+    "dib/cfx_imagetransformer.h",
+    "dib/cfx_scanlinecompositor.cpp",
+    "dib/cfx_scanlinecompositor.h",
+    "dib/cstretchengine.cpp",
+    "dib/cstretchengine.h",
+    "dib/fx_dib_main.cpp",
+    "dib/scanlinecomposer_iface.h",
+    "fontdata/chromefontdata/FoxitDingbats.cpp",
+    "fontdata/chromefontdata/FoxitFixed.cpp",
+    "fontdata/chromefontdata/FoxitFixedBold.cpp",
+    "fontdata/chromefontdata/FoxitFixedBoldItalic.cpp",
+    "fontdata/chromefontdata/FoxitFixedItalic.cpp",
+    "fontdata/chromefontdata/FoxitSans.cpp",
+    "fontdata/chromefontdata/FoxitSansBold.cpp",
+    "fontdata/chromefontdata/FoxitSansBoldItalic.cpp",
+    "fontdata/chromefontdata/FoxitSansItalic.cpp",
+    "fontdata/chromefontdata/FoxitSansMM.cpp",
+    "fontdata/chromefontdata/FoxitSerif.cpp",
+    "fontdata/chromefontdata/FoxitSerifBold.cpp",
+    "fontdata/chromefontdata/FoxitSerifBoldItalic.cpp",
+    "fontdata/chromefontdata/FoxitSerifItalic.cpp",
+    "fontdata/chromefontdata/FoxitSerifMM.cpp",
+    "fontdata/chromefontdata/FoxitSymbol.cpp",
+    "fontdata/chromefontdata/chromefontdata.h",
+    "freetype/fx_freetype.cpp",
+    "fx_dib.h",
+    "fx_font.cpp",
+    "fx_font.h",
+    "fx_freetype.h",
+    "render_defines.h",
+    "renderdevicedriver_iface.cpp",
+    "renderdevicedriver_iface.h",
+    "scoped_font_transform.cpp",
+    "scoped_font_transform.h",
+    "systemfontinfo_iface.h",
+    "text_char_pos.cpp",
+    "text_char_pos.h",
+    "text_glyph_pos.cpp",
+    "text_glyph_pos.h",
+  ]
+
+  configs += [
+    ":fxge_warnings",
+    "../../:pdfium_core_config",
+  ]
+
+  deps = [ "../fxcrt" ]
+
+  if (is_component_build || use_system_freetype) {
+    # ft_adobe_glyph_list is not exported from the Freetype shared library so we
+    # need it defined in component builds and builds using system freetype.
+    defines = [ "DEFINE_PS_TABLES_DATA" ]
+  }
+
+  if (pdf_enable_xfa) {
+    sources += [
+      "cfx_unicodeencodingex.cpp",
+      "cfx_unicodeencodingex.h",
+    ]
+  }
+
+  if (pdf_use_skia || pdf_use_skia_paths) {
+    sources += [ "skia/fx_skia_device.cpp" ]
+    deps += [ "//skia" ]
+  } else {
+    sources += [
+      "agg/fx_agg_driver.cpp",
+      "agg/fx_agg_driver.h",
+    ]
+    deps += [ "../../third_party:fx_agg" ]
+  }
+
+  if (is_android) {
+    sources += [
+      "android/cfpf_skiadevicemodule.cpp",
+      "android/cfpf_skiadevicemodule.h",
+      "android/cfpf_skiafont.cpp",
+      "android/cfpf_skiafont.h",
+      "android/cfpf_skiafontmgr.cpp",
+      "android/cfpf_skiafontmgr.h",
+      "android/cfpf_skiapathfont.cpp",
+      "android/cfpf_skiapathfont.h",
+      "android/cfx_androidfontinfo.cpp",
+      "android/cfx_androidfontinfo.h",
+      "android/fx_android_impl.cpp",
+    ]
+  }
+
+  if (is_linux || is_chromeos) {
+    sources += [ "fx_ge_linux.cpp" ]
+  }
+
+  if (is_mac) {
+    sources += [
+      "apple/fx_apple_platform.cpp",
+      "apple/fx_mac_impl.cpp",
+      "apple/fx_mac_impl.h",
+      "apple/fx_quartz_device.cpp",
+      "apple/fx_quartz_device.h",
+    ]
+    frameworks = [ "CoreGraphics.framework" ]
+  }
+
+  if (is_win) {
+    sources += [
+      "cfx_windowsrenderdevice.h",
+      "dib/cfx_dibextractor.cpp",
+      "dib/cfx_dibextractor.h",
+      "win32/cfx_psrenderer.cpp",
+      "win32/cfx_psrenderer.h",
+      "win32/cfx_windowsdib.h",
+      "win32/cpsoutput.cpp",
+      "win32/cpsoutput.h",
+      "win32/fx_win32_device.cpp",
+      "win32/fx_win32_dib.cpp",
+      "win32/fx_win32_gdipext.cpp",
+      "win32/fx_win32_print.cpp",
+      "win32/win32_int.h",
+    ]
+    configs -= [ "//build/config/win:lean_and_mean" ]
+  }
+
+  visibility = [ "../../*" ]
+}
+
+pdfium_unittest_source_set("unittests") {
+  sources = [
+    "cfx_folderfontinfo_unittest.cpp",
+    "cfx_fontmapper_unittest.cpp",
+    "dib/cfx_cmyk_to_srgb_unittest.cpp",
+    "dib/cfx_dibitmap_unittest.cpp",
+    "dib/cstretchengine_unittest.cpp",
+    "fx_font_unittest.cpp",
+  ]
+  deps = [
+    ":fxge",
+    "../fpdfapi/page",
+    "../fpdfapi/parser",
+  ]
+  pdfium_root_dir = "../../"
+}
+
+pdfium_embeddertest_source_set("embeddertests") {
+  sources = [ "fx_ge_text_embeddertest.cpp" ]
+  deps = []
+  pdfium_root_dir = "../../"
+
+  if (pdf_use_skia || pdf_use_skia_paths) {
+    sources += [ "skia/fx_skia_device_embeddertest.cpp" ]
+    deps += [
+      ":fxge",
+      "../../fpdfsdk",
+      "//skia",
+    ]
+  }
+
+  if (is_win) {
+    sources += [ "win32/fx_win32_device_embeddertest.cpp" ]
+    deps += [
+      ":fxge",
+      "../fxcodec",
+    ]
+  }
+}

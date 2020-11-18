@@ -1,0 +1,188 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/chromeos/ui_mode.gni")
+import("//build/config/locales.gni")
+import("//build/config/ui.gni")
+import("//chrome/common/features.gni")
+import("//components/gwp_asan/buildflags/buildflags.gni")
+import("//components/nacl/features.gni")
+import("//ppapi/buildflags/buildflags.gni")
+import("//tools/grit/grit_rule.gni")
+import("//tools/ipc_fuzzer/ipc_fuzzer.gni")
+
+if (is_android) {
+  import("//build/config/android/rules.gni")
+}
+
+# This target is for dependency tracking for the command ID header.
+source_set("command_ids") {
+  sources = [ "chrome_command_ids.h" ]
+}
+
+# TODO: put back in chrome/browser if necessary. http://crbug.com/771801.
+source_set("shutdown_signal_handlers") {
+  if (is_posix || is_fuchsia) {
+    sources = [
+      "shutdown_signal_handlers_posix.cc",
+      "shutdown_signal_handlers_posix.h",
+    ]
+  }
+  deps = [ "//base" ]
+}
+
+# On Windows, links chrome_dll.rc. On other platforms, does nothing so you can
+# unconditionally depend on it.
+source_set("chrome_dll_resources") {
+  # This source is added unconditionally for include checking on non-Windows
+  # platforms.
+  sources = [ "chrome_dll_resource.h" ]
+
+  deps = [ ":command_ids" ]
+
+  if (is_win) {
+    sources += [
+      "chrome_dll.rc",
+      "etw_events/chrome_events_win.rc",
+    ]
+
+    deps += [
+      "//build:branding_buildflags",
+      "//printing/buildflags",
+    ]
+  }
+}
+
+if (is_android) {
+  import("//build/config/android/rules.gni")
+  android_generated_java_resources =
+      [ "java/res/values/generated_resources.xml" ] +
+      process_file_template(
+          android_bundle_locales_as_resources,
+          [ "java/res/values-{{source_name_part}}/generated_resources.xml" ])
+}
+
+grit("generated_resources") {
+  source = "generated_resources.grd"
+  defines = chrome_grit_defines
+  output_dir = "$root_gen_dir/chrome"
+  outputs =
+      [ "grit/generated_resources.h" ] +
+      process_file_template(locales_with_fake_bidi,
+                            [ "generated_resources_{{source_name_part}}.pak" ])
+  if (is_android) {
+    outputs += android_generated_java_resources
+  }
+}
+
+if (is_android) {
+  java_strings_grd_prebuilt("java_strings_grd") {
+    grit_output_dir = "$root_gen_dir/chrome/java/res"
+    generated_files =
+        rebase_path(android_generated_java_resources, "java/res", ".")
+    deps = [ ":generated_resources" ]
+  }
+}
+
+grit("google_chrome_strings") {
+  source = "google_chrome_strings.grd"
+  defines = chrome_grit_defines
+  output_dir = "$root_gen_dir/chrome"
+  outputs = [ "grit/google_chrome_strings.h" ] +
+            process_file_template(
+                locales_with_fake_bidi,
+                [ "google_chrome_strings_{{source_name_part}}.pak" ])
+}
+
+grit("chromium_strings") {
+  source = "chromium_strings.grd"
+  defines = chrome_grit_defines
+  output_dir = "$root_gen_dir/chrome"
+  outputs =
+      [ "grit/chromium_strings.h" ] +
+      process_file_template(locales_with_fake_bidi,
+                            [ "chromium_strings_{{source_name_part}}.pak" ])
+}
+
+static_library("test_support") {
+  testonly = true
+  visibility = [ "//chrome/test:test_support" ]
+
+  sources = [
+    "chrome_main_delegate.cc",
+    "chrome_main_delegate.h",
+  ]
+
+  deps = [
+    "//base",
+    "//build:chromeos_buildflags",
+    "//chrome/app:shutdown_signal_handlers",
+    "//chrome/browser",
+    "//chrome/browser/policy:path_parser",
+    "//chrome/child",
+    "//chrome/common",
+    "//chrome/gpu",
+    "//chrome/renderer",
+    "//chrome/utility",
+    "//components/gwp_asan/buildflags",
+    "//components/heap_profiling/in_process",
+    "//components/nacl/common:buildflags",
+    "//components/startup_metric_utils/browser",
+    "//content/public/app",
+    "//content/public/common",
+    "//content/public/common:service_names",
+    "//pdf:pdf_ppapi",
+    "//ppapi/buildflags",
+    "//printing/buildflags",
+    "//services/tracing/public/cpp",
+    "//ui/base",
+    "//v8:v8_headers",
+  ]
+
+  if (!is_fuchsia) {
+    # TODO(crbug.com/753619): Enable crash reporting on Fuchsia.
+    deps += [
+      "//components/crash/core/app",
+      "//components/crash/core/app:test_support",
+    ]
+  }
+
+  if (is_mac) {
+    sources += [ "chrome_main_mac.mm" ]
+
+    deps += [ "//chrome:chrome_framework" ]
+  }
+
+  if (is_win) {
+    deps += [
+      "//chrome/chrome_elf:test_stubs",
+      "//chrome/install_static:install_static_util",
+      "//components/browser_watcher:stability_client",
+      "//sandbox/win:sandbox",
+    ]
+  }
+
+  if (is_chromeos) {
+    deps += [
+      "//chrome/browser/chromeos",
+      "//chromeos",
+      "//chromeos/memory:memory",
+    ]
+  }
+
+  if (chromeos_is_browser_only) {
+    deps += [ "//chromeos/lacros" ]
+  }
+
+  if (enable_plugins && enable_nacl) {
+    deps += [
+      "//components/nacl/browser",
+      "//components/nacl/renderer/plugin:nacl_trusted_plugin",
+    ]
+  }
+
+  if (enable_gwp_asan) {
+    deps += [ "//components/gwp_asan/client" ]
+  }
+}

@@ -1,0 +1,561 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//media/media_options.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
+
+mojom("mojom") {
+  generate_java = true
+
+  # TODO(crbug.com/676224): Conditionally add source files in this list when we
+  # support EnabledIf attribute in mojom files.
+  sources = [
+    "audio_data_pipe.mojom",
+    "audio_decoder.mojom",
+    "audio_input_stream.mojom",
+    "audio_logging.mojom",
+    "audio_output_stream.mojom",
+    "audio_parameters.mojom",
+    "cdm_infobar_service.mojom",
+    "cdm_service.mojom",
+    "cdm_storage.mojom",
+    "content_decryption_module.mojom",
+    "decryptor.mojom",
+    "demuxer_stream.mojom",
+    "display_media_information.mojom",
+    "frame_interface_factory.mojom",
+    "interface_factory.mojom",
+    "key_system_support.mojom",
+    "media_log.mojom",
+    "media_metrics_provider.mojom",
+    "media_service.mojom",
+    "media_types.mojom",
+    "output_protection.mojom",
+    "platform_verification.mojom",
+    "playback_events_recorder.mojom",
+    "provision_fetcher.mojom",
+    "renderer.mojom",
+    "renderer_extensions.mojom",
+    "video_decode_perf_history.mojom",
+    "video_decode_stats_recorder.mojom",
+    "video_decoder.mojom",
+    "video_encode_accelerator.mojom",
+    "video_encoder_info.mojom",
+    "watch_time_recorder.mojom",
+  ]
+
+  if (enable_media_drm_storage) {
+    sources += [ "media_drm_storage.mojom" ]
+  }
+
+  if (is_android) {
+    sources += [ "android_overlay.mojom" ]
+  } else {
+    sources += [ "speech_recognition_service.mojom" ]
+  }
+
+  if (is_chromecast) {
+    sources += [ "cast_application_media_info_manager.mojom" ]
+  }
+
+  public_deps = [
+    "//gpu/ipc/common:interfaces",
+    "//media/learning/mojo/public/mojom",
+    "//mojo/public/mojom/base",
+    "//services/network/public/mojom",
+    "//services/service_manager/public/mojom",
+    "//ui/gfx/geometry/mojom",
+    "//ui/gfx/mojom",
+    "//ui/gl/mojom",
+    "//url/mojom:url_mojom_gurl",
+    "//url/mojom:url_mojom_origin",
+  ]
+
+  if (is_mac) {
+    # TODO(xhwang): Ideally media should not worry about sandbox. Find a way to
+    # remove this dependency.
+    public_deps += [ "//sandbox/mac/mojom" ]
+  }
+
+  if (enable_cast_renderer) {
+    enabled_features = [ "enable_cast_renderer" ]
+  }
+
+  shared_typemaps = [
+    {
+      types = [
+        {
+          mojom = "media.mojom.AudioParameters"
+          cpp = "::media::AudioParameters"
+        },
+      ]
+      traits_headers = [ "//media/base/ipc/media_param_traits.h" ]
+      traits_public_deps = [
+        "//media",
+        "//media/base/ipc",
+      ]
+    },
+    {
+      types = [
+        {
+          mojom = "media.mojom.VideoFrameMetadata"
+          cpp = "::media::VideoFrameMetadata"
+        },
+      ]
+      traits_headers = [ "video_frame_metadata_mojom_traits.h" ]
+      traits_public_deps = [ ":shared_mojom_traits" ]
+    },
+  ]
+
+  cpp_typemaps = [
+    {
+      types = [
+        {
+          mojom = "media.mojom.AudioDecoderConfig"
+          cpp = "::media::AudioDecoderConfig"
+        },
+      ]
+      traits_headers = [ "audio_decoder_config_mojom_traits.h" ]
+      traits_sources = [ "audio_decoder_config_mojom_traits.cc" ]
+      traits_public_deps = [
+        "//base",
+        "//media",
+        "//media/base/ipc",
+      ]
+    },
+    {
+      types = [
+        {
+          mojom = "media.mojom.CdmKeyInformation"
+          cpp = "::std::unique_ptr<::media::CdmKeyInformation>"
+          move_only = true
+        },
+        {
+          mojom = "media.mojom.CdmKeyStatus"
+          cpp = "::media::CdmKeyInformation::KeyStatus"
+        },
+      ]
+      traits_headers = [ "cdm_key_information_mojom_traits.h" ]
+      traits_sources = [ "cdm_key_information_mojom_traits.cc" ]
+      traits_public_deps = [ "//media" ]
+    },
+    {
+      types = [
+        {
+          mojom = "media.mojom.VideoRotation"
+          cpp = "::media::VideoRotation"
+        },
+        {
+          mojom = "media.mojom.CopyMode"
+          cpp = "::media::VideoFrameMetadata::CopyMode"
+        },
+      ]
+      traits_headers = [ "media_types_enum_mojom_traits.h" ]
+    },
+    {
+      types = [
+        {
+          mojom = "media.mojom.CdmConfig"
+          cpp = "::media::CdmConfig"
+        },
+        {
+          mojom = "media.mojom.CdmPromiseResult.Exception"
+          cpp = "::media::CdmPromise::Exception"
+        },
+        {
+          mojom = "media.mojom.CdmSessionType"
+          cpp = "::media::CdmSessionType"
+        },
+        {
+          mojom = "media.mojom.CdmMessageType"
+          cpp = "::media::CdmMessageType"
+        },
+        {
+          mojom = "media.mojom.Decryptor.Status"
+          cpp = "::media::Decryptor::Status"
+        },
+        {
+          mojom = "media.mojom.Decryptor.StreamType"
+          cpp = "::media::Decryptor::StreamType"
+        },
+        {
+          mojom = "media.mojom.DemuxerStream.Status"
+          cpp = "::media::DemuxerStream::Status"
+        },
+        {
+          mojom = "media.mojom.DemuxerStream.Type"
+          cpp = "::media::DemuxerStream::Type"
+        },
+        {
+          mojom = "media.mojom.EmeInitDataType"
+          cpp = "::media::EmeInitDataType"
+        },
+        {
+          mojom = "media.mojom.HdcpVersion"
+          cpp = "::media::HdcpVersion"
+        },
+        {
+          mojom = "media.mojom.SessionData.KeyType"
+          cpp = "::media::MediaDrmKeyType"
+        },
+      ]
+      traits_headers = [ "//media/base/ipc/media_param_traits_macros.h" ]
+      traits_public_deps = [
+        "//media",
+        "//media/base/ipc",
+      ]
+    },
+    {
+      types = [
+        {
+          mojom = "media.mojom.EncryptionPattern"
+          cpp = "::media::EncryptionPattern"
+        },
+      ]
+      traits_headers = [ "encryption_pattern_mojom_traits.h" ]
+      traits_sources = [ "encryption_pattern_mojom_traits.cc" ]
+      traits_public_deps = [
+        "//media",
+        "//media/base/ipc",
+      ]
+    },
+
+    {
+      types = [
+        {
+          mojom = "media.mojom.PipelineStatistics"
+          cpp = "::media::PipelineStatistics"
+        },
+        {
+          mojom = "media.mojom.PipelineDecoderInfo"
+          cpp = "::media::PipelineDecoderInfo"
+        },
+      ]
+      traits_headers = [ "pipeline_status_mojom_traits.h" ]
+    },
+    {
+      types = [
+        {
+          mojom = "media.mojom.Status"
+          cpp = "::media::Status"
+        },
+      ]
+      traits_headers = [ "status_mojom_traits.h" ]
+      traits_sources = [ "status_mojom_traits.cc" ]
+    },
+    {
+      types = [
+        {
+          mojom = "media.mojom.VideoColorSpace.PrimaryID"
+          cpp = "::media::VideoColorSpace::PrimaryID"
+        },
+        {
+          mojom = "media.mojom.VideoColorSpace.TransferID:"
+          cpp = "::media::VideoColorSpace::TransferID"
+        },
+        {
+          mojom = "media.mojom.VideoColorSpace.MatrixID:"
+          cpp = "::media::VideoColorSpace::MatrixID"
+        },
+        {
+          mojom = "media.mojom.VideoColorSpace.RangeID:"
+          cpp = "::gfx::ColorSpace::RangeID"
+        },
+        {
+          mojom = "media.mojom.VideoColorSpace:"
+          cpp = "::media::VideoColorSpace"
+        },
+      ]
+      traits_headers = [ "video_color_space_mojom_traits.h" ]
+    },
+    {
+      types = [
+        {
+          mojom = "media.mojom.OverlayInfo"
+          cpp = "::media::OverlayInfo"
+        },
+        {
+          mojom = "media.mojom.SupportedVideoDecoderConfig"
+          cpp = "::media::SupportedVideoDecoderConfig"
+        },
+        {
+          mojom = "media.mojom.VideoDecoderImplementation"
+          cpp = "::media::VideoDecoderImplementation"
+        },
+      ]
+      traits_headers = [
+        "supported_video_decoder_config_mojom_traits.h",
+        "//media/base/ipc/media_param_traits_macros.h",
+      ]
+      traits_sources = [ "supported_video_decoder_config_mojom_traits.cc" ]
+      traits_public_deps = [
+        "//base",
+        "//media",
+        "//media/base/ipc",
+        "//media/gpu/ipc/common",
+        "//ui/gfx/geometry/mojom:mojom_traits",
+      ]
+    },
+    {
+      types = [
+        {
+          mojom = "media.mojom.VideoDecoderConfig"
+          cpp = "::media::VideoDecoderConfig"
+        },
+      ]
+      traits_headers = [ "//media/base/video_decoder_config.h" ]
+      traits_private_headers = [ "video_decoder_config_mojom_traits.h" ]
+      traits_sources = [ "video_decoder_config_mojom_traits.cc" ]
+      traits_public_deps = [
+        "//base",
+        "//media",
+        "//media/base/ipc",
+        "//ui/gfx/geometry/mojom:mojom_traits",
+      ]
+    },
+    {
+      types = [
+        {
+          mojom = "media.mojom.BitstreamBufferMetadata"
+          cpp = "::media::BitstreamBufferMetadata"
+        },
+        {
+          mojom = "media.mojom.VideoBitrateAllocation"
+          cpp = "::media::VideoBitrateAllocation"
+        },
+        {
+          mojom = "media.mojom.VideoEncodeAccelerator.Error"
+          cpp = "::media::VideoEncodeAccelerator::Error"
+        },
+        {
+          mojom = "media.mojom.VideoEncodeAcceleratorConfig"
+          cpp = "::media::VideoEncodeAccelerator::Config"
+        },
+        {
+          mojom = "media.mojom.SpatialLayer"
+          cpp = "::media::VideoEncodeAccelerator::Config::SpatialLayer"
+        },
+        {
+          mojom = "media.mojom.VideoEncodeAcceleratorSupportedProfile"
+          cpp = "::media::VideoEncodeAccelerator::SupportedProfile"
+        },
+        {
+          mojom = "media.mojom.Vp8Metadata"
+          cpp = "::media::Vp8Metadata"
+        },
+        {
+          mojom = "media.mojom.Vp9Metadata"
+          cpp = "::media::Vp9Metadata"
+        },
+      ]
+      traits_headers = [ "video_encode_accelerator_mojom_traits.h" ]
+      traits_sources = [ "video_encode_accelerator_mojom_traits.cc" ]
+      traits_public_deps = [
+        "//base",
+        "//media",
+        "//media/base/ipc",
+        "//ui/gfx/geometry/mojom:mojom_traits",
+      ]
+    },
+    {
+      types = [
+        {
+          mojom = "media.mojom.ScalingSettings"
+          cpp = "::media::ScalingSettings"
+        },
+        {
+          mojom = "media.mojom.ResolutionBitrateLimit"
+          cpp = "::media::ResolutionBitrateLimit"
+        },
+        {
+          mojom = "media.mojom.VideoEncoderInfo"
+          cpp = "::media::VideoEncoderInfo"
+        },
+      ]
+      traits_headers = [ "video_encoder_info_mojom_traits.h" ]
+      traits_sources = [ "video_encoder_info_mojom_traits.cc" ]
+      traits_public_deps = [
+        "//base",
+        "//media",
+        "//media/base/ipc",
+        "//ui/gfx/geometry/mojom:mojom_traits",
+      ]
+    },
+    {
+      types = [
+        {
+          mojom = "media.mojom.AudioCodec"
+          cpp = "::media::AudioCodec"
+        },
+        {
+          mojom = "media.mojom.AudioCodecProfile"
+          cpp = "::media::AudioCodecProfile"
+        },
+        {
+          mojom = "media.mojom.BufferingState"
+          cpp = "::media::BufferingState"
+        },
+        {
+          mojom = "media.mojom.BufferingStateChangeReason"
+          cpp = "::media::BufferingStateChangeReason"
+        },
+        {
+          mojom = "media.mojom.ChannelLayout"
+          cpp = "::media::ChannelLayout"
+        },
+        {
+          mojom = "media.mojom.DecodeStatus"
+          cpp = "::media::DecodeStatus"
+        },
+        {
+          mojom = "media.mojom.EncryptionScheme"
+          cpp = "::media::EncryptionScheme"
+        },
+        {
+          mojom = "media.mojom.MediaContainerName"
+          cpp = "::media::container_names::MediaContainerName"
+        },
+        {
+          mojom = "media.mojom.MediaLogRecord"
+          cpp = "::media::MediaLogRecord"
+        },
+        {
+          mojom = "media.mojom.OutputDeviceStatus"
+          cpp = "::media::OutputDeviceStatus"
+        },
+        {
+          mojom = "media.mojom.PipelineStatus"
+          cpp = "::media::PipelineStatus"
+        },
+        {
+          mojom = "media.mojom.SampleFormat"
+          cpp = "::media::SampleFormat"
+        },
+        {
+          mojom = "media.mojom.SubsampleEntry"
+          cpp = "::media::SubsampleEntry"
+        },
+        {
+          mojom = "media.mojom.VideoCodec"
+          cpp = "::media::VideoCodec"
+        },
+        {
+          mojom = "media.mojom.VideoCodecProfile"
+          cpp = "::media::VideoCodecProfile"
+        },
+        {
+          mojom = "media.mojom.VideoPixelFormat"
+          cpp = "::media::VideoPixelFormat"
+        },
+        {
+          mojom = "media.mojom.VideoTransformation"
+          cpp = "::media::VideoTransformation"
+        },
+        {
+          mojom = "media.mojom.WaitingReason"
+          cpp = "::media::WaitingReason"
+        },
+        {
+          mojom = "media.mojom.WatchTimeKey"
+          cpp = "::media::WatchTimeKey"
+        },
+        {
+          mojom = "media.mojom.MediaStatusState"
+          cpp = "::media::MediaStatus::State"
+        },
+        {
+          mojom = "media.mojom.StatusCode"
+          cpp = "::media::StatusCode"
+        },
+      ]
+      traits_headers = [
+        "video_transformation_mojom_traits.h",
+        "//media/base/ipc/media_param_traits_macros.h",
+      ]
+      traits_sources = [ "video_transformation_mojom_traits.cc" ]
+    },
+    {
+      types = [
+        {
+          mojom = "media.mojom.VideoFrame"
+          cpp = "::scoped_refptr<::media::VideoFrame>"
+          nullable_is_same_type = true
+        },
+      ]
+      traits_headers = [ "video_frame_mojom_traits.h" ]
+      traits_sources = [ "video_frame_mojom_traits.cc" ]
+      traits_public_deps = [
+        "//media/mojo/common:mojo_shared_buffer_video_frame",
+        "//ui/gfx/geometry/mojom",
+      ]
+    },
+  ]
+
+  cpp_typemaps += shared_typemaps
+  blink_cpp_typemaps = shared_typemaps
+
+  export_class_attribute_blink = "BLINK_PLATFORM_EXPORT"
+  export_define_blink = "BLINK_PLATFORM_IMPLEMENTATION=1"
+  export_header_blink = "third_party/blink/public/platform/web_common.h"
+}
+
+source_set("shared_mojom_traits") {
+  sources = [
+    "video_frame_metadata_mojom_traits.cc",
+    "video_frame_metadata_mojom_traits.h",
+  ]
+
+  public_deps = [
+    ":mojom_shared",
+    "//gpu/ipc/common:common",
+    "//gpu/ipc/common:mojom_traits",
+    "//media",
+    "//media/base/ipc:ipc",
+    "//mojo/public/mojom/base",
+    "//ui/gfx/geometry/mojom:mojom_traits",
+  ]
+}
+
+mojom("remoting_common") {
+  sources = [ "remoting_common.mojom" ]
+}
+
+mojom("remoting") {
+  sources = [ "remoting.mojom" ]
+
+  public_deps = [
+    ":mojom",
+    ":remoting_common",
+  ]
+}
+
+mojom("test_interfaces") {
+  testonly = true
+  sources = [ "traits_test_service.mojom" ]
+  public_deps = [ ":mojom" ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+
+  sources = [
+    "audio_decoder_config_mojom_traits_unittest.cc",
+    "cdm_key_information_mojom_traits_unittest.cc",
+    "video_decoder_config_mojom_traits_unittest.cc",
+    "video_encode_accelerator_mojom_traits_unittest.cc",
+    "video_frame_metadata_mojom_traits_unittest.cc",
+    "video_frame_mojom_traits_unittest.cc",
+  ]
+
+  deps = [
+    "//base",
+    "//base/test:test_support",
+    "//media:test_support",
+    "//media/mojo:test_support",
+    "//mojo/public/cpp/test_support:test_utils",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//ui/gfx:test_support",
+  ]
+}

@@ -1,0 +1,295 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//chrome/browser/media/router/features.gni")
+import("//extensions/buildflags/buildflags.gni")
+import("//testing/libfuzzer/fuzzer_test.gni")
+import("//testing/test.gni")
+
+# This file depends on the legacy global sources assignment filter. It should
+# be converted to check target platform before assigning source files to the
+# sources variable. Remove this import and set_sources_assignment_filter call
+# when the file has been converted. See https://crbug.com/1018739 for details.
+import("//build/config/deprecated_default_sources_assignment_filter.gni")
+set_sources_assignment_filter(deprecated_default_sources_assignment_filter)
+
+static_library("router") {
+  deps = [
+    "//base",
+    "//chrome:strings",
+    "//chrome/common:constants",
+    "//components/cast_channel",
+    "//components/keyed_service/content",
+    "//components/keyed_service/core",
+    "//components/openscreen_platform:openscreen_platform_network_service",
+    "//content/public/browser",
+    "//content/public/common",
+    "//crypto",
+    "//net",
+    "//net/traffic_annotation",
+    "//services/network:network_service",
+    "//services/network/public/mojom",
+    "//third_party/icu",
+    "//url",
+  ]
+  public_deps = [
+    "//components/media_router/browser",
+    "//components/media_router/common",
+    "//components/media_router/common/mojom:media_router",
+  ]
+  sources = [
+    "chrome_media_router_factory.cc",
+    "chrome_media_router_factory.h",
+    "presentation/chrome_local_presentation_manager_factory.cc",
+    "presentation/chrome_local_presentation_manager_factory.h",
+  ]
+
+  if (enable_extensions) {
+    deps += [
+      "discovery",
+      "//components/mirroring/mojom:host",
+      "//components/mirroring/mojom:service",
+
+      # We can't depend on //chrome/browser/ui due to introducing a cyclic
+      # dependency, so we have to depend on this directly to fix include
+      # resolution for browser.h, which is used in multiple extension-only
+      # files.
+      # TODO(crbug.com/1030821): Resolve circular dependencies
+      "//components/paint_preview/buildflags",
+      "//components/signin/public/base:signin_buildflags",
+      "//components/translate/content/common",
+      "//extensions/browser",
+      "//extensions/buildflags",
+      "//extensions/common",
+      "//mojo/public/cpp/bindings",
+      "//ui/base:buildflags",
+    ]
+
+    public_deps += [ "//components/media_router/common/mojom:logger" ]
+
+    sources += [
+      "data_decoder_util.cc",
+      "data_decoder_util.h",
+      "event_page_request_manager.cc",
+      "event_page_request_manager.h",
+      "event_page_request_manager_factory.cc",
+      "event_page_request_manager_factory.h",
+      "mojo/media_route_provider_util_win.cc",
+      "mojo/media_route_provider_util_win.h",
+      "mojo/media_router_desktop.cc",
+      "mojo/media_router_desktop.h",
+      "mojo/media_router_mojo_impl.cc",
+      "mojo/media_router_mojo_impl.h",
+      "mojo/media_router_mojo_metrics.cc",
+      "mojo/media_router_mojo_metrics.h",
+      "mojo/media_sink_service_status.cc",
+      "mojo/media_sink_service_status.h",
+      "providers/cast/app_activity.cc",
+      "providers/cast/app_activity.h",
+      "providers/cast/cast_activity.cc",
+      "providers/cast/cast_activity.h",
+      "providers/cast/cast_activity_manager.cc",
+      "providers/cast/cast_activity_manager.h",
+      "providers/cast/cast_app_availability_tracker.cc",
+      "providers/cast/cast_app_availability_tracker.h",
+      "providers/cast/cast_app_discovery_service.cc",
+      "providers/cast/cast_app_discovery_service.h",
+      "providers/cast/cast_internal_message_util.cc",
+      "providers/cast/cast_internal_message_util.h",
+      "providers/cast/cast_media_controller.cc",
+      "providers/cast/cast_media_controller.h",
+      "providers/cast/cast_media_route_provider.cc",
+      "providers/cast/cast_media_route_provider.h",
+      "providers/cast/cast_media_route_provider_metrics.cc",
+      "providers/cast/cast_media_route_provider_metrics.h",
+      "providers/cast/cast_session_client.cc",
+      "providers/cast/cast_session_client.h",
+      "providers/cast/cast_session_client_impl.cc",
+      "providers/cast/cast_session_client_impl.h",
+      "providers/cast/cast_session_tracker.cc",
+      "providers/cast/cast_session_tracker.h",
+      "providers/cast/chrome_cast_message_handler.cc",
+      "providers/cast/chrome_cast_message_handler.h",
+      "providers/cast/dual_media_sink_service.cc",
+      "providers/cast/dual_media_sink_service.h",
+      "providers/cast/mirroring_activity.cc",
+      "providers/cast/mirroring_activity.h",
+      "providers/common/buffered_message_sender.cc",
+      "providers/common/buffered_message_sender.h",
+      "providers/dial/dial_activity_manager.cc",
+      "providers/dial/dial_activity_manager.h",
+      "providers/dial/dial_internal_message_util.cc",
+      "providers/dial/dial_internal_message_util.h",
+      "providers/dial/dial_media_route_provider.cc",
+      "providers/dial/dial_media_route_provider.h",
+      "providers/dial/dial_media_route_provider_metrics.cc",
+      "providers/dial/dial_media_route_provider_metrics.h",
+      "providers/extension/extension_media_route_provider_proxy.cc",
+      "providers/extension/extension_media_route_provider_proxy.h",
+      "providers/wired_display/wired_display_media_route_provider.cc",
+      "providers/wired_display/wired_display_media_route_provider.h",
+      "providers/wired_display/wired_display_presentation_receiver.h",
+      "providers/wired_display/wired_display_presentation_receiver_factory.cc",
+      "providers/wired_display/wired_display_presentation_receiver_factory.h",
+    ]
+
+    if (enable_openscreen) {
+      sources += [
+        "providers/openscreen/discovery/open_screen_listener.cc",
+        "providers/openscreen/discovery/open_screen_listener.h",
+        "providers/openscreen/network_service_async_packet_sender.cc",
+        "providers/openscreen/network_service_async_packet_sender.h",
+        "providers/openscreen/network_service_quic_packet_writer.cc",
+        "providers/openscreen/network_service_quic_packet_writer.h",
+      ]
+
+      deps += [
+        "//third_party/openscreen/src/osp/public",
+        "//third_party/openscreen/src/platform",
+        "//third_party/openscreen/src/util",
+      ]
+    }
+  }
+}
+
+if (!is_android) {
+  static_library("test_support") {
+    testonly = true
+    deps = [
+      "discovery",
+      "//chrome/test:test_support",
+      "//components/media_router/common/mojom:media_router",
+      "//components/media_router/common/mojom:media_router_test_interfaces",
+      "//extensions/browser",
+      "//extensions/common",
+      "//testing/gmock",
+    ]
+    public_deps = [ ":router" ]
+    sources = [
+      "test/media_router_mojo_test.cc",
+      "test/media_router_mojo_test.h",
+      "test/mock_dns_sd_registry.cc",
+      "test/mock_dns_sd_registry.h",
+      "test/mock_logger.cc",
+      "test/mock_logger.h",
+      "test/mock_mojo_media_router.cc",
+      "test/mock_mojo_media_router.h",
+      "test/noop_dual_media_sink_service.cc",
+      "test/noop_dual_media_sink_service.h",
+      "test/provider_test_helpers.cc",
+      "test/provider_test_helpers.h",
+    ]
+  }
+}
+
+source_set("unittests") {
+  testonly = true
+
+  sources = [
+    "chrome_media_router_factory_unittest.cc",
+    "presentation/chrome_local_presentation_manager_factory_unittest.cc",
+  ]
+
+  deps = [
+    ":router",
+    "//base",
+    "//base/test:test_support",
+    "//components/media_router/browser:test_support",
+    "//components/media_router/common:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+
+  if (!is_android) {
+    sources += [
+      # In-browser discovery is not used by Android for now.
+      "discovery/dial/device_description_fetcher_unittest.cc",
+      "discovery/dial/device_description_service_unittest.cc",
+      "discovery/dial/dial_app_discovery_service_unittest.cc",
+      "discovery/dial/dial_device_data_unittest.cc",
+      "discovery/dial/dial_media_sink_service_impl_unittest.cc",
+      "discovery/dial/dial_registry_unittest.cc",
+      "discovery/dial/dial_service_unittest.cc",
+      "discovery/dial/dial_url_fetcher_unittest.cc",
+      "discovery/dial/safe_dial_app_info_parser_unittest.cc",
+      "discovery/dial/safe_dial_device_description_parser_unittest.cc",
+      "discovery/discovery_network_list_unittest.cc",
+      "discovery/discovery_network_monitor_metric_observer_unittest.cc",
+      "discovery/discovery_network_monitor_unittest.cc",
+      "discovery/mdns/cast_media_sink_service_impl_unittest.cc",
+      "discovery/mdns/cast_media_sink_service_unittest.cc",
+      "discovery/mdns/dns_sd_registry_unittest.cc",
+      "discovery/media_sink_discovery_metrics_unittest.cc",
+      "event_page_request_manager_unittest.cc",
+      "media_router_feature_unittest.cc",
+      "mojo/media_router_desktop_unittest.cc",
+      "mojo/media_router_mojo_impl_unittest.cc",
+      "mojo/media_router_mojo_metrics_unittest.cc",
+      "mojo/media_sink_service_status_unittest.cc",
+      "providers/cast/app_activity_unittest.cc",
+      "providers/cast/cast_activity_manager_unittest.cc",
+      "providers/cast/cast_activity_test_base.cc",
+      "providers/cast/cast_activity_test_base.h",
+      "providers/cast/cast_app_availability_tracker_unittest.cc",
+      "providers/cast/cast_app_discovery_service_unittest.cc",
+      "providers/cast/cast_internal_message_util_unittest.cc",
+      "providers/cast/cast_media_controller_unittest.cc",
+      "providers/cast/cast_media_route_provider_metrics_unittest.cc",
+      "providers/cast/cast_media_route_provider_unittest.cc",
+      "providers/cast/cast_session_client_unittest.cc",
+      "providers/cast/cast_session_tracker_unittest.cc",
+      "providers/cast/dual_media_sink_service_unittest.cc",
+      "providers/cast/mirroring_activity_unittest.cc",
+      "providers/cast/mock_app_activity.cc",
+      "providers/cast/mock_app_activity.h",
+      "providers/cast/test_util.cc",
+      "providers/cast/test_util.h",
+      "providers/dial/dial_activity_manager_unittest.cc",
+      "providers/dial/dial_internal_message_util_unittest.cc",
+      "providers/dial/dial_media_route_provider_unittest.cc",
+      "providers/extension/extension_media_route_provider_proxy_unittest.cc",
+      "providers/wired_display/wired_display_media_route_provider_unittest.cc",
+    ]
+    deps += [ ":test_support" ]
+  }
+
+  if (enable_openscreen) {
+    include_dirs = [ "//third_party/openscreen/src" ]
+
+    sources += [
+      "providers/openscreen/discovery/open_screen_listener_unittest.cc",
+      "providers/openscreen/network_service_quic_packet_writer_unittest.cc",
+    ]
+  }
+}
+
+if (enable_openscreen) {
+  test("openscreen_unittests") {
+    deps = [
+      "//base/test:run_all_unittests",
+      "//base/test:test_support",
+      "//chrome/browser",
+      "//chrome/test:test_support",
+      "//components/openscreen_platform:openscreen_platform_network_service",
+      "//testing/gmock",
+      "//third_party/blink/public/mojom:mojom_platform_headers",
+      "//third_party/openscreen/src:openscreen_unittests_all",
+    ]
+  }
+}
+
+fuzzer_test("dial_internal_message_fuzzer") {
+  sources = [ "providers/dial/dial_internal_message_fuzzer.cc" ]
+  deps = [
+    ":router",
+    "//base",
+    "//base/test:test_support",
+    "//chrome/browser",
+    "//chrome/test:test_support",
+    "//components/mirroring/mojom:service",
+    "//components/translate/content/common",
+  ]
+  dict = "providers/dial/fuzzer_data/dial_internal_message_fuzzer.dict"
+  seed_corpus = "providers/dial/fuzzer_data/corpus/"
+}

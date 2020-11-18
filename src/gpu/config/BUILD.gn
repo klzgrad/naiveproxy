@@ -1,0 +1,253 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/chrome_build.gni")
+import("//build/config/chromecast_build.gni")
+import("//build/config/ui.gni")
+import("//gpu/vulkan/features.gni")
+
+if (is_android) {
+  import("//build/config/android/rules.gni")
+}
+
+# This file depends on the legacy global sources assignment filter. It should
+# be converted to check target platform before assigning source files to the
+# sources variable. Remove this import and set_sources_assignment_filter call
+# when the file has been converted. See https://crbug.com/1018739 for details.
+import("//build/config/deprecated_default_sources_assignment_filter.gni")
+set_sources_assignment_filter(deprecated_default_sources_assignment_filter)
+
+group("config") {
+  if (is_component_build) {
+    public_deps = [ "//gpu" ]
+  } else {
+    public_deps = [ ":config_sources" ]
+  }
+}
+
+process_json_outputs = [
+  "$target_gen_dir/gpu_driver_bug_list_arrays_and_structs_autogen.h",
+  "$target_gen_dir/gpu_driver_bug_list_autogen.cc",
+  "$target_gen_dir/gpu_driver_bug_list_autogen.h",
+  "$target_gen_dir/gpu_driver_bug_list_exceptions_autogen.h",
+  "$target_gen_dir/software_rendering_list_arrays_and_structs_autogen.h",
+  "$target_gen_dir/software_rendering_list_autogen.cc",
+  "$target_gen_dir/software_rendering_list_autogen.h",
+  "$target_gen_dir/software_rendering_list_exceptions_autogen.h",
+]
+
+action("process_json") {
+  script = "process_json.py"
+
+  inputs = [
+    "gpu_driver_bug_list.json",
+    "gpu_driver_bug_workaround_type.h",
+    "gpu_feature_type.h",
+    "software_rendering_list.json",
+  ]
+
+  outputs = process_json_outputs
+
+  args = [
+    "--output-dir",
+    rebase_path("$target_gen_dir", root_build_dir),
+    "--skip-testing-data",
+    "--os-filter",
+  ]
+  if (is_win) {
+    args += [ "win" ]
+  } else if (is_mac) {
+    args += [ "macosx" ]
+  } else if (is_android) {
+    args += [ "android" ]
+  } else if (is_chromeos) {
+    args += [ "chromeos" ]
+  } else if (is_fuchsia) {
+    args += [ "fuchsia" ]
+  } else {
+    args += [ "linux" ]
+  }
+
+  public_deps = [ ":workaround_list" ]
+}
+
+action("workaround_list") {
+  script = "build_workaround_header.py"
+
+  skia_workaround_list = "//third_party/skia/src/gpu/gpu_workaround_list.txt"
+  inputs = [
+    "gpu_workaround_list.txt",
+    skia_workaround_list,
+  ]
+
+  outputs = [ "$target_gen_dir/gpu_driver_bug_workaround_autogen.h" ]
+
+  args = [
+    "--output-file",
+    rebase_path(outputs[0], root_build_dir),
+  ]
+  foreach(file, inputs) {
+    args += [ rebase_path(file, root_build_dir) ]
+  }
+}
+
+if (enable_vulkan) {
+  component("vulkan_info") {
+    sources = [
+      "vulkan_info.cc",
+      "vulkan_info.h",
+    ]
+
+    configs += [ "//gpu:gpu_implementation" ]
+
+    deps = [ "//gpu/ipc/common:vulkan_interface" ]
+    public_deps = [
+      "//third_party/vulkan_headers",
+      "//ui/gfx",
+    ]
+
+    # surpass linke error 4217. It is because vulkan_info depends on
+    # //gpu/ipc/common:vulkan_interface and //gpu/ipc/common:vulkan_interface"
+    # depends on this target.
+    # TODO(penghuang): Fix this link error
+    if (is_win && is_component_build) {
+      ldflags = [ "/IGNORE:4217" ]
+    }
+  }
+}
+
+source_set("config_sources") {
+  # External code should depend on this via //gpu/config above rather than
+  # depending on this directly or the component build will break.
+  visibility = [ "//gpu/*" ]
+
+  sources = [
+    "device_perf_info.cc",
+    "device_perf_info.h",
+    "dx_diag_node.cc",
+    "dx_diag_node.h",
+    "gpu_blocklist.cc",
+    "gpu_blocklist.h",
+    "gpu_control_list.cc",
+    "gpu_control_list.h",
+    "gpu_crash_keys.cc",
+    "gpu_crash_keys.h",
+    "gpu_domain_guilt.h",
+    "gpu_driver_bug_list.cc",
+    "gpu_driver_bug_list.h",
+    "gpu_driver_bug_workaround_type.h",
+    "gpu_driver_bug_workarounds.cc",
+    "gpu_driver_bug_workarounds.h",
+    "gpu_dx_diagnostics_win.cc",
+    "gpu_extra_info.cc",
+    "gpu_extra_info.h",
+    "gpu_feature_info.cc",
+    "gpu_feature_info.h",
+    "gpu_feature_type.h",
+    "gpu_finch_features.cc",
+    "gpu_finch_features.h",
+    "gpu_info.cc",
+    "gpu_info.h",
+    "gpu_info_collector.cc",
+    "gpu_info_collector.h",
+    "gpu_info_collector_android.cc",
+    "gpu_info_collector_linux.cc",
+    "gpu_info_collector_mac.mm",
+    "gpu_info_collector_win.cc",
+    "gpu_mode.h",
+    "gpu_preferences.cc",
+    "gpu_preferences.h",
+    "gpu_switches.cc",
+    "gpu_switches.h",
+    "gpu_switching.cc",
+    "gpu_switching.h",
+    "gpu_test_config.cc",
+    "gpu_test_config.h",
+    "gpu_test_expectations_parser.cc",
+    "gpu_test_expectations_parser.h",
+    "gpu_util.cc",
+    "gpu_util.h",
+    "skia_limits.cc",
+    "skia_limits.h",
+  ]
+
+  if (is_fuchsia) {
+    sources += [ "gpu_info_collector_fuchsia.cc" ]
+  }
+
+  sources += process_json_outputs
+
+  configs += [ "//gpu:gpu_implementation" ]
+
+  public_deps = [ "//components/crash/core/common:crash_key" ]
+
+  if (enable_vulkan) {
+    public_deps += [ ":vulkan_info" ]
+  }
+
+  deps = [
+    ":process_json",
+    "//base",
+    "//build:branding_buildflags",
+    "//build:chromecast_buildflags",
+    "//gpu/command_buffer/common:common_sources",
+    "//gpu/ipc/common:gpu_preferences_interface",
+    "//gpu/vulkan:buildflags",
+    "//media:media_buildflags",
+    "//third_party/re2",
+    "//third_party/vulkan_headers",
+    "//ui/gl",
+    "//ui/gl:buildflags",
+    "//ui/gl/init",
+  ]
+
+  # GpuPreferences is using its own mojo bindings which creates a
+  # cycle between this target and gpu_preferences_interface.
+  allow_circular_includes_from =
+      [ "//gpu/ipc/common:gpu_preferences_interface" ]
+
+  # Prefer mesa GL headers to system headers, which cause problems on Win.
+  include_dirs = [ "//third_party/mesa_headers" ]
+
+  if (is_win) {
+    libs = [
+      "dxgi.lib",
+      "dxguid.lib",
+    ]
+
+    if (is_chrome_branded && is_official_build) {
+      sources += [
+        "//third_party/amd/AmdCfxPxExt.h",
+        "//third_party/amd/amd_videocard_info_win.cc",
+      ]
+    }
+  }
+  if (is_mac) {
+    frameworks = [ "OpenGL.framework" ]
+  }
+  if (is_linux || is_chromeos || is_mac) {
+    deps += [ "//third_party/angle:angle_gpu_info_util" ]
+  }
+  if (use_x11) {
+    deps += [
+      "//ui/base:features",
+      "//ui/gfx/linux:gpu_memory_buffer_support_x11",
+    ]
+  }
+}
+
+if (is_android) {
+  java_cpp_strings("java_switches_srcjar") {
+    # External code should depend on ":config_java" instead.
+    visibility = [ ":*" ]
+    sources = [ "gpu_switches.cc" ]
+    template = "android/java/src/org/chromium/gpu/config/GpuSwitches.java.tmpl"
+  }
+
+  android_library("config_java") {
+    # Right now, this only includes the Java switches. But if we need more Java
+    # files, they should be added here as necessary.
+    srcjar_deps = [ ":java_switches_srcjar" ]
+  }
+}

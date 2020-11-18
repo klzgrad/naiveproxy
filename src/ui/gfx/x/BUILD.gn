@@ -1,0 +1,143 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ui.gni")
+import("//ui/ozone/ozone.gni")
+
+assert(use_x11 || ozone_platform_x11)
+
+xcbproto_path = "//third_party/xcbproto/src"
+
+config("x11_private_config") {
+  cflags = [
+    # Generated proto files pull all fields from a struct into scope
+    # even if they aren't used.  Rather than adding logic in the
+    # generator to determine which fields are used and keeping only
+    # those, simply ignore unused variable warnings.
+    "-Wno-unused-variable",
+  ]
+  defines = [ "IS_X11_IMPL" ]
+}
+
+action("gen_xprotos") {
+  visibility = [ ":xprotos" ]
+  script = "gen_xproto.py"
+  protos = [
+    "bigreq",
+    "composite",
+    "damage",
+    "dpms",
+    "dri2",
+    "dri3",
+    "ge",
+    "glx",
+    "present",
+    "randr",
+    "record",
+    "render",
+    "res",
+    "screensaver",
+    "shape",
+    "shm",
+    "sync",
+    "xc_misc",
+    "xevie",
+    "xf86dri",
+    "xf86vidmode",
+    "xfixes",
+    "xinerama",
+    "xinput",
+    "xkb",
+    "xprint",
+    "xproto",
+    "xselinux",
+    "xtest",
+    "xv",
+    "xvmc",
+  ]
+  sources = []
+  outputs = [
+    "$target_gen_dir/read_event.cc",
+    "$target_gen_dir/extension_manager.h",
+    "$target_gen_dir/extension_manager.cc",
+  ]
+  foreach(proto, protos) {
+    sources += [ "$xcbproto_path/src/${proto}.xml" ]
+    outputs += [
+      "$target_gen_dir/${proto}.h",
+      "$target_gen_dir/${proto}.cc",
+    ]
+  }
+
+  args = rebase_path([
+                       xcbproto_path,
+                       target_gen_dir,
+                     ],
+                     root_build_dir) + protos
+}
+
+component("xprotos") {
+  deps = [
+    ":gen_xprotos",
+    "//base",
+    "//base:i18n",
+    "//ui/events/platform",
+  ]
+  public_deps = [ "//ui/gfx/x/keysyms" ]
+  sources = get_target_outputs(":gen_xprotos") + [
+              "xproto_internal.h",
+              "xproto_internal.cc",
+              "xproto_types.h",
+              "xproto_types.cc",
+              "xproto_util.h",
+              "xproto_util.cc",
+              "connection.h",
+              "connection.cc",
+              "event.h",
+              "event.cc",
+              "x11_switches.cc",
+              "x11_switches.h",
+              "x11.h",
+            ]
+  configs += [
+    ":x11_private_config",
+    "//build/config/linux:x11",
+  ]
+}
+
+component("x") {
+  output_name = "gfx_x11"
+
+  sources = [
+    "../gfx_export.h",
+    "x11_atom_cache.cc",
+    "x11_atom_cache.h",
+    "x11_error_tracker.cc",
+    "x11_error_tracker.h",
+    "x11_path.cc",
+    "x11_path.h",
+    "x11_types.cc",
+    "x11_types.h",
+  ]
+
+  defines = [ "GFX_IMPLEMENTATION" ]
+
+  public_configs = [ "//build/config/linux:x11" ]
+
+  deps = [
+    "//base",
+    "//skia",
+  ]
+  public_deps = [ ":xprotos" ]
+}
+
+source_set("unit_test") {
+  testonly = true
+  sources = [ "connection_unittest.cc" ]
+  deps = [
+    "//base",
+    "//testing/gtest",
+    "//ui/gfx/x",
+  ]
+}
