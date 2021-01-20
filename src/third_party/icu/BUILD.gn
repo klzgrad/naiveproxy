@@ -1,0 +1,400 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/host_byteorder.gni")
+import("//third_party/icu/config.gni")
+import("//third_party/icu/sources.gni")
+
+if (is_android) {
+  import("//build/config/android/rules.gni")
+}
+
+if (is_mac && !icu_is_in_fuchsia) {
+  import("//build/config/sanitizers/sanitizers.gni")
+}
+
+assert(!icu_disable_thin_archive || !is_component_build,
+       "icu_disable_thin_archive only works in static library builds")
+
+# Meta target that includes both icuuc and icui18n. Most targets want both.
+# You can depend on the individually if you need to.
+group("icu") {
+  public_deps = [
+    ":icui18n",
+    ":icuuc",
+  ]
+}
+
+# Shared config used by ICU and all dependents.
+config("icu_config") {
+  defines = [
+    # Tell ICU to not insert |using namespace icu;| into its headers,
+    # so that chrome's source explicitly has to use |icu::|.
+    "U_USING_ICU_NAMESPACE=0",
+
+    # We don't use ICU plugins and dyload is only necessary for them.
+    # NaCl-related builds also fail looking for dlfcn.h when it's enabled.
+    "U_ENABLE_DYLOAD=0",
+
+    # v8/Blink need to know whether Chromium's copy of ICU is used or not.
+    "USE_CHROMIUM_ICU=1",
+
+    # Enable tracing to connect to UMA but disable tracing of resource
+    # to avoid performance issues.
+    "U_ENABLE_TRACING=1",
+    "U_ENABLE_RESOURCE_TRACING=0",
+  ]
+
+  if (!is_component_build) {
+    defines += [ "U_STATIC_IMPLEMENTATION" ]
+  }
+
+  include_dirs = [
+    "source/common",
+    "source/i18n",
+  ]
+
+  if (icu_use_data_file) {
+    defines += [ "ICU_UTIL_DATA_IMPL=ICU_UTIL_DATA_FILE" ]
+  } else {
+    defines += [ "ICU_UTIL_DATA_IMPL=ICU_UTIL_DATA_STATIC" ]
+  }
+
+  if (is_win) {
+    defines += [ "UCHAR_TYPE=wchar_t" ]
+  } else {
+    defines += [ "UCHAR_TYPE=uint16_t" ]
+  }
+}
+
+# Config used only by ICU code.
+config("icu_code") {
+  cflags = []
+  defines = [
+    "HAVE_DLOPEN=0",
+
+    # Only build encoding coverters and detectors necessary for HTML5.
+    "UCONFIG_ONLY_HTML_CONVERSION=1",
+
+    # TODO(jshin): do we still need this?
+    "UCONFIG_USE_WINDOWS_LCID_MAPPING_API=0",
+
+    # No dependency on the default platform encoding.
+    # Will cut down the code size.
+    "U_CHARSET_IS_UTF8=1",
+  ]
+
+  if (is_win) {
+    # Disable some compiler warnings.
+    cflags += [
+      "/wd4005",  # Macro redefinition.
+      "/wd4068",  # Unknown pragmas.
+      "/wd4267",  # Conversion from size_t on 64-bits.
+      "/utf-8",  # ICU source files are in UTF-8.
+    ]
+  } else if (is_linux || is_chromeos || is_android || icu_is_in_fuchsia) {
+    cflags += [ "-Wno-unused-function" ]
+  }
+  if (is_clang) {
+    cflags += [
+      # ICU has some code with the pattern:
+      #   if (found = uprv_getWindowsTimeZoneInfo(...))
+      "-Wno-parentheses",
+
+      # ucnv2022.cpp contains three functions that are only used when
+      # certain preprocessor defines are set.
+      # unistr.cpp also has an unused function for non-component builds.
+      "-Wno-unused-function",
+
+      # putil.cpp contains unused variables when building for iOS simulators.
+      "-Wno-unused-variable",
+    ]
+  }
+  if (is_clang || is_linux || is_chromeos || is_android || icu_is_in_fuchsia) {
+    cflags += [
+      # ICU uses its own deprecated functions.
+      "-Wno-deprecated-declarations",
+    ]
+  }
+  if (icu_is_in_fuchsia) {
+    cflags += [
+      # Disable spurious thread safety errors in umutex.cpp
+      "-Wno-thread-safety",
+
+      # Can probably remove the below after
+      # https://unicode-org.atlassian.net/projects/ICU/issues/ICU-20869
+      # is fixed.
+      "-Wno-implicit-int-float-conversion",
+      "-Wno-conversion",
+    ]
+  }
+}
+
+# Config used to set default visibility to hidden.
+config("visibility_hidden") {
+  cflags = []
+  if (is_mac || is_linux || is_chromeos || is_android || is_fuchsia) {
+    cflags += [ "-fvisibility=hidden" ]
+  }
+}
+
+template("generate_icu_component") {
+  if (icu_is_in_fuchsia) {
+    target(default_library_type, target_name) {
+      forward_variables_from(invoker,
+                             "*",
+                             [
+                               "testonly",
+                               "visibility",
+                             ])
+      assert(fuchsia_output_name_postfix == "")
+
+      # ICU uses RTTI, replace the default "no rtti" config (if applied).
+      configs += [
+        "//build/config:no_rtti",
+        "//build/config:symbol_visibility_hidden",
+      ]
+      configs -= [
+        "//build/config:no_rtti",
+        "//build/config:symbol_visibility_hidden",
+      ]
+
+      configs += [ "//build/config:rtti" ]
+
+      # These need to be applied after the main configs so the "-Wno-*" options
+      # take effect.
+      configs += [ ":icu_code" ]
+      configs += extra_configs
+      public_configs = [ ":icu_config" ]
+    }
+  } else {
+    component(target_name) {
+      forward_variables_from(invoker,
+                             "*",
+                             [
+                               "testonly",
+                               "visibility",
+                             ])
+      if (is_fuchsia) {
+        # Fuchsia puts its own libicu*.so in /system/lib where we need to put our
+        # .so when doing component builds, so we need to give this a different name.
+        output_name = "${target_name}_cr${fuchsia_output_name_postfix}"
+      } else {
+        assert(fuchsia_output_name_postfix == "")
+      }
+
+      # ICU uses RTTI, replace the default "no rtti" config (if applied).
+      configs += [
+        "//build/config/compiler:no_rtti",
+        "//build/config/compiler:chromium_code",
+      ]
+      configs -= [
+        "//build/config/compiler:no_rtti",
+        "//build/config/compiler:chromium_code",
+      ]
+      configs += [
+        "//build/config/compiler:rtti",
+        "//build/config/compiler:no_chromium_code",
+      ]
+
+      # These need to be applied after the main configs so the "-Wno-*" options
+      # take effect.
+      configs += [ ":icu_code" ]
+      configs += extra_configs
+      public_configs = [ ":icu_config" ]
+
+      # Make icu into a standalone static library. Currently This is only useful
+      # on Chrome OS.
+      if (invoker.check_thin_archive && icu_disable_thin_archive) {
+        configs -= [ "//build/config/compiler:thin_archive" ]
+        complete_static_lib = true
+      }
+    }
+  }
+}
+
+template("generate_icui18n") {
+  if (!icu_is_in_fuchsia) {
+    check_thin_archive = true
+  }
+
+  generate_icu_component(target_name) {
+    assert(defined(invoker.icuuc_deps), "Need the 'icuuc_deps' parameter.")
+    icuuc_deps = invoker.icuuc_deps
+
+    fuchsia_output_name_postfix = ""
+    if (defined(invoker.fuchsia_output_name_postfix)) {
+      fuchsia_output_name_postfix = invoker.fuchsia_output_name_postfix
+    }
+
+    forward_variables_from(invoker,
+                           "*",
+                           [
+                             "testonly",
+                             "visibility",
+                           ])
+
+    sources = icu18n_sources
+    public = icu18n_public
+
+    defines = [ "U_I18N_IMPLEMENTATION" ]
+    deps = icuuc_deps
+  }
+}
+
+generate_icui18n("icui18n") {
+  extra_configs = []
+  icuuc_deps = [ ":icuuc" ]
+}
+
+generate_icui18n("icui18n_hidden_visibility") {
+  extra_configs = [ ":visibility_hidden" ]
+  icuuc_deps = [ ":icuuc_hidden_visibility" ]
+  if (is_fuchsia && !icu_is_in_fuchsia) {
+    fuchsia_output_name_postfix = "_hidden_visibility"
+  }
+}
+
+template("generate_icuuc") {
+  if (!icu_is_in_fuchsia) {
+    check_thin_archive = false
+  }
+
+  generate_icu_component(target_name) {
+    fuchsia_output_name_postfix = ""
+    if (defined(invoker.fuchsia_output_name_postfix)) {
+      fuchsia_output_name_postfix = invoker.fuchsia_output_name_postfix
+    }
+
+    forward_variables_from(invoker,
+                           "*",
+                           [
+                             "testonly",
+                             "visibility",
+                           ])
+
+    sources = icuuc_sources
+    public = icuuc_public
+
+    defines = [ "U_COMMON_IMPLEMENTATION" ]
+    deps = [ ":icudata" ]
+
+    if (icu_use_data_file) {
+      sources += [ "source/stubdata/stubdata.cpp" ]
+    }
+
+    defines += [ "U_ICUDATAENTRY_IN_COMMON" ]
+  }
+}
+
+generate_icuuc("icuuc") {
+  extra_configs = []
+}
+generate_icuuc("icuuc_hidden_visibility") {
+  extra_configs = [ ":visibility_hidden" ]
+  if (is_fuchsia && !icu_is_in_fuchsia) {
+    fuchsia_output_name_postfix = "_hidden_visibility"
+  }
+}
+
+if (is_android && enable_java_templates) {
+  android_assets("icu_assets") {
+    if (icu_use_data_file) {
+      sources = [ "$root_out_dir/icudtl.dat" ]
+      deps = [ ":icudata" ]
+      disable_compression = true
+    }
+  }
+
+  android_assets("icu_extra_assets") {
+    if (icu_use_data_file) {
+      sources = [ "$root_out_dir/icudtl_extra.dat" ]
+      deps = [ ":extra_icudata" ]
+      disable_compression = true
+    }
+  }
+}
+
+if (is_android) {
+  # Use android_small for now to keep the size till we decide to switch to the new one.
+  data_dir = "android_small"
+} else if (is_ios) {
+  data_dir = "ios"
+} else if (is_chromeos) {
+  data_dir = "chromeos"
+} else {
+  data_dir = "common"
+}
+
+if (current_cpu == "mips" || current_cpu == "mips64" ||
+    host_byteorder == "big") {
+  data_bundle_prefix = "icudtb"
+} else {
+  data_bundle_prefix = "icudtl"
+}
+data_bundle = "${data_bundle_prefix}.dat"
+
+if (icu_use_data_file) {
+  if (is_ios) {
+    bundle_data("icudata") {
+      sources = [ "$data_dir/$data_bundle" ]
+      outputs = [ "{{bundle_resources_dir}}/{{source_file_part}}" ]
+    }
+  } else {
+    copy("icudata") {
+      sources = [ "$data_dir/$data_bundle" ]
+      outputs = [ "$root_out_dir/$data_bundle" ]
+      data = [ "$root_out_dir/$data_bundle" ]
+    }
+  }
+
+  copy("extra_icudata") {
+    sources = [ "//third_party/icu/android_small/icudtl_extra.dat" ]
+    outputs = [ "$root_out_dir/icudtl_extra.dat" ]
+  }
+} else {
+  data_assembly = "$target_gen_dir/${data_bundle_prefix}_dat.S"
+  inline_data_assembly = "$target_gen_dir/${data_bundle_prefix}_dat.cc"
+  action("make_data_assembly") {
+    script = "scripts/make_data_assembly.py"
+    inputs = [ "$data_dir/$data_bundle" ]
+    outputs = [ data_assembly ]
+    args = [
+      rebase_path(inputs[0], root_build_dir),
+      rebase_path(data_assembly, root_build_dir),
+    ]
+    if (is_mac || is_ios) {
+      args += [ "--mac" ]
+    } else if (is_win) {
+      args += [ "--win" ]
+    }
+  }
+
+  if (is_win) {
+    action("make_inline_data_assembly") {
+      deps = [ ":make_data_assembly" ]
+      script = "scripts/asm_to_inline_asm.py"
+      inputs = [ data_assembly ]
+      outputs = [ inline_data_assembly ]
+      args = rebase_path([
+                           data_assembly,
+                           inline_data_assembly,
+                         ],
+                         root_build_dir)
+    }
+  } else {
+    not_needed([ "inline_data_assembly" ])
+  }
+
+  source_set("icudata") {
+    defines = [ "U_HIDE_DATA_SYMBOL" ]
+    if (is_win) {
+      sources = [ inline_data_assembly ]
+      deps = [ ":make_inline_data_assembly" ]
+    } else {
+      sources = [ data_assembly ]
+      deps = [ ":make_data_assembly" ]
+    }
+  }
+}

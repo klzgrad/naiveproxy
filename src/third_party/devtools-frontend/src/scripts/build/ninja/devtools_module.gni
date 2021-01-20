@@ -1,0 +1,62 @@
+# Copyright 2020 The Chromium Authors.  All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("../../../all_devtools_modules.gni")
+import("../../../third_party/typescript/typescript.gni")
+import("./copy.gni")
+import("./vars.gni")
+
+template("devtools_module") {
+  _typescript_target_name = target_name + "-typescript"
+  _typescript_target_dep = ":$_typescript_target_name"
+
+  ts_library(_typescript_target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "sources",
+                             "deps",
+                           ])
+
+    # To make sure that this target can be depended upon by other TypeScript targets,
+    # we have to name it the `target_name`. However, we can't name this `ts_library` the
+    # `target_name`, as the buildgraph requires the `copy_gen__to_resources` to happen *after*
+    # `ts_library` is finished.
+    typescript_config_name = invoker.target_name
+
+    is_web_worker = defined(invoker.is_web_worker) && invoker.is_web_worker
+  }
+
+  if (is_debug) {
+    copy_gen_to_resources(target_name) {
+      sources = filter_include(get_target_outputs(_typescript_target_dep),
+                               [
+                                 "*.js",
+                                 "*.map",
+                               ])
+
+      public_deps = [ _typescript_target_dep ]
+
+      visibility = invoker.visibility + [ ":*" ]
+    }
+
+    _target_outputs = get_target_outputs(":" + target_name + "-copy")
+    _filtered_target_outputs =
+        filter_exclude(
+            filter_exclude(_target_outputs, generated_typescript_modules),
+            [ "*.map" ])
+    assert(
+        _filtered_target_outputs == [],
+        "$_filtered_target_outputs are not listed in all_typescript_module_sources")
+  } else {
+    group(target_name) {
+      public_deps = [ _typescript_target_dep ]
+
+      visibility = invoker.visibility + [ ":*" ]
+    }
+  }
+}
+
+set_defaults("devtools_module") {
+  visibility = []
+}

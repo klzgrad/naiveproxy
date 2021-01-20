@@ -1,0 +1,83 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/features.gni")
+import("//testing/test.gni")
+
+source_set("message_port") {
+  if (is_fuchsia) {
+    public_deps = [ ":message_port_fuchsia" ]
+  } else {
+    public_deps = [ ":message_port_cast" ]
+  }
+}
+
+source_set("public") {
+  sources = [
+    "message_port.cc",
+    "message_port.h",
+  ]
+
+  deps = [
+    "//base",
+    "//components/cast:export",
+  ]
+
+  defines = [ "CAST_COMPONENT_IMPLEMENTATION" ]
+
+  visibility = [ ":*" ]
+}
+
+if (is_fuchsia) {
+  source_set("message_port_fuchsia") {
+    public = [ "message_port_fuchsia.h" ]
+
+    sources = [ "message_port_fuchsia.cc" ]
+
+    public_deps = [
+      ":public",
+      "//fuchsia:cast_fidl",
+      "//fuchsia/base",
+    ]
+
+    deps = [ "//base" ]
+  }
+}
+
+source_set("message_port_cast") {
+  public = [ "message_port_cast.h" ]
+
+  sources = [ "message_port_cast.cc" ]
+
+  public_deps = [ ":public" ]
+
+  deps = [
+    ":public",
+    "//base",
+    "//third_party/blink/public/common",
+  ]
+}
+
+source_set("message_port_unittest") {
+  testonly = true
+  sources = [ "message_port_unittest.cc" ]
+  deps = [
+    ":message_port",
+    ":test_message_port_receiver",
+    "//base/test:test_support",
+    "//testing/gtest",
+  ]
+}
+
+source_set("test_message_port_receiver") {
+  testonly = true
+  sources = [
+    "test_message_port_receiver.cc",
+    "test_message_port_receiver.h",
+  ]
+  deps = [
+    ":public",
+    "//base",
+  ]
+}

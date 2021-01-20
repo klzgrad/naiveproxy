@@ -1,0 +1,84 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//chrome/common/features.gni")
+import("//third_party/closure_compiler/compile_js.gni")
+import("//tools/grit/preprocess_grit.gni")
+import("//tools/polymer/html_to_js.gni")
+import("//ui/webui/webui_features.gni")
+
+js_library("module_descriptor") {
+}
+
+js_library("modules") {
+  deps = [
+    ":module_registry",
+    "kaleidoscope:module",
+    "task_module:module",
+  ]
+  if (!is_official_build) {
+    deps += [ "dummy:module" ]
+  }
+}
+
+js_library("module_wrapper") {
+  deps = [
+    ":module_descriptor",
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+  ]
+}
+
+js_library("module_registry") {
+  deps = [
+    ":module_descriptor",
+    "//ui/webui/resources/js:cr.m",
+  ]
+}
+
+html_to_js("web_components_local") {
+  js_files = [ "module_wrapper.js" ]
+}
+
+group("web_components") {
+  public_deps = [
+    ":web_components_local",
+    "dummy:web_components",
+    "task_module:web_components",
+  ]
+}
+
+if (optimize_webui) {
+  # Up one folder to get to the root NTP gen dir, where files need to live
+  # for bundling.
+  preprocess_folder = "../preprocessed/modules"
+
+  preprocess_grit("preprocess") {
+    defines = [ "is_official_build=$is_official_build" ]
+    in_folder = "./"
+
+    out_folder = "$target_gen_dir/$preprocess_folder"
+    in_files = [
+      "kaleidoscope/module.js",
+      "module_descriptor.js",
+      "modules.js",
+      "module_registry.js",
+      "task_module/task_module_handler_proxy.js",
+    ]
+    if (!is_official_build) {
+      in_files += [ "dummy/foo_proxy.js" ]
+    }
+  }
+
+  preprocess_grit("preprocess_gen") {
+    deps = [ ":web_components" ]
+    defines = [ "is_official_build=$is_official_build" ]
+    in_folder = target_gen_dir
+    out_folder = "$target_gen_dir/$preprocess_folder"
+    in_files = [
+      "module_wrapper.js",
+      "dummy/module.js",
+      "task_module/module.js",
+    ]
+  }
+}

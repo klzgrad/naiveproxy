@@ -1,0 +1,38 @@
+# Copyright 2020 The Chromium Authors.  All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("../../../all_devtools_modules.gni")
+import("./copy.gni")
+
+template("devtools_pre_built") {
+  _copy_to_gen_target_name = target_name + "-copy-javascript"
+  _copy_target_dep = ":$_copy_to_gen_target_name"
+
+  copy_to_gen(_copy_to_gen_target_name) {
+    sources = invoker.sources
+
+    deps = invoker.deps
+  }
+
+  copy_sources_to_resources(target_name) {
+    sources = invoker.sources
+
+    public_deps = [ _copy_target_dep ]
+  }
+
+  if (is_debug) {
+    _target_outputs = get_target_outputs(":" + target_name + "-copy")
+    _filtered_target_outputs =
+        filter_include(
+            filter_exclude(_target_outputs, generated_typescript_modules),
+            [ "*.js" ])
+    assert(
+        _filtered_target_outputs == [],
+        "$_filtered_target_outputs are not listed in all_typescript_module_sources")
+  }
+}
+
+set_defaults("devtools_pre_built") {
+  deps = []
+}

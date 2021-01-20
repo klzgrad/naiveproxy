@@ -1,0 +1,221 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+template("gcc_toolchain") {
+  toolchain(target_name) {
+    assert(defined(invoker.ar), "Caller must define ar command.")
+    assert(defined(invoker.cc), "Caller must define cc command.")
+    assert(defined(invoker.cxx), "Caller must define cxx command.")
+    assert(defined(invoker.ld), "Caller must define ld command.")
+    forward_variables_from(invoker,
+                           [
+                             "ar",
+                             "cc",
+                             "cxx",
+                             "ld",
+                           ])
+
+    toolchain_args = {
+      forward_variables_from(invoker.toolchain_args, "*")
+
+      # The host toolchain needs to be preserved by all secondary toolchains.
+      # For futher explanation, see
+      # https://gn.googlesource.com/gn/+/refs/heads/master/docs/reference.md#toolchain-overview
+      host_toolchain = host_toolchain
+    }
+
+    lib_switch = "-l"
+    lib_dir_switch = "-L"
+
+    object_prefix = "{{source_out_dir}}/{{label_name}}."
+
+    tool("cc") {
+      depfile = "{{output}}.d"
+      command = "$cc -MMD -MF $depfile {{defines}} {{include_dirs}} {{cflags}} {{cflags_c}} -c {{source}} -o {{output}}"
+      depsformat = "gcc"
+      description = "CC {{output}}"
+      outputs = [
+        "$object_prefix{{source_name_part}}.o",
+      ]
+    }
+
+    tool("cxx") {
+      depfile = "{{output}}.d"
+      command = "$cxx -MMD -MF $depfile {{defines}} {{include_dirs}} {{cflags}} {{cflags_cc}} -c {{source}} -o {{output}}"
+      depsformat = "gcc"
+      description = "CXX {{output}}"
+      outputs = [
+        "$object_prefix{{source_name_part}}.o",
+      ]
+    }
+
+    tool("asm") {
+      depfile = "{{output}}.d"
+      command = "$cc -MMD -MF $depfile {{defines}} {{include_dirs}} {{asmflags}} -c {{source}} -o {{output}}"
+      depsformat = "gcc"
+      description = "ASM {{output}}"
+      outputs = [
+        "$object_prefix{{source_name_part}}.o",
+      ]
+    }
+
+    tool("alink") {
+      rspfile = "{{output}}.rsp"
+      command = "rm -f {{output}} && $ar rcs {{output}} @$rspfile"
+      description = "AR {{target_output_name}}{{output_extension}}"
+      rspfile_content = "{{inputs}}"
+      outputs = [
+        "{{output_dir}}/{{target_output_name}}{{output_extension}}",
+      ]
+      default_output_dir = "{{target_out_dir}}"
+      default_output_extension = ".a"
+      output_prefix = "lib"
+    }
+
+    tool("solink") {
+      soname = "{{target_output_name}}{{output_extension}}"  # e.g. "libfoo.so".
+      sofile = "{{output_dir}}/$soname"
+      rspfile = soname + ".rsp"
+
+      command =
+          "$ld -shared {{ldflags}} -o $sofile -Wl,-soname=$soname @$rspfile"
+      rspfile_content = "-Wl,--whole-archive {{inputs}} {{solibs}} -Wl,--no-whole-archive {{libs}}"
+
+      description = "SOLINK {{output}}"
+
+      # Use this for {{output_extension}} expansions unless a target manually
+      # overrides it (in which case {{output_extension}} will be what the target
+      # specifies).
+      default_output_extension = ".so"
+
+      # Use this for {{output_dir}} expansions unless a target manually overrides
+      # it (in which case {{output_dir}} will be what the target specifies).
+      default_output_dir = "{{root_out_dir}}"
+
+      outputs = [
+        sofile,
+      ]
+      link_output = sofile
+      depend_output = sofile
+      output_prefix = "lib"
+    }
+
+    tool("link") {
+      outfile = "{{output_dir}}/{{target_output_name}}{{output_extension}}"
+      rspfile = "$outfile.rsp"
+
+      # These extra ldflags allow an executable to search for shared libraries in
+      # the current working directory.
+      additional_executable_ldflags = "-Wl,-rpath=\$ORIGIN/ -Wl,-rpath-link="
+      command = "$ld {{ldflags}} $additional_executable_ldflags -o $outfile -Wl,--start-group @$rspfile {{solibs}} -Wl,--end-group {{libs}}"
+      description = "LINK $outfile"
+      default_output_dir = "{{root_out_dir}}"
+      rspfile_content = "{{inputs}}"
+      outputs = [
+        outfile,
+      ]
+    }
+
+    tool("stamp") {
+      command = "touch {{output}}"
+      description = "STAMP {{output}}"
+    }
+
+    tool("copy") {
+      command = "ln -f {{source}} {{output}} 2>/dev/null || (rm -rf {{output}} && cp -af {{source}} {{output}})"
+      description = "COPY {{source}} {{output}}"
+    }
+  }
+}
+
+template("clang_toolchain") {
+  prefix = rebase_path("$clang_base_path/bin", root_build_dir)
+
+  gcc_toolchain(target_name) {
+    ar = "$prefix/llvm-ar"
+    cc = "$prefix/clang"
+    cxx = "$prefix/clang++"
+    ld = cxx
+    toolchain_args = {
+      forward_variables_from(invoker.toolchain_args, "*")
+      is_clang = true
+    }
+  }
+}
+
+clang_toolchain("clang_x64") {
+  toolchain_args = {
+    current_cpu = "x64"
+    current_os = "linux"
+  }
+}
+
+clang_toolchain("clang_x86") {
+  toolchain_args = {
+    current_cpu = "x86"
+    current_os = "linux"
+  }
+}
+
+clang_toolchain("clang_arm") {
+  toolchain_args = {
+    current_cpu = "arm"
+    current_os = "linux"
+  }
+}
+
+clang_toolchain("clang_arm64") {
+  toolchain_args = {
+    current_cpu = "arm64"
+    current_os = "linux"
+  }
+}
+
+gcc_toolchain("gcc_x64") {
+  ar = "ar"
+  cc = "gcc"
+  cxx = "g++"
+  ld = cxx
+  toolchain_args = {
+    current_cpu = "x64"
+    current_os = "linux"
+    is_gcc = true
+  }
+}
+
+gcc_toolchain("gcc_x86") {
+  ar = "ar"
+  cc = "gcc"
+  cxx = "g++"
+  ld = cxx
+  toolchain_args = {
+    current_cpu = "x86"
+    current_os = "linux"
+    is_gcc = true
+  }
+}
+
+gcc_toolchain("gcc_arm") {
+  ar = "ar"
+  cc = "gcc"
+  cxx = "g++"
+  ld = cxx
+  toolchain_args = {
+    current_cpu = "arm"
+    current_os = "linux"
+    is_gcc = true
+  }
+}
+
+gcc_toolchain("gcc_arm64") {
+  ar = "ar"
+  cc = "gcc"
+  cxx = "g++"
+  ld = cxx
+  toolchain_args = {
+    current_cpu = "arm64"
+    current_os = "linux"
+    is_gcc = true
+  }
+}

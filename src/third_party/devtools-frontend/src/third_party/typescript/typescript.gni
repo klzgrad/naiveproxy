@@ -1,0 +1,186 @@
+# Copyright 2019 The Chromium Authors.  All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("../../scripts/build/ninja/vars.gni")
+
+# Defines a target that compiles .ts files using TypeScript.
+# A temporary tsconfig.json is generated which uses the
+# tsconfig.json in this folder as basis.
+#
+# Either `sources` or `deps` must be listed (or both).
+#
+# For tests, you must specify the `testonly = true` argument:
+#
+# Variables:
+#   sources (optional):
+#     List of TypeScript files to typecheck and generate
+#   deps (optional):
+#     List of dependencies that are ts_libraries or export a tsconfig.json
+# Example:
+#   ts_library("main") {
+#     sources = ["bar.js", "foo.ts"]
+#     deps = ["../common"]
+#   }
+#
+#   ts_library("unittest") {
+#     testonly = true
+#     sources = [ "bar_test.ts" ]
+#     deps = [ "../../../../front_end/common" ]
+#   }
+#
+template("ts_library") {
+  action(target_name) {
+    script = devtools_location_prepend + "third_party/typescript/ts_library.py"
+
+    forward_variables_from(invoker,
+                           [
+                             "sources",
+                             "visibility",
+                             "deps",
+                             "public_deps",
+                           ])
+
+    inputs = [
+      devtools_location_prepend + "tsconfig.base.json",
+      devtools_location_prepend + "node_modules/typescript/lib/tsc.js",
+      devtools_location_prepend + "front_end/legacy/legacy-defs.d.ts",
+      devtools_location_prepend + "front_end/global_typings/global_defs.d.ts",
+      devtools_location_prepend +
+          "front_end/global_typings/resize_observer.d.ts",
+      devtools_location_prepend + "front_end/legacy/estree-legacy.d.ts",
+      devtools_location_prepend + "front_end/legacy/codemirror-legacy.d.ts",
+      devtools_location_prepend + "node_modules/@types/estree/index.d.ts",
+      devtools_location_prepend + "front_end/generated/protocol.d.ts",
+      devtools_location_prepend + "front_end/generated/protocol-proxy-api.d.ts",
+      devtools_location_prepend + "node_modules/@types/filesystem/index.d.ts",
+      devtools_location_prepend + "node_modules/@types/codemirror/index.d.ts",
+      devtools_location_prepend + "node_modules/@types/chai/index.d.ts",
+      devtools_location_prepend + "node_modules/@types/mocha/index.d.ts",
+    ]
+
+    _typescript_config_name = target_name
+
+    if (defined(invoker.typescript_config_name)) {
+      _typescript_config_name = invoker.typescript_config_name
+    }
+
+    args = [
+      "--tsconfig_output_location",
+      rebase_path(target_gen_dir, root_build_dir) +
+          "/$_typescript_config_name-tsconfig.json",
+    ]
+
+    assert(
+        defined(sources) || defined(deps),
+        "You must either specify an array of 'sources' or 'deps' for $target_name")
+
+    _test_only = defined(invoker.testonly) && invoker.testonly
+    _verify_lib_check =
+        defined(invoker.verify_lib_check) && invoker.verify_lib_check
+    _rootdir = "."
+
+    if (defined(invoker.rootdir)) {
+      _rootdir = invoker.rootdir
+    }
+
+    if (!defined(public_deps)) {
+      public_deps = []
+    }
+
+    if (defined(deps)) {
+      args += [ "--deps" ]
+      foreach(dep, deps) {
+        args += [ rebase_path(get_label_info(dep, "dir"), _rootdir) + "/" +
+                  get_label_info(dep, "name") + "-tsconfig.json" ]
+      }
+
+      # We need to expose our deps in the Ninja chain, to allow `generate_devtools_grd`
+      # to eventually roll up all files. If these are not public, Ninja complains that
+      # the files are not reachable.
+      public_deps += deps
+    }
+
+    # Here we assume that all sources are in this folder listed,
+    # as there is no way of retrieving the folder the template
+    # is in with Ninja.
+    args += [
+      "--front_end_directory",
+      rebase_path(_rootdir, root_build_dir),
+    ]
+
+    if (_test_only) {
+      args += [ "--test-only" ]
+    }
+
+    if (_verify_lib_check) {
+      args += [ "--verify-lib-check" ]
+    }
+
+    if (defined(invoker.module)) {
+      args += [ "--module=" + invoker.module ]
+    }
+
+    if (defined(invoker.is_web_worker) && invoker.is_web_worker) {
+      args += [ "--is_web_worker" ]
+    }
+
+    output_files = [ "$target_gen_dir/$_typescript_config_name-tsconfig.json" ]
+
+    if (defined(sources)) {
+      args += [ "--sources" ] + rebase_path(sources, root_build_dir)
+      output_files += [
+        "$target_gen_dir/$_typescript_config_name-tsconfig.json.tsbuildinfo",
+      ]
+
+      foreach(src, sources) {
+        _extension = get_path_info(src, "extension")
+        _relative_file_name = rebase_path(src, _rootdir)
+        _fileName = get_path_info(_relative_file_name, "dir") + "/" +
+                    get_path_info(_relative_file_name, "name")
+
+        # Any .d.ts file does not generate a corresponding a .js file, but we
+        # copy it over into the generated build folder instead, as tsc doesn't
+        # do that on its own
+        if (_extension == "ts" &&
+            get_path_info(get_path_info(src, "name"), "extension") == "d") {
+          output_files += [ "$target_gen_dir/$src" ]
+          # Any file checked by TypeScript that is jsdoc-typed will be also
+          # generating a js file in the gen folder
+        } else if (_extension == "js" || _extension == "ts") {
+          output_files += [
+            "$target_gen_dir/$_fileName.js",
+            "$target_gen_dir/$_fileName.js.map",
+          ]
+        } else {
+          assert(false,
+                 "Incorrect extension on '$src' with extension '$_extension'")
+        }
+
+        output_files += [ "$target_gen_dir/$_fileName.d.ts" ]
+      }
+    }
+
+    outputs = output_files
+  }
+}
+
+set_defaults("ts_library") {
+  # Build output should be private and directories should export all relevant
+  # components in a group
+  visibility = [ "*" ]
+}
+
+template("node_ts_library") {
+  ts_library(target_name) {
+    module = "commonjs"
+    testonly = true
+
+    forward_variables_from(invoker,
+                           [
+                             "sources",
+                             "visibility",
+                             "deps",
+                           ])
+  }
+}

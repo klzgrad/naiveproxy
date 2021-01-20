@@ -1,0 +1,181 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//chrome/common/features.gni")
+import("//third_party/closure_compiler/compile_js.gni")
+import("//tools/grit/grit_rule.gni")
+import("//tools/grit/preprocess_grit.gni")
+import("//tools/polymer/html_to_js.gni")
+import("//ui/webui/resources/tools/generate_grd.gni")
+import("//ui/webui/webui_features.gni")
+
+preprocess_folder = "preprocessed"
+preprocess_manifest = "preprocessed_manifest.json"
+preprocess_web_components_manifest = "preprocessed_gen_manifest.json"
+preprocess_fuse_manifest = "preprocessed_fuse_manifest.json"
+preprocess_mojo_manifest = "preprocessed_mojo_manifest.json"
+
+generate_grd("build_grd") {
+  input_files = [ "tab_search_page.html" ]
+  input_files_base_dir = rebase_path(".", "//")
+  resource_path_rewrites = [ "fuse.basic.esm.min.js|fuse.js" ]
+  deps = [
+    ":preprocess",
+    ":preprocess_fuse",
+    ":preprocess_mojo",
+    ":preprocess_web_components",
+  ]
+  manifest_files = [
+    "$target_gen_dir/$preprocess_manifest",
+    "$target_gen_dir/$preprocess_fuse_manifest",
+    "$target_gen_dir/$preprocess_mojo_manifest",
+    "$target_gen_dir/$preprocess_web_components_manifest",
+  ]
+  grd_prefix = "tab_search"
+  out_grd = "$target_gen_dir/${grd_prefix}_resources.grd"
+}
+
+preprocess_grit("preprocess") {
+  in_folder = "./"
+  out_folder = "$target_gen_dir/$preprocess_folder"
+  out_manifest = "$target_gen_dir/$preprocess_manifest"
+  in_files = [
+    "fuzzy_search.js",
+    "tab_data.js",
+    "tab_search_api_proxy.js",
+  ]
+}
+
+preprocess_grit("preprocess_web_components") {
+  deps = [ ":web_components" ]
+  in_folder = target_gen_dir
+  out_folder = "$target_gen_dir/$preprocess_folder"
+  out_manifest = "$target_gen_dir/$preprocess_web_components_manifest"
+  in_files = [
+    "app.js",
+    "infinite_list.js",
+    "tab_search_item.js",
+    "tab_search_search_field.js",
+  ]
+}
+
+preprocess_grit("preprocess_fuse") {
+  in_folder = "../../../../third_party/fusejs/dist/"
+  out_folder = "$target_gen_dir/$preprocess_folder"
+  out_manifest = "$target_gen_dir/$preprocess_fuse_manifest"
+  in_files = [ "fuse.basic.esm.min.js" ]
+}
+
+preprocess_grit("preprocess_mojo") {
+  deps = [ "//chrome/browser/ui/webui/tab_search:mojo_bindings_webui_js" ]
+  in_folder = "$root_gen_dir/mojom-webui/chrome/browser/ui/webui/tab_search/"
+  out_folder = "$target_gen_dir/$preprocess_folder"
+  out_manifest = "$target_gen_dir/$preprocess_mojo_manifest"
+  in_files = [ "tab_search.mojom-webui.js" ]
+}
+
+grit("tab_search_resources") {
+  defines = chrome_grit_defines
+
+  # These arguments are needed since the grd is generated at build time.
+  enable_input_discovery_for_gn_analyze = false
+  source = "$target_gen_dir/tab_search_resources.grd"
+  deps = [ ":build_grd" ]
+
+  outputs = [
+    "grit/tab_search_resources.h",
+    "grit/tab_search_resources_map.cc",
+    "grit/tab_search_resources_map.h",
+    "tab_search_resources.pak",
+  ]
+  output_dir = "$root_gen_dir/chrome"
+}
+
+js_type_check("closure_compile") {
+  is_polymer3 = true
+  closure_flags =
+      default_closure_args + mojom_js_args + [
+        "js_module_root=" + rebase_path(".", root_build_dir),
+        "js_module_root=" + rebase_path(
+                "$root_gen_dir/mojom-webui/chrome/browser/ui/webui/tab_search",
+                root_build_dir),
+      ]
+  deps = [
+    ":app",
+    ":fuzzy_search",
+    ":infinite_list",
+    ":tab_data",
+    ":tab_search_api_proxy",
+    ":tab_search_item",
+    ":tab_search_search_field",
+  ]
+}
+
+js_library("app") {
+  deps = [
+    ":fuzzy_search",
+    ":tab_data",
+    ":tab_search_api_proxy",
+    ":tab_search_item",
+    ":tab_search_search_field",
+    "//third_party/polymer/v3_0/components-chromium/iron-a11y-announcer",
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+    "//ui/webui/resources/js:cr.m",
+    "//ui/webui/resources/js:load_time_data.m",
+    "//ui/webui/resources/js:util.m",
+  ]
+  externs_list = [ "$externs_path/metrics_private.js" ]
+}
+
+js_library("fuzzy_search") {
+  deps = [
+    ":tab_data",
+    "//ui/webui/resources/js:util.m",
+  ]
+}
+
+js_library("infinite_list") {
+  deps = [
+    "//third_party/polymer/v3_0/components-chromium/iron-selector:iron-selector",
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+  ]
+}
+
+js_library("tab_data") {
+  deps = []
+}
+
+js_library("tab_search_api_proxy") {
+  deps = [
+    "//chrome/browser/ui/webui/tab_search:mojo_bindings_webui_js",
+    "//ui/webui/resources/js:cr.m",
+  ]
+  externs_list = [ "$externs_path/metrics_private.js" ]
+}
+
+js_library("tab_search_item") {
+  deps = [
+    ":tab_data",
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+    "//ui/webui/resources/cr_elements/cr_icon_button:cr_icon_button.m",
+    "//ui/webui/resources/js:icon.m",
+    "//ui/webui/resources/js:load_time_data.m",
+  ]
+}
+
+js_library("tab_search_search_field") {
+  deps = [
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+    "//ui/webui/resources/cr_elements/cr_search_field:cr_search_field_behavior.m",
+  ]
+}
+
+html_to_js("web_components") {
+  js_files = [
+    "app.js",
+    "infinite_list.js",
+    "tab_search_item.js",
+    "tab_search_search_field.js",
+  ]
+}

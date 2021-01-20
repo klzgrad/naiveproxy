@@ -1,0 +1,152 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ios/bundle_identifier_prefix.gni")
+import("//build/config/ios/templates/ios_binary_bundle.gni")
+
+# Template to generate a framework bundle.
+#
+# All the other parameters are forwarded to a shared_library target that will
+# generate the bundle binary. In general, you want to pass at least "sources"
+# or "deps" to have some binary objects included in your shared library.
+#
+# Arguments
+#
+#   - info_plist (optional)
+#
+#       path to additional Info.plist to merge into the final bundle Info.plist
+#
+#   - bundle_identifier_prefix (optional)
+#
+#       prefix for the bundle identifier (the full identifier will be defined
+#       to $bundle_identifier_prefix.$output_name); if unset will defaults to
+#       default_bundle_identifier_prefix
+#
+#   - output_name (optional)
+#
+#       name of the bundle without the extension; defaults to $target_name
+#
+#   - public_headers (optional)
+#
+#       list of public headers files to copy into the framework bundle; this
+#       does not generate an umbrella header; an umbrella header named after
+#       the framework bundle will be created
+#
+template("ios_framework_bundle") {
+  _output_name = target_name
+  if (defined(invoker.output_name)) {
+    _output_name = invoker.output_name
+  }
+
+  _dylib_target = target_name + "_dylib"
+  _dylib_bundle = target_name + "_dylib_bundle"
+
+  _bundle_identifier_prefix = default_bundle_identifier_prefix
+  if (defined(invoker.bundle_identifier_prefix)) {
+    _bundle_identifier_prefix = invoker.bundle_identifier_prefix
+  }
+
+  _bundle_identifier = "$_bundle_identifier_prefix.$_output_name"
+
+  shared_library(_dylib_target) {
+    forward_variables_from(invoker,
+                           "*",
+                           [
+                             "bundle_extension",
+                             "bundle_identifier_prefix",
+                             "bundle_type",
+                             "display_name",
+                             "info_plist",
+                             "output_name",
+                             "public_headers",
+                           ])
+
+    output_extension = ""
+    output_name = _output_name
+    output_prefix_override = true
+    output_dir = "$target_out_dir/$_dylib_target"
+
+    if (!defined(ldflags)) {
+      ldflags = []
+    }
+    ldflags += [
+      "-Xlinker",
+      "-install_name",
+      "-Xlinker",
+      "@rpath/$_output_name.framework/$_output_name",
+    ]
+  }
+
+  bundle_data(_dylib_bundle) {
+    public_deps = [ ":$_dylib_target" ]
+    sources = [ "$target_out_dir/$_dylib_target/$_output_name" ]
+    outputs = [ "{{bundle_executable_dir}}/{{source_file_part}}" ]
+  }
+
+  if (defined(invoker.public_headers)) {
+    _umbrella_target = target_name + "_umbrella"
+    _umbrella_output = "$target_out_dir/$_umbrella_target/$_output_name.h"
+
+    action(_umbrella_target) {
+      script = "//build/config/ios/scripts/generate_umbrella_header.py"
+      sources = []
+      outputs = [ _umbrella_output ]
+      args = [ "-o=" + rebase_path(_umbrella_output, root_build_dir) ] +
+             rebase_path(invoker.public_headers, root_build_dir)
+    }
+
+    _headers_bundle = target_name + "_headers_bundle"
+
+    bundle_data(_headers_bundle) {
+      sources = invoker.public_headers + [ _umbrella_output ]
+      outputs = [ "{{bundle_resources_dir}}/Headers/{{source_file_part}}" ]
+      public_deps = [ ":$_umbrella_target" ]
+    }
+  }
+
+  _config_name = target_name + "_config"
+
+  config(_config_name) {
+    framework_dirs = [ root_out_dir ]
+    frameworks = [ "$_output_name.framework" ]
+  }
+
+  ios_binary_bundle(target_name) {
+    forward_variables_from(invoker,
+                           "*",
+                           [
+                             "bundle_extension",
+                             "bundle_type",
+                             "configs",
+                             "deps",
+                             "output_name",
+                             "public_configs",
+                             "public_deps",
+                             "public_headers",
+                           ])
+
+    output_name = _output_name
+    product_type = "com.apple.product-type.framework"
+
+    bundle_identifier = _bundle_identifier
+    bundle_extension = "framework"
+    bundle_type = "FMWK"
+
+    public_deps = [ ":$_dylib_bundle" ]
+
+    if (defined(invoker.public_headers)) {
+      public_deps += [ ":$_headers_bundle" ]
+    }
+
+    public_configs = [ ":$_config_name" ]
+  }
+
+  _target_name = target_name
+
+  bundle_data("$target_name+bundle") {
+    public_deps = [ ":$_target_name" ]
+    sources = [ "$root_out_dir/$_output_name.framework" ]
+    outputs = [ "{{bundle_contents_dir}}/Frameworks/{{source_file_part}}" ]
+  }
+}

@@ -1,0 +1,320 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//chrome/browser/buildflags.gni")
+import("//chrome/common/features.gni")
+import("//chrome/test/base/js2gtest.gni")
+import("//chrome/test/include_js_tests.gni")
+import("//components/nacl/features.gni")
+import("//third_party/closure_compiler/compile_js.gni")
+import("//tools/grit/grit_rule.gni")
+import("//tools/grit/repack.gni")
+
+assert(!is_ios, "Chromium/iOS shouldn't use anything in //chrome")
+
+if (enable_js_type_check) {
+  group("closure_compile") {
+    deps = [
+      "accessibility:closure_compile",
+      "components:closure_compile",
+      "engagement:closure_compile",
+      "interventions_internals:closure_compile",
+      "media:closure_compile",
+      "memory_internals:closure_compile",
+      "reset_password:closure_compile",
+    ]
+    if (is_linux || is_chromeos || is_win || is_mac) {
+      deps += [
+        "bluetooth_internals:closure_compile",
+        "bookmarks:closure_compile",
+        "commander:closure_compile",
+        "discards:closure_compile",
+        "download_internals:closure_compile",
+        "downloads:closure_compile",
+        "gaia_auth_host:closure_compile",
+        "history:closure_compile",
+        "inline_login:closure_compile",
+        "local_ntp:closure_compile",
+        "local_state:closure_compile",
+        "management:closure_compile",
+        "media_router:closure_compile",
+        "nearby_internals:closure_compile",
+        "nearby_share/shared:closure_compile",
+        "nearby_share/shared:closure_compile_module",
+        "new_tab_page:closure_compile",
+        "ntp4:closure_compile",
+        "omnibox:closure_compile",
+        "pdf:closure_compile",
+        "print_preview:closure_compile",
+        "quota_internals:closure_compile",
+        "read_later:closure_compile",
+        "settings:closure_compile",
+        "settings:closure_compile_module",
+        "signin:closure_compile",
+        "tab_search:closure_compile",
+        "usb_internals:closure_compile",
+        "user_manager:closure_compile",
+        "web_app_internals:closure_compile",
+        "welcome:closure_compile",
+      ]
+    }
+    if (is_win || is_android || is_linux || is_chromeos) {
+      deps += [ "sandbox_internals:closure_compile" ]
+    }
+    if (is_linux || is_chromeos) {
+      deps += [ "webui_js_exception:closure_compile" ]
+    }
+    if (is_chromeos) {
+      deps += [
+        "chromeos:closure_compile",
+        "nearby_share:closure_compile",
+      ]
+    }
+    if (enable_extensions) {
+      deps += [ "extensions:closure_compile" ]
+    }
+    if (enable_nacl) {
+      deps += [ "about_nacl:closure_compile" ]
+    }
+    if (enable_webui_tab_strip) {
+      deps += [ "tab_strip:closure_compile" ]
+    }
+    if (enable_kaleidoscope) {
+      deps += [ "kaleidoscope:closure_compile" ]
+    }
+    if (is_android) {
+      deps += [
+        "explore_sites_internals:closure_compile",
+        "feed_internals:closure_compile",
+        "internals/notifications:closure_compile",
+        "internals/query_tiles:closure_compile",
+        "offline_pages:closure_compile",
+        "video_tutorials:closure_compile",
+        "webapks:closure_compile",
+      ]
+    }
+    if (is_win || is_mac || is_linux) {
+      deps += [ "browser_switch:closure_compile" ]
+    }
+
+    # Note: The following targets should only be type-checked on Windows builds,
+    # but because Window bots don't depend on Java, |closure_compile| is off on
+    # Windows. Adding |is_linux| so that these targets are type-checked on at
+    # least one platform.
+    if (is_win || is_linux || is_chromeos) {
+      deps += [ "conflicts:closure_compile" ]
+    }
+  }
+}
+
+if (!is_android) {
+  grit("component_extension_resources") {
+    source = "component_extension_resources.grd"
+
+    deps = [ "//chrome/browser/resources/pdf:web_components" ]
+
+    defines = chrome_grit_defines
+    if (enable_hangout_services_extension) {
+      defines += [ "enable_hangout_services_extension" ]
+    }
+
+    outputs = [
+      "grit/component_extension_resources.h",
+      "grit/component_extension_resources_map.cc",
+      "grit/component_extension_resources_map.h",
+      "component_extension_resources.pak",
+    ]
+    output_dir = "$root_gen_dir/chrome"
+  }
+
+  grit("gaia_auth_host_resources") {
+    source = "gaia_auth_host/gaia_auth_host_resources.grd"
+    deps = [ "//chrome/browser/resources/gaia_auth_host:modulize" ]
+
+    defines = chrome_grit_defines
+    outputs = [
+      "grit/gaia_auth_host_resources.h",
+      "grit/gaia_auth_host_resources_map.cc",
+      "grit/gaia_auth_host_resources_map.h",
+      "gaia_auth_host_resources.pak",
+    ]
+    output_dir = "$root_gen_dir/chrome"
+  }
+
+  grit("local_ntp_resources") {
+    source = "local_ntp/local_ntp_resources.grd"
+    defines = chrome_grit_defines
+    outputs = [
+      "grit/local_ntp_resources.h",
+      "local_ntp_resources.pak",
+    ]
+    output_dir = "$root_gen_dir/chrome"
+  }
+
+  grit("new_tab_page_resources") {
+    if (optimize_webui) {
+      source = "new_tab_page/new_tab_page_resources_vulcanized.grd"
+    } else {
+      source = "new_tab_page/new_tab_page_resources.grd"
+    }
+
+    deps = [
+      "//chrome/browser/promo_browser_command:mojo_bindings_js",
+      "//chrome/browser/search/task_module:mojo_bindings_js",
+      "//chrome/browser/ui/webui/new_tab_page:mojo_bindings_js",
+      "//skia/public/mojom:mojom_js",
+    ]
+    if (!is_official_build) {
+      deps += [ "//chrome/browser/ui/webui/new_tab_page/foo:mojo_bindings_js" ]
+    }
+
+    if (optimize_webui) {
+      deps += [ "//chrome/browser/resources/new_tab_page:optimized_js" ]
+    } else {
+      deps += [ "//chrome/browser/resources/new_tab_page:web_components" ]
+    }
+
+    defines = chrome_grit_defines + [ "is_official_build=$is_official_build" ]
+    outputs = [
+      "grit/new_tab_page_resources.h",
+      "grit/new_tab_page_resources_map.cc",
+      "grit/new_tab_page_resources_map.h",
+      "new_tab_page_resources.pak",
+    ]
+    output_dir = "$root_gen_dir/chrome"
+  }
+
+  grit("preinstalled_web_apps_resources") {
+    source = "preinstalled_web_apps/resources.grd"
+    defines = chrome_grit_defines
+    outputs = [
+      "grit/preinstalled_web_apps_resources.h",
+      "grit/preinstalled_web_apps_resources_map.cc",
+      "grit/preinstalled_web_apps_resources_map.h",
+      "preinstalled_web_apps_resources.pak",
+    ]
+    output_dir = "$root_gen_dir/chrome"
+  }
+}
+
+if (is_chromeos) {
+  grit("multidevice_internals_resources") {
+    source =
+        "chromeos/multidevice_internals/multidevice_internals_resources.grd"
+
+    deps = [ "//chrome/browser/resources/chromeos/multidevice_internals:web_components" ]
+
+    defines = chrome_grit_defines
+    outputs = [
+      "grit/multidevice_internals_resources.h",
+      "grit/multidevice_internals_resources_map.cc",
+      "grit/multidevice_internals_resources_map.h",
+      "multidevice_internals_resources.pak",
+    ]
+    output_dir = "$root_gen_dir/chrome"
+  }
+
+  grit("bluetooth_pairing_dialog_resources") {
+    defines = chrome_grit_defines
+
+    # These arguments are needed since the grd is generated at build time.
+    enable_input_discovery_for_gn_analyze = false
+    bluetooth_gen_dir = "$root_gen_dir/chrome/browser/resources/chromeos/bluetooth_pairing_dialog"
+    source = "$bluetooth_gen_dir/bluetooth_pairing_dialog_resources.grd"
+    deps = [
+      "//chrome/browser/resources/chromeos/bluetooth_pairing_dialog:build_grd",
+    ]
+
+    outputs = [
+      "grit/bluetooth_pairing_dialog_resources.h",
+      "grit/bluetooth_pairing_dialog_resources_map.cc",
+      "grit/bluetooth_pairing_dialog_resources_map.h",
+      "bluetooth_pairing_dialog_resources.pak",
+    ]
+    output_dir = "$root_gen_dir/chrome"
+  }
+}
+
+if (enable_extensions) {
+  grit("sync_file_system_internals_resources") {
+    source =
+        "sync_file_system_internals/sync_file_system_internals_resources.grd"
+    defines = chrome_grit_defines
+    outputs = [
+      "grit/sync_file_system_internals_resources.h",
+      "sync_file_system_internals_resources.pak",
+    ]
+    output_dir = "$root_gen_dir/chrome"
+  }
+}
+
+repack("dev_ui_paks") {
+  output = "$root_gen_dir/chrome/dev_ui_resources.pak"
+
+  sources = [
+    "$root_gen_dir/chrome/bluetooth_internals_resources.pak",
+    "$root_gen_dir/chrome/dev_ui_browser_resources.pak",
+    "$root_gen_dir/chrome/invalidations_resources.pak",
+    "$root_gen_dir/chrome/net_internals_resources.pak",
+    "$root_gen_dir/chrome/omnibox_resources.pak",
+    "$root_gen_dir/chrome/quota_internals_resources.pak",
+    "$root_gen_dir/chrome/usb_internals_resources.pak",
+    "$root_gen_dir/chrome/webrtc_logs_resources.pak",
+    "$root_gen_dir/components/dev_ui_components_resources.pak",
+    "$root_gen_dir/components/sync_driver_resources.pak",
+    "$root_gen_dir/content/browser/resources/media/media_internals_resources.pak",
+    "$root_gen_dir/content/browser/webrtc/resources/webrtc_internals_resources.pak",
+    "$root_gen_dir/content/dev_ui_content_resources.pak",
+  ]
+  deps = [
+    "//chrome/browser:dev_ui_browser_resources",
+    "//chrome/browser/resources/bluetooth_internals:resources",
+    "//chrome/browser/resources/invalidations:invalidations_resources",
+    "//chrome/browser/resources/media:webrtc_logs_resources",
+    "//chrome/browser/resources/net_internals:net_internals_resources",
+    "//chrome/browser/resources/omnibox:resources",
+    "//chrome/browser/resources/quota_internals:quota_internals_resources",
+    "//chrome/browser/resources/usb_internals:resources",
+    "//components/resources:dev_ui_components_resources",
+    "//components/sync/driver:resources",
+    "//content:dev_ui_content_resources",
+    "//content/browser/resources/media:media_internals_resources",
+    "//content/browser/webrtc/resources",
+  ]
+
+  if (is_android) {
+    sources += [ "$root_gen_dir/chrome/webapks_ui_resources.pak" ]
+    deps += [ "//chrome/browser/resources/webapks:webapks_ui_resources" ]
+  }
+}
+
+# Some targets in this file are depended on independent of include_js_tests,
+# so this file gets loaded even if !include_js_tests. Since js2gtest()s don't
+# compile in some scenarios when include_js_tests is false, and since this
+# file is loaded even when it's false, we need to make sure the js2gtest()
+# target only exists in this file when it works. (In contrast, most other
+# BUILD.gn files containing js2gtest()s contain nothing else and hence are only
+# loaded when include_js_tests is true.)
+if (!is_android && include_js_tests) {
+  js2gtest("resources_unitjs_tests") {
+    test_type = "webui"
+    sources = [ "gaia_auth_host/password_change_authenticator_test.unitjs" ]
+
+    # This has to be a gen_include, so it doesn't collide with other js2gtests
+    gen_include_files = [ "//ui/webui/resources/js/cr.js" ]
+
+    # But these have to be extra_js_files, since it uses a native object
+    # EventTarget, which doesn't work at compile time.
+    extra_js_files = [
+      "//ui/webui/resources/js/cr/event_target.js",
+      "gaia_auth_host/password_change_authenticator.js",
+    ]
+    defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+  }
+
+  source_set("browser_tests_js") {
+    testonly = true
+    deps = [ ":resources_unitjs_tests" ]
+  }
+}

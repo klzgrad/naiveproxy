@@ -1,0 +1,76 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//third_party/closure_compiler/compile_js.gni")
+import("//tools/grit/grit_rule.gni")
+import("//tools/polymer/html_to_js.gni")
+
+js_type_check("closure_compile") {
+  uses_js_modules = true
+  closure_flags = default_closure_args + mojom_js_args + [
+                    "js_module_root=" + rebase_path(".", root_build_dir),
+                    "js_module_root=" + rebase_path(
+                            "$root_gen_dir/mojom-webui/chrome/browser/ui/webui/usb_internals",
+                            root_build_dir),
+                    "js_module_root=" + rebase_path(
+                            "$root_gen_dir/mojom-webui/services/device/public/mojom",
+                            root_build_dir),
+                  ]
+  deps = [
+    ":app",
+    ":descriptor_panel",
+    ":devices_page",
+  ]
+}
+
+js_library("app") {
+  deps = [
+    ":devices_page",
+    "//chrome/browser/ui/webui/usb_internals:mojo_bindings_webui_js",
+    "//ui/webui/resources/js:assert.m",
+    "//ui/webui/resources/js:cr.m",
+    "//ui/webui/resources/js/cr/ui:tabs.m",
+  ]
+}
+
+js_library("devices_page") {
+  deps = [
+    ":descriptor_panel",
+    "//chrome/browser/ui/webui/usb_internals:mojo_bindings_webui_js",
+    "//ui/webui/resources/js:assert.m",
+    "//ui/webui/resources/js:cr.m",
+    "//ui/webui/resources/js:util.m",
+    "//ui/webui/resources/js/cr/ui:tabs.m",
+    "//ui/webui/resources/js/cr/ui:tree.m",
+  ]
+}
+
+js_library("descriptor_panel") {
+  deps = [
+    "//chrome/browser/ui/webui/usb_internals:mojo_bindings_webui_js",
+    "//ui/webui/resources/js:assert.m",
+    "//ui/webui/resources/js:util.m",
+    "//ui/webui/resources/js/cr:ui.m",
+    "//ui/webui/resources/js/cr/ui:tree.m",
+  ]
+}
+
+grit("resources") {
+  source = "resources.grd"
+  outputs = [
+    "grit/usb_internals_resources.h",
+    "grit/usb_internals_resources_map.cc",
+    "grit/usb_internals_resources_map.h",
+    "usb_internals_resources.pak",
+  ]
+  output_dir = "$root_gen_dir/chrome"
+  deps = [
+    ":web_components",
+    "//chrome/browser/ui/webui/usb_internals:mojo_bindings_webui_js",
+  ]
+}
+
+html_to_js("web_components") {
+  js_files = [ "app.js" ]
+}

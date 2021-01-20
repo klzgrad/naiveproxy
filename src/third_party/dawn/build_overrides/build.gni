@@ -1,0 +1,46 @@
+# Copyright 2018 The Dawn Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+declare_args() {
+  # Tell Dawn and dependencies to not do Chromium-specific things
+  build_with_chromium = false
+
+  # Use Chromium's binutils to have "hermetic" builds on bots
+  linux_use_bundled_binutils_override = true
+
+  # In standalone Dawn builds, don't try to use the hermetic install of Xcode
+  # that Chromium uses
+  use_system_xcode = ""
+
+  # Android 32-bit non-component, non-clang builds cannot have symbol_level=2
+  # due to 4GiB file size limit, see https://crbug.com/648948.
+  ignore_elf32_limitations = false
+}
+
+# Detect whether we can use the hermetic XCode like in Chromium and do so if
+# possible.
+if (host_os == "mac" && use_system_xcode == "") {
+  _result = exec_script("//build/mac/should_use_hermetic_xcode.py",
+                        [ target_os ],
+                        "value")
+
+  assert(_result != 2,
+         "Do not allow building targets with the default" +
+             "hermetic toolchain if the minimum OS version is not met.")
+  assert(_result != 3,
+         "iOS does not support building with a hermetic toolchain. " +
+             "Please install Xcode.")
+
+  use_system_xcode = _result != 1
+}

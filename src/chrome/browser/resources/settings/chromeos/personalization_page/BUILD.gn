@@ -1,0 +1,157 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//third_party/closure_compiler/compile_js.gni")
+import("//tools/polymer/polymer.gni")
+import("//ui/webui/resources/tools/js_modulizer.gni")
+import("../os_settings.gni")
+
+js_type_check("closure_compile") {
+  deps = [
+    ":change_picture",
+    ":change_picture_browser_proxy",
+    ":personalization_page",
+  ]
+}
+
+js_library("change_picture") {
+  deps = [
+    ":change_picture_browser_proxy",
+    "..:deep_linking_behavior",
+    "..:metrics_recorder",
+    "..:os_route",
+    "../..:router",
+    "//third_party/polymer/v1_0/components-chromium/iron-a11y-announcer:iron-a11y-announcer-extracted",
+    "//third_party/polymer/v1_0/components-chromium/iron-selector:iron-selector-extracted",
+    "//ui/webui/resources/cr_elements/chromeos/cr_picture:cr_picture_list",
+    "//ui/webui/resources/cr_elements/chromeos/cr_picture:cr_picture_pane",
+    "//ui/webui/resources/cr_elements/chromeos/cr_picture:cr_picture_types",
+    "//ui/webui/resources/cr_elements/chromeos/cr_picture:png",
+    "//ui/webui/resources/js:assert",
+    "//ui/webui/resources/js:i18n_behavior",
+    "//ui/webui/resources/js:load_time_data",
+    "//ui/webui/resources/js:web_ui_listener_behavior",
+  ]
+}
+
+js_library("change_picture_browser_proxy") {
+  deps = [ "//ui/webui/resources/js:cr" ]
+}
+
+js_library("personalization_page") {
+  deps = [
+    ":wallpaper_browser_proxy",
+    "..:deep_linking_behavior",
+    "..:os_route",
+    "../..:router",
+    "../../prefs",
+    "../../settings_page:settings_animated_pages",
+    "../ambient_mode_page:ambient_mode_browser_proxy",
+    "//ui/webui/resources/js:cr",
+  ]
+}
+
+js_library("wallpaper_browser_proxy") {
+  deps = [ "//ui/webui/resources/js:cr" ]
+  externs_list = [ "$externs_path/chrome_send.js" ]
+}
+
+js_type_check("closure_compile_module") {
+  is_polymer3 = true
+  deps = [
+    ":change_picture.m",
+    ":change_picture_browser_proxy.m",
+    ":personalization_page.m",
+    ":wallpaper_browser_proxy.m",
+  ]
+}
+
+js_library("change_picture.m") {
+  sources = [ "$root_gen_dir/chrome/browser/resources/settings/chromeos/personalization_page/change_picture.m.js" ]
+  deps = [
+    ":change_picture_browser_proxy.m",
+    "..:deep_linking_behavior.m",
+    "..:metrics_recorder.m",
+    "..:os_route.m",
+    "../..:router.m",
+    "//third_party/polymer/v3_0/components-chromium/iron-a11y-announcer:iron-a11y-announcer",
+    "//third_party/polymer/v3_0/components-chromium/iron-selector:iron-selector",
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+    "//ui/webui/resources/cr_elements/chromeos/cr_picture:cr_picture_list.m",
+    "//ui/webui/resources/cr_elements/chromeos/cr_picture:cr_picture_pane.m",
+    "//ui/webui/resources/cr_elements/chromeos/cr_picture:cr_picture_types.m",
+    "//ui/webui/resources/cr_elements/chromeos/cr_picture:png.m",
+    "//ui/webui/resources/js:assert.m",
+    "//ui/webui/resources/js:i18n_behavior.m",
+    "//ui/webui/resources/js:load_time_data.m",
+    "//ui/webui/resources/js:util.m",
+    "//ui/webui/resources/js:web_ui_listener_behavior.m",
+  ]
+  extra_deps = [ ":change_picture_module" ]
+}
+
+js_library("change_picture_browser_proxy.m") {
+  sources = [ "$root_gen_dir/chrome/browser/resources/settings/chromeos/personalization_page/change_picture_browser_proxy.m.js" ]
+  extra_deps = [ ":modulize" ]
+}
+
+js_library("personalization_page.m") {
+  sources = [ "$root_gen_dir/chrome/browser/resources/settings/chromeos/personalization_page/personalization_page.m.js" ]
+  deps = [
+    ":wallpaper_browser_proxy.m",
+    "..:deep_linking_behavior.m",
+    "..:os_route.m",
+    "../..:router.m",
+    "../../prefs:prefs.m",
+    "../../settings_page:settings_animated_pages.m",
+    "../ambient_mode_page:ambient_mode_browser_proxy.m",
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+    "//ui/webui/resources/js:load_time_data.m",
+  ]
+  extra_deps = [ ":personalization_page_module" ]
+}
+
+js_library("wallpaper_browser_proxy.m") {
+  sources = [ "$root_gen_dir/chrome/browser/resources/settings/chromeos/personalization_page/wallpaper_browser_proxy.m.js" ]
+  externs_list = [ "$externs_path/chrome_send.js" ]
+  extra_deps = [ ":modulize" ]
+}
+
+group("polymer3_elements") {
+  public_deps = [
+    ":change_picture_module",
+    ":modulize",
+    ":personalization_page_module",
+  ]
+}
+
+polymer_modulizer("change_picture") {
+  js_file = "change_picture.js"
+  html_file = "change_picture.html"
+  html_type = "dom-module"
+  migrated_imports = os_settings_migrated_imports
+  namespace_rewrites = os_settings_namespace_rewrites +
+                       [ "Polymer.IronA11yAnnouncer|IronA11yAnnouncer" ]
+  auto_imports = os_settings_auto_imports + [
+                   "ui/webui/resources/html/assert.html|assert,assertNotReached",
+                   "ui/webui/resources/polymer/v3_0/iron-a11y-announcer/iron-a11y-announcer.html|IronA11yAnnouncer",
+                 ]
+}
+
+polymer_modulizer("personalization_page") {
+  js_file = "personalization_page.js"
+  html_file = "personalization_page.html"
+  html_type = "dom-module"
+  migrated_imports = os_settings_migrated_imports
+  namespace_rewrites = os_settings_namespace_rewrites
+  auto_imports = os_settings_auto_imports
+}
+
+js_modulizer("modulize") {
+  input_files = [
+    "change_picture_browser_proxy.js",
+    "wallpaper_browser_proxy.js",
+  ]
+  namespace_rewrites = os_settings_namespace_rewrites
+}

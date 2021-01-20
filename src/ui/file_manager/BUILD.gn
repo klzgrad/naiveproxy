@@ -1,0 +1,147 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//chrome/common/features.gni")
+import("//third_party/closure_compiler/compile_js.gni")
+import("//tools/grit/grit_rule.gni")
+import("//tools/grit/preprocess_grit.gni")
+import("//ui/webui/resources/tools/generate_grd.gni")
+
+grit("resources") {
+  source = "file_manager_resources.grd"
+  outputs = [
+    "grit/file_manager_resources.h",
+    "grit/file_manager_resources_map.cc",
+    "grit/file_manager_resources_map.h",
+    "file_manager_resources.pak",
+    "file_manager_resources.rc",
+  ]
+}
+
+component("file_manager") {
+  sources = [ "file_manager_export.h" ]
+  public_deps = [
+    ":file_manager_gen_resources",
+    ":resources",
+    "//base",
+  ]
+  defines = [ "FILE_MANAGER_IMPLEMENTATION" ]
+}
+
+group("closure_compile") {
+  # Subfolders' closure_compile groups bundle the non-test "module" type-check
+  # groups as well as unittests and test_support.
+  testonly = true
+
+  deps = [
+    "audio_player/elements:closure_compile",
+    "audio_player/js:closure_compile",
+    "base/js:closure_compile",
+    "file_manager/background/js:closure_compile",
+    "file_manager/common/js:closure_compile",
+    "file_manager/foreground/elements:closure_compile",
+    "file_manager/foreground/js:closure_compile",
+    "file_manager/foreground/js/metadata:closure_compile",
+    "file_manager/foreground/js/ui:closure_compile",
+    "file_manager/test:closure_compile",
+    "gallery/js:closure_compile",
+    "gallery/js/image_editor:closure_compile",
+    "image_loader:closure_compile",
+    "integration_tests:closure_compile",
+    "integration_tests/file_manager:closure_compile",
+    "video_player/js:closure_compile",
+  ]
+}
+
+group("unit_test_data") {
+  testonly = true
+  deps = [
+    "base/js:js_test_gen_html",
+    "file_manager/background/js:js_test_gen_html",
+    "file_manager/common/js:js_test_gen_html",
+    "file_manager/common/js:js_test_gen_html_modules",
+    "file_manager/foreground/elements:js_test_gen_html",
+    "file_manager/foreground/js:js_test_gen_html",
+    "file_manager/foreground/js/metadata:js_test_gen_html",
+    "file_manager/foreground/js/metadata:js_test_gen_html_modules",
+    "file_manager/foreground/js/ui:js_test_gen_html",
+    "gallery/js:js_test_gen_html",
+    "gallery/js/image_editor:js_test_gen_html",
+    "image_loader:js_test_gen_html",
+    "image_loader:js_test_gen_html_modules",
+    "video_player/js:js_test_gen_html",
+  ]
+}
+
+preprocess_folder = "$target_gen_dir/preprocessed"
+
+# Inline images and move files to the preprocessed folder to combine all
+# resources in the same folder to be able to generate the JS bundle.
+# This is for files direct from the src/:  input_folder="./".
+preprocess_grit("preprocess_static") {
+  in_folder = "./"
+  out_folder = preprocess_folder
+
+  in_files = [ "audio_player/js/main.m.js" ]
+
+  deps = [ "//ui/file_manager/audio_player/js:main.m" ]
+}
+
+# This is for files that are generated in "gen/": input_folder=target_gen_dir.
+preprocess_grit("preprocess_generated") {
+  in_folder = target_gen_dir
+  out_folder = preprocess_folder
+
+  in_files = [
+    "base/js/app_util.m.js",
+    "base/js/volume_manager_types.m.js",
+    "base/js/mediasession_types.m.js",
+  ]
+
+  deps = [ "//ui/file_manager/base/js:modulize" ]
+}
+
+grd_prefix = "file_manager_gen"
+generated_grd = "$target_gen_dir/${grd_prefix}_resources.grd"
+
+generate_grd("build_grd") {
+  out_grd = generated_grd
+
+  input_files_base_dir =
+      rebase_path("$target_gen_dir/preprocessed", root_gen_dir)
+  input_files = [ "../audio_player/js/main.m.rollup.js" ]
+
+  resource_path_rewrites =
+      [ "../audio_player/js/main.m.rollup.js|audio_player/js/main.m.js" ]
+
+  deps = [ "//ui/file_manager/audio_player/js:build" ]
+}
+
+# Resources for the JS modules.
+grit("file_manager_gen_resources") {
+  grit_flags = [
+    "-E",
+    "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
+    "-E",
+    "root_src_dir=" + rebase_path(root_gen_dir, root_build_dir),
+  ]
+
+  defines = chrome_grit_defines
+
+  # These arguments are needed since the grd is generated at build time.
+  enable_input_discovery_for_gn_analyze = false
+  defines +=
+      [ "SHARED_INTERMEDIATE_DIR=" + rebase_path(root_gen_dir, root_build_dir) ]
+
+  source = generated_grd
+  deps = [ ":build_grd" ]
+
+  outputs = [
+    "grit/file_manager_gen_resources.h",
+    "grit/file_manager_gen_resources_map.cc",
+    "grit/file_manager_gen_resources_map.h",
+    "file_manager_gen_resources.pak",
+  ]
+  output_dir = "$root_gen_dir/ui/file_manager"
+}

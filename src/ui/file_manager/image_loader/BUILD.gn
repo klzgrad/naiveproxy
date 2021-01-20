@@ -1,0 +1,192 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//third_party/closure_compiler/compile_js.gni")
+import("//third_party/closure_compiler/js_unit_tests.gni")
+import("//ui/file_manager/base/gn/js_test_gen_html.gni")
+import("//ui/webui/resources/tools/js_modulizer.gni")
+
+js_type_check("closure_compile_jsmodules") {
+  uses_js_modules = true
+  deps = [
+    ":image_loader_client.m",
+    ":load_image_request.m",
+  ]
+}
+
+js_type_check("closure_compile_module") {
+  closure_flags = default_closure_args + [ "jscomp_error=strictCheckTypes" ]
+  deps = [
+    ":background",
+    ":cache",
+    ":image_loader",
+    ":image_loader_client",
+    ":image_loader_util",
+    ":image_request_task",
+    ":load_image_request",
+    ":piex_loader",
+    ":scheduler",
+  ]
+}
+
+js_library("background") {
+  deps = [ ":image_loader" ]
+}
+
+js_library("cache") {
+}
+
+js_unittest("cache_unittest") {
+  deps = [
+    ":cache",
+    ":load_image_request",
+    "//ui/webui/resources/js:webui_resource_test",
+  ]
+}
+
+js_library("image_loader") {
+  deps = [
+    ":cache",
+    ":image_request_task",
+    ":load_image_request",
+    ":scheduler",
+    "//ui/file_manager/externs:file_manager_private",
+  ]
+}
+
+js_unittest("image_loader_unittest") {
+  deps = [
+    ":image_loader",
+    "//ui/webui/resources/js:webui_resource_test",
+  ]
+}
+
+js_library("image_loader_util") {
+  deps = [
+    ":load_image_request",
+    "//ui/webui/resources/js:assert",
+  ]
+}
+
+js_library("load_image_request") {
+  deps = [
+    "//ui/file_manager/file_manager/foreground/js/metadata:image_orientation",
+    "//ui/webui/resources/js:assert",
+  ]
+}
+
+js_library("load_image_request.m") {
+  sources =
+      [ "$root_gen_dir/ui/file_manager/image_loader/load_image_request.m.js" ]
+  deps = [
+    "//ui/file_manager/file_manager/foreground/js/metadata:image_orientation.m",
+    "//ui/webui/resources/js:assert.m",
+  ]
+
+  extra_deps = [ ":modulize" ]
+}
+
+js_library("image_loader_client") {
+  deps = [
+    ":load_image_request",
+    "//ui/file_manager/file_manager/common/js:lru_cache",
+  ]
+  externs_list = [
+    "$externs_path/chrome.js",
+    "$externs_path/chrome_extensions.js",
+    "$externs_path/metrics_private.js",
+  ]
+}
+
+js_library("image_loader_client.m") {
+  sources =
+      [ "$root_gen_dir/ui/file_manager/image_loader/image_loader_client.m.js" ]
+  deps = [
+    ":load_image_request.m",
+    "//ui/file_manager/file_manager/common/js:lru_cache.m",
+  ]
+  externs_list = [
+    "$externs_path/chrome.js",
+    "$externs_path/chrome_extensions.js",
+    "$externs_path/metrics_private.js",
+  ]
+
+  extra_deps = [ ":modulize" ]
+}
+
+js_unittest("image_loader_client_unittest.m") {
+  deps = [
+    ":image_loader_client.m",
+    ":load_image_request.m",
+    "//chrome/test/data/webui:chai_assert",
+    "//ui/file_manager/base/js:test_error_reporting.m",
+  ]
+}
+
+js_library("piex_loader") {
+  # No dependencies should be added here, so the module can be loaded as a
+  # standalone .js file.
+
+  externs_list = [ "//ui/file_manager/externs/platform.js" ]
+}
+
+js_library("image_request_task") {
+  deps = [
+    ":cache",
+    ":image_loader_util",
+    ":load_image_request",
+    ":piex_loader",
+    "//ui/file_manager/file_manager/common/js:file_type",
+  ]
+  externs_list = [ "//ui/file_manager/externs/platform.js" ]
+}
+
+js_library("scheduler") {
+  deps = [ ":image_request_task" ]
+}
+
+js_unittest("scheduler_unittest") {
+  deps = [
+    ":scheduler",
+    "//ui/webui/resources/js:webui_resource_test",
+  ]
+}
+
+js_test_gen_html("js_test_gen_html_modules") {
+  deps = [ ":image_loader_client_unittest.m" ]
+  js_module = true
+
+  closure_flags =
+      strict_error_checking_closure_args + [
+        "js_module_root=./gen/ui",
+        "js_module_root=../../ui",
+        "browser_resolver_prefix_replacements=\"chrome://test/=./\"",
+      ]
+}
+
+js_test_gen_html("js_test_gen_html") {
+  closure_flags = default_closure_args + [ "jscomp_error=strictCheckTypes" ]
+  deps = [
+    ":cache_unittest",
+    ":image_loader_unittest",
+    ":scheduler_unittest",
+  ]
+}
+
+group("closure_compile") {
+  testonly = true
+  deps = [
+    ":closure_compile_jsmodules",
+    ":closure_compile_module",
+    ":js_test_gen_html_modules_type_check_auto",
+    ":js_test_gen_html_type_check_auto",
+  ]
+}
+
+js_modulizer("modulize") {
+  input_files = [
+    "image_loader_client.js",
+    "load_image_request.js",
+  ]
+}
