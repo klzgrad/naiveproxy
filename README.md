@@ -51,7 +51,7 @@ route {
   file_server { root /var/www/html }
 }
 ```
-This is Caddy 2 syntax. It is not the same with Caddy 1.
+`:443` must appear first for this Caddyfile to work. For more advanced usage consider using JSON for Caddy 2's config.
 
 Locally run `./naive` with the following `config.json` to get a SOCKS5 proxy at local port 1080.
 ```json
