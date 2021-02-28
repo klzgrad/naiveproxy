@@ -25,7 +25,7 @@ for flag in ALL_NONSHARED ALL_KMODS ALL SIGNED_PACKAGES; do
   sed -i "s/CONFIG_$flag=y/# CONFIG_$flag is not set/" .config
 done
 make oldconfig
-make -j $(nproc)
+make
 full_root=staging_dir/toolchain-*_gcc-${gcc_ver}_${abi}
 cp -r staging_dir/target-*_${abi}/usr $full_root
 echo '
