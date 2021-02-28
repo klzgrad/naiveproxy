@@ -8,6 +8,11 @@ case "$ARCH" in
 esac
 
 build_sysroot() {
+  . ./get-sysroot.sh
+  sysroot=$(get_sysroot)
+  if [ -d $sysroot/lib ]; then
+    return
+  fi
   ./build/linux/sysroot_scripts/sysroot-creator-sid-naive.sh "BuildSysroot$1"
 }
 
