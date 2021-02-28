@@ -10,8 +10,17 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        target_cpu: [x86]
+        target_cpu: [x64, x86, arm64, arm]
     env:
       EXTRA_FLAGS: 'target_cpu="${{ matrix.target_cpu }}"'
     steps:
+      - uses: actions/checkout@v2
+      - run: sudo apt update
+      - run: sudo apt install ninja-build pkg-config libnss3-dev qemu-user strace
+      # libc6-i386 interferes with linux-x86 build
       - run: sudo apt remove libc6-i386
+      - run: ./get-clang.sh
+        working-directory: src
+      - run: ./build.sh
+        working-directory: src
+      - run: ./tests/basic.sh src/out/Release/naive
