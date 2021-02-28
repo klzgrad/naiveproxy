@@ -2,7 +2,7 @@ on:
   push:
     branches: [master]
   release:
-    types: [published]
+    types: [created]
 jobs:
   linux:
     runs-on: ubuntu-latest
@@ -23,6 +23,20 @@ jobs:
       - run: ./build.sh
         working-directory: src
       - run: ./tests/basic.sh src/out/Release/naive
+      - run: |
+          BUNDLE="naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}"
+          mkdir $BUNDLE
+          cp src/out/Release/naive src/config.json LICENSE USAGE.txt $BUNDLE
+          tar cJf $BUNDLE.tar.xz $BUNDLE
+      - uses: actions/upload-release-asset@v1
+        if: ${{ github.event_name == 'release' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}.tar.xz
+          asset_name: naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}.tar.xz
+          asset_content_type: application/octet-stream
   win:
     runs-on: windows-latest
     defaults:
@@ -43,6 +57,20 @@ jobs:
         working-directory: src
       - run: ./tests/basic.sh src/out/Release/naive
         if: ${{ matrix.arch != 'arm64' }}
+      - run: |
+          BUNDLE="naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}"
+          mkdir $BUNDLE
+          cp src/out/Release/naive.exe src/config.json LICENSE USAGE.txt $BUNDLE
+          7z a $BUILD_NAME.zip $BUILD_NAME
+      - uses: actions/upload-release-asset@v1
+        if: ${{ github.event_name == 'release' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}.zip
+          asset_name: naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}.zip
+          asset_content_type: application/octet-stream
   mac:
     runs-on: macos-latest
     strategy:
@@ -60,6 +88,20 @@ jobs:
         working-directory: src
       - run: ./tests/basic.sh src/out/Release/naive
         if: ${{ matrix.arch != 'arm64' }}
+      - run: |
+          BUNDLE="naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}"
+          mkdir $BUNDLE
+          cp src/out/Release/naive src/config.json LICENSE USAGE.txt $BUNDLE
+          tar cJf $BUNDLE.tar.xz $BUNDLE
+      - uses: actions/upload-release-asset@v1
+        if: ${{ github.event_name == 'release' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}.tar.xz
+          asset_name: naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}.tar.xz
+          asset_content_type: application/octet-stream
   openwrt:
     runs-on: ubuntu-latest
     strategy:
@@ -105,3 +147,17 @@ jobs:
       - run: ./build.sh
         working-directory: src
       - run: ./tests/basic.sh src/out/Release/naive
+      - run: |
+          BUNDLE="naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}"
+          mkdir $BUNDLE
+          cp src/out/Release/naive src/config.json LICENSE USAGE.txt $BUNDLE
+          tar cJf $BUNDLE.tar.xz $BUNDLE
+      - uses: actions/upload-release-asset@v1
+        if: ${{ github.event_name == 'release' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}.tar.xz
+          asset_name: naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}.tar.xz
+          asset_content_type: application/octet-stream
