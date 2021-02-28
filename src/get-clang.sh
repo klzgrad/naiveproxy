@@ -67,7 +67,7 @@ if [ "$PGO_NAME" ]; then
   profile=$(cat chrome/build/$PGO_NAME.pgo.txt)
   cd chrome/build/pgo_profiles
   if [ ! -f "$profile" ]; then
-    curl -LO "https://storage.googleapis.com/chromium-optimization-profiles/pgo_profiles/$profile"
+    curl --retry 3 -LO "https://storage.googleapis.com/chromium-optimization-profiles/pgo_profiles/$profile"
   fi
   cd ../../..
 fi
