@@ -1,21 +1,23 @@
 on:
   push:
-    branches:
-      - master
+    branches: [master]
   release:
-    types:
-      - created
+    types: [published]
 jobs:
-  macos:
-    runs-on: macos-latest
+  linux:
+    runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        arch: [arm64]
+        arch: [x64, x86, arm64, arm]
     env:
       EXTRA_FLAGS: 'target_cpu="${{ matrix.arch }}"'
     steps:
       - uses: actions/checkout@v2
-      - run: brew install ninja
+      - run: sudo apt update
+      - run: sudo apt install ninja-build pkg-config libnss3-dev qemu-user
+      # libc6-i386 interferes with x86 build
+      - run: sudo apt remove libc6-i386
       - run: ./get-clang.sh
         working-directory: src
       - run: ./build.sh
@@ -27,8 +29,9 @@ jobs:
       run:
         shell: bash
     strategy:
+      fail-fast: false
       matrix:
-        arch: [arm]
+        arch: [x64, x86, arm64]
     env:
       EXTRA_FLAGS: 'target_cpu="${{ matrix.arch }}"'
     steps:
@@ -39,4 +42,66 @@ jobs:
       - run: ./build.sh
         working-directory: src
       - run: ./tests/basic.sh src/out/Release/naive
-        if: ${{ matrix.arch != 'arm' }}
+        if: ${{ matrix.arch != 'arm64' }}
+  mac:
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, arm64]
+    env:
+      EXTRA_FLAGS: 'target_cpu="${{ matrix.arch }}"'
+    steps:
+      - uses: actions/checkout@v2
+      - run: brew install ninja
+      - run: ./get-clang.sh
+        working-directory: src
+      - run: ./build.sh
+        working-directory: src
+      - run: ./tests/basic.sh src/out/Release/naive
+        if: ${{ matrix.arch != 'arm64' }}
+  openwrt:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: mipsel_24kc
+            target_cpu: mipsel
+            extra: 'mips_arch_variant="r2" mips_float_abi="soft" mips_tune="24kc" use_lld=false use_gold=false'
+            openwrt: 'target=ramips subtarget=rt305x abi=musl'
+          - arch: x86_64
+            target_cpu: x64
+            openwrt: 'target=x86 subtarget=64 abi=musl'
+          - arch: x86
+            target_cpu: x86
+            openwrt: 'target=x86 subtarget=generic abi=musl'
+          - arch: aarch64
+            target_cpu: arm64
+            openwrt: 'target=armvirt subtarget=64 abi=musl'
+          - arch: arm_cortex-a15_neon-vfpv4
+            target_cpu: arm
+            extra: 'arm_version=0 arm_cpu="cortex-a15" arm_fpu="neon-vfpv4" arm_float_abi="hard"'
+            openwrt: 'target=ipq806x subtarget=generic abi=musl_eabi'
+          - arch: arm_cortex-a9
+            target_cpu: arm
+            extra: 'arm_version=0 arm_cpu="cortex-a9" arm_float_abi="soft" arm_use_neon=false'
+            openwrt: 'target=bcm53xx subtarget=generic abi=musl_eabi'
+    env:
+      EXTRA_FLAGS: |
+        target_cpu="${{ matrix.target_cpu }}"
+        ${{ matrix.extra }}
+        use_allocator="none" use_allocator_shim=false
+        custom_toolchain="//build/toolchain/linux:clang_${{ matrix.target_cpu }}_openwrt"
+      OPENWRT_FLAGS: 'arch=${{ matrix.arch }} release=19.07.7 gcc_ver=7.5.0 ${{ matrix.openwrt }}'
+    steps:
+      - uses: actions/checkout@v2
+      - run: sudo apt update
+      - run: sudo apt install ninja-build pkg-config libnss3-dev qemu-user
+      # libc6-i386 interferes with x86 build
+      - run: sudo apt remove libc6-i386
+      - run: ./get-clang.sh
+        working-directory: src
+      - run: ./build.sh
+        working-directory: src
+      - run: ./tests/basic.sh src/out/Release/naive
