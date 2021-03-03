@@ -82,7 +82,7 @@ fi
 
 # sccache (Windows)
 if [ "$ARCH" = Windows -a ! -f ~/.cargo/bin/sccache.exe ]; then
-  sccache_url="https://github.com/mozilla/sccache/releases/download/v0.2.15/sccache-v0.2.15-x86_64-pc-windows-msvc.tar.gz"
+  sccache_url="https://github.com/mozilla/sccache/releases/download/0.2.12/sccache-0.2.12-x86_64-pc-windows-msvc.tar.gz"
   mkdir -p ~/.cargo/bin
   curl -L "$sccache_url" | tar xzf - --strip=1 -C ~/.cargo/bin
 fi
