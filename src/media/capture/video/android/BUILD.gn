@@ -1,0 +1,69 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/android/config.gni")
+import("//build/config/android/rules.gni")
+import("//build/config/arm.gni")
+import("//build/config/ui.gni")
+import("//media/media_options.gni")
+
+assert(is_android)
+
+source_set("android") {
+  sources = [
+    "photo_capabilities.cc",
+    "photo_capabilities.h",
+    "video_capture_device_android.cc",
+    "video_capture_device_android.h",
+    "video_capture_device_factory_android.cc",
+    "video_capture_device_factory_android.h",
+  ]
+  configs += [ "//media:media_config" ]
+  deps = [
+    ":capture_jni_headers",
+    "//media/capture:capture_device_specific",
+    "//media/capture/mojom:image_capture",
+    "//media/capture/mojom:image_capture_types",
+    "//third_party/libyuv",
+    "//ui/gfx:color_space",
+    "//ui/gfx/geometry",
+  ]
+}
+
+generate_jni("capture_jni_headers") {
+  sources = [
+    "java/src/org/chromium/media/PhotoCapabilities.java",
+    "java/src/org/chromium/media/VideoCapture.java",
+    "java/src/org/chromium/media/VideoCaptureFactory.java",
+  ]
+}
+
+java_cpp_enum("media_java_enums_srcjar") {
+  sources = [
+    "../../../base/video_facing.h",
+    "../video_capture_device_descriptor.h",
+    "photo_capabilities.h",
+    "video_capture_device_android.h",
+  ]
+}
+
+android_library("capture_java") {
+  deps = [
+    "//base:base_java",
+    "//base:jni_java",
+    "//third_party/android_deps:androidx_annotation_annotation_java",
+  ]
+  annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
+
+  srcjar_deps = [ ":media_java_enums_srcjar" ]
+
+  sources = [
+    "java/src/org/chromium/media/PhotoCapabilities.java",
+    "java/src/org/chromium/media/VideoCapture.java",
+    "java/src/org/chromium/media/VideoCaptureCamera.java",
+    "java/src/org/chromium/media/VideoCaptureCamera2.java",
+    "java/src/org/chromium/media/VideoCaptureFactory.java",
+    "java/src/org/chromium/media/VideoCaptureFormat.java",
+  ]
+}

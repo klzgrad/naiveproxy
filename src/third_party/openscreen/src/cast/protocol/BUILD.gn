@@ -1,0 +1,73 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/data_headers_template.gni")
+import("//build_overrides/build.gni")
+assert(!build_with_chromium)
+
+data_headers("castv2_schema_headers") {
+  namespace = "cast"
+  sources = [
+    "castv2/receiver_schema.json",
+    "castv2/streaming_schema.json",
+  ]
+}
+
+source_set("castv2") {
+  sources = [
+    "castv2/validation.cc",
+    "castv2/validation.h",
+  ]
+
+  public_deps = [ "../../third_party/jsoncpp" ]
+
+  deps = [
+    ":castv2_schema_headers",
+    "../../util",
+    "//third_party/valijson",
+  ]
+
+  public_configs = [ "../../build:openscreen_include_dirs" ]
+}
+
+data_headers("streaming_examples") {
+  testonly = true
+  namespace = "cast"
+  sources = [
+    "castv2/streaming_examples/answer.json",
+    "castv2/streaming_examples/capabilities_response.json",
+    "castv2/streaming_examples/get_capabilities.json",
+    "castv2/streaming_examples/get_status.json",
+    "castv2/streaming_examples/offer.json",
+    "castv2/streaming_examples/rpc.json",
+    "castv2/streaming_examples/status_response.json",
+  ]
+}
+
+data_headers("receiver_examples") {
+  testonly = true
+  namespace = "cast"
+  sources = [
+    "castv2/receiver_examples/get_app_availability.json",
+    "castv2/receiver_examples/get_app_availability_response.json",
+    "castv2/receiver_examples/launch.json",
+    "castv2/receiver_examples/stop.json",
+  ]
+}
+
+source_set("unittests") {
+  testonly = true
+
+  sources = [ "castv2/validation_unittest.cc" ]
+
+  deps = [
+    ":castv2",
+    ":receiver_examples",
+    ":streaming_examples",
+    "../../third_party/abseil",
+    "../../third_party/googletest:gmock",
+    "../../third_party/googletest:gtest",
+    "//third_party/valijson",
+  ]
+}

@@ -1,0 +1,143 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build_overrides/build.gni")
+
+declare_args() {
+  # Enables trace logging in build. This is true by default, unless
+  # we are built against Chrome--we have no way to link their platform
+  # implementation into our binaries so trace logging is not possible.
+  enable_trace_logging = !build_with_chromium
+}
+
+config("trace_logging_config") {
+  if (enable_trace_logging) {
+    defines = [ "ENABLE_TRACE_LOGGING" ]
+  }
+}
+
+source_set("util") {
+  sources = [
+    "alarm.cc",
+    "alarm.h",
+    "base64.cc",
+    "base64.h",
+    "big_endian.cc",
+    "big_endian.h",
+    "chrono_helpers.h",
+    "crypto/certificate_utils.cc",
+    "crypto/certificate_utils.h",
+    "crypto/digest_sign.cc",
+    "crypto/digest_sign.h",
+    "crypto/openssl_util.cc",
+    "crypto/openssl_util.h",
+    "crypto/pem_helpers.cc",
+    "crypto/pem_helpers.h",
+    "crypto/random_bytes.cc",
+    "crypto/random_bytes.h",
+    "crypto/rsa_private_key.cc",
+    "crypto/rsa_private_key.h",
+    "crypto/secure_hash.cc",
+    "crypto/secure_hash.h",
+    "crypto/sha2.cc",
+    "crypto/sha2.h",
+    "enum_name_table.h",
+    "flat_map.h",
+    "hashing.h",
+    "integer_division.h",
+    "json/json_helpers.h",
+    "json/json_serialization.cc",
+    "json/json_serialization.h",
+    "json/json_value.cc",
+    "json/json_value.h",
+    "operation_loop.cc",
+    "operation_loop.h",
+    "osp_logging.h",
+    "saturate_cast.h",
+    "simple_fraction.cc",
+    "simple_fraction.h",
+    "std_util.cc",
+    "std_util.h",
+    "stringprintf.cc",
+    "stringprintf.h",
+    "trace_logging.h",
+    "trace_logging/macro_support.h",
+    "trace_logging/scoped_trace_operations.cc",
+    "trace_logging/scoped_trace_operations.h",
+    "url.cc",
+    "url.h",
+    "weak_ptr.h",
+    "yet_another_bit_vector.cc",
+    "yet_another_bit_vector.h",
+  ]
+
+  public_deps = [
+    "../third_party/abseil",
+    "../third_party/jsoncpp",
+  ]
+
+  deps = [
+    "../third_party/boringssl",
+    "../third_party/mozilla",
+
+    # We do a clone of Chrome's modp_b64 in order to share their BUILD.gn
+    # and license files, so this should always be an absolute reference.
+    "//third_party/modp_b64",
+  ]
+
+  public_configs = [
+    "../build:openscreen_include_dirs",
+    ":trace_logging_config",
+  ]
+}
+
+source_set("unittests") {
+  testonly = true
+
+  sources = [
+    "alarm_unittest.cc",
+    "base64_unittest.cc",
+    "big_endian_unittest.cc",
+    "crypto/random_bytes_unittest.cc",
+    "crypto/rsa_private_key_unittest.cc",
+    "crypto/secure_hash_unittest.cc",
+    "crypto/sha2_unittest.cc",
+    "enum_name_table_unittest.cc",
+    "flat_map_unittest.cc",
+    "integer_division_unittest.cc",
+    "json/json_helpers_unittest.cc",
+    "json/json_serialization_unittest.cc",
+    "json/json_value_unittest.cc",
+    "operation_loop_unittest.cc",
+    "saturate_cast_unittest.cc",
+    "simple_fraction_unittest.cc",
+    "stringprintf_unittest.cc",
+    "trace_logging/scoped_trace_operations_unittest.cc",
+    "url_unittest.cc",
+    "weak_ptr_unittest.cc",
+    "yet_another_bit_vector_unittest.cc",
+  ]
+
+  # The trace logging unittests depend on macros only defined
+  # when trace logging is enabled.
+  if (enable_trace_logging) {
+    sources += [ "trace_logging_unittest.cc" ]
+  }
+
+  # TODO(http://issuetracker.google.com/159955844): test fails on fieldtrial
+  # bot, needs to be diagnosed and reenabled in Chrome.
+  if (!build_with_chromium) {
+    sources += [ "crypto/certificate_utils_unittest.cc" ]
+  }
+
+  deps = [
+    ":util",
+    "../platform:test",
+    "../third_party/abseil",
+    "../third_party/boringssl",
+    "../third_party/googletest:gmock",
+    "../third_party/googletest:gtest",
+    "../third_party/jsoncpp",
+  ]
+}

@@ -1,0 +1,68 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+source_set("lib") {
+  sources = [
+    "unzipper_impl.cc",
+    "unzipper_impl.h",
+  ]
+
+  deps = [
+    "//base",
+    "//mojo/public/cpp/bindings",
+    "//third_party/zlib/google:zip",
+  ]
+
+  public_deps = [
+    "//components/services/filesystem/public/mojom",
+    "//components/services/unzip/public/mojom",
+  ]
+}
+
+source_set("in_process") {
+  # NOTE: In-process unzipping is unsafe! Unfortunately on iOS we have no other
+  # choice. On all other platforms, this target is restricted to tests.
+  testonly = !is_ios
+
+  sources = [
+    "in_process_unzipper.cc",
+    "in_process_unzipper.h",
+  ]
+
+  deps = [
+    ":lib",
+    "//base",
+  ]
+
+  public_deps = [
+    "//components/services/unzip/public/mojom",
+    "//mojo/public/cpp/bindings",
+  ]
+}
+
+bundle_data("unit_tests_bundle_data") {
+  visibility = [ ":unit_tests" ]
+  testonly = true
+  sources = [
+    "//components/test/data/unzip_service/bad_archive.zip",
+    "//components/test/data/unzip_service/good_archive.zip",
+  ]
+  outputs = [ "{{bundle_resources_dir}}/" +
+              "{{source_root_relative_dir}}/{{source_file_part}}" ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+
+  sources = [ "public/cpp/unzip_unittest.cc" ]
+
+  deps = [
+    ":lib",
+    ":unit_tests_bundle_data",
+    "//base",
+    "//base/test:test_support",
+    "//components/services/unzip/public/cpp",
+    "//testing/gtest",
+  ]
+}

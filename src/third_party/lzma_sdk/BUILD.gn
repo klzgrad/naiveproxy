@@ -1,0 +1,104 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+config("lzma_sdk_config") {
+  include_dirs = [ "." ]
+}
+
+# Must be in a config because of how GN orders flags (otherwise -Wall will
+# appear after this, and turn it back on).
+config("clang_warnings") {
+  if (is_clang) {
+    # Upstream uses self-assignment to avoid warnings.
+    cflags = [ "-Wno-self-assign" ]
+  }
+}
+
+config("lzma_defines") {
+  defines = [
+    "_7ZIP_ST",
+    "_7Z_NO_METHODS_FILTERS",
+    "_LZMA_PROB32",
+  ]
+}
+
+static_library("lzma_sdk") {
+  sources = [
+    "7z.h",
+    "7zAlloc.c",
+    "7zAlloc.h",
+    "7zArcIn.c",
+    "7zBuf.c",
+    "7zBuf.h",
+    "7zCrc.c",
+    "7zCrc.h",
+    "7zCrcOpt.c",
+    "7zDec.c",
+    "7zFile.c",
+    "7zFile.h",
+    "7zStream.c",
+    "7zTypes.h",
+    "Alloc.c",
+    "Alloc.h",
+    "Bcj2.c",
+    "Bcj2.h",
+    "Bra.c",
+    "Bra.h",
+    "Bra86.c",
+    "Compiler.h",
+    "CpuArch.c",
+    "CpuArch.h",
+    "Delta.c",
+    "Delta.h",
+    "LzFind.c",
+    "LzFind.h",
+    "LzHash.h",
+    "Lzma2Dec.c",
+    "Lzma2Dec.h",
+    "LzmaDec.c",
+    "LzmaDec.h",
+    "LzmaEnc.c",
+    "LzmaEnc.h",
+    "LzmaLib.c",
+    "LzmaLib.h",
+    "Precomp.h",
+  ]
+
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [
+    "//build/config/compiler:no_chromium_code",
+
+    # Must be after no_chromium_code for warning flags to be ordered correctly.
+    ":clang_warnings",
+    ":lzma_defines",
+  ]
+  public_configs = [ ":lzma_sdk_config" ]
+}
+
+static_library("lzma_sdk_xz") {
+  sources = [
+    "BraIA64.c",
+    "RotateDefs.h",
+    "Sha256.c",
+    "Sha256.h",
+    "Xz.c",
+    "Xz.h",
+    "XzCrc64.c",
+    "XzCrc64.h",
+    "XzCrc64Opt.c",
+    "XzDec.c",
+  ]
+
+  deps = [ ":lzma_sdk" ]
+
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [
+    "//build/config/compiler:no_chromium_code",
+
+    # Must be after no_chromium_code for warning flags to be ordered correctly.
+    ":clang_warnings",
+    ":lzma_defines",
+  ]
+  public_configs = [ ":lzma_sdk_config" ]
+}

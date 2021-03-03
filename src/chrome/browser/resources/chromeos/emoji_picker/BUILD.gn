@@ -1,0 +1,123 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//third_party/closure_compiler/compile_js.gni")
+import("//tools/grit/grit_rule.gni")
+import("//tools/polymer/html_to_js.gni")
+import("//ui/webui/resources/tools/generate_grd.gni")
+
+component_js_files = [
+  "emoji_picker.js",
+  "emoji_group.js",
+  "emoji_group_button.js",
+  "icons.js",
+]
+
+resources_grd_file = "$target_gen_dir/resources.grd"
+components_grdp_file = "$target_gen_dir/components.grdp"
+data_grdp_file = "$target_gen_dir/data.grdp"
+
+generate_grd("build_grd") {
+  deps = [
+    ":build_components_grdp",
+    ":build_data_grdp",
+  ]
+  grd_prefix = "emoji_picker"
+  out_grd = resources_grd_file
+  input_files = [
+    "index.html",
+    "types.js",
+    "events.js",
+  ]
+  grdp_files = [
+    components_grdp_file,
+    data_grdp_file,
+  ]
+  input_files_base_dir = rebase_path(".", "//")
+}
+
+generate_grd("build_components_grdp") {
+  deps = [ ":web_components" ]
+  grd_prefix = "emoji_picker"
+  out_grd = components_grdp_file
+  input_files = component_js_files
+  input_files_base_dir = rebase_path(target_gen_dir, root_build_dir)
+}
+
+generate_grd("build_data_grdp") {
+  grd_prefix = "emoji_picker"
+  out_grd = data_grdp_file
+  input_files = [ "emoji_13_1_ordering.json" ]
+  input_files_base_dir = rebase_path("//third_party/emoji-metadata/src", "//")
+}
+
+grit("resources") {
+  # These arguments are needed since the grd is generated at build time.
+  enable_input_discovery_for_gn_analyze = false
+  source = resources_grd_file
+  deps = [ ":build_grd" ]
+  outputs = [
+    "grit/emoji_picker_resources.h",
+    "grit/emoji_picker_resources_map.cc",
+    "grit/emoji_picker_resources_map.h",
+    "emoji_picker_resources.pak",
+  ]
+  output_dir = "$root_gen_dir/chrome"
+}
+
+js_library("emoji_picker") {
+  deps = [
+    ":emoji_group",
+    ":emoji_group_button",
+    ":events",
+    ":types",
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+    "//ui/webui/resources/js:assert.m",
+  ]
+}
+
+js_library("emoji_group") {
+  deps = [
+    ":types",
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+  ]
+}
+
+js_library("emoji_group_button") {
+  deps = [
+    ":events",
+    ":icons",
+    "//third_party/polymer/v3_0/components-chromium/iron-icon",
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+  ]
+}
+
+js_library("icons") {
+  deps = [
+    "//third_party/polymer/v3_0/components-chromium/iron-iconset-svg",
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+  ]
+}
+
+js_library("types") {
+}
+
+js_library("events") {
+}
+
+js_type_check("closure_compile") {
+  is_polymer3 = true
+  deps = [
+    ":emoji_group",
+    ":emoji_group_button",
+    ":emoji_picker",
+    ":events",
+    ":icons",
+    ":types",
+  ]
+}
+
+html_to_js("web_components") {
+  js_files = component_js_files
+}

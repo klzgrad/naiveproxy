@@ -1,0 +1,147 @@
+# Copyright (C) 2017 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../gn/fuzzer.gni")
+import("../../gn/perfetto.gni")
+import("../../gn/perfetto_component.gni")
+import("../../gn/proto_library.gni")
+import("../../gn/test.gni")
+
+# This build file should not be leaked into all embedders. Only select
+# projects should be depending on our IPC layer.
+assert(enable_perfetto_ipc)
+
+if (perfetto_component_type == "static_library") {
+  # In build generators everything else outside should just depend on the
+  # :perfetto_ipc static library (at the end of this file) rather than
+  # individual sub-targets.
+  _ipc_visibility = [ ":*" ]  # Only targets defined in this file.
+} else {
+  _ipc_visibility = [ "*" ]  # Default visibility.
+}
+
+source_set("client") {
+  public_deps = [
+    "../../include/perfetto/ext/ipc",
+    "../base:unix_socket",
+  ]
+  deps = [
+    ":common",
+    "../../gn:default_deps",
+    "../../protos/perfetto/ipc:wire_protocol_cpp",
+    "../base",
+  ]
+  sources = [
+    "client_impl.cc",
+    "client_impl.h",
+    "service_proxy.cc",
+  ]
+  visibility = _ipc_visibility
+}
+
+source_set("host") {
+  public_deps = [
+    "../../include/perfetto/ext/ipc",
+    "../base:unix_socket",
+  ]
+  deps = [
+    ":common",
+    "../../gn:default_deps",
+    "../../protos/perfetto/ipc:wire_protocol_cpp",
+    "../base",
+  ]
+  sources = [
+    "host_impl.cc",
+    "host_impl.h",
+  ]
+  visibility = _ipc_visibility
+}
+
+source_set("common") {
+  public_deps = [
+    "../../include/perfetto/ext/ipc",
+    "../../protos/perfetto/ipc:wire_protocol_cpp",
+  ]
+  deps = [
+    "../../gn:default_deps",
+    "../base",
+  ]
+  sources = [
+    "buffered_frame_deserializer.cc",
+    "buffered_frame_deserializer.h",
+    "deferred.cc",
+    "virtual_destructors.cc",
+  ]
+  visibility = _ipc_visibility
+}
+
+perfetto_fuzzer_test("buffered_frame_deserializer_fuzzer") {
+  sources = [ "buffered_frame_deserializer_fuzzer.cc" ]
+  deps = [
+    ":common",
+    "../../gn:default_deps",
+    "../../protos/perfetto/ipc:wire_protocol_cpp",
+    "../base",
+  ]
+}
+
+perfetto_unittest_source_set("unittests") {
+  testonly = true
+  deps = [
+    ":client",
+    ":common",
+    ":host",
+    ":test_messages_cpp",
+    ":test_messages_ipc",
+    "../../gn:default_deps",
+    "../../gn:gtest_and_gmock",
+    "../../protos/perfetto/ipc:wire_protocol_cpp",
+    "../base",
+    "../base:test_support",
+  ]
+  sources = [
+    "buffered_frame_deserializer_unittest.cc",
+    "client_impl_unittest.cc",
+    "deferred_unittest.cc",
+    "host_impl_unittest.cc",
+    "test/ipc_integrationtest.cc",
+  ]
+}
+
+perfetto_proto_library("test_messages_@TYPE@") {
+  proto_generators = [
+    "ipc",
+    "zero",
+    "cpp",
+  ]
+  sources = [
+    "test/client_unittest_messages.proto",
+    "test/deferred_unittest_messages.proto",
+    "test/greeter_service.proto",
+  ]
+}
+
+# This is used by Bazel BUILD rules. The problem it solves is the following:
+# In GN builds we want to keep client and host separate. This allows reducing
+# the binary size by splitting targets all the way up to the client library
+# (libperfetto_client_experimental). In bazel/blaze we fuse everything together
+# because handling this split is too complex due to the lack of a
+# source_set-equivalent.
+perfetto_component("perfetto_ipc") {
+  public_deps = [
+    ":client",
+    ":host",
+    "../../gn:default_deps",
+  ]
+}

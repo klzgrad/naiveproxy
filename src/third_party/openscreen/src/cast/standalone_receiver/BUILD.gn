@@ -1,0 +1,79 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/external_libraries.gni")
+import("//build_overrides/build.gni")
+
+# Define the executable target only when the build is configured to use the
+# standalone platform implementation; since this is itself a standalone
+# application.
+if (!build_with_chromium) {
+  shared_sources = [
+    "cast_service.cc",
+    "cast_service.h",
+    "mirroring_application.cc",
+    "mirroring_application.h",
+    "streaming_playback_controller.cc",
+    "streaming_playback_controller.h",
+  ]
+
+  shared_deps = [
+    "../common:public",
+    "../streaming:receiver",
+  ]
+
+  have_external_libs = have_ffmpeg && have_libsdl2
+
+  if (have_external_libs) {
+    source_set("standalone_receiver_sdl") {
+      sources = shared_sources
+      deps = shared_deps
+
+      defines = [ "CAST_STANDALONE_RECEIVER_HAVE_EXTERNAL_LIBS" ]
+      sources += [
+        "avcodec_glue.h",
+        "decoder.cc",
+        "decoder.h",
+        "sdl_audio_player.cc",
+        "sdl_audio_player.h",
+        "sdl_glue.cc",
+        "sdl_glue.h",
+        "sdl_player_base.cc",
+        "sdl_player_base.h",
+        "sdl_video_player.cc",
+        "sdl_video_player.h",
+      ]
+      include_dirs = ffmpeg_include_dirs + libsdl2_include_dirs
+      lib_dirs = ffmpeg_lib_dirs + libsdl2_lib_dirs
+      libs = ffmpeg_libs + libsdl2_libs
+    }
+  }
+
+  source_set("standalone_receiver_dummy") {
+    sources = shared_sources
+    deps = shared_deps
+
+    sources += [
+      "dummy_player.cc",
+      "dummy_player.h",
+    ]
+  }
+
+  executable("cast_receiver") {
+    sources = [ "main.cc" ]
+
+    deps = [
+      "../receiver:agent",
+      "../receiver:channel",
+    ]
+
+    configs += [ "../common:certificate_config" ]
+
+    if (have_external_libs) {
+      deps += [ ":standalone_receiver_sdl" ]
+    } else {
+      deps += [ ":standalone_receiver_dummy" ]
+    }
+  }
+}

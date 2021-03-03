@@ -1,0 +1,45 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+declare_args() {
+  # Version of the ARM processor when compiling on ARM. Ignored on non-ARM
+  # platforms.
+  arm_version = 7
+
+  # The ARM architecture. This will be a string like "armv6" or "armv7-a".
+  # An empty string means to use the default for the arm_version. Getting
+  # a proper list of supported architectures is challenging for clang, but
+  # can be found in the triple.h header in the LLVM source, under the
+  # SubArchType enum.
+  arm_arch = "armv7-a"
+
+  # The ARM floating point hardware. This will be a string like "neon" or
+  # "vfpv3".
+  arm_fpu = "vfpv3-d16"
+
+  # The ARM floating point mode. This is either the string "hard", "soft", or
+  # "softfp".
+  arm_float_abi = "hard"
+
+  # The ARM variant-specific tuning mode. This will be a string like "armv6"
+  # or "cortex-a15". Each cpu-type has a different tuning value.
+  arm_tune = "generic-armv7-a"
+}
+
+declare_args() {
+  # Whether to use the neon FPU instruction set or not. Actual value is set
+  # below, based on the arm_fpu argument.
+  arm_use_neon = arm_fpu == "neon"
+}
+
+if (current_cpu == "arm64") {
+  # arm64 supports only "hard".
+  arm_float_abi = "hard"
+  arm_fpu = "neon"
+  arm_use_neon = true
+}
+
+assert(arm_float_abi == "hard" || arm_float_abi == "soft" ||
+       arm_float_abi == "softfp")
+assert(arm_version == 6 || arm_version == 7 || arm_version == 8)

@@ -1,0 +1,81 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//chromeos/assistant/assistant.gni")
+
+assert(enable_cros_libassistant)
+
+component("libassistant") {
+  sources = [
+    "libassistant_service.cc",
+    "libassistant_service.h",
+  ]
+
+  public_deps = [ "//chromeos/services/libassistant/public/mojom" ]
+
+  deps = [
+    ":internal",
+    "//chromeos/services/assistant/public/cpp/migration",
+    "//chromeos/services/libassistant/public/mojom",
+  ]
+
+  defines = [ "IS_LIBASSISTANT_SERVICE_IMPL" ]
+
+  # The default output name of this service, `libassistant_service.so`, already
+  # exists (as build target of //chromeos/services/assistant), so we have to
+  # use `lib_libassistant_service.so`.
+  output_name = "lib_libassistant_service"
+}
+
+source_set("internal") {
+  visibility = [ ":*" ]
+
+  sources = [
+    "assistant_manager_observer.h",
+    "conversation_controller.cc",
+    "conversation_controller.h",
+    "display_controller.cc",
+    "display_controller.h",
+    "platform_api.cc",
+    "platform_api.h",
+    "service_controller.cc",
+    "service_controller.h",
+    "util.cc",
+    "util.h",
+  ]
+
+  deps = [
+    "//build/util:webkit_version",
+    "//chromeos/assistant/internal",
+    "//chromeos/assistant/internal/proto/google3",
+    "//chromeos/dbus",
+    "//chromeos/services/assistant/public/cpp",
+    "//chromeos/services/assistant/public/cpp/migration",
+    "//chromeos/services/libassistant/public/mojom",
+    "//libassistant/shared/internal_api:assistant_manager_internal",
+    "//libassistant/shared/public",
+  ]
+
+  defines = [ "IS_LIBASSISTANT_SERVICE_IMPL" ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [ "service_controller_unittest.cc" ]
+
+  deps = [
+    ":internal",
+    ":libassistant",
+    "//base",
+    "//base/test:test_support",
+    "//chromeos/assistant/internal:test_support",
+    "//chromeos/services/assistant/public/cpp",
+    "//chromeos/services/assistant/public/cpp/migration",
+    "//chromeos/services/assistant/public/cpp/migration:test_support",
+    "//chromeos/services/libassistant/public/mojom",
+    "//libassistant/shared/internal_api:assistant_manager_internal",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+}

@@ -1,0 +1,139 @@
+# Copyright (C) 2020 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../../gn/perfetto.gni")
+
+source_set("common") {
+  sources = [
+    "common/args_tracker.cc",
+    "common/args_tracker.h",
+    "common/clock_tracker.cc",
+    "common/clock_tracker.h",
+    "common/event_tracker.cc",
+    "common/event_tracker.h",
+    "common/flow_tracker.cc",
+    "common/flow_tracker.h",
+    "common/global_args_tracker.cc",
+    "common/global_args_tracker.h",
+    "common/process_tracker.cc",
+    "common/process_tracker.h",
+    "common/slice_tracker.cc",
+    "common/slice_tracker.h",
+    "common/system_info_tracker.cc",
+    "common/system_info_tracker.h",
+    "common/track_tracker.cc",
+    "common/track_tracker.h",
+  ]
+  public_deps = [
+    ":gen_cc_config_descriptor",
+    "../util:protozero_to_text",
+  ]
+  deps = [
+    "../../../gn:default_deps",
+    "../../../protos/perfetto/common:zero",
+    "../../../protos/perfetto/trace:zero",
+    "../../../protos/perfetto/trace/profiling:zero",
+    "../../base",
+    "../storage",
+    "../types",
+  ]
+}
+
+source_set("unittests") {
+  sources = [
+    "common/clock_tracker_unittest.cc",
+    "common/event_tracker_unittest.cc",
+    "common/flow_tracker_unittest.cc",
+    "common/process_tracker_unittest.cc",
+    "common/slice_tracker_unittest.cc",
+  ]
+  testonly = true
+  deps = [
+    ":common",
+    "../../../gn:default_deps",
+    "../../../gn:gtest_and_gmock",
+    "../../../protos/perfetto/common:zero",
+    "../../../protos/perfetto/trace:zero",
+    "../../base",
+    "../storage",
+    "../types",
+  ]
+}
+
+config("gen_config") {
+  include_dirs = [ "${root_gen_dir}/${perfetto_root_path}" ]
+}
+
+action("gen_cc_config_descriptor") {
+  descriptor_target = "../../../protos/perfetto/config:descriptor"
+  generated_header = "${target_gen_dir}/config.descriptor.h"
+
+  descriptor_file_path =
+      get_label_info(descriptor_target, "target_gen_dir") + "/config.descriptor"
+
+  script = "../../../tools/gen_cc_proto_descriptor.py"
+  deps = [ descriptor_target ]
+  args = [
+    "--gen_dir",
+    rebase_path(root_gen_dir, root_build_dir),
+    "--cpp_out",
+    rebase_path(generated_header, root_build_dir),
+    rebase_path(descriptor_file_path, root_build_dir),
+  ]
+  inputs = [ descriptor_file_path ]
+  outputs = [ generated_header ]
+  public_configs = [ ":gen_config" ]
+}
+
+action("gen_cc_chrome_track_event_descriptor") {
+  descriptor_target =
+      "../../../protos/third_party/chromium:chrome_track_event_descriptor"
+  generated_header = "${target_gen_dir}/chrome_track_event.descriptor.h"
+
+  descriptor_file_path = get_label_info(descriptor_target, "target_gen_dir") +
+                         "/chrome_track_event.descriptor"
+
+  script = "../../../tools/gen_cc_proto_descriptor.py"
+  deps = [ descriptor_target ]
+  args = [
+    "--gen_dir",
+    rebase_path(root_gen_dir, root_build_dir),
+    "--cpp_out",
+    rebase_path(generated_header, root_build_dir),
+    rebase_path(descriptor_file_path, root_build_dir),
+  ]
+  inputs = [ descriptor_file_path ]
+  outputs = [ generated_header ]
+}
+
+action("gen_cc_track_event_descriptor") {
+  descriptor_target =
+      "../../../protos/perfetto/trace/track_event:track_event_descriptor"
+  generated_header = "${target_gen_dir}/track_event.descriptor.h"
+
+  descriptor_file_path = get_label_info(descriptor_target, "target_gen_dir") +
+                         "/track_event.descriptor"
+
+  script = "../../../tools/gen_cc_proto_descriptor.py"
+  deps = [ descriptor_target ]
+  args = [
+    "--gen_dir",
+    rebase_path(root_gen_dir, root_build_dir),
+    "--cpp_out",
+    rebase_path(generated_header, root_build_dir),
+    rebase_path(descriptor_file_path, root_build_dir),
+  ]
+  inputs = [ descriptor_file_path ]
+  outputs = [ generated_header ]
+}

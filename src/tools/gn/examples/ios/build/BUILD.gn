@@ -1,0 +1,88 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ios/deployment_target.gni")
+
+config("compiler") {
+  configs = [
+    ":include_dirs",
+    ":cpp_standard",
+    ":objc_use_arc",
+    ":objc_abi_version",
+  ]
+  cflags = [ "-g" ]
+  swiftflags = [ "-g" ]
+}
+
+config("shared_binary") {
+  if (current_os == "ios" || current_os == "mac") {
+    configs = [
+      ":rpath_config",
+      ":swift_libdir",
+    ]
+  }
+}
+
+config("objc_abi_version") {
+  cflags_objc = [ "-fobjc-abi-version=2" ]
+  cflags_objcc = cflags_objc
+  ldflags = [
+    "-Xlinker",
+    "-objc_abi_version",
+    "-Xlinker",
+    "2",
+  ]
+}
+
+config("include_dirs") {
+  include_dirs = [
+    "//",
+    root_gen_dir,
+  ]
+}
+
+config("objc_use_arc") {
+  cflags_objc = [
+    "-fobjc-arc",
+    "-fobjc-weak",
+  ]
+  cflags_objcc = cflags_objc
+}
+
+config("cpp_standard") {
+  cflags_c = [ "--std=c11" ]
+  cflags_cc = [
+    "--std=c++17",
+    "--stdlib=libc++",
+  ]
+  ldflags = [ "--stdlib=libc++" ]
+}
+
+if (current_os == "ios" || current_os == "mac") {
+  config("rpath_config") {
+    ldflags = [
+      "-Xlinker",
+      "-rpath",
+      "-Xlinker",
+      "@executable_path/Frameworks",
+      "-Xlinker",
+      "-rpath",
+      "-Xlinker",
+      "@loader_path/Frameworks",
+    ]
+  }
+
+  _sdk_info = exec_script("//build/config/ios/scripts/sdk_info.py",
+                          [
+                            "--target-cpu",
+                            current_cpu,
+                            "--deployment-target",
+                            ios_deployment_target,
+                          ],
+                          "json")
+
+  config("swift_libdir") {
+    lib_dirs = [ "${_sdk_info.sdk_path}/usr/lib/swift" ]
+  }
+}
