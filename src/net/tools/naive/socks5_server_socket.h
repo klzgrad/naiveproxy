@@ -92,21 +92,6 @@ class Socks5ServerSocket : public StreamSocket {
     kEndPointResolvedIPv6 = 0x04,
   };
 
-  enum SocksCommandType {
-    kCommandConnect = 0x01,
-    kCommandBind = 0x02,
-    kCommandUDPAssociate = 0x03,
-  };
-
-  static const unsigned int kGreetReadHeaderSize;
-  static const unsigned int kReadHeaderSize;
-  static const char kSOCKS5Version;
-  static const char kSOCKS5Reserved;
-  static const char kAuthMethodNone;
-  static const char kAuthMethodNoAcceptable;
-  static const char kReplySuccess;
-  static const char kReplyCommandNotSupported;
-
   void DoCallback(int result);
   void OnIOComplete(int result);
   void OnReadWriteComplete(CompletionOnceCallback callback, int result);

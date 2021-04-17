@@ -20,14 +20,20 @@
 
 namespace net {
 
-const unsigned int Socks5ServerSocket::kGreetReadHeaderSize = 2;
-const unsigned int Socks5ServerSocket::kReadHeaderSize = 5;
-const char Socks5ServerSocket::kSOCKS5Version = '\x05';
-const char Socks5ServerSocket::kSOCKS5Reserved = '\x00';
-const char Socks5ServerSocket::kAuthMethodNone = '\x00';
-const char Socks5ServerSocket::kAuthMethodNoAcceptable = '\xff';
-const char Socks5ServerSocket::kReplySuccess = '\x00';
-const char Socks5ServerSocket::kReplyCommandNotSupported = '\x07';
+enum SocksCommandType {
+  kCommandConnect = 0x01,
+  kCommandBind = 0x02,
+  kCommandUDPAssociate = 0x03,
+};
+
+static constexpr unsigned int kGreetReadHeaderSize = 2;
+static constexpr unsigned int kReadHeaderSize = 5;
+static constexpr char kSOCKS5Version = '\x05';
+static constexpr char kSOCKS5Reserved = '\x00';
+static constexpr char kAuthMethodNone = '\x00';
+static constexpr char kAuthMethodNoAcceptable = '\xff';
+static constexpr char kReplySuccess = '\x00';
+static constexpr char kReplyCommandNotSupported = '\x07';
 
 static_assert(sizeof(struct in_addr) == 4, "incorrect system size of IPv4");
 static_assert(sizeof(struct in6_addr) == 16, "incorrect system size of IPv6");
