@@ -31,6 +31,8 @@ struct NetworkTrafficAnnotationTag;
 class Socks5ServerSocket : public StreamSocket {
  public:
   Socks5ServerSocket(std::unique_ptr<StreamSocket> transport_socket,
+                     const std::string& user,
+                     const std::string& pass,
                      const NetworkTrafficAnnotationTag& traffic_annotation);
 
   // On destruction Disconnect() is called.
@@ -80,6 +82,10 @@ class Socks5ServerSocket : public StreamSocket {
     STATE_GREET_READ_COMPLETE,
     STATE_GREET_WRITE,
     STATE_GREET_WRITE_COMPLETE,
+    STATE_AUTH_READ,
+    STATE_AUTH_READ_COMPLETE,
+    STATE_AUTH_WRITE,
+    STATE_AUTH_WRITE_COMPLETE,
     STATE_HANDSHAKE_WRITE,
     STATE_HANDSHAKE_WRITE_COMPLETE,
     STATE_HANDSHAKE_READ,
@@ -99,10 +105,14 @@ class Socks5ServerSocket : public StreamSocket {
   void OnReadWriteComplete(CompletionOnceCallback callback, int result);
 
   int DoLoop(int last_io_result);
-  int DoGreetWrite();
-  int DoGreetWriteComplete(int result);
   int DoGreetRead();
   int DoGreetReadComplete(int result);
+  int DoGreetWrite();
+  int DoGreetWriteComplete(int result);
+  int DoAuthRead();
+  int DoAuthReadComplete(int result);
+  int DoAuthWrite();
+  int DoAuthWriteComplete(int result);
   int DoHandshakeRead();
   int DoHandshakeReadComplete(int result);
   int DoHandshakeWrite();
@@ -131,11 +141,9 @@ class Socks5ServerSocket : public StreamSocket {
   // overlying connection is free to communicate.
   bool completed_handshake_;
 
-  // These contain the bytes received / sent by the SOCKS handshake.
-  size_t bytes_received_;
+  // Contains the bytes sent by the SOCKS handshake.
   size_t bytes_sent_;
 
-  size_t greet_read_header_size_;
   size_t read_header_size_;
 
   bool was_ever_used_;
@@ -143,7 +151,10 @@ class Socks5ServerSocket : public StreamSocket {
   SocksEndPointAddressType address_type_;
   int address_size_;
 
+  std::string user_;
+  std::string pass_;
   char auth_method_;
+  char auth_status_;
   char reply_;
 
   HostPortPair request_endpoint_;

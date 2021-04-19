@@ -18,6 +18,7 @@
 #include "base/logging.h"
 #include "base/rand_util.h"
 #include "base/run_loop.h"
+#include "base/strings/escape.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -94,6 +95,8 @@ struct CommandLine {
 
 struct Params {
   net::ClientProtocol protocol;
+  std::string listen_user;
+  std::string listen_pass;
   std::string listen_addr;
   int listen_port;
   int concurrency;
@@ -230,7 +233,8 @@ bool ParseCommandLine(const CommandLine& cmdline, Params* params) {
   params->protocol = net::ClientProtocol::kSocks5;
   params->listen_addr = "0.0.0.0";
   params->listen_port = 1080;
-  url::AddStandardScheme("socks", url::SCHEME_WITH_HOST_AND_PORT);
+  url::AddStandardScheme("socks",
+                         url::SCHEME_WITH_HOST_PORT_AND_USER_INFORMATION);
   url::AddStandardScheme("redir", url::SCHEME_WITH_HOST_AND_PORT);
   if (!cmdline.listen.empty()) {
     GURL url(cmdline.listen);
@@ -251,6 +255,12 @@ bool ParseCommandLine(const CommandLine& cmdline, Params* params) {
     } else {
       std::cerr << "Invalid scheme in --listen" << std::endl;
       return false;
+    }
+    if (!url.username().empty()) {
+      params->listen_user = base::UnescapeBinaryURLComponent(url.username());
+    }
+    if (!url.password().empty()) {
+      params->listen_pass = base::UnescapeBinaryURLComponent(url.password());
     }
     if (!url.host().empty()) {
       params->listen_addr = url.host();
@@ -567,6 +577,7 @@ int main(int argc, char* argv[]) {
   }
 
   net::NaiveProxy naive_proxy(std::move(listen_socket), params.protocol,
+                              params.listen_user, params.listen_pass,
                               params.concurrency, resolver.get(), session,
                               kTrafficAnnotation);
 
