@@ -28,11 +28,16 @@ enum SocksCommandType {
 };
 
 static constexpr unsigned int kGreetReadHeaderSize = 2;
+static constexpr unsigned int kAuthReadHeaderSize = 2;
 static constexpr unsigned int kReadHeaderSize = 5;
 static constexpr char kSOCKS5Version = '\x05';
 static constexpr char kSOCKS5Reserved = '\x00';
 static constexpr char kAuthMethodNone = '\x00';
+static constexpr char kAuthMethodUserPass = '\x02';
 static constexpr char kAuthMethodNoAcceptable = '\xff';
+static constexpr char kSubnegotiationVersion = '\x01';
+static constexpr char kAuthStatusSuccess = '\x00';
+static constexpr char kAuthStatusFailure = '\xff';
 static constexpr char kReplySuccess = '\x00';
 static constexpr char kReplyCommandNotSupported = '\x07';
 
@@ -41,17 +46,18 @@ static_assert(sizeof(struct in6_addr) == 16, "incorrect system size of IPv6");
 
 Socks5ServerSocket::Socks5ServerSocket(
     std::unique_ptr<StreamSocket> transport_socket,
+    const std::string& user,
+    const std::string& pass,
     const NetworkTrafficAnnotationTag& traffic_annotation)
     : io_callback_(base::BindRepeating(&Socks5ServerSocket::OnIOComplete,
                                        base::Unretained(this))),
       transport_(std::move(transport_socket)),
       next_state_(STATE_NONE),
       completed_handshake_(false),
-      bytes_received_(0),
       bytes_sent_(0),
-      greet_read_header_size_(kGreetReadHeaderSize),
-      read_header_size_(kReadHeaderSize),
       was_ever_used_(false),
+      user_(user),
+      pass_(pass),
       net_log_(transport_->NetLog()),
       traffic_annotation_(traffic_annotation) {}
 
@@ -252,6 +258,20 @@ int Socks5ServerSocket::DoLoop(int last_io_result) {
         net_log_.EndEventWithNetErrorCode(NetLogEventType::SOCKS5_GREET_WRITE,
                                           rv);
         break;
+      case STATE_AUTH_READ:
+        DCHECK_EQ(OK, rv);
+        rv = DoAuthRead();
+        break;
+      case STATE_AUTH_READ_COMPLETE:
+        rv = DoAuthReadComplete(rv);
+        break;
+      case STATE_AUTH_WRITE:
+        DCHECK_EQ(OK, rv);
+        rv = DoAuthWrite();
+        break;
+      case STATE_AUTH_WRITE_COMPLETE:
+        rv = DoAuthWriteComplete(rv);
+        break;
       case STATE_HANDSHAKE_READ:
         DCHECK_EQ(OK, rv);
         net_log_.BeginEvent(NetLogEventType::SOCKS5_HANDSHAKE_READ);
@@ -285,11 +305,10 @@ int Socks5ServerSocket::DoGreetRead() {
   next_state_ = STATE_GREET_READ_COMPLETE;
 
   if (buffer_.empty()) {
-    DCHECK_EQ(0U, bytes_received_);
-    DCHECK_EQ(kGreetReadHeaderSize, greet_read_header_size_);
+    read_header_size_ = kGreetReadHeaderSize;
   }
 
-  int handshake_buf_len = greet_read_header_size_ - bytes_received_;
+  int handshake_buf_len = read_header_size_ - buffer_.size();
   DCHECK_LT(0, handshake_buf_len);
   handshake_buf_ = base::MakeRefCounted<IOBuffer>(handshake_buf_len);
   return transport_->Read(handshake_buf_.get(), handshake_buf_len,
@@ -306,32 +325,37 @@ int Socks5ServerSocket::DoGreetReadComplete(int result) {
     return ERR_SOCKS_CONNECTION_FAILED;
   }
 
-  bytes_received_ += result;
   buffer_.append(handshake_buf_->data(), result);
 
   // When the first few bytes are read, check how many more are required
   // and accordingly increase them
-  if (bytes_received_ == kGreetReadHeaderSize) {
+  if (buffer_.size() == kGreetReadHeaderSize) {
     if (buffer_[0] != kSOCKS5Version) {
       net_log_.AddEventWithIntParams(NetLogEventType::SOCKS_UNEXPECTED_VERSION,
                                      "version", buffer_[0]);
       return ERR_SOCKS_CONNECTION_FAILED;
     }
-    if (buffer_[1] == 0) {
+    int nmethods = buffer_[1];
+    if (nmethods == 0) {
       net_log_.AddEvent(NetLogEventType::SOCKS_NO_REQUESTED_AUTH);
       return ERR_SOCKS_CONNECTION_FAILED;
     }
 
-    greet_read_header_size_ += buffer_[1];
+    read_header_size_ += nmethods;
     next_state_ = STATE_GREET_READ;
     return OK;
   }
 
-  if (bytes_received_ == greet_read_header_size_) {
-    void* match = std::memchr(&buffer_[kGreetReadHeaderSize], kAuthMethodNone,
-                              greet_read_header_size_ - kGreetReadHeaderSize);
+  if (buffer_.size() == read_header_size_) {
+    int nmethods = buffer_[1];
+    char expected_method = kAuthMethodNone;
+    if (!user_.empty() || !pass_.empty()) {
+      expected_method = kAuthMethodUserPass;
+    }
+    void* match =
+        std::memchr(&buffer_[kGreetReadHeaderSize], expected_method, nmethods);
     if (match) {
-      auth_method_ = kAuthMethodNone;
+      auth_method_ = expected_method;
     } else {
       auth_method_ = kAuthMethodNoAcceptable;
     }
@@ -368,9 +392,10 @@ int Socks5ServerSocket::DoGreetWriteComplete(int result) {
   bytes_sent_ += result;
   if (bytes_sent_ == buffer_.size()) {
     buffer_.clear();
-    bytes_received_ = 0;
-    if (auth_method_ != kAuthMethodNoAcceptable) {
+    if (auth_method_ == kAuthMethodNone) {
       next_state_ = STATE_HANDSHAKE_READ;
+    } else if (auth_method_ == kAuthMethodUserPass) {
+      next_state_ = STATE_AUTH_READ;
     } else {
       net_log_.AddEvent(NetLogEventType::SOCKS_NO_ACCEPTABLE_AUTH);
       return ERR_SOCKS_CONNECTION_FAILED;
@@ -381,15 +406,112 @@ int Socks5ServerSocket::DoGreetWriteComplete(int result) {
   return OK;
 }
 
+int Socks5ServerSocket::DoAuthRead() {
+  next_state_ = STATE_AUTH_READ_COMPLETE;
+
+  if (buffer_.empty()) {
+    read_header_size_ = kAuthReadHeaderSize;
+  }
+
+  int handshake_buf_len = read_header_size_ - buffer_.size();
+  DCHECK_LT(0, handshake_buf_len);
+  handshake_buf_ = base::MakeRefCounted<IOBuffer>(handshake_buf_len);
+  return transport_->Read(handshake_buf_.get(), handshake_buf_len,
+                          io_callback_);
+}
+
+int Socks5ServerSocket::DoAuthReadComplete(int result) {
+  if (result < 0)
+    return result;
+
+  if (result == 0) {
+    return ERR_SOCKS_CONNECTION_FAILED;
+  }
+
+  buffer_.append(handshake_buf_->data(), result);
+
+  // When the first few bytes are read, check how many more are required
+  // and accordingly increase them
+  if (buffer_.size() == kAuthReadHeaderSize) {
+    if (buffer_[0] != kSubnegotiationVersion) {
+      net_log_.AddEventWithIntParams(NetLogEventType::SOCKS_UNEXPECTED_VERSION,
+                                     "version", buffer_[0]);
+      return ERR_SOCKS_CONNECTION_FAILED;
+    }
+    int username_len = buffer_[1];
+    read_header_size_ += username_len + 1;
+    next_state_ = STATE_AUTH_READ;
+    return OK;
+  }
+
+  if (buffer_.size() == read_header_size_) {
+    int username_len = buffer_[1];
+    int password_len = buffer_[kAuthReadHeaderSize + username_len];
+    size_t password_offset = kAuthReadHeaderSize + username_len + 1;
+    if (buffer_.size() == password_offset && password_len != 0) {
+      read_header_size_ += password_len;
+      next_state_ = STATE_AUTH_READ;
+      return OK;
+    }
+
+    if (buffer_.compare(kAuthReadHeaderSize, username_len, user_) == 0 &&
+        buffer_.compare(password_offset, password_len, pass_) == 0) {
+      auth_status_ = kAuthStatusSuccess;
+    } else {
+      auth_status_ = kAuthStatusFailure;
+    }
+    buffer_.clear();
+    next_state_ = STATE_AUTH_WRITE;
+    return OK;
+  }
+
+  next_state_ = STATE_AUTH_READ;
+  return OK;
+}
+
+int Socks5ServerSocket::DoAuthWrite() {
+  if (buffer_.empty()) {
+    const char write_data[] = {kSubnegotiationVersion, auth_status_};
+    buffer_ = std::string(write_data, base::size(write_data));
+    bytes_sent_ = 0;
+  }
+
+  next_state_ = STATE_AUTH_WRITE_COMPLETE;
+  int handshake_buf_len = buffer_.size() - bytes_sent_;
+  DCHECK_LT(0, handshake_buf_len);
+  handshake_buf_ = base::MakeRefCounted<IOBuffer>(handshake_buf_len);
+  std::memcpy(handshake_buf_->data(), &buffer_.data()[bytes_sent_],
+              handshake_buf_len);
+  return transport_->Write(handshake_buf_.get(), handshake_buf_len,
+                           io_callback_, traffic_annotation_);
+}
+
+int Socks5ServerSocket::DoAuthWriteComplete(int result) {
+  if (result < 0)
+    return result;
+
+  bytes_sent_ += result;
+  if (bytes_sent_ == buffer_.size()) {
+    buffer_.clear();
+    if (auth_status_ == kAuthStatusSuccess) {
+      next_state_ = STATE_HANDSHAKE_READ;
+    } else {
+      return ERR_SOCKS_CONNECTION_FAILED;
+    }
+  } else {
+    next_state_ = STATE_AUTH_WRITE;
+  }
+  return OK;
+}
+
 int Socks5ServerSocket::DoHandshakeRead() {
   next_state_ = STATE_HANDSHAKE_READ_COMPLETE;
 
   if (buffer_.empty()) {
-    DCHECK_EQ(0U, bytes_received_);
-    DCHECK_EQ(kReadHeaderSize, read_header_size_);
+    read_header_size_ = kReadHeaderSize;
   }
 
-  int handshake_buf_len = read_header_size_ - bytes_received_;
+  int handshake_buf_len = read_header_size_ - buffer_.size();
   DCHECK_LT(0, handshake_buf_len);
   handshake_buf_ = base::MakeRefCounted<IOBuffer>(handshake_buf_len);
   return transport_->Read(handshake_buf_.get(), handshake_buf_len,
@@ -408,11 +530,10 @@ int Socks5ServerSocket::DoHandshakeReadComplete(int result) {
   }
 
   buffer_.append(handshake_buf_->data(), result);
-  bytes_received_ += result;
 
   // When the first few bytes are read, check how many more are required
   // and accordingly increase them
-  if (bytes_received_ == kReadHeaderSize) {
+  if (buffer_.size() == kReadHeaderSize) {
     if (buffer_[0] != kSOCKS5Version || buffer_[2] != kSOCKS5Reserved) {
       net_log_.AddEventWithIntParams(NetLogEventType::SOCKS_UNEXPECTED_VERSION,
                                      "version", buffer_[0]);
@@ -463,7 +584,7 @@ int Socks5ServerSocket::DoHandshakeReadComplete(int result) {
   }
 
   // When the final bytes are read, setup handshake.
-  if (bytes_received_ == read_header_size_) {
+  if (buffer_.size() == read_header_size_) {
     size_t port_start = read_header_size_ - sizeof(uint16_t);
     uint16_t port_net;
     std::memcpy(&port_net, &buffer_[port_start], sizeof(uint16_t));
@@ -495,16 +616,14 @@ int Socks5ServerSocket::DoHandshakeWrite() {
 
   if (buffer_.empty()) {
     const char write_data[] = {
+        // clang-format off
         kSOCKS5Version,
         reply_,
         kSOCKS5Reserved,
         kEndPointResolvedIPv4,
-        0x00,
-        0x00,
-        0x00,
-        0x00,  // BND.ADDR
-        0x00,
-        0x00,  // BND.PORT
+        0x00, 0x00, 0x00, 0x00,  // BND.ADDR
+        0x00, 0x00,  // BND.PORT
+        // clang-format on
     };
     buffer_ = std::string(write_data, base::size(write_data));
     bytes_sent_ = 0;
@@ -536,10 +655,8 @@ int Socks5ServerSocket::DoHandshakeWriteComplete(int result) {
                                      "error_code", reply_);
       return ERR_SOCKS_CONNECTION_FAILED;
     }
-  } else if (bytes_sent_ < buffer_.size()) {
-    next_state_ = STATE_HANDSHAKE_WRITE;
   } else {
-    NOTREACHED();
+    next_state_ = STATE_HANDSHAKE_WRITE;
   }
 
   return OK;
