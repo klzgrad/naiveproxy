@@ -29,12 +29,16 @@ namespace net {
 
 NaiveProxy::NaiveProxy(std::unique_ptr<ServerSocket> listen_socket,
                        ClientProtocol protocol,
+                       const std::string& listen_user,
+                       const std::string& listen_pass,
                        int concurrency,
                        RedirectResolver* resolver,
                        HttpNetworkSession* session,
                        const NetworkTrafficAnnotationTag& traffic_annotation)
     : listen_socket_(std::move(listen_socket)),
       protocol_(protocol),
+      listen_user_(listen_user),
+      listen_pass_(listen_pass),
       concurrency_(std::min(4, std::max(1, concurrency))),
       resolver_(resolver),
       session_(session),
@@ -108,6 +112,7 @@ void NaiveProxy::DoConnect() {
 
   if (protocol_ == ClientProtocol::kSocks5) {
     socket = std::make_unique<Socks5ServerSocket>(std::move(accepted_socket_),
+                                                  listen_user_, listen_pass_,
                                                   traffic_annotation_);
   } else if (protocol_ == ClientProtocol::kHttp) {
     socket = std::make_unique<HttpProxySocket>(std::move(accepted_socket_),
