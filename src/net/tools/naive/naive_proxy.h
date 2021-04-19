@@ -34,6 +34,8 @@ class NaiveProxy {
  public:
   NaiveProxy(std::unique_ptr<ServerSocket> server_socket,
              ClientProtocol protocol,
+             const std::string& listen_user,
+             const std::string& listen_pass,
              int concurrency,
              RedirectResolver* resolver,
              HttpNetworkSession* session,
@@ -59,6 +61,8 @@ class NaiveProxy {
 
   std::unique_ptr<ServerSocket> listen_socket_;
   ClientProtocol protocol_;
+  std::string listen_user_;
+  std::string listen_pass_;
   int concurrency_;
   ProxyInfo proxy_info_;
   SSLConfig server_ssl_config_;
