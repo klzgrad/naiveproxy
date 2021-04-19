@@ -62,17 +62,17 @@ test_naive 'Trivial - listen no host' socks5h://127.0.0.1:60301 \
 test_naive 'Trivial - listen no port' socks5h://127.0.0.1:1080 \
   '--log --listen=socks://127.0.0.1'
 
-test_naive 'Trivial - auth' socks5h://user:pass@127.0.0.1:1080 \
-  '--log --listen=socks://user:pass@127.0.0.1'
+test_naive 'Trivial - auth' socks5h://user:pass@127.0.0.1:60311 \
+  '--log --listen=socks://user:pass@127.0.0.1:60311'
 
-test_naive 'Trivial - auth with special chars' socks5h://user:^@127.0.0.1:1080 \
-  '--log --listen=socks://user:^@127.0.0.1'
+test_naive 'Trivial - auth with special chars' socks5h://user:^@127.0.0.1:60312 \
+  '--log --listen=socks://user:^@127.0.0.1:60312'
 
-test_naive 'Trivial - auth with special chars' socks5h://^:^@127.0.0.1:1080 \
-  '--log --listen=socks://^:^@127.0.0.1'
+test_naive 'Trivial - auth with special chars' socks5h://^:^@127.0.0.1:60313 \
+  '--log --listen=socks://^:^@127.0.0.1:60313'
 
-test_naive 'Trivial - auth with empty pass' socks5h://user:@127.0.0.1:1080 \
-  '--log --listen=socks://user:@127.0.0.1'
+test_naive 'Trivial - auth with empty pass' socks5h://user:@127.0.0.1:60314 \
+  '--log --listen=socks://user:@127.0.0.1:60314'
 
 test_naive 'SOCKS-SOCKS' socks5h://127.0.0.1:60401 \
   '--log --listen=socks://:60401 --proxy=socks://127.0.0.1:60402' \
