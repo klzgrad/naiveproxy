@@ -1,0 +1,636 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# ==============================================================================
+# TEST SETUP
+# ==============================================================================
+
+import("//build/config/chromeos/ui_mode.gni")
+import("//build_overrides/build.gni")
+
+if (is_android) {
+  import("//build/config/android/config.gni")
+  import("//build/config/android/extract_unwind_tables.gni")
+  import("//build/config/android/rules.gni")
+  import("//build/config/sanitizers/sanitizers.gni")
+} else if (is_fuchsia) {
+  import("//build/config/chromecast_build.gni")
+  import("//build/config/coverage/coverage.gni")
+  import("//build/config/fuchsia/generate_runner_scripts.gni")
+  import("//build/config/fuchsia/package.gni")
+  import("//third_party/fuchsia-sdk/sdk/build/cmc.gni")
+} else if (is_chromeos_ash) {
+  import("//build/config/chromeos/rules.gni")
+  import("//build/config/sanitizers/sanitizers.gni")
+  import("//build/util/generate_wrapper.gni")
+} else if (is_ios) {
+  import("//build/config/ios/ios_sdk.gni")
+  import("//build/config/ios/ios_test_runner_wrapper.gni")
+  import("//build/config/ios/rules.gni")
+} else {
+  import("//build/config/sanitizers/sanitizers.gni")
+  import("//build/util/generate_wrapper.gni")
+}
+
+# Define a test as an executable (or apk on Android) with the "testonly" flag
+# set.
+# Variable:
+#   use_xvfb: (optional) whether to run the executable under Xvfb.
+#   use_raw_android_executable: Use executable() rather than android_apk().
+#   use_native_activity: Test implements ANativeActivity_onCreate().
+#   is_xctest: (iOS, optional) whether to build the executable as XCTest.
+#      Similar to the GN arg 'enable_run_ios_unittests_with_xctest' but
+#      for build targets.
+template("test") {
+  testonly = true
+  if (!is_ios) {
+    assert(!defined(invoker.is_xctest) || !invoker.is_xctest,
+           "is_xctest can be set only for iOS builds")
+  }
+  if (is_android) {
+    assert(!defined(invoker.use_xvfb) || !invoker.use_xvfb)
+
+    _use_raw_android_executable = defined(invoker.use_raw_android_executable) &&
+                                  invoker.use_raw_android_executable
+
+    # output_name is used to allow targets with the same name but in different
+    # packages to still produce unique runner scripts.
+    _output_name = invoker.target_name
+    if (defined(invoker.output_name)) {
+      _output_name = invoker.output_name
+    }
+
+    _test_runner_target = "${_output_name}__test_runner_script"
+    _wrapper_script_vars = [
+      "ignore_all_data_deps",
+      "shard_timeout",
+    ]
+
+    assert(_use_raw_android_executable || enable_java_templates)
+
+    if (_use_raw_android_executable) {
+      _exec_target = "${target_name}__exec"
+      _dist_target = "${target_name}__dist"
+      _exec_output =
+          "$target_out_dir/${invoker.target_name}/${invoker.target_name}"
+
+      executable(_exec_target) {
+        # Configs will always be defined since we set_defaults in BUILDCONFIG.gn.
+        configs = []
+        data_deps = []
+        forward_variables_from(invoker,
+                               "*",
+                               TESTONLY_AND_VISIBILITY + _wrapper_script_vars +
+                                   [ "extra_dist_files" ])
+
+        # Thanks to the set_defaults() for test(), configs are initialized with
+        # the default shared_library configs rather than executable configs.
+        configs -= [
+          "//build/config:shared_library_config",
+          "//build/config/android:hide_all_but_jni",
+        ]
+        configs += [ "//build/config:executable_config" ]
+
+        # Don't output to the root or else conflict with the group() below.
+        output_name = rebase_path(_exec_output, root_out_dir)
+      }
+
+      create_native_executable_dist(_dist_target) {
+        dist_dir = "$root_out_dir/$target_name"
+        binary = _exec_output
+        deps = [ ":$_exec_target" ]
+        if (defined(invoker.extra_dist_files)) {
+          extra_files = invoker.extra_dist_files
+        }
+      }
+    } else {
+      _library_target = "${target_name}__library"
+      _apk_target = "${target_name}__apk"
+      _apk_specific_vars = [
+        "android_manifest",
+        "android_manifest_dep",
+        "app_as_shared_lib",
+        "enable_multidex",
+        "product_config_java_packages",
+        "min_sdk_version",
+        "proguard_configs",
+        "proguard_enabled",
+        "srcjar_deps",
+        "target_sdk_version",
+        "use_default_launcher",
+        "use_native_activity",
+      ]
+
+      # Adds the unwind tables from unstripped binary as an asset file in the
+      # apk, if |add_unwind_tables_in_apk| is specified by the test.
+      if (defined(invoker.add_unwind_tables_in_apk) &&
+          invoker.add_unwind_tables_in_apk) {
+        _unwind_table_asset_name = "${target_name}_unwind_assets"
+        unwind_table_asset(_unwind_table_asset_name) {
+          library_target = _library_target
+          deps = [ ":$_library_target" ]
+        }
+      }
+
+      shared_library(_library_target) {
+        # Configs will always be defined since we set_defaults in BUILDCONFIG.gn.
+        configs = []  # Prevent list overwriting warning.
+        configs = invoker.configs
+
+        forward_variables_from(
+            invoker,
+            "*",
+            [ "deps" ] + _apk_specific_vars + _wrapper_script_vars +
+                TESTONLY_AND_VISIBILITY)
+
+        # Native targets do not need to depend on java targets. Filter them out
+        # so that the shared library can be built without needing to wait for
+        # dependent java targets.
+        deps = []
+        if (defined(invoker.deps)) {
+          foreach(_dep, invoker.deps) {
+            _target_label = get_label_info(_dep, "label_no_toolchain")
+            if (filter_exclude([ _target_label ], java_target_patterns) != []) {
+              deps += [ _dep ]
+            }
+          }
+        }
+
+        if (!defined(invoker.use_default_launcher) ||
+            invoker.use_default_launcher) {
+          deps += [ "//testing/android/native_test:native_test_native_code" ]
+        }
+      }
+      unittest_apk(_apk_target) {
+        forward_variables_from(invoker, _apk_specific_vars)
+        shared_library = ":$_library_target"
+        apk_name = invoker.target_name
+        if (defined(invoker.output_name)) {
+          apk_name = invoker.output_name
+          install_script_name = "install_${invoker.output_name}"
+        }
+
+        if (defined(invoker.deps)) {
+          deps = invoker.deps
+        } else {
+          deps = []
+        }
+
+        # Add the Java classes so that each target does not have to do it.
+        deps += [ "//base/test:test_support_java" ]
+
+        if (defined(_unwind_table_asset_name)) {
+          deps += [ ":${_unwind_table_asset_name}" ]
+        }
+      }
+    }
+
+    test_runner_script(_test_runner_target) {
+      forward_variables_from(invoker, _wrapper_script_vars)
+
+      if (_use_raw_android_executable) {
+        executable_dist_dir = "$root_out_dir/$_dist_target"
+        data_deps = [ ":$_exec_target" ]
+      } else {
+        apk_target = ":$_apk_target"
+        incremental_apk = incremental_install
+
+        # Dep needed for the test runner .runtime_deps file to pick up data
+        # deps from the forward_variables_from(invoker, "*") on the library.
+        data_deps = [ ":$_library_target" ]
+      }
+      test_name = _output_name
+      test_suite = _output_name
+      test_type = "gtest"
+    }
+
+    # Create a wrapper script rather than using a group() in order to ensure
+    # "ninja $target_name" always works. If this was a group(), then GN would
+    # not create a top-level alias for it if a target exists in another
+    # directory with the same $target_name.
+    # Also - bots run this script directly for "components_perftests".
+    generate_wrapper(target_name) {
+      forward_variables_from(invoker, [ "visibility" ])
+      executable = "$root_build_dir/bin/run_$_output_name"
+      wrapper_script = "$root_build_dir/$_output_name"
+      deps = [ ":$_test_runner_target" ]
+      if (_use_raw_android_executable) {
+        deps += [ ":$_dist_target" ]
+      } else {
+        # Dep needed for the swarming .isolate file to pick up data
+        # deps from the forward_variables_from(invoker, "*") on the library.
+        deps += [
+          ":$_apk_target",
+          ":$_library_target",
+        ]
+      }
+    }
+  } else if (is_fuchsia) {
+    assert(!defined(invoker.use_xvfb) || !invoker.use_xvfb)
+
+    _output_name = invoker.target_name
+    _pkg_target = "${_output_name}_pkg"
+    _exec_target = "${_output_name}__exec"
+
+    # TODO(1019938): switch the default to tests.cmx which doesn't request
+    # the deprecated-ambient-replace-as-executable feature.
+    if (!defined(invoker.manifest)) {
+      manifest = "//build/config/fuchsia/tests-with-exec.cmx"
+    } else {
+      manifest = invoker.manifest
+    }
+
+    if (use_clang_coverage) {
+      component_with_coverage_manifest = "${target_name}-coverage.test-cmx"
+      cmc_merge(component_with_coverage_manifest) {
+        sources = [
+          "//build/config/fuchsia/add_DebugData_service.test-cmx",
+          manifest,
+        ]
+        output_name = target_name
+      }
+      manifest = "${target_out_dir}/${component_with_coverage_manifest}"
+    }
+
+    fuchsia_package_runner(target_name) {
+      is_test_exe = true
+      forward_variables_from(invoker,
+                             [
+                               "use_test_server",
+                               "package_deps",
+                               "visibility",
+                             ])
+      runner_script = "//build/fuchsia/test_runner.py"
+      package = ":$_pkg_target"
+      package_name_override = _output_name
+
+      data_deps = [ "//testing/buildbot/filters:fuchsia_filters" ]
+    }
+
+    cr_fuchsia_package(_pkg_target) {
+      binary = ":$_exec_target"
+      package_name_override = _output_name
+      if (use_clang_coverage) {
+        deps = [ ":$component_with_coverage_manifest" ]
+      }
+    }
+
+    executable(_exec_target) {
+      forward_variables_from(invoker, "*", TESTONLY_AND_VISIBILITY)
+      output_name = _exec_target
+    }
+  } else if (is_ios) {
+    assert(!defined(invoker.use_xvfb) || !invoker.use_xvfb)
+    _runtime_deps_file = "$root_out_dir/${target_name}.runtime_deps"
+
+    declare_args() {
+      # Keep the unittest-as-xctest functionality defaulted to off until the
+      # bots are updated to handle it properly.
+      # TODO(crbug.com/1001667): Remove this arg once the iOS test runner
+      # supports running unittests with xctest.
+      enable_run_ios_unittests_with_xctest = false
+    }
+
+    _test_target = target_name
+    _wrapper_output_name = "run_${target_name}"
+    ios_test_runner_wrapper(_wrapper_output_name) {
+      forward_variables_from(invoker,
+                             [
+                               "data",
+                               "data_deps",
+                               "deps",
+                               "executable_args",
+                               "retries",
+                               "shards",
+                             ])
+
+      _root_build_dir = rebase_path("${root_build_dir}", root_build_dir)
+
+      if (!defined(executable_args)) {
+        executable_args = []
+      }
+      executable_args += [
+        "--app",
+        "@WrappedPath(${_root_build_dir}/${_test_target}.app)",
+      ]
+
+      wrapper_output_name = "${_wrapper_output_name}"
+    }
+
+    _resources_bundle_data = target_name + "_resources_bundle_data"
+
+    bundle_data(_resources_bundle_data) {
+      visibility = [ ":$_test_target" ]
+      sources = [ "//testing/gtest_ios/Default.png" ]
+      outputs = [ "{{bundle_resources_dir}}/{{source_file_part}}" ]
+    }
+
+    force_xctest = enable_run_ios_unittests_with_xctest ||
+                   (defined(invoker.is_xctest) && invoker.is_xctest)
+
+    if (force_xctest) {
+      ios_test_target_type = "ios_xctest_test"
+    } else {
+      ios_test_target_type = "ios_app_bundle"
+    }
+
+    target(ios_test_target_type, _test_target) {
+      testonly = true
+
+      if (force_xctest && build_with_chromium) {
+        xctest_module_target = "//base/test:google_test_runner"
+      }
+
+      forward_variables_from(invoker, "*", TESTONLY_AND_VISIBILITY)
+
+      # Provide sensible defaults in case invoker did not define any of those
+      # required variables.
+      if (!defined(info_plist) && !defined(info_plist_target)) {
+        info_plist = "//testing/gtest_ios/unittest-Info.plist"
+      }
+
+      _gtest_bundle_id_suffix = "${target_name}"
+      xcode_product_bundle_id = "gtest.$_gtest_bundle_id_suffix"
+
+      if (!defined(extra_substitutions)) {
+        extra_substitutions = []
+      }
+      extra_substitutions +=
+          [ "GTEST_BUNDLE_ID_SUFFIX=$_gtest_bundle_id_suffix" ]
+
+      if (!defined(bundle_deps)) {
+        bundle_deps = []
+      }
+      bundle_deps += [ ":$_resources_bundle_data" ]
+
+      if (!defined(data_deps)) {
+        data_deps = []
+      }
+
+      # Include the generate_wrapper as part of data_deps
+      data_deps += [ ":${_wrapper_output_name}" ]
+      write_runtime_deps = _runtime_deps_file
+    }
+  } else if (is_chromeos_ash && cros_board != "") {
+    assert(!defined(invoker.use_xvfb) || !invoker.use_xvfb)
+
+    # Building for a cros board (ie: not linux-chromeos).
+
+    _gen_runner_target = "${target_name}__runner"
+    _runtime_deps_file =
+        "$root_out_dir/gen.runtime/" + get_label_info(target_name, "dir") +
+        "/" + get_label_info(target_name, "name") + ".runtime_deps"
+
+    generate_runner_script(_gen_runner_target) {
+      generated_script = "$root_build_dir/bin/run_" + invoker.target_name
+      test_exe = invoker.target_name
+      runtime_deps_file = _runtime_deps_file
+    }
+
+    executable(target_name) {
+      forward_variables_from(invoker, "*", TESTONLY_AND_VISIBILITY)
+      forward_variables_from(invoker, [ "visibility" ])
+      if (!defined(deps)) {
+        deps = []
+      }
+      if (!defined(data)) {
+        data = []
+      }
+
+      # We use a special trigger script for CrOS hardware tests.
+      data += [ "//testing/trigger_scripts/chromeos_device_trigger.py" ]
+
+      output_name = target_name
+      write_runtime_deps = _runtime_deps_file
+      data += [ _runtime_deps_file ]
+      deps += [ ":$_gen_runner_target" ]
+    }
+  } else if (chromeos_is_browser_only) {
+    _runtime_deps_file = "$root_out_dir/${target_name}.runtime_deps"
+    _executable = target_name
+    _gen_runner_target = "${target_name}__runner"
+
+    if (defined(invoker.use_xvfb)) {
+      _use_xvfb = invoker.use_xvfb
+    } else {
+      _use_xvfb = false
+    }
+
+    # When use_xvfb is set by the invoker, it indicates that running this test
+    # target requires a window, and in lacros build, ash-chrome serves as the
+    # display server. Note that even though the tests themselves do not require
+    # xvfb anymore, xvfb.py is still needed to invoke the lacros test runner
+    # because ash-chrome is based on x11.
+    _use_ash_chrome = _use_xvfb
+
+    generate_wrapper(_gen_runner_target) {
+      wrapper_script = "$root_build_dir/bin/run_" + _executable
+
+      data = []
+      if (_use_xvfb) {
+        executable = "//testing/xvfb.py"
+        data += [ "//testing/xvfb.py" ]
+      } else {
+        executable = "//testing/test_env.py"
+        data += [ "//testing/test_env.py" ]
+      }
+
+      executable_args = [
+        "@WrappedPath(../../build/lacros/test_runner.py)",
+        "test",
+        "@WrappedPath(./${_executable})",
+        "--test-launcher-bot-mode",
+      ]
+
+      if (_use_ash_chrome) {
+        executable_args += [ "--ash-chrome-path=ash_clang_x64/chrome" ]
+      }
+
+      if (is_asan) {
+        executable_args += [ "--asan=true" ]
+      }
+      if (is_msan) {
+        executable_args += [ "--msan=true" ]
+      }
+      if (is_tsan) {
+        executable_args += [ "--tsan=true" ]
+      }
+      if (use_cfi_diag) {
+        executable_args += [ "--cfi-diag=true" ]
+      }
+
+      data += [
+        "//build/lacros/test_runner.py",
+        "//.vpython",
+      ]
+    }
+
+    executable(target_name) {
+      forward_variables_from(invoker, "*", TESTONLY_AND_VISIBILITY)
+      forward_variables_from(invoker, [ "visibility" ])
+      if (!defined(deps)) {
+        deps = []
+      }
+
+      if (!defined(data_deps)) {
+        data_deps = []
+      }
+
+      write_runtime_deps = _runtime_deps_file
+      deps += [ ":$_gen_runner_target" ]
+      if (_use_ash_chrome && also_build_ash_chrome) {
+        data_deps +=
+            [ "//chrome:chrome(//build/toolchain/linux:ash_clang_x64)" ]
+      }
+    }
+  } else if (!is_nacl) {
+    if (is_mac || is_win) {
+      assert(!defined(invoker.use_xvfb) || !invoker.use_xvfb)
+    }
+
+    _runtime_deps_file = "$root_out_dir/${target_name}.runtime_deps"
+    _executable = target_name
+    _gen_runner_target = "${target_name}__runner"
+
+    if ((is_linux || is_chromeos) && defined(invoker.use_xvfb)) {
+      _use_xvfb = invoker.use_xvfb
+    } else {
+      _use_xvfb = false
+    }
+
+    generate_wrapper(_gen_runner_target) {
+      wrapper_script = "$root_build_dir/bin/run_" + _executable
+
+      data = []
+      if (_use_xvfb) {
+        executable = "//testing/xvfb.py"
+        data += [ "//testing/xvfb.py" ]
+      } else {
+        executable = "//testing/test_env.py"
+        data += [ "//testing/test_env.py" ]
+      }
+
+      executable_args = [
+        "@WrappedPath(./${_executable})",
+        "--test-launcher-bot-mode",
+      ]
+      if (is_asan) {
+        executable_args += [ "--asan=true" ]
+      }
+      if (is_msan) {
+        executable_args += [ "--msan=true" ]
+      }
+      if (is_tsan) {
+        executable_args += [ "--tsan=true" ]
+      }
+      if (use_cfi_diag) {
+        executable_args += [ "--cfi-diag=true" ]
+      }
+
+      data += [ "//.vpython" ]
+    }
+
+    executable(target_name) {
+      forward_variables_from(invoker,
+                             "*",
+                             TESTONLY_AND_VISIBILITY + [ "use_xvfb" ])
+      forward_variables_from(invoker, [ "visibility" ])
+      if (!defined(deps)) {
+        deps = []
+      }
+
+      deps += [
+        # Give tests the default manifest on Windows (a no-op elsewhere).
+        "//build/win:default_exe_manifest",
+      ]
+
+      write_runtime_deps = _runtime_deps_file
+      deps += [ ":$_gen_runner_target" ]
+    }
+  } else {
+    # This is a catch-all clause for NaCl toolchains and other random
+    # configurations that might define tests; test() in these configs
+    # will just define the underlying executables.
+    assert(!defined(invoker.use_xvfb) || !invoker.use_xvfb,
+           "use_xvfb should not be defined for a non-linux configuration")
+    executable(target_name) {
+      forward_variables_from(invoker, "*", TESTONLY_AND_VISIBILITY)
+      forward_variables_from(invoker, [ "visibility" ])
+      if (!defined(deps)) {
+        deps = []
+      }
+    }
+  }
+}
+
+# Defines a type of test that invokes a script to run, rather than
+# invoking an executable.
+#
+# The script must implement the
+# [test executable API](//docs/testing/test_executable_api.md).
+#
+# The template must be passed the `script` parameter, which specifies
+# the path to the script to run. It may optionally be passed a
+# `script_args` parameter, which can be used to include a list of
+# args to be specified by default. The template will produce
+# a `$root_build_dir/run_$target_name` wrapper and write the runtime_deps
+# for the target to $root_build_dir/${target_name}.runtime_deps, as per
+# the conventions listed in the
+# [test wrapper API](//docs/testing/test_wrapper_api.md).
+template("script_test") {
+  generate_wrapper(target_name) {
+    testonly = true
+    wrapper_script = "${root_build_dir}/bin/run_${target_name}"
+
+    executable = "//testing/test_env.py"
+
+    executable_args =
+        [ "@WrappedPath(" + rebase_path(invoker.script, root_build_dir) + ")" ]
+    if (defined(invoker.args)) {
+      executable_args += invoker.args
+    }
+
+    data = [
+      "//.vpython",
+      "//testing/test_env.py",
+
+      # These aren't needed by *every* test, but they're likely needed often
+      # enough to just make it easier to declare them here.
+      "//testing/xvfb.py",
+      "//testing/scripts/common.py",
+
+      invoker.script,
+    ]
+    if (defined(invoker.data)) {
+      data += invoker.data
+    }
+    data_deps = []
+    if (defined(invoker.data_deps)) {
+      data_deps += invoker.data_deps
+    }
+
+    forward_variables_from(invoker,
+                           [ "*" ],
+                           TESTONLY_AND_VISIBILITY + [
+                                 "data",
+                                 "data_deps",
+                                 "script",
+                                 "script_args",
+                               ])
+    forward_variables_from(invoker, [ "visibility" ])
+
+    write_runtime_deps = "${root_build_dir}/${target_name}.runtime_deps"
+  }
+}
+
+# Test defaults.
+set_defaults("test") {
+  if (is_android) {
+    configs = default_shared_library_configs
+    configs -= [ "//build/config/android:hide_all_but_jni_onload" ]
+    configs += [ "//build/config/android:hide_all_but_jni" ]
+  } else {
+    configs = default_executable_configs
+  }
+}

@@ -1,0 +1,325 @@
+;; --------------------------------------------------------------------------
+;;   
+;;   Copyright 1996-2019 The NASM Authors - All Rights Reserved
+;;   See the file AUTHORS included with the NASM distribution for
+;;   the specific copyright holders.
+;;
+;;   Redistribution and use in source and binary forms, with or without
+;;   modification, are permitted provided that the following
+;;   conditions are met:
+;;
+;;   * Redistributions of source code must retain the above copyright
+;;     notice, this list of conditions and the following disclaimer.
+;;   * Redistributions in binary form must reproduce the above
+;;     copyright notice, this list of conditions and the following
+;;     disclaimer in the documentation and/or other materials provided
+;;     with the distribution.
+;;
+;;     THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+;;     CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+;;     INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+;;     MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+;;     DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+;;     CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+;;     SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+;;     NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+;;     LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+;;     HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+;;     CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+;;     OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+;;     EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+;;
+;; --------------------------------------------------------------------------
+
+; Standard macro set for NASM -*- nasm -*-
+
+; Macros to make NASM ignore some TASM directives
+STD: tasm
+    %idefine IDEAL
+    %idefine JUMPS
+    %idefine P386
+    %idefine P486
+    %idefine P586
+    %idefine END
+
+; The normal standard macros
+STD: nasm
+
+; Note that although some user-level forms of directives are defined
+; here, not all of them are: the user-level form of a format-specific
+; directive should be defined in the module for that directive.
+
+%define __?SECT?__            ; it ought to be defined, even if as nothing
+%defalias __SECT__ __?SECT?__
+
+%imacro section 1+.nolist
+    %define __?SECT?__ [section %1]
+    __?SECT?__
+%endmacro
+
+%imacro segment 1+.nolist
+    %define __?SECT?__ [segment %1]
+    __?SECT?__
+%endmacro
+
+%define __?SECTALIGN_ALIGN_UPDATES_SECTION?__ 1
+%imacro sectalign 1+.nolist
+    %ifidni %1,off
+        %define __?SECTALIGN_ALIGN_UPDATES_SECTION?__ 0
+    %elifidni %1,on
+        %define __?SECTALIGN_ALIGN_UPDATES_SECTION?__ 1
+    %else
+        [sectalign %1]
+    %endif
+%endmacro
+%defalias __SECTALIGN_ALIGN_UPDATES_SECTION__ __?SECTALIGN_ALIGN_UPDATES_SECTION?__
+
+%imacro absolute 1+.nolist
+    %define __?SECT?__ [absolute %1]
+    __?SECT?__
+%endmacro
+
+%imacro struc 1-2.nolist 0
+    %push
+        %define %$strucname %1
+        [absolute %2]
+        %$strucname:        ; allow definition of `.member' to work sanely
+%endmacro
+
+%imacro endstruc 0.nolist
+        %{$strucname}_size equ ($-%$strucname)
+    %pop
+    __?SECT?__
+%endmacro
+
+%imacro istruc 1.nolist
+    %push
+        %define %$strucname %1
+        %$strucstart:
+%endmacro
+
+%imacro at 1-2+.nolist
+    times (%1-%$strucname)-($-%$strucstart) db 0
+    %2
+%endmacro
+
+%imacro iend 0.nolist
+        times %{$strucname}_size-($-%$strucstart) db 0
+    %pop
+%endmacro
+
+%imacro align 1-2+.nolist nop
+    %if __?SECTALIGN_ALIGN_UPDATES_SECTION?__
+        sectalign %1
+    %endif
+    times (((%1) - (($-$$) % (%1))) % (%1)) %2
+%endmacro
+
+%imacro alignb 1-2+.nolist
+    %if __?SECTALIGN_ALIGN_UPDATES_SECTION?__
+        sectalign %1
+    %endif
+    %ifempty %2
+        [warning push]
+        [warning -zeroing]
+        resb (((%1) - (($-$$) % (%1))) % (%1))
+        [warning pop]
+    %else
+        times (((%1) - (($-$$) % (%1))) % (%1)) %2
+    %endif
+%endmacro
+
+%imacro bits 1+.nolist
+    [bits %1]
+%endmacro
+
+%imacro use16 0.nolist
+    [bits 16]
+%endmacro
+
+%imacro use32 0.nolist
+    [bits 32]
+%endmacro
+
+%imacro use64 0.nolist
+    [bits 64]
+%endmacro
+
+%imacro extern 1-*.nolist
+    %rep %0
+        [extern %1]
+        %rotate 1
+    %endrep
+%endmacro
+
+%imacro static 1-*.nolist
+    %rep %0
+        [static %1]
+        %rotate 1
+    %endrep
+%endmacro
+
+%imacro global 1-*.nolist
+    %rep %0
+        [global %1]
+        %rotate 1
+    %endrep
+%endmacro
+
+%imacro required 1-*.nolist
+    %rep %0
+        [required %1]
+        %rotate 1
+    %endrep
+%endmacro
+
+%imacro common 1-*.nolist
+    %rep %0
+        [common %1]
+        %rotate 1
+    %endrep
+%endmacro
+
+%imacro cpu 1+.nolist
+    [cpu %1]
+%endmacro
+
+%define __?FLOAT_DAZ?__ nodaz
+%define __?FLOAT_ROUND?__ near
+; __?FLOAT?__ contains the whole floating-point configuration so it can
+; be saved and restored
+%define __?FLOAT?__ __?FLOAT_DAZ?__,__?FLOAT_ROUND?__
+
+%defalias __FLOAT_DAZ__ __?FLOAT_DAZ?__
+%defalias __FLOAT_ROUND__ __?FLOAT_ROUND?__
+%defalias __FLOAT__ __?FLOAT?__
+
+%imacro float 1-*.nolist
+    %rep %0
+        [float %1]
+        %ifidni %1,daz
+            %define __?FLOAT_DAZ?__ daz
+        %elifidni %1,nodaz
+            %define __?FLOAT_DAZ?__ nodaz
+        %elifidni %1,near
+            %define __?FLOAT_ROUND?__ near
+        %elifidni %1,up
+            %define __?FLOAT_ROUND?__ up
+        %elifidni %1,down
+            %define __?FLOAT_ROUND?__ down
+        %elifidni %1,zero
+            %define __?FLOAT_ROUND?__ zero
+        %elifidni %1,default
+            %define __?FLOAT_DAZ?__ nodaz
+            %define __?FLOAT_ROUND?__ near
+        %endif
+        %rotate 1
+    %endrep
+%endmacro
+
+%imacro default 1+.nolist
+    [default %1]
+%endmacro
+
+%imacro userel 0.nolist
+    [default rel]
+%endmacro
+%imacro useabs 0.nolist
+    [default abs]
+%endmacro
+%imacro usebnd 0.nolist
+    [default bnd]
+%endmacro
+%imacro usenobnd 0.nolist
+    [default nobnd]
+%endmacro
+
+%imacro incbin 1-2+.nolist 0
+    %push
+        %pathsearch %$dep %1
+        %depend %$dep
+        %? %$dep,%2
+    %pop
+%endmacro
+
+; Compatibility macro aliases
+%defalias __NASM_MAJOR__      __?NASM_MAJOR?__
+%defalias __NASM_MINOR__      __?NASM_MINOR?__
+%defalias __NASM_SUBMINOR__   __?NASM_SUBMINOR?__
+%defalias __NASM_PATCHLEVEL__ __?NASM_PATCHLEVEL?__
+%defalias __NASM_SNAPSHOT__   __?NASM_SNAPSHOT?__
+%defalias __NASM_VERSION_ID__ __?NASM_VERSION_ID?__
+%defalias __NASM_VER__        __?NASM_VER?__
+
+%defalias __OUTPUT_FORMAT__   __?OUTPUT_FORMAT?__
+%defalias __DEBUG_FORMAT__    __?DEBUG_FORMAT?__
+
+%defalias __DATE__            __?DATE?__
+%defalias __DATE_NUM__        __?DATE_NUM?__
+%defalias __TIME__            __?TIME?__
+%defalias __TIME_NUM__        __?TIME_NUM?__
+%defalias __UTC_DATE__        __?UTC_DATE?__
+%defalias __UTC_DATE_NUM__    __?UTC_DATE_NUM?__
+%defalias __UTC_TIME__        __?UTC_TIME?__
+%defalias __UTC_TIME_NUM__    __?UTC_TIME_NUM?__
+%defalias __POSIX_TIME__      __?POSIX_TIME?__
+
+%defalias __FILE__            __?FILE?__
+%defalias __LINE__            __?LINE?__
+%defalias __BITS__            __?BITS?__
+%defalias __PTR__             __?PTR?__
+%defalias __PASS__            __?PASS?__
+
+; Backwards compatiblity aliases for tokens. The extra level of indirection here
+; means %aliases on|off will do the right thing for these as well.
+%idefine __?infinity?__ %?
+%idefine __?nan?__ %?
+%idefine __?qnan?__ %?
+%idefine __?snan?__ %?
+
+%idefine __?float8?__ %?
+%idefine __?float16?__ %?
+%idefine __?float32?__ %?
+%idefine __?float64?__ %?
+%idefine __?float80m?__ %?
+%idefine __?float80e?__ %?
+%idefine __?float128l?__ %?
+%idefine __?float128h?__ %?
+
+%idefine __?utf16?__ %?
+%idefine __?utf16le?__ %?
+%idefine __?utf16be?__ %?
+%idefine __?utf32?__ %?
+%idefine __?utf32le?__ %?
+%idefine __?utf32be?__ %?
+
+%idefine __?ilog2e?__ %?
+%idefine __?ilog2w?__ %?
+%idefine __?ilog2f?__ %?
+%idefine __?ilog2c?__ %?
+
+%idefalias __infinity__ __?infinity?__
+%idefalias __nan__ __?nan?__
+%idefalias __qnan__ __?qnan?__
+%idefalias __snan__ __?snan?__
+
+%idefalias __float8__ __?float8?__
+%idefalias __float16__ __?float16?__
+%idefalias __float32__ __?float32?__
+%idefalias __float64__ __?float64?__
+%idefalias __float80m__ __?float80m?__
+%idefalias __float80e__ __?float80e?__
+%idefalias __float128l__ __?float128l?__
+%idefalias __float128h__ __?float128h?__
+
+%idefalias __utf16__ __?utf16?__
+%idefalias __utf16le__ __?utf16le?__
+%idefalias __utf16be__ __?utf16be?__
+%idefalias __utf32__ __?utf32?__
+%idefalias __utf32le__ __?utf32le?__
+%idefalias __utf32be__ __?utf32be?__
+
+%idefalias __ilog2e__ __?ilog2e?__
+%idefalias __ilog2w__ __?ilog2w?__
+%idefalias __ilog2f__ __?ilog2f?__
+%idefalias __ilog2c__ __?ilog2c?__

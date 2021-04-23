@@ -1,0 +1,79 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//testing/test.gni")
+
+if (is_android) {
+  component("graphics_provider") {
+    sources = [
+      "common/graphics_memory_dump_provider_android.cc",
+      "common/graphics_memory_dump_provider_android.h",
+      "tracing_export.h",
+    ]
+
+    defines = [ "TRACING_IMPLEMENTATION" ]
+
+    deps = [ "//base" ]
+  }
+}
+
+component("startup_tracing") {
+  sources = [
+    "common/trace_startup_config.cc",
+    "common/trace_startup_config.h",
+    "common/trace_to_console.cc",
+    "common/trace_to_console.h",
+    "common/tracing_switches.cc",
+    "common/tracing_switches.h",
+    "tracing_export.h",
+  ]
+
+  defines = [ "TRACING_IMPLEMENTATION" ]
+
+  deps = [ "//base" ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+
+  deps = [
+    "//base/test:test_support",
+    "//testing/gmock:gmock",
+    "//testing/gtest",
+  ]
+
+  if (is_android) {
+    sources = [ "common/graphics_memory_dump_provider_android_unittest.cc" ]
+    deps += [ ":graphics_provider" ]
+  }
+
+  if (!is_android) {
+    sources = [ "common/trace_startup_config_unittest.cc" ]
+    deps += [ ":startup_tracing" ]
+  }
+}
+
+test("tracing_perftests") {
+  sources = [
+    "test/perf_test_helpers.cc",
+    "test/perf_test_helpers.h",
+    "test/trace_event_perftest.cc",
+  ]
+  deps = [
+    "//base:base",
+    "//base/test:test_support",
+    "//base/test:test_support_perf",
+    "//testing/gtest",
+    "//testing/perf",
+  ]
+
+  data_deps = [
+    # Needed for isolate script to execute.
+    "//testing:run_perf_test",
+  ]
+
+  if (is_android) {
+    deps += [ "//testing/android/native_test:native_test_native_code" ]
+  }
+}

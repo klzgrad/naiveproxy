@@ -1,0 +1,207 @@
+# This file is used by the GN meta build system to find the root of the source
+# tree and to set startup options. For documentation on the values set in this
+# file, run "gn help dotfile" at the command line.
+
+import("//build/dotfile_settings.gni")
+import("//third_party/angle/dotfile_settings.gni")
+
+# The location of the build configuration file.
+buildconfig = "//build/config/BUILDCONFIG.gn"
+
+# These arguments override the default values for items in a declare_args
+# block. "gn args" in turn can override these.
+#
+# In general the value for a build arg in the declare_args block should be the
+# default. In some cases, a DEPS-ed in project will want different defaults for
+# being built as part of Chrome vs. being built standalone. In this case, the
+# Chrome defaults should go here. There should be no overrides here for
+# values declared in the main Chrome repository.
+#
+# Important note for defining defaults: This file is executed before the
+# BUILDCONFIG.gn file. That file sets up the global variables like "is_ios".
+# This means that the default_args can not depend on the platform,
+# architecture, or other build parameters. If you really need that, the other
+# repo should define a flag that toggles on a behavior that implements the
+# additional logic required by Chrome to set the variables.
+default_args = {
+  # TODO(brettw) bug 684096: Chrome on iOS does not build v8, so "gn gen" prints
+  # a warning that "Build argument has no effect". When adding a v8 variable, it
+  # also needs to be defined to src/ios/BUILD.gn (respectively removed from both
+  # location when it is removed).
+
+  v8_extra_library_files = []
+  v8_experimental_extra_library_files = []
+  v8_enable_gdbjit = false
+  v8_imminent_deprecation_warnings = false
+
+  # TODO(jochen): Remove this. http://crbug.com/v8/5830,
+  # http://crbug.com/728583.
+  v8_check_microtasks_scopes_consistency = false
+
+  # Don't include webrtc's builtin task queue implementation.
+  rtc_link_task_queue_impl = false
+
+  # Don't include the iLBC audio codec.
+  # TODO(bugs.webrtc.org/8396): Once WebRTC gets rid of its internal
+  # deps on codecs, we can remove this.
+  rtc_include_ilbc = false
+
+  # Changes some setup for the Crashpad build to set them to build against
+  # Chromium's zlib, base, etc.
+  crashpad_dependencies = "chromium"
+
+  # Override ANGLE's Vulkan dependencies.
+  angle_vulkan_headers_dir = "//third_party/vulkan-deps/vulkan-headers/src"
+  angle_vulkan_loader_dir = "//third_party/vulkan-deps/vulkan-loader/src"
+  angle_vulkan_tools_dir = "//third_party/vulkan-deps/vulkan-tools/src"
+  angle_vulkan_validation_layers_dir =
+      "//third_party/vulkan-deps/vulkan-validation-layers/src"
+}
+
+# These are the targets to skip header checking by default. The files in targets
+# matching these patterns (see "gn help label_pattern" for format) will not have
+# their includes checked for proper dependencies when you run either
+# "gn check" or "gn gen --check".
+no_check_targets = [
+  # //chrome/*, https://crbug.com/949535
+  "//chrome/browser/media/router/discovery:*",  # 7 errors
+  "//chrome/browser/media/router:*",  # 225 errors
+  "//chrome/browser/safe_browsing/android:*",  # 3 errors
+  "//chrome/browser/safety_check/android:*",  # 3 errors
+  "//chrome/browser/storage_access_api:*",  # 2 errors
+  "//chrome/browser/touch_to_fill/android:*",  # 8 errors
+  "//chrome/test:*",  # 2682 errors
+  "//extensions/browser/api/declarative_net_request:*",  # 18 errors
+  "//extensions/browser/api/declarative_webrequest:*",  # 29 errors
+  "//extensions/browser/api/web_request:*",  # 37 errors
+  "//extensions/browser/api:*",  # 7 errors
+  "//extensions/browser:*",  # 20 errors
+  "//extensions:*",  # 75 errors
+  "//headless:*",  # 167 errors
+  "//jingle:*",  # 4 errors
+  "//native_client/src/trusted/service_runtime:*",  # 2 errors
+  "//ppapi/cpp/private:*",  # 1 error
+  "//ppapi/host:*",  # 1 error
+  "//ppapi/native_client/src/untrusted/pnacl_irt_shim:*",  # 197 errors
+  "//ppapi/proxy:*",  # 31 errors
+  "//ppapi/thunk:*",  # 1071 errors
+  "//ppapi:*",  # 3 errors
+  "//remoting/codec:*",  # 32 errors
+  "//remoting/host/file_transfer:*",  # 43 errors
+  "//remoting/host/installer/mac:*",  # 1 error
+  "//remoting/host/it2me:*",  # 18 errors
+  "//remoting/host/mac:*",  # 49 errors
+  "//remoting/host/security_key:*",  # 68 errors
+  "//remoting/host/setup:*",  # 9 errors
+  "//remoting/host/win:*",  # 43 errors
+  "//remoting/host:*",  # 164 errors
+  "//remoting/ios/app/settings:*",  # 6 errors
+  "//remoting/ios/app:*",  # 9 errors
+  "//remoting/ios/audio:*",  # 5 errors
+  "//remoting/ios/domain:*",  # 2 errors
+  "//remoting/ios/facade:*",  # 8 errors
+  "//remoting/ios/persistence:*",  # 10 errors
+  "//remoting/ios/session:*",  # 7 errors
+  "//remoting/ios:*",  # 2 errors
+  "//remoting/protocol:*",  # 142 errors
+  "//remoting/test:*",  # 20 errors
+  "//sandbox/win:*",  # 7 errors
+
+  "//third_party/ffmpeg:*",  # 1 error
+  "//third_party/icu/*",
+  "//third_party/libvpx:*",  # 164 errors
+  "//third_party/libwebp:*",  # 80 errors, https://crbug.com/800762
+
+  # //v8/*, https://crbug.com/v8/7330
+  "//v8/src/inspector:*",  # 20 errors
+  "//v8/test/cctest:*",  # 26 errors
+  "//v8/test/unittests:*",  # 11 errors
+  "//v8/test/wasm-api-tests:*",  # 13 errors
+  "//v8/third_party/inspector_protocol:*",  # 2 errors
+  "//v8/tools/debug_helper:*",  # 9 errors
+  "//v8/tools/v8windbg:*",  # 2 errors
+  "//v8:*",  # 1871 errors
+]
+
+# These are the list of GN files that run exec_script. This whitelist exists
+# to force additional review for new uses of exec_script, which is strongly
+# discouraged.
+#
+# PLEASE READ
+#
+# You should almost never need to add new exec_script calls. exec_script is
+# slow, especially on Windows, and can cause confusing effects. Although
+# individually each call isn't slow or necessarily very confusing, at the scale
+# of our repo things get out of hand quickly. By strongly pushing back on all
+# additions, we keep the build fast and clean. If you think you need to add a
+# new call, please consider:
+#
+# - Do not use a script to check for the existence of a file or directory to
+#   enable a different mode. Instead, use GN build args to enable or disable
+#   functionality and set options. An example is checking for a file in the
+#   src-internal repo to see if the corresponding src-internal feature should
+#   be enabled. There are several things that can go wrong with this:
+#
+#    - It's mysterious what causes some things to happen. Although in many cases
+#      such behavior can be conveniently automatic, GN optimizes for explicit
+#      and obvious behavior so people can more easily diagnose problems.
+#
+#    - The user can't enable a mode for one build and not another. With GN build
+#      args, the user can choose the exact configuration of multiple builds
+#      using one checkout. But implicitly basing flags on the state of the
+#      checkout, this functionality is broken.
+#
+#    - It's easy to get stale files. If for example the user edits the gclient
+#      to stop checking out src-internal (or any other optional thing), it's
+#      easy to end up with stale files still mysteriously triggering build
+#      conditions that are no longer appropriate (yes, this happens in real
+#      life).
+#
+# - Do not use a script to iterate files in a directory (glob):
+#
+#    - This has the same "stale file" problem as the above discussion. Various
+#      operations can leave untracked files in the source tree which can cause
+#      surprising effects.
+#
+#    - It becomes impossible to use "git grep" to find where a certain file is
+#      referenced. This operation is very common and people really do get
+#      confused when things aren't listed.
+#
+#    - It's easy to screw up. One common case is a build-time script that packs
+#      up a directory. The author notices that the script isn't re-run when the
+#      directory is updated, so adds a glob so all the files are listed as
+#      inputs. This seems to work great... until a file is deleted. When a
+#      file is deleted, all the inputs the glob lists will still be up to date
+#      and no command-lines will have been changed. The action will not be
+#      re-run and the build will be broken. It is possible to get this correct
+#      using glob, and it's possible to mess it up without glob, but globs make
+#      this situation much easier to create. if the build always lists the
+#      files and passes them to a script, it will always be correct.
+
+exec_script_whitelist =
+    build_dotfile_settings.exec_script_whitelist +
+    angle_dotfile_settings.exec_script_whitelist +
+    [
+      # Whitelist entries for //build should go into
+      # //build/dotfile_settings.gni instead, so that they can be shared
+      # with other repos. The entries in this list should be only for files
+      # in the Chromium repo outside of //build.
+      "//build_overrides/build.gni",
+
+      "//chrome/android/webapk/shell_apk/prepare_upload_dir/BUILD.gn",
+
+      # TODO(dgn): Layer violation but breaks the build otherwise, see
+      # https://crbug.com/474506.
+      "//clank/java/BUILD.gn",
+      "//clank/native/BUILD.gn",
+
+      "//google_apis/BUILD.gn",
+      "//printing/BUILD.gn",
+
+      "//remoting/host/installer/linux/BUILD.gn",
+      "//remoting/remoting_version.gni",
+      "//remoting/host/installer/win/generate_clsids.gni",
+
+      "//tools/grit/grit_rule.gni",
+      "//tools/gritsettings/BUILD.gn",
+    ]

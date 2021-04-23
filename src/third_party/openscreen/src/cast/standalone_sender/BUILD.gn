@@ -1,0 +1,69 @@
+# Copyright 2020 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/external_libraries.gni")
+import("//build_overrides/build.gni")
+
+# Define the executable target only when the build is configured to use the
+# standalone platform implementation; since this is itself a standalone
+# application.
+if (!build_with_chromium) {
+  declare_args() {
+    have_libs = have_ffmpeg && have_libopus && have_libvpx
+  }
+
+  config("standalone_external_libs") {
+    defines = []
+    if (have_libs) {
+      defines += [ "CAST_STANDALONE_SENDER_HAVE_EXTERNAL_LIBS" ]
+    }
+  }
+
+  executable("cast_sender") {
+    deps = [
+      "../../platform",
+      "../../third_party/jsoncpp",
+      "../../util",
+      "../common:public",
+      "../common/channel/proto:channel_proto",
+      "../sender:channel",
+      "../streaming:common",
+      "../streaming:sender",
+    ]
+
+    sources = [ "main.cc" ]
+    include_dirs = []
+    lib_dirs = []
+    libs = []
+    if (have_ffmpeg && have_libopus && have_libvpx) {
+      sources += [
+        "ffmpeg_glue.cc",
+        "ffmpeg_glue.h",
+        "looping_file_cast_agent.cc",
+        "looping_file_cast_agent.h",
+        "looping_file_sender.cc",
+        "looping_file_sender.h",
+        "receiver_chooser.cc",
+        "receiver_chooser.h",
+        "simulated_capturer.cc",
+        "simulated_capturer.h",
+        "streaming_opus_encoder.cc",
+        "streaming_opus_encoder.h",
+        "streaming_vp8_encoder.cc",
+        "streaming_vp8_encoder.h",
+      ]
+      include_dirs +=
+          ffmpeg_include_dirs + libopus_include_dirs + libvpx_include_dirs
+      lib_dirs += ffmpeg_lib_dirs + libopus_lib_dirs + libvpx_lib_dirs
+      libs += ffmpeg_libs + libopus_libs + libvpx_libs
+    }
+
+    configs += [ "../common:certificate_config" ]
+
+    public_configs = [
+      "../../build:openscreen_include_dirs",
+      ":standalone_external_libs",
+    ]
+  }
+}

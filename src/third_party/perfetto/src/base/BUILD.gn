@@ -1,0 +1,202 @@
+# Copyright (C) 2017 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("//build_overrides/build.gni")
+import("../../gn/gen_perfetto_version_header.gni")
+import("../../gn/perfetto.gni")
+import("../../gn/perfetto_component.gni")
+import("../../gn/test.gni")
+import("../../gn/wasm.gni")
+
+# On standalone builds this is all the OSes we support. On chromium builds,
+# though, this really means !is_fuchsia && !is_nacl.
+_subprocess_supported =
+    is_linux || is_chromeos || is_android || is_mac || is_win
+
+perfetto_component("base") {
+  deps = [ "../../gn:default_deps" ]
+  public_deps = [
+    "../../include/perfetto/base",
+    "../../include/perfetto/ext/base",
+  ]
+  sources = [
+    "ctrl_c_handler.cc",
+    "event_fd.cc",
+    "file_utils.cc",
+    "getopt_compat.cc",
+    "logging.cc",
+    "metatrace.cc",
+    "paged_memory.cc",
+    "pipe.cc",
+    "status.cc",
+    "string_splitter.cc",
+    "string_utils.cc",
+    "string_view.cc",
+    "temp_file.cc",
+    "thread_checker.cc",
+    "time.cc",
+    "utils.cc",
+    "uuid.cc",
+    "version.cc",
+    "virtual_destructors.cc",
+    "waitable_event.cc",
+    "watchdog_posix.cc",
+  ]
+
+  if (!is_nacl) {
+    sources += [
+      "thread_task_runner.cc",
+      "unix_task_runner.cc",
+    ]
+  }
+
+  if (_subprocess_supported) {
+    sources += [
+      "subprocess.cc",
+      "subprocess_posix.cc",
+      "subprocess_windows.cc",
+    ]
+  }
+
+  if (enable_perfetto_stderr_crash_dump) {
+    deps += [ ":debug_crash_stack_trace" ]
+  }
+
+  if (enable_perfetto_version_gen) {
+    deps += [ ":version_gen_h" ]
+  }
+}
+
+if (enable_perfetto_version_gen) {
+  config("version_gen_config") {
+    include_dirs = [ root_gen_dir ]
+  }
+
+  # Note: the build file translators (tools/gn_utils.py) depend on the hardcoded
+  # "//src/base:version_gen_h". If you rename this target, update build file
+  # translators accordingly.
+  gen_perfetto_version_header("version_gen_h") {
+    cpp_out = "${root_gen_dir}/perfetto_version.gen.h"
+  }
+}
+
+if (enable_perfetto_stderr_crash_dump) {
+  source_set("debug_crash_stack_trace") {
+    sources = [ "debug_crash_stack_trace.cc" ]
+    deps = [
+      "../../gn:default_deps",
+      "../../include/perfetto/ext/base",
+      "../../include/perfetto/ext/base",
+    ]
+    if (is_linux || is_android) {
+      deps += [ "../../gn:libbacktrace" ]
+    }
+    cflags = [ "-Wno-deprecated" ]
+  }
+}
+
+if (enable_perfetto_ipc) {
+  # This cannot be in :base as it does not build on WASM.
+  perfetto_component("unix_socket") {
+    deps = [
+      "../../gn:default_deps",
+      "../../include/perfetto/ext/base",
+    ]
+    sources = [ "unix_socket.cc" ]
+    if (is_win && perfetto_build_standalone) {
+      libs = [ "Ws2_32.lib" ]
+    }
+  }
+}
+
+source_set("test_support") {
+  testonly = true
+  deps = [
+    ":base",
+    "../../gn:default_deps",
+  ]
+  sources = [
+    "test/test_task_runner.cc",
+    "test/test_task_runner.h",
+    "test/utils.cc",
+    "test/utils.h",
+    "test/vm_test_utils.cc",
+    "test/vm_test_utils.h",
+  ]
+}
+
+perfetto_unittest_source_set("unittests") {
+  testonly = true
+  deps = [
+    ":base",
+    ":test_support",
+    "../../gn:default_deps",
+    "../../gn:gtest_and_gmock",
+  ]
+
+  sources = [
+    "circular_queue_unittest.cc",
+    "flat_set_unittest.cc",
+    "getopt_compat_unittest.cc",
+    "no_destructor_unittest.cc",
+    "optional_unittest.cc",
+    "paged_memory_unittest.cc",
+    "scoped_file_unittest.cc",
+    "string_splitter_unittest.cc",
+    "string_utils_unittest.cc",
+    "string_view_unittest.cc",
+    "string_writer_unittest.cc",
+    "task_runner_unittest.cc",
+    "temp_file_unittest.cc",
+    "thread_checker_unittest.cc",
+    "time_unittest.cc",
+    "utils_unittest.cc",
+    "uuid_unittest.cc",
+    "weak_ptr_unittest.cc",
+  ]
+  if (_subprocess_supported) {
+    # Don't run on Fuchsia, NaCL. They pretend to be POSIX but then give up on
+    # execve(2).
+    sources += [ "subprocess_unittest.cc" ]
+  }
+
+  # TODO: Enable these for Windows when possible.
+  if (!is_win) {
+    sources += [
+      "metatrace_unittest.cc",
+      "thread_task_runner_unittest.cc",
+      "watchdog_posix_unittest.cc",
+    ]
+  }
+  if (perfetto_build_standalone || perfetto_build_with_android) {
+    # This causes some problems on the chromium waterfall.
+    if (is_linux || is_android) {
+      sources += [ "watchdog_unittest.cc" ]
+    }
+    sources += [ "unix_socket_unittest.cc" ]
+    deps += [ ":unix_socket" ]
+  }
+}
+
+if (enable_perfetto_benchmarks) {
+  source_set("benchmarks") {
+    testonly = true
+    deps = [
+      ":base",
+      "../../gn:benchmark",
+      "../../gn:default_deps",
+    ]
+    sources = [ "flat_set_benchmark.cc" ]
+  }
+}

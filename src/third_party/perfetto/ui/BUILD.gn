@@ -1,0 +1,54 @@
+# Copyright (C) 2018 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../gn/perfetto.gni")
+
+# Prevent that this file is accidentally included in embedder builds.
+assert(enable_perfetto_ui)
+
+nodejs_bin = rebase_path("//tools/node", root_build_dir)
+
+group("ui") {
+  deps = [
+    ":ui_build($host_toolchain)",
+    "//src/trace_processor:trace_processor.wasm($wasm_toolchain)",
+    "//tools/trace_to_text:trace_to_text.wasm($wasm_toolchain)",
+  ]
+}
+
+action("deprecation_warning") {
+  script = "../gn/standalone/build_tool_wrapper.py"
+  outputs = [ "$target_out_dir/never_written_always_execute_rule-2.stamp" ]
+  inputs = []
+  args = [
+    "cat",
+    rebase_path("config/gn_deprecation_banner.txt", root_build_dir),
+  ]
+}
+
+action("ui_build") {
+  deps = [ ":deprecation_warning" ]
+  script = "../gn/standalone/build_tool_wrapper.py"
+  outputs = [ "$target_out_dir/never_written_always_execute_rule.stamp" ]
+  inputs = [
+    "//tools/node",
+    "build.js",
+  ]
+  args = [
+    nodejs_bin,
+    rebase_path("build.js", root_build_dir),
+    "--out",
+    ".",
+  ]
+}

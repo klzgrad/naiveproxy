@@ -1,0 +1,59 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# LibFuzzer is a LLVM tool for coverage-guided fuzz testing.
+# See http://www.chromium.org/developers/testing/libfuzzer
+#
+# To enable libfuzzer, 'use_libfuzzer' GN option should be set to true.
+# Or to enable afl, 'use_afl' GN option should be set to true.
+
+import("//build/config/features.gni")
+import("//build/config/sanitizers/sanitizers.gni")
+
+# TODO(mmoroz): we should eventually rename this into "fuzzing_engine_main".
+source_set("libfuzzer_main") {
+  deps = []
+  sources = []
+  if (use_libfuzzer) {
+    deps += [ "//third_party/libFuzzer:libfuzzer" ]
+  } else if (use_afl) {
+    deps += [ "//third_party/libFuzzer:afl_driver" ]
+  } else {
+    sources += [ "unittest_main.cc" ]
+  }
+  if (use_clang_coverage) {
+    # For purposes of code coverage calculation, fuzzer targets are run through
+    # a wrapper script in this directory, which handles corpus retrieval and
+    # appropriate parameter passing to run the target in an isolate. This
+    # directive makes this script and its dependencies to be included in the
+    # target's isolate.
+    data = [ "//tools/code_coverage/" ]
+  }
+}
+
+# A config used by all fuzzer_tests.
+config("fuzzer_test_config") {
+  if (use_libfuzzer && is_mac) {
+    ldflags = [
+      "-Wl,-U,_LLVMFuzzerCustomMutator",
+      "-Wl,-U,_LLVMFuzzerInitialize",
+    ]
+  }
+}
+
+# Noop config used to tag fuzzer tests excluded from clusterfuzz.
+# Libfuzzer build bot uses this to filter out targets while
+# building an archive for clusterfuzz.
+config("no_clusterfuzz") {
+}
+
+# noop to tag seed corpus rules.
+source_set("seed_corpus") {
+}
+
+if (use_fuzzing_engine) {
+  pool("fuzzer_owners_pool") {
+    depth = 1
+  }
+}

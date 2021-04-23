@@ -1,0 +1,120 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//third_party/blink/renderer/bindings/bindings.gni")
+import("//third_party/blink/renderer/core/core.gni")
+import("//third_party/inspector_protocol/inspector_protocol.gni")
+import("//v8/gni/v8.gni")
+
+_inspector_protocol_dir = "//third_party/inspector_protocol"
+
+# inspector protocol -----------------------------------------------------------
+
+inspector_protocol_generate("protocol_sources") {
+  inspector_protocol_dir = _inspector_protocol_dir
+  browser_protocol =
+      "//third_party/blink/public/devtools_protocol/browser_protocol.pdl"
+  out_dir = blink_core_output_dir
+
+  config_file = "inspector_protocol_config.json"
+  _imported = rebase_path(v8_inspector_js_protocol, root_build_dir)
+  config_values = [ "imported.path=$_imported" ]
+
+  inputs = [
+    v8_inspector_js_protocol,
+    browser_protocol,
+    "inspector_protocol_config.json",
+  ]
+
+  # These are relative to blink_core_output_dir.
+  outputs = [
+    "inspector/protocol/Accessibility.cpp",
+    "inspector/protocol/Accessibility.h",
+    "inspector/protocol/Animation.cpp",
+    "inspector/protocol/Animation.h",
+    "inspector/protocol/ApplicationCache.cpp",
+    "inspector/protocol/ApplicationCache.h",
+    "inspector/protocol/Audits.cpp",
+    "inspector/protocol/Audits.h",
+    "inspector/protocol/CacheStorage.cpp",
+    "inspector/protocol/CacheStorage.h",
+    "inspector/protocol/CSS.cpp",
+    "inspector/protocol/CSS.h",
+    "inspector/protocol/Database.cpp",
+    "inspector/protocol/Database.h",
+    "inspector/protocol/Debugger.h",
+    "inspector/protocol/DeviceOrientation.cpp",
+    "inspector/protocol/DeviceOrientation.h",
+    "inspector/protocol/DOM.cpp",
+    "inspector/protocol/DOMDebugger.cpp",
+    "inspector/protocol/DOMDebugger.h",
+    "inspector/protocol/DOM.h",
+    "inspector/protocol/DOMSnapshot.cpp",
+    "inspector/protocol/DOMSnapshot.h",
+    "inspector/protocol/DOMStorage.cpp",
+    "inspector/protocol/DOMStorage.h",
+    "inspector/protocol/Emulation.cpp",
+    "inspector/protocol/Emulation.h",
+    "inspector/protocol/Forward.h",
+    "inspector/protocol/IndexedDB.cpp",
+    "inspector/protocol/IndexedDB.h",
+    "inspector/protocol/IO.cpp",
+    "inspector/protocol/IO.h",
+    "inspector/protocol/LayerTree.cpp",
+    "inspector/protocol/LayerTree.h",
+    "inspector/protocol/Log.cpp",
+    "inspector/protocol/Log.h",
+    "inspector/protocol/Media.cpp",
+    "inspector/protocol/Media.h",
+    "inspector/protocol/Memory.cpp",
+    "inspector/protocol/Memory.h",
+    "inspector/protocol/Network.cpp",
+    "inspector/protocol/Network.h",
+    "inspector/protocol/Overlay.cpp",
+    "inspector/protocol/Overlay.h",
+    "inspector/protocol/Page.cpp",
+    "inspector/protocol/Page.h",
+    "inspector/protocol/Performance.cpp",
+    "inspector/protocol/Performance.h",
+    "inspector/protocol/PerformanceTimeline.cpp",
+    "inspector/protocol/PerformanceTimeline.h",
+    "inspector/protocol/Protocol.cpp",
+    "inspector/protocol/Protocol.h",
+    "inspector/protocol/Runtime.h",
+    "inspector/protocol/Security.cpp",
+    "inspector/protocol/Security.h",
+    "inspector/protocol/WebAudio.cpp",
+    "inspector/protocol/WebAudio.h",
+  ]
+
+  deps = [ "//third_party/blink/public/devtools_protocol:protocol_version" ]
+}
+
+# Compiles the sources generated above.
+source_set("generated") {
+  sources = get_target_outputs(":protocol_sources")
+
+  configs -= core_config_remove
+  configs += core_config_add + [
+               "../..:inside_blink",
+               "//third_party/blink/renderer/core:core_include_dirs",
+             ]
+
+  if (is_win) {
+    cflags = [ "/wd4702" ]  # Unreachable code.
+  }
+
+  deps = [
+    ":protocol_sources",
+    "//skia",
+    "//third_party/blink/renderer/bindings/core/v8:bindings_core_v8_generated",
+    "//third_party/blink/renderer/core:all_generators",
+    "//third_party/blink/renderer/core/probe:generated",
+    "//third_party/blink/renderer/platform:make_platform_generated",
+    "//third_party/blink/renderer/platform/wtf",
+    "//v8",
+  ]
+
+  public_deps = [ "//third_party/inspector_protocol:crdtp" ]
+}

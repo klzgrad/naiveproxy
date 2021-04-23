@@ -1,0 +1,43 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/chromeos/ui_mode.gni")
+import("//third_party/protobuf/proto_library.gni")
+
+if (is_android) {
+  import("//build/config/android/rules.gni")
+
+  proto_java_library("proto_java") {
+    proto_path = "."
+    sources = [
+      "client_variations.proto",
+      "layer.proto",
+      "study.proto",
+      "variations_seed.proto",
+    ]
+  }
+}
+
+proto_library("proto") {
+  sources = [
+    "client_variations.proto",
+    "layer.proto",
+    "study.proto",
+    "variations_seed.proto",
+  ]
+
+  # The generated JavaScript bindings are used to build a small, self-contained
+  # parser for ClientVariations in Dev Tools. This parser is used to decode the
+  # X-Client-Data header.
+  generate_javascript = true
+}
+
+# Some of the Windows builders do not support Java, which is a required
+# dependency for this build target. This target is only built manually, so it's
+# fine to limit it to Linux.
+if (is_linux || is_chromeos_lacros || is_mac) {
+  group("devtools") {
+    deps = [ "devtools" ]
+  }
+}

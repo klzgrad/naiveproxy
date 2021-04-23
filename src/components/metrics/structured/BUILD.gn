@@ -1,0 +1,122 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/python.gni")
+import("//testing/test.gni")
+import("//third_party/protobuf/proto_library.gni")
+
+# Structured metrics is subcomponent of UMA that gathers and reports structured
+# events with several attached metrics.
+static_library("structured") {
+  sources = [
+    "event_base.cc",
+    "event_base.h",
+    "external_metrics.cc",
+    "external_metrics.h",
+    "histogram_util.cc",
+    "histogram_util.h",
+    "key_data.cc",
+    "key_data.h",
+    "persistent_proto.cc",
+    "persistent_proto.h",
+    "recorder.cc",
+    "recorder.h",
+    "structured_metrics_provider.cc",
+    "structured_metrics_provider.h",
+  ]
+
+  public_deps = [ "//third_party/metrics_proto" ]
+
+  deps = [
+    ":storage",
+    ":structured_events",
+    "//base",
+    "//components/metrics",
+    "//components/prefs",
+    "//crypto",
+  ]
+}
+
+proto_library("storage") {
+  # These protos are only used internally, so make them visible only to
+  # subdirectories.
+  visibility = [ "./*" ]
+  proto_in_dir = "//"
+  generate_python = false
+  sources = [ "storage.proto" ]
+
+  # This is required because metrics_proto/BUILD.gn sets proto_in_dir as ".",
+  # which means protos can't be referred to by absolute paths from within other
+  # protos.
+  import_dirs = [ "//third_party/metrics_proto" ]
+  proto_deps = [ "//third_party/metrics_proto" ]
+  link_deps = [ "//third_party/metrics_proto" ]
+}
+
+action("gen_structured_events") {
+  script = "//tools/metrics/structured/gen_events.py"
+
+  # Re-generate the outputs if the codegen code changes:
+  inputs = [
+    "//tools/metrics/structured/codegen.py",
+    "//tools/metrics/structured/gen_events.py",
+    "//tools/metrics/structured/model.py",
+    "//tools/metrics/structured/model_util.py",
+    "//tools/metrics/structured/templates.py",
+  ]
+  sources = [ "//tools/metrics/structured/structured.xml" ]
+
+  outdir = "$target_gen_dir"
+
+  outputs = [
+    outdir + "/structured_events.cc",
+    outdir + "/structured_events.h",
+  ]
+
+  args = [
+    "--input",
+    rebase_path(sources[0], root_build_dir),
+    "--output",
+    rebase_path(outdir, root_build_dir),
+  ]
+}
+
+static_library("structured_events") {
+  sources = get_target_outputs(":gen_structured_events")
+
+  deps = [
+    ":gen_structured_events",
+    "//base",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "external_metrics_unittest.cc",
+    "key_data_unittest.cc",
+    "persistent_proto_unittest.cc",
+    "structured_metrics_provider_unittest.cc",
+  ]
+
+  deps = [
+    ":storage",
+    ":structured",
+    ":structured_events",
+    "//base",
+    "//base/test:test_support",
+    "//components/prefs",
+    "//testing/gtest",
+  ]
+}
+
+# Convenience testing target
+test("structured_metrics_unittests") {
+  deps = [
+    ":unit_tests",
+    "//base",
+    "//base/test:test_support",
+    "//components/test:run_all_unittests",
+  ]
+}
