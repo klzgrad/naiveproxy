@@ -20,7 +20,6 @@
 #include "build/build_config.h"
 #include "build/buildflag.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
-#include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
 #include "url/scheme_host_port.h"
 
 #if BUILDFLAG(IS_ANDROID)
@@ -326,8 +325,6 @@ class COMPONENT_EXPORT(URL) Origin {
                             uint64_t tokenHighBits,
                             uint64_t tokenLowBits);
 #endif  // BUILDFLAG(IS_ANDROID)
-
-  void WriteIntoTrace(perfetto::TracedValue context) const;
 
  private:
   friend class blink::SecurityOrigin;
