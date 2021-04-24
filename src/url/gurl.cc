@@ -16,7 +16,6 @@
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/trace_event/memory_usage_estimator.h"
-#include "third_party/perfetto/include/perfetto/tracing/traced_value.h"
 #include "url/url_canon_stdstring.h"
 #include "url/url_util.h"
 
@@ -528,10 +527,6 @@ bool GURL::IsAboutPath(base::StringPiece actual_path,
   }
 
   return false;
-}
-
-void GURL::WriteIntoTrace(perfetto::TracedValue context) const {
-  std::move(context).WriteString(possibly_invalid_spec());
 }
 
 std::ostream& operator<<(std::ostream& out, const GURL& url) {
