@@ -19,7 +19,6 @@
 #include "build/build_config.h"
 #include "ipc/ipc_param_traits.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
-#include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
 #include "url/scheme_host_port.h"
 #include "url/third_party/mozilla/url_parse.h"
 #include "url/url_canon.h"
@@ -303,8 +302,6 @@ class COMPONENT_EXPORT(URL) Origin {
   static Origin FromJavaObject(
       const base::android::JavaRef<jobject>& java_origin);
 #endif  // BUILDFLAG(IS_ANDROID)
-
-  void WriteIntoTrace(perfetto::TracedValue context) const;
 
  private:
   friend class blink::SecurityOrigin;
