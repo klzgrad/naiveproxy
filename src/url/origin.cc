@@ -19,7 +19,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
-#include "third_party/perfetto/include/perfetto/tracing/traced_value.h"
 #include "url/gurl.h"
 #include "url/url_canon.h"
 #include "url/url_canon_stdstring.h"
@@ -384,10 +383,6 @@ absl::optional<Origin> Origin::Deserialize(const std::string& value) {
   origin.nonce_ = std::move(nonce);
   origin.tuple_ = tuple;
   return origin;
-}
-
-void Origin::WriteIntoTrace(perfetto::TracedValue context) const {
-  std::move(context).WriteString(GetDebugString());
 }
 
 std::ostream& operator<<(std::ostream& out, const url::Origin& origin) {
