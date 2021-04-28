@@ -445,8 +445,7 @@ std::unique_ptr<URLRequestContext> BuildURLRequestContext(
     if (proxy_url.compare(0, 7, "quic://") == 0) {
       proxy_url.replace(0, 4, "https");
       auto* quic = context->quic_context()->params();
-      const auto& versions = quic::SupportedVersions();
-      quic->supported_versions.assign(versions.begin(), versions.end());
+      quic->supported_versions = {quic::ParsedQuicVersion::Draft29()};
       quic->origins_to_force_quic_on.insert(
           net::HostPortPair::FromURL(GURL(proxy_url)));
     }
