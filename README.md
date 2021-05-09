@@ -15,13 +15,13 @@ The code consists of a patch series morphed and rebased onto every new Chrome re
 
 [Browser → Naïve (client)] ⟶ Censor ⟶ [Frontend → Naïve (server)] ⟶ Internet
 
-NaïveProxy uses Chrome's network stack. The traffic behavior intercepted by the censor is identical to regular HTTP/2 traffic between Chrome and standard Frontend (e.g. Caddy, HAProxy).
+NaïveProxy uses Chrome's network stack. Its visible traffic behavior is identical to regular HTTP/2 traffic between Chrome and standard Frontend (e.g. Caddy, HAProxy).
 
 Frontend also reroutes unauthenticated users and active probes to a backend HTTP server, making it impossible to detect the existence of a proxy, like this: Probe ⟶ Frontend ⟶ index.html
 
 Starting from v84, users can run a naïve fork of Caddy forwardproxy without the Naïve server.
 
-## Download
+## Download binaries
 
 See [latest release](https://github.com/klzgrad/naiveproxy/releases/latest). Linux, Windows, Mac OS, and various OpenWrt targets are supported.
 
@@ -31,13 +31,13 @@ Note: On Linux libnss3 must be installed before using the prebuilt binary.
 
 ## Setup
 
-On the server, build and run Caddy v2 with naïve fork of forwardproxy: (Golang v1.14+ required)
+On the server, build and run Caddy v2 with naïve fork of forwardproxy:
 ```sh
 go get -u github.com/caddyserver/xcaddy/cmd/xcaddy
 ~/go/bin/xcaddy build --with github.com/caddyserver/forwardproxy@caddy2=github.com/klzgrad/forwardproxy@naive
 sudo setcap cap_net_bind_service=+ep ./caddy
 ```
-Then `./caddy start` with the following Caddyfile (replace the example values accordingly):
+Then `./caddy start` with the following Caddyfile (replace `user` and `pass` accordingly):
 ```
 :443, example.com
 tls me@example.com
@@ -51,7 +51,7 @@ route {
   file_server { root /var/www/html }
 }
 ```
-`:443` must appear first for this Caddyfile to work. For more advanced usage consider using JSON for Caddy 2's config.
+`:443` must appear first for this Caddyfile to work. For more advanced usage consider using [JSON for Caddy 2's config](https://caddyserver.com/docs/json/)..
 
 See also: [Run Caddy as a daemon](https://github.com/klzgrad/naiveproxy/wiki/Run-Caddy-as-a-daemon)
 
@@ -65,7 +65,7 @@ Locally run `./naive` with the following `config.json` to get a SOCKS5 proxy at 
 
 See [USAGE.txt](https://github.com/klzgrad/naiveproxy/blob/master/USAGE.txt) for more parameters in `config.json`. See also [Performance Tuning](https://github.com/klzgrad/naiveproxy/wiki/Performance-Tuning).
 
-## Build
+## Build from source
 
 If you don't like to download binaries, you can build NaïveProxy.
 
@@ -89,15 +89,15 @@ The scripts download tools from Google servers with curl. You may need to set a 
 
 Their TLS stacks have distinct features that can be [easily detected](https://arxiv.org/abs/1607.01639). TLS parameters are generally very informative and distinguishable. Most client-originated traffic comes from browsers, putting the custom network stacks in the minority.
 
-Previously, Tor tried to mimic Firefox's TLS signature and still got [identified and blocked by firewalls](https://groups.google.com/d/msg/traffic-obf/BpFSCVgi5rs/nCqNwoeRKQAJ), because that signature was of an outdated version of Firefox and the firewall determined the rate of collateral damage would be acceptable. If we use the signature of the most commonly used browser the collateral damage of blocking it would be unacceptable.
+Previously, Tor tried to mimic Firefox's TLS signature and still got [identified and blocked by firewalls](https://groups.google.com/d/msg/traffic-obf/BpFSCVgi5rs/nCqNwoeRKQAJ), because that signature was of an outdated version of Firefox and the firewall determined the rate of collateral damage would be acceptable. If we use the signature of the most commonly used browser, the collateral damage of blocking it would be unacceptable.
 
 ### Why not use Go, Node, etc. for performance?
 
 Any languages can be used for high performance architectures, but not all architectures have high performance.
 
-Go, Node, etc. make it easy to implement a 1:1 connection proxy model, i.e. creating one upstream connection for every user connection. Then under this model the goal of performance is to reduce overhead in setting up each upstream connection. Toward that goal people start to reinvent their own 0-RTT cryptographic protocols (badly) as TLS goes out of the window because it either spends take several round trips in handshakes or makes it [a pain to set up 0-RTT properly](https://tools.ietf.org/html/rfc8446#section-8). Then people also start to look at low level optimization such as TCP Fast Open.
+Go, Node, etc. make it easy to implement a 1:1 connection proxy model, i.e. creating one upstream connection for every user connection. Then under this model the performance goal is lower overhead in setting up each upstream connection. Toward that goal people start to reinvent their own 0-RTT cryptographic protocols (badly) as TLS goes out of the window because it either spends take several round trips in handshakes or makes it [a pain to set up 0-RTT properly](https://tools.ietf.org/html/rfc8446#section-8). Then people also start to look at low level optimization such as TCP Fast Open.
 
-Meanwhile, Google has removed the code for TCP Fast Open in Chromium all together (they [authored](https://tools.ietf.org/html/rfc7413) the RFC of TCP Fast Open in 2014). The literal reason given for this reversal was
+Meanwhile, Google has removed the code for TCP Fast Open in Chromium altogether (they [authored](https://tools.ietf.org/html/rfc7413) the RFC of TCP Fast Open in 2014). The literal reason given for this reversal was
 
 > We never enabled it by default, and have no plans to, so we should just remove it.  QUIC also makes it less useful, and TLS 1.2 0-RTT session restore means it potentially mutates state.
 
@@ -119,9 +119,9 @@ You may have wondered why not use Chrome directly if NaïveProxy reuses Chrome's
 
 But this setup is prone to basic traffic analysis due to lack of obfuscation and predictable packet sizes in TLS handshakes. [The bane of "TLS-in-TLS" tunnels](http://blog.zorinaq.com/my-experience-with-the-great-firewall-of-china/) is that this combination is just so different from any normal protocols (nobody does 3-way handshakes twice in a row) and the record sizes of TLS handshakes are so predictable that no machine learning is needed to [detect it](https://github.com/shadowsocks/shadowsocks-org/issues/86#issuecomment-362809854).
 
-The browser will introduce an extra 1RTT delay during proxied connection setup because of interpretation of HTTP RFCs. The browser will wait for a 200 response after a CONNECT request, incuring 1RTT which is not necessary. NaïveProxy does HTTP Fast CONNECT similar to TCP Fast Open, i.e. send subsequent data immediately after CONNECT. Also, you may have to type in the password for the proxy everytime you open the browser. NaïveProxy sends the password automatically.
+The browser will introduce an extra 1RTT delay during proxied connection setup because of its interpretation of HTTP RFCs. The browser will wait for a 200 response after a CONNECT request, incurring unnecessary latency. NaïveProxy does HTTP Fast CONNECT similar to TCP Fast Open, i.e. sending subsequent data immediately after CONNECT without this 1RTT delay. Also, you may have to type in the password for the proxy every time you open the browser. NaïveProxy sends the password automatically.
 
-Thus, traffic obfuscation, HTTP Fast CONNECT, and auto-authentication are the crucial last 20% provided by NaïveProxy. These can't be really achieved inside Chrome as extensions/apps because they don't have access to sockets. NaïveProxy extracts Chromium's network stack without all the other baggage to build a small binary (4% of a full Chrome build).
+Thus, traffic obfuscation, HTTP Fast CONNECT, and auto-authentication are the crucial last 20% provided by NaïveProxy. These can't be really achieved inside Chrome as extensions/apps because they don't have access to sockets. So instead, NaïveProxy extracts Chromium's network stack without all the other baggage to build a small binary (4% of a full Chrome build).
 
 But if you don't need the best performance, and unobfuscated TLS-in-TLS somehow still works for you, you can just keep using Caddy proxy with your browser.
 
