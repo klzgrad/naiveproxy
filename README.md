@@ -53,6 +53,8 @@ route {
 ```
 `:443` must appear first for this Caddyfile to work. For more advanced usage consider using JSON for Caddy 2's config.
 
+See also: [Run Caddy as a daemon](https://github.com/klzgrad/naiveproxy/wiki/Run-Caddy-as-a-daemon)
+
 Locally run `./naive` with the following `config.json` to get a SOCKS5 proxy at local port 1080.
 ```json
 {
