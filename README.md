@@ -23,7 +23,7 @@ Starting from v84, users can run a naïve fork of Caddy forwardproxy without the
 
 ## Download binaries
 
-See [latest release](https://github.com/klzgrad/naiveproxy/releases/latest). Linux, Windows, Mac OS, and various OpenWrt targets are supported.
+See [latest release](https://github.com/klzgrad/naiveproxy/releases/latest). Linux, Windows, Mac OS, and [various OpenWrt targets](https://github.com/klzgrad/naiveproxy/wiki/OpenWrt-Support) are supported.
 
 Users should always use the latest version to keep signatures identical to Chrome.
 
