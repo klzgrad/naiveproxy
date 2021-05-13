@@ -10,10 +10,10 @@ if [ -d $sysroot/lib ]; then
 fi
 mkdir -p $sysroot
 
-SDK_PATH=openwrt-sdk-$release-$target-${subtarget}_gcc-${gcc_ver}_${abi}.Linux-x86_64
-if [ "$target" = bcm53xx ]; then
-  SDK_PATH=openwrt-sdk-$release-${target}_gcc-${gcc_ver}_${abi}.Linux-x86_64
-fi
+case "$target" in
+rb532|bcm53xx|imx6|tegra|gemini|cns3xxx|kirkwood) SDK_PATH=openwrt-sdk-$release-${target}_gcc-${gcc_ver}_${abi}.Linux-x86_64;;
+*) SDK_PATH=openwrt-sdk-$release-$target-${subtarget}_gcc-${gcc_ver}_${abi}.Linux-x86_64;;
+esac
 SDK_URL=https://downloads.openwrt.org/releases/$release/targets/$target/$subtarget/$SDK_PATH.tar.xz
 rm -rf $SDK_PATH
 curl $SDK_URL | tar xJf -
