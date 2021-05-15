@@ -9,6 +9,7 @@
 #include "net/cert/cert_net_fetcher.h"
 #include "net/cert/internal/cert_errors.h"
 #include "net/cert/pem.h"
+#include "net/cert/x509_certificate.h"
 #include "net/cert/x509_util.h"
 #include "url/gurl.h"
 
@@ -50,6 +51,28 @@ bool ParseCertFromPem(const uint8_t* data,
   return ParseCertFromDer(
       reinterpret_cast<const uint8_t*>(pem_tokenizer.data().data()),
       pem_tokenizer.data().size(), results);
+}
+
+bool ParseCertFromAuto(const uint8_t* data,
+                       size_t length,
+                       ParsedCertificateList* results) {
+  CertificateList certs = X509Certificate::CreateCertificateListFromBytes(
+      reinterpret_cast<const char*>(data), length,
+      X509Certificate::FORMAT_AUTO);
+  bool ok = false;
+  for (const auto& cert : certs) {
+    CertErrors errors;
+    auto parsed = ParsedCertificate::Create(
+        bssl::UpRef(cert->cert_buffer()),
+        x509_util::DefaultParseCertificateOptions(), &errors);
+    if (parsed) {
+      results->push_back(parsed);
+      ok = true;
+    } else {
+      LOG(ERROR) << errors.ToDebugString();
+    }
+  }
+  return ok;
 }
 
 class AiaRequest : public CertIssuerSource::Request {
@@ -117,7 +140,9 @@ bool AiaRequest::AddCompletedFetchToResults(Error error,
   // is not part of RFC 5280's profile.
   return ParseCertFromDer(fetched_bytes.data(), fetched_bytes.size(),
                           results) ||
-         ParseCertFromPem(fetched_bytes.data(), fetched_bytes.size(), results);
+         ParseCertFromPem(fetched_bytes.data(), fetched_bytes.size(),
+                          results) ||
+         ParseCertFromAuto(fetched_bytes.data(), fetched_bytes.size(), results);
 }
 
 }  // namespace
