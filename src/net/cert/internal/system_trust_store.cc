@@ -19,12 +19,17 @@
 #include <Security/Security.h>
 #endif
 
+#include <array>
 #include <memory>
+#include <vector>
 
+#include "base/environment.h"
+#include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/no_destructor.h"
+#include "base/strings/string_split.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "build/build_config.h"
@@ -49,8 +54,8 @@
 #include "third_party/boringssl/src/include/openssl/pool.h"
 #elif BUILDFLAG(IS_WIN)
 #include "net/cert/internal/trust_store_win.h"
-#elif BUILDFLAG(IS_ANDROID)
-#include "net/cert/internal/trust_store_android.h"
+#elif BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_ANDROID)
+#include "base/lazy_instance.h"
 #endif
 #if BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
 #include "net/cert/internal/trust_store_chrome.h"
@@ -314,6 +319,172 @@ class SystemTrustStoreFuchsia : public SystemTrustStore {
 std::unique_ptr<SystemTrustStore> CreateSslSystemTrustStore() {
   return std::make_unique<SystemTrustStoreFuchsia>();
 }
+
+#elif BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_ANDROID)
+
+namespace {
+
+// Copied from https://golang.org/src/crypto/x509/root_linux.go
+// Possible certificate files; stop after finding one.
+constexpr std::array<const char*, 6> kStaticRootCertFiles = {
+    "/etc/ssl/certs/ca-certificates.crt",  // Debian/Ubuntu/Gentoo etc.
+    "/etc/pki/tls/certs/ca-bundle.crt",    // Fedora/RHEL 6
+    "/etc/ssl/ca-bundle.pem",              // OpenSUSE
+    "/etc/pki/tls/cacert.pem",             // OpenELEC
+    "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",  // CentOS/RHEL 7
+    "/etc/ssl/cert.pem",                                  // Alpine Linux
+};
+
+// Possible directories with certificate files; stop after successfully
+// reading at least one file from a directory.
+constexpr std::array<const char*, 3> kStaticRootCertDirs = {
+    "/etc/ssl/certs",      // SLES10/SLES11, https://golang.org/issue/12139
+    "/etc/pki/tls/certs",  // Fedora/RHEL
+    "/system/etc/security/cacerts",  // Android
+};
+
+// The environment variable which identifies where to locate the SSL
+// certificate file. If set this overrides the system default.
+constexpr char kStaticCertFileEnv[] = "SSL_CERT_FILE";
+
+// The environment variable which identifies which directory to check for SSL
+// certificate files. If set this overrides the system default. It is a colon
+// separated list of directories.
+// See https://www.openssl.org/docs/man1.0.2/man1/c_rehash.html.
+constexpr char kStaticCertDirsEnv[] = "SSL_CERT_DIR";
+
+class StaticUnixSystemCerts {
+ public:
+  StaticUnixSystemCerts() : system_trust_store_(Create()) {}
+
+  TrustStoreInMemory* system_trust_store() { return system_trust_store_.get(); }
+
+  static std::unique_ptr<TrustStoreInMemory> Create() {
+    auto ptr = std::make_unique<TrustStoreInMemory>();
+    auto env = base::Environment::Create();
+    std::string env_value;
+
+    std::vector<std::string> cert_filenames(kStaticRootCertFiles.begin(),
+                                            kStaticRootCertFiles.end());
+    if (env->GetVar(kStaticCertFileEnv, &env_value) && !env_value.empty()) {
+      cert_filenames = {env_value};
+    }
+
+    bool cert_file_ok = false;
+    for (const auto& filename : cert_filenames) {
+      std::string file;
+      if (!base::ReadFileToString(base::FilePath(filename), &file))
+        continue;
+      if (AddCertificatesFromBytes(file.data(), file.size(), ptr.get())) {
+        cert_file_ok = true;
+        break;
+      }
+    }
+
+    std::vector<std::string> cert_dirnames(kStaticRootCertDirs.begin(),
+                                           kStaticRootCertDirs.end());
+    if (env->GetVar(kStaticCertDirsEnv, &env_value) && !env_value.empty()) {
+      cert_dirnames = base::SplitString(env_value, ":", base::TRIM_WHITESPACE,
+                                        base::SPLIT_WANT_NONEMPTY);
+    }
+
+    bool cert_dir_ok = false;
+    for (const auto& dir : cert_dirnames) {
+      base::FileEnumerator e(base::FilePath(dir),
+                             /*recursive=*/true, base::FileEnumerator::FILES);
+      for (auto filename = e.Next(); !filename.empty(); filename = e.Next()) {
+        std::string file;
+        if (!base::ReadFileToString(filename, &file)) {
+          continue;
+        }
+        if (AddCertificatesFromBytes(file.data(), file.size(), ptr.get())) {
+          cert_dir_ok = true;
+        }
+      }
+      if (cert_dir_ok)
+        break;
+    }
+
+    if (!cert_file_ok && !cert_dir_ok) {
+      LOG(ERROR) << "No CA certificates were found. Try using environment "
+                    "variable SSL_CERT_FILE or SSL_CERT_DIR";
+    }
+
+    return ptr;
+  }
+
+ private:
+  static bool AddCertificatesFromBytes(const char* data,
+                                       size_t length,
+                                       TrustStoreInMemory* store) {
+    auto certs = X509Certificate::CreateCertificateListFromBytes(
+        {reinterpret_cast<const uint8_t*>(data), length},
+        X509Certificate::FORMAT_AUTO);
+    bool certs_ok = false;
+    for (const auto& cert : certs) {
+      CertErrors errors;
+      auto parsed = ParsedCertificate::Create(
+          bssl::UpRef(cert->cert_buffer()),
+          x509_util::DefaultParseCertificateOptions(), &errors);
+      if (parsed) {
+        if (!store->Contains(parsed.get())) {
+          store->AddTrustAnchor(parsed);
+        }
+        certs_ok = true;
+      } else {
+        LOG(ERROR) << errors.ToDebugString();
+      }
+    }
+    return certs_ok;
+  }
+
+  std::unique_ptr<TrustStoreInMemory> system_trust_store_;
+};
+
+base::LazyInstance<StaticUnixSystemCerts>::Leaky g_root_certs_static_unix =
+    LAZY_INSTANCE_INITIALIZER;
+
+}  // namespace
+
+class SystemTrustStoreStaticUnix : public SystemTrustStore {
+ public:
+  SystemTrustStoreStaticUnix() = default;
+
+  TrustStore* GetTrustStore() override {
+    return g_root_certs_static_unix.Get().system_trust_store();
+  }
+
+  bool UsesSystemTrustStore() const override { return true; }
+
+  bool IsKnownRoot(const ParsedCertificate* trust_anchor) const override {
+    return g_root_certs_static_unix.Get().system_trust_store()->Contains(
+        trust_anchor);
+  }
+
+#if BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
+  int64_t chrome_root_store_version() override { return 0; }
+#endif
+};
+
+std::unique_ptr<SystemTrustStore> CreateSslSystemTrustStore() {
+  return std::make_unique<SystemTrustStoreStaticUnix>();
+}
+
+#if BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
+
+std::unique_ptr<SystemTrustStore> CreateSslSystemTrustStoreChromeRoot(
+    std::unique_ptr<TrustStoreChrome> chrome_root) {
+  return std::make_unique<SystemTrustStoreChrome>(
+      std::move(chrome_root), StaticUnixSystemCerts::Create());
+}
+
+#else
+
+std::unique_ptr<SystemTrustStore> CreateSslSystemTrustStoreChromeRoot() {
+  return std::make_unique<DummySystemTrustStore>();
+}
+
+#endif  // CHROME_ROOT_STORE_SUPPORTED
 
 #elif BUILDFLAG(IS_WIN)
 
