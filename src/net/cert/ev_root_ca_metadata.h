@@ -16,7 +16,7 @@
 #include "net/cert/x509_certificate.h"
 
 #if defined(USE_NSS_CERTS) || defined(OS_WIN) || defined(OS_APPLE) || \
-    defined(OS_FUCHSIA)
+    defined(OS_FUCHSIA) || defined(OS_ANDROID) || defined(OS_LINUX)
 // When not defined, the EVRootCAMetadata singleton is a dumb placeholder
 // implementation that will fail all EV lookup operations.
 #define PLATFORM_USES_CHROMIUM_EV_METADATA

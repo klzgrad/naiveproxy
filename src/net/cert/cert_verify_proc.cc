@@ -47,7 +47,8 @@
 #include "third_party/boringssl/src/include/openssl/pool.h"
 #include "url/url_canon.h"
 
-#if defined(OS_FUCHSIA) || defined(USE_NSS_CERTS) || defined(OS_MAC)
+#if defined(OS_FUCHSIA) || defined(USE_NSS_CERTS) || defined(OS_MAC) || \
+    defined(OS_ANDROID) || defined(OS_LINUX)
 #include "net/cert/cert_verify_proc_builtin.h"
 #endif
 
@@ -468,7 +469,8 @@ base::Value CertVerifyParams(X509Certificate* cert,
 
 }  // namespace
 
-#if !(defined(OS_FUCHSIA) || defined(OS_LINUX) || defined(OS_CHROMEOS))
+#if !(defined(OS_FUCHSIA) || defined(OS_LINUX) || defined(OS_CHROMEOS) || \
+      defined(OS_ANDROID))
 // static
 scoped_refptr<CertVerifyProc> CertVerifyProc::CreateSystemVerifyProc(
     scoped_refptr<CertNetFetcher> cert_net_fetcher) {
@@ -486,7 +488,8 @@ scoped_refptr<CertVerifyProc> CertVerifyProc::CreateSystemVerifyProc(
 }
 #endif
 
-#if defined(OS_FUCHSIA) || defined(USE_NSS_CERTS) || defined(OS_MAC)
+#if defined(OS_FUCHSIA) || defined(USE_NSS_CERTS) || defined(OS_MAC) || \
+    defined(OS_ANDROID) || defined(OS_LINUX)
 // static
 scoped_refptr<CertVerifyProc> CertVerifyProc::CreateBuiltinVerifyProc(
     scoped_refptr<CertNetFetcher> cert_net_fetcher) {
