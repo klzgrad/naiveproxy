@@ -10,6 +10,7 @@
 #include "net/cert/cert_net_fetcher.h"
 #include "net/cert/pem.h"
 #include "net/cert/pki/cert_errors.h"
+#include "net/cert/x509_certificate.h"
 #include "net/cert/x509_util.h"
 #include "url/gurl.h"
 
@@ -140,6 +141,22 @@ bool AiaRequest::AddCompletedFetchToResults(Error error,
   //    Conforming applications that support HTTP or FTP for accessing
   //    certificates MUST be able to accept individual DER encoded
   //    certificates and SHOULD be able to accept "certs-only" CMS messages.
+
+  // Handles PKCS#7 encoded certificates
+  CertificateList certs = X509Certificate::CreateCertificateListFromBytes(
+      fetched_bytes, X509Certificate::FORMAT_AUTO);
+  bool certs_ok = false;
+  for (const auto& cert : certs) {
+    auto parsed = ParsedCertificate::Create(
+        bssl::UpRef(cert->cert_buffer()),
+        x509_util::DefaultParseCertificateOptions(), /*errors=*/nullptr);
+    if (parsed) {
+      results->push_back(parsed);
+      certs_ok = true;
+    }
+  }
+  if (certs_ok)
+    return true;
 
   // TODO(https://crbug.com/870359): Some AIA responses are served as PEM, which
   // is not part of RFC 5280's profile.
