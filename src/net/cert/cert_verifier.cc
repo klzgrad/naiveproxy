@@ -40,7 +40,8 @@ class DefaultCertVerifyProcFactory : public net::CertVerifyProcFactory {
     return CertVerifyProc::CreateBuiltinWithChromeRootStore(
         std::move(cert_net_fetcher), impl_params.crl_set,
         base::OptionalToPtr(impl_params.root_store_data));
-#elif BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+#elif BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID)
     return CertVerifyProc::CreateBuiltinVerifyProc(std::move(cert_net_fetcher),
                                                    impl_params.crl_set);
 #else
