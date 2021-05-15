@@ -52,7 +52,8 @@
 #include "url/url_canon.h"
 
 #if BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(USE_NSS_CERTS) || BUILDFLAG(IS_MAC) || \
-    BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
+    BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED) || BUILDFLAG(IS_ANDROID) ||        \
+    BUILDFLAG(IS_LINUX)
 #include "net/cert/cert_verify_proc_builtin.h"
 #endif
 
@@ -525,7 +526,8 @@ scoped_refptr<CertVerifyProc> CertVerifyProc::CreateSystemVerifyProc(
 }
 #endif
 
-#if BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(USE_NSS_CERTS)
+#if BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(USE_NSS_CERTS) || \
+    BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_LINUX)
 // static
 scoped_refptr<CertVerifyProc> CertVerifyProc::CreateBuiltinVerifyProc(
     scoped_refptr<CertNetFetcher> cert_net_fetcher) {
