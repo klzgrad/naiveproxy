@@ -10,9 +10,6 @@
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 
-// Must come after all headers that specialize FromJniType() / ToJniType().
-#include "base/virtual_document_path_jni/VirtualDocumentPath_jni.h"
-
 namespace base::files_internal {
 
 VirtualDocumentPath::VirtualDocumentPath(
@@ -29,53 +26,28 @@ VirtualDocumentPath::~VirtualDocumentPath() = default;
 
 std::optional<VirtualDocumentPath> VirtualDocumentPath::Parse(
     const std::string& path) {
-  JNIEnv* env = android::AttachCurrentThread();
-  base::android::ScopedJavaLocalRef<jobject> obj =
-      Java_VirtualDocumentPath_parse(env, path);
-  if (obj.is_null()) {
-    return std::nullopt;
-  }
-  return VirtualDocumentPath(obj);
+  return std::nullopt;
 }
 
 std::optional<std::string> VirtualDocumentPath::ResolveToContentUri() const {
-  JNIEnv* env = android::AttachCurrentThread();
-  std::string uri =
-      Java_VirtualDocumentPath_resolveToContentUriString(env, obj_);
-  if (uri.empty()) {
-    return std::nullopt;
-  }
-  return uri;
+  return std::nullopt;
 }
 
 std::string VirtualDocumentPath::ToString() const {
-  JNIEnv* env = android::AttachCurrentThread();
-  return Java_VirtualDocumentPath_toString(env, obj_);
+  return {};
 }
 
 bool VirtualDocumentPath::Mkdir(mode_t mode) const {
-  JNIEnv* env = android::AttachCurrentThread();
-  return Java_VirtualDocumentPath_mkdir(env, obj_);
+  return false;
 }
 
 bool VirtualDocumentPath::WriteFile(span<const uint8_t> data) const {
-  JNIEnv* env = android::AttachCurrentThread();
-  base::android::ScopedJavaLocalRef<jbyteArray> bs =
-      base::android::ToJavaByteArray(env, data);
-  return Java_VirtualDocumentPath_writeFile(env, obj_, bs);
+  return false;
 }
 
 std::optional<std::pair<std::string, bool>> VirtualDocumentPath::CreateOrOpen()
     const {
-  JNIEnv* env = android::AttachCurrentThread();
-  base::android::ScopedJavaLocalRef<jobject> result =
-      Java_VirtualDocumentPath_createOrOpen(env, obj_);
-  if (result.is_null()) {
-    return std::nullopt;
-  }
-  std::string uri = Java_CreateOrOpenResult_getContentUriString(env, result);
-  bool created = Java_CreateOrOpenResult_getCreated(env, result);
-  return std::make_pair(uri, created);
+  return std::nullopt;
 }
 
 }  // namespace base::files_internal
