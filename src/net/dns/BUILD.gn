@@ -3,8 +3,6 @@
 # found in the LICENSE file.
 
 import("//net/features.gni")
-import("//testing/libfuzzer/fuzzer_test.gni")
-import("//third_party/protobuf/proto_library.gni")
 
 enable_built_in_dns = use_blink
 
@@ -17,16 +15,7 @@ source_set("dns") {
 
   # Internals only intended for use inside network stack (and tests).
   friend = [
-    "//chrome/browser:test_support",
-    "//chrome/test/*",
-    "//components/certificate_transparency:unit_tests",
-    "//components/cronet/*",
-
-    # Needed for brokering system DNS resolution out of the network service.
-    "//content/browser/system_dns_resolution",
-    "//content/test/*",
     "//net/*",
-    "//services/network/*",
   ]
 
   public = []
@@ -197,30 +186,7 @@ source_set("host_resolver") {
   # Restricted access so we can keep track of all usage external to the
   # network stack and network service.
   friend = [
-    # chromecast/browser/url_request_context_factory.cc
-    # URLRequestContext creation for chromecast.
-    "//chromecast/browser",
-
-    # URLRequestContext and HttpNetworkSession::Context creation for iOS.
-    "//ios/components/io_thread",
-    "//ios/web/shell",
-    "//ios/web_view:*",
-
-    # Tests and test support.
-    "//chrome/browser:test_support",
-    "//chrome/test/*",
-    "//components/grpc_support/test:unit_tests",
-    "//content/shell:content_shell_lib",
-    "//content/test:*",
-
-    # Stand-alone tools.
-    "//google_apis/gcm:mcs_probe",
-
-    # Network stack/service.
-    "//components/certificate_transparency/*",
-    "//components/cronet/*",
     "//net/*",
-    "//services/network/*",
   ]
 
   sources = [
@@ -259,16 +225,7 @@ source_set("host_resolver_manager") {
   # Restricted access so we can keep track of all usage external to the
   # network stack and network service.
   friend = [
-    # chromecast/browser/url_request_context_factory.cc
-    # URLRequestContext creation for chromecast.
-    "//chromecast/browser",
-
-    # Tests and test support.
-    "//components/cronet:cronet_common_unittests",
-
-    # Network stack/service.
     "//net/*",
-    "//services/network/*",
   ]
 
   sources = [ "host_resolver_manager.h" ]
@@ -298,24 +255,7 @@ source_set("dns_client") {
   # Restricted access so we can keep track of all usage external to the
   # network stack.
   friend = [
-    # chrome/browser/local_discovery/service_discovery_client_impl.cc
-    # Result parsing utilities for parsing results read through MdnsClient.
-    # TODO(crbug.com/874662): Remove once migrated to network service.
-    "//chrome/browser",
-
-    # chrome/browser/ash/smb_client/discovery/mdns_host_locator.cc
-    # Result parsing for results read through MdnsClient.
-    # TODO(crbug.com/902531): Remove once migrated to network service.
-    "//chrome/browser/ash",
-
-    # Tests and test support
-    "//chrome/browser:test_support",
-    "//chrome/test/*",
-
-    # Network stack/service
-    "//components/certificate_transparency/*",
     "//net/*",
-    "//services/network/*",
   ]
 
   sources = [
@@ -352,29 +292,7 @@ source_set("mdns_client") {
   # Restricted access so we can keep track of all usage external to the
   # network stack.
   friend = [
-    # chrome/browser/local_discovery/service_discovery_client_mdns.h
-    # chrome/browser/local_discovery/service_discovery_client_impl.h
-    # Makes MDNS queries using MDnsClient.
-    # TODO(crbug.com/874662): Remove once migrated to network service.
-    "//chrome/browser",
-
-    # chrome/tools/service_discovery_sniffer/service_discovery_sniffer.cc
-    # Creates MDnsClient instance and passes to ServiceDiscoveryClientImpl.
-    # TODO(crbug.com/874662): Remove once discovery client migrated.
-    "//chrome/tools/service_discovery_sniffer",
-
-    # chrome/browser/ash/smb_client/discovery/mdns_host_locator.h
-    # chrome/browser/ash/smb_client/discovery/mdns_host_locator.cc
-    # Makes MDNS queries using MDnsClient.
-    # TODO(crbug.com/902531): Remove once migrated to network service.
-    "//chrome/browser/ash",
-
-    # Tests and test support
-    "//chrome/browser:test_support",
-
-    # Network stack/service
     "//net/*",
-    "//services/network/*",
   ]
 
   public = []
@@ -390,228 +308,4 @@ source_set("mdns_client") {
     "//net:net_deps",
   ]
   public_deps = [ "//net:net_public_deps" ]
-}
-
-source_set("tests") {
-  testonly = true
-  sources = [
-    "address_info_unittest.cc",
-    "context_host_resolver_unittest.cc",
-    "dns_alias_utility_unittest.cc",
-    "dns_config_service_unittest.cc",
-    "dns_hosts_unittest.cc",
-    "dns_names_util_unittest.cc",
-    "dns_query_unittest.cc",
-    "dns_response_result_extractor_unittest.cc",
-    "dns_response_unittest.cc",
-    "dns_transaction_unittest.cc",
-    "dns_udp_tracker_unittest.cc",
-    "dns_util_unittest.cc",
-    "host_cache_unittest.cc",
-    "host_resolver_internal_result_unittest.cc",
-    "host_resolver_manager_unittest.cc",
-    "https_record_rdata_unittest.cc",
-    "httpssvc_metrics_unittest.cc",
-    "mapped_host_resolver_unittest.cc",
-    "nsswitch_reader_unittest.cc",
-    "opt_record_rdata_unittest.cc",
-    "record_parsed_unittest.cc",
-    "record_rdata_unittest.cc",
-    "resolve_context_unittest.cc",
-    "serial_worker_unittest.cc",
-    "system_dns_config_change_notifier_unittest.cc",
-  ]
-
-  if (is_win) {
-    sources += [ "dns_config_service_win_unittest.cc" ]
-  }
-
-  if (is_android) {
-    sources += [ "dns_config_service_android_unittest.cc" ]
-  } else if (is_linux) {
-    sources += [ "dns_config_service_linux_unittest.cc" ]
-  } else if (is_posix) {
-    sources += [ "dns_config_service_posix_unittest.cc" ]
-  }
-
-  if (enable_built_in_dns) {
-    sources += [
-      "address_sorter_unittest.cc",
-      "dns_client_unittest.cc",
-    ]
-    if (is_posix || is_fuchsia) {
-      sources += [ "address_sorter_posix_unittest.cc" ]
-    }
-  }
-
-  if (enable_mdns) {
-    sources += [
-      "mdns_cache_unittest.cc",
-      "mdns_client_unittest.cc",
-    ]
-  }
-
-  deps = [
-    "//base",
-    "//net",
-    "//net:test_support",
-    "//testing/gmock",
-    "//testing/gtest",
-  ]
-}
-
-source_set("test_support") {
-  visibility = [ "//net:test_support" ]
-  testonly = true
-  sources = [
-    "dns_test_util.cc",
-    "host_resolver_internal_result_test_util.cc",
-    "host_resolver_results_test_util.cc",
-    "mock_host_resolver.cc",
-  ]
-  public = [
-    "dns_test_util.h",
-    "host_resolver_internal_result_test_util.h",
-    "host_resolver_results_test_util.h",
-    "mock_host_resolver.h",
-  ]
-
-  if (enable_mdns) {
-    sources += [
-      "mock_mdns_client.cc",
-      "mock_mdns_socket_factory.cc",
-    ]
-    public += [
-      "mock_mdns_client.h",
-      "mock_mdns_socket_factory.h",
-    ]
-  }
-
-  deps = [
-    "//base",
-    "//net",
-    "//testing/gmock",
-    "//testing/gtest",
-  ]
-}
-
-if (use_fuzzing_engine) {
-  # fuzzer_test targets are no-op when |use_fuzzing_engine| is false. Fuzzer
-  # support targets should be disabled too.
-  source_set("fuzzer_test_support") {
-    testonly = true
-    sources = [
-      "fuzzed_host_resolver_util.cc",
-      "fuzzed_host_resolver_util.h",
-    ]
-    deps = [
-      "//base",
-      "//base/test:test_support",
-      "//net",
-    ]
-  }
-}
-
-proto_library("host_cache_fuzzer_proto") {
-  proto_in_dir = "//"
-  sources = [ "host_cache_fuzzer.proto" ]
-  deps = [ "//testing/libfuzzer/proto:json_proto" ]
-}
-
-fuzzer_test("net_dns_host_cache_fuzzer") {
-  sources = [ "host_cache_fuzzer.cc" ]
-  deps = [
-    ":host_cache_fuzzer_proto",
-    "//base",
-    "//net",
-    "//net:net_fuzzer_test_support",
-    "//testing/libfuzzer/proto:json_proto",
-    "//testing/libfuzzer/proto:json_proto_converter",
-    "//third_party/libprotobuf-mutator",
-  ]
-  dict = "//testing/libfuzzer/fuzzers/dicts/json.dict"
-}
-
-fuzzer_test("net_dns_hosts_parse_fuzzer") {
-  sources = [ "dns_hosts_parse_fuzzer.cc" ]
-  deps = [
-    "//base",
-    "//net",
-    "//net:net_fuzzer_test_support",
-  ]
-  dict = "//net/data/fuzzer_dictionaries/net_dns_hosts_parse_fuzzer.dict"
-}
-
-fuzzer_test("net_dns_https_record_rdata_fuzzer") {
-  sources = [ "https_record_rdata_fuzzer.cc" ]
-  deps = [
-    "//base",
-    "//net",
-    "//net:net_fuzzer_test_support",
-  ]
-  dict = "//net/data/fuzzer_dictionaries/net_dns_record_fuzzer.dict"
-}
-
-fuzzer_test("net_dns_nsswitch_reader_fuzzer") {
-  sources = [ "nsswitch_reader_fuzzer.cc" ]
-  deps = [
-    "//base",
-    "//net",
-    "//net:net_fuzzer_test_support",
-  ]
-  dict = "//net/data/fuzzer_dictionaries/net_dns_nsswitch_reader_fuzzer.dict"
-}
-
-fuzzer_test("net_dns_record_fuzzer") {
-  sources = [ "dns_record_fuzzer.cc" ]
-  deps = [
-    "//base",
-    "//net",
-    "//net:net_fuzzer_test_support",
-  ]
-  dict = "//net/data/fuzzer_dictionaries/net_dns_record_fuzzer.dict"
-}
-
-fuzzer_test("net_dns_query_parse_fuzzer") {
-  sources = [ "dns_query_parse_fuzzer.cc" ]
-  deps = [
-    "//base",
-    "//net",
-    "//net:net_fuzzer_test_support",
-  ]
-  dict = "//net/data/fuzzer_dictionaries/net_dns_record_fuzzer.dict"
-}
-
-fuzzer_test("net_dns_response_fuzzer") {
-  sources = [ "dns_response_fuzzer.cc" ]
-  deps = [
-    "//base",
-    "//net",
-    "//net:net_fuzzer_test_support",
-  ]
-  dict = "//net/data/fuzzer_dictionaries/net_dns_record_fuzzer.dict"
-}
-
-fuzzer_test("net_host_resolver_manager_fuzzer") {
-  sources = [ "host_resolver_manager_fuzzer.cc" ]
-  deps = [
-    "//base",
-    "//net",
-    "//net:net_fuzzer_test_support",
-    "//net:test_support",
-  ]
-  dict = "//net/data/fuzzer_dictionaries/net_host_resolver_manager_fuzzer.dict"
-}
-
-if (is_win) {
-  fuzzer_test("net_dns_parse_domain_ascii_win_fuzzer") {
-    sources = [ "dns_parse_domain_ascii_win_fuzzer.cc" ]
-    deps = [
-      "//base",
-      "//net",
-      "//net:net_fuzzer_test_support",
-    ]
-    dict = "//net/data/fuzzer_dictionaries/net_dns_hosts_parse_fuzzer.dict"
-    seed_corpus = "//net/data/fuzzer_data/dns_parse_domain_ascii_win_fuzzer"
-  }
 }

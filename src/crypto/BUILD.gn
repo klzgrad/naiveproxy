@@ -6,7 +6,6 @@ import("//build/buildflag_header.gni")
 import("//build/config/chromeos/ui_mode.gni")
 import("//components/nacl/toolchain.gni")
 import("//crypto/features.gni")
-import("//testing/test.gni")
 
 buildflag_header("buildflags") {
   header = "crypto_buildflags.h"
@@ -149,76 +148,4 @@ component("crypto") {
   }
 
   defines = [ "CRYPTO_IMPLEMENTATION" ]
-}
-
-test("crypto_unittests") {
-  sources = [
-    "aead_unittest.cc",
-    "ec_private_key_unittest.cc",
-    "ec_signature_creator_unittest.cc",
-    "encryptor_unittest.cc",
-    "hmac_unittest.cc",
-    "p224_spake_unittest.cc",
-    "random_unittest.cc",
-    "rsa_private_key_unittest.cc",
-    "secure_hash_unittest.cc",
-    "sha2_unittest.cc",
-    "signature_creator_unittest.cc",
-    "signature_verifier_unittest.cc",
-    "symmetric_key_unittest.cc",
-    "unexportable_key_unittest.cc",
-  ]
-
-  if (is_win) {
-    sources += [ "unexportable_key_metrics_unittest.cc" ]
-  }
-
-  # Some files are built when NSS is used for the platform certificate library.
-  if (use_nss_certs) {
-    sources += [
-      "nss_key_util_unittest.cc",
-      "nss_util_unittest.cc",
-    ]
-    configs += [ "//build/config/linux/nss" ]
-  }
-
-  deps = [
-    ":crypto",
-    ":test_support",
-    "//base",
-    "//base/test:run_all_unittests",
-    "//base/test:test_support",
-    "//testing/gmock",
-    "//testing/gtest",
-  ]
-}
-
-static_library("test_support") {
-  testonly = true
-  sources = [
-    "scoped_mock_unexportable_key_provider.cc",
-    "scoped_mock_unexportable_key_provider.h",
-  ]
-
-  if (use_nss_certs) {
-    sources += [
-      "scoped_test_nss_db.cc",
-      "scoped_test_nss_db.h",
-    ]
-    configs += [ "//build/config/linux/nss" ]
-  }
-
-  if (is_chromeos_ash) {
-    sources += [
-      "scoped_test_nss_chromeos_user.cc",
-      "scoped_test_nss_chromeos_user.h",
-      "scoped_test_system_nss_key_slot.cc",
-      "scoped_test_system_nss_key_slot.h",
-    ]
-  }
-
-  deps = [
-    ":crypto",
-    "//base",
-  ]
 }
