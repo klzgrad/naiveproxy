@@ -66,34 +66,6 @@ void GetOsVersionStringAndNumbers(std::string* version_string,
 // limited to `PROP_VALUE_MAX` (92 bytes) and will fail to return the value
 // (returning a warning message instead) if the property is longer.
 std::string ReadArbitrarilyLongSystemProperty(const char* name) {
-  // `__system_property_read_callback` was introduced in Android API level 26.
-  // When available, use it because it allows reading properties of arbitrary
-  // length without being truncated or limited by `PROP_VALUE_MAX`.
-  if (__builtin_available(android 26, *)) {
-    const prop_info* pi = __system_property_find(name);
-    if (!pi) {
-      return std::string();
-    }
-    std::string value;
-    __system_property_read_callback(
-        pi,
-        [](void* cookie, const char* /*name*/, const char* value,
-           uint32_t /*serial*/) {
-          // This static_cast is safe because:
-          // 1. The cookie is passed as `&value` where `value` is a
-          // `std::string`
-          //    local variable in `ReadArbitrarilyLongSystemProperty`.
-          // 2. `__system_property_read_callback` executes the callback
-          //    synchronously on the same thread before returning.
-          // 3. Therefore, the `value` object is guaranteed to be alive on the
-          //    stack during the callback execution.
-          std::string* out = static_cast<std::string*>(cookie);
-          *out = value;
-        },
-        &value);
-    return value;
-  }
-
   // Fallback for devices running pre-API 26 or targets compiled with a
   // minimum deployment target lower than Android 26.
   char value_str[PROP_VALUE_MAX] = "";

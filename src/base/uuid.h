@@ -20,7 +20,6 @@
 
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_ROBOLECTRIC)
 #include "base/android/jni_string.h"
-#include "base/system_jni/UUID_jni.h"
 #include "third_party/jni_zero/jni_zero.h"
 #endif
 
@@ -117,8 +116,7 @@ inline base::Uuid FromJniType<base::Uuid>(
   if (!obj) {
     return base::Uuid();
   }
-  return base::Uuid::ParseLowercase(
-      FromJniType<std::string>(env, JNI_UUID::Java_UUID_toString(env, obj)));
+  return {};
 }
 
 template <>
@@ -128,10 +126,7 @@ inline ScopedJavaLocalRef<jobject> ToJniType<base::Uuid>(
   if (!uuid.is_valid()) {
     return nullptr;
   }
-  absl::uint128 value = uuid.AsInteger();
-  return JNI_UUID::Java_UUID_Constructor(
-      env, static_cast<jlong>(absl::Uint128High64(value)),
-      static_cast<jlong>(absl::Uint128Low64(value)));
+  return {};
 }
 
 }  // namespace jni_zero
