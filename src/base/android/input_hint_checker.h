@@ -70,7 +70,7 @@ class BASE_EXPORT InputHintChecker {
   // Throttles the calls to one every few milliseconds. When a call is made
   // before the minimal time interval passed since the previous call, returns
   // false.
-  static bool HasInput();
+  static bool HasInput() { return false; }
 
   // RAII override of GetInstance() for testing.
   struct ScopedOverrideInstance {
