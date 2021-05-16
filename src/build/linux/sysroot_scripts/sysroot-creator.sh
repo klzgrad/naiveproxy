@@ -385,8 +385,6 @@ HacksAndPatchesCommon() {
   # which overwrites PKG_CONFIG_LIBDIR internally
   SubBanner "Move pkgconfig scripts"
   mkdir -p ${INSTALL_ROOT}/usr/lib/pkgconfig
-  mv ${INSTALL_ROOT}/usr/lib/${arch}-${os}/pkgconfig/* \
-      ${INSTALL_ROOT}/usr/lib/pkgconfig
 }
 
 
