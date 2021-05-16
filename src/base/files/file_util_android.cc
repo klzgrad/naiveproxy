@@ -9,19 +9,7 @@
 #include "base/files/file_path.h"
 #include "base/path_service.h"
 
-// Must come after all headers that specialize FromJniType() / ToJniType().
-#include "base/file_utils_jni/FileUtils_jni.h"
-
 namespace base {
-namespace android {
-
-static std::string JNI_FileUtils_GetAbsoluteFilePath(
-    JNIEnv* env,
-    const std::string& file_path) {
-  return MakeAbsoluteFilePath(base::FilePath(file_path)).value();
-}
-
-}  // namespace android
 
 bool GetShmemTempDir(bool executable, base::FilePath* path) {
   return PathService::Get(base::DIR_CACHE, path);
@@ -61,9 +49,7 @@ std::optional<FilePath> ResolveToVirtualDocumentPath(const FilePath& path) {
 std::optional<std::string> CopyFileToDownloadsCollection(
     const FilePath& file_path,
     const std::string& mime_type) {
-  JNIEnv* env = jni_zero::AttachCurrentThread();
-  return android::Java_FileUtils_copyFileToDownloadsCollection(
-      env, file_path.value(), mime_type);
+  return std::nullopt;
 }
 
 }  // namespace base
