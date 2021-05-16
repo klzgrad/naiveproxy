@@ -1,0 +1,64 @@
+# Copyright 2014 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/c++/c++.gni")
+import("//build/config/compiler/compiler.gni")
+import("//build/config/sanitizers/sanitizers.gni")
+
+if (current_toolchain == default_toolchain) {
+  import("//build/toolchain/concurrent_links.gni")
+}
+
+assert(current_os == "openwrt")
+
+declare_args() {
+  build_static = false
+}
+
+# This is included by reference in the //build/config/compiler config that
+# is applied to all targets. It is here to separate out the logic that is
+# Android-only.
+config("compiler") {
+  cflags = []
+  ldflags = []
+
+  defines = [
+    "_LIBCPP_HAS_MUSL_LIBC",
+    "__UCLIBC__",
+    "__MUSL__",
+  ]
+
+  if (build_static) {
+    # Musl static objects are not built with -fPIC, cannot use -static-pie.
+    ldflags += [ "-static" ]
+  } else if (current_cpu == "x86") {
+    ldflags += [ "-Wl,--dynamic-linker=/lib/ld-musl-i386.so.1" ]
+  } else if (current_cpu == "mipsel") {
+    ldflags += [ "-Wl,--dynamic-linker=/lib/ld-musl-mipsel-sf.so.1" ]
+  }
+
+  abi = "musl"
+  if (current_cpu == "arm") {
+    abi = "muslgnueabi"
+    arch = "arm"
+  } else if (current_cpu == "arm64") {
+    arch = "aarch64"
+  } else if (current_cpu == "x86") {
+    arch = "i486"
+  } else if (current_cpu == "x64") {
+    arch = "x86_64"
+  } else if (current_cpu == "mipsel") {
+    arch = "mipsel"
+  } else if (current_cpu == "mips64el") {
+    arch = "mips64el"
+  } else {
+    assert(false, "Architecture not supported")
+  }
+  cflags += [ "--target=$arch-openwrt-linux-$abi" ]
+  ldflags += [ "--target=$arch-openwrt-linux-$abi" ]
+
+  # Assign any flags set for the C compiler to asmflags so that they are sent
+  # to the assembler.
+  asmflags = cflags
+}
