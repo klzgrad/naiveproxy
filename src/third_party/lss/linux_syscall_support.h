@@ -1442,8 +1442,8 @@ struct kernel_statfs {
 #ifndef __NR_ioprio_get
 #define __NR_ioprio_get         (__NR_Linux + 274)
 #endif
-#ifndef __NT_getrandom
-#define                         (__NR_Linux + 313)
+#ifndef __NR_getrandom
+#define __NR_getrandom          (__NR_Linux + 313)
 #endif
 /* End of MIPS (64bit API) definitions */
 #else
