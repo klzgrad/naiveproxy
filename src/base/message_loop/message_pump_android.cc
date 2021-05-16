@@ -462,7 +462,6 @@ void MessagePumpAndroid::DoNonDelayedLooperWork(bool do_idle_work) {
     // polling the input channel.
     if (is_type_ui_ && next_work_info.is_immediate() &&
         InputHintChecker::HasInput()) {
-      InputHintChecker::GetInstance().set_is_after_input_yield(true);
       ScheduleWork();
       return;
     }
@@ -590,11 +589,6 @@ void MessagePumpAndroid::OnReturnFromLooper() {
   if (!is_type_ui_) {
     return;
   }
-  auto& checker = InputHintChecker::GetInstance();
-  if (checker.is_after_input_yield()) {
-    InputHintChecker::RecordInputHintResult(InputHintResult::kBackToNative);
-  }
-  checker.set_is_after_input_yield(false);
 }
 
 void MessagePumpAndroid::ScheduleDelayedWork(
