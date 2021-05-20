@@ -9,8 +9,6 @@ The following traffic attacks are mitigated in NaïveProxy:
 * [Active probing](https://ensa.fi/active-probing/): defeated by *application fronting*, i.e. hiding proxy servers behind a commonly used frontend with application-layer routing.
 * Length-based traffic analysis: mitigated by length padding.
 
-The code consists of a patch series morphed and rebased onto every new Chrome release.
-
 ## Architecture
 
 [Browser → Naïve (client)] ⟶ Censor ⟶ [Frontend → Naïve (server)] ⟶ Internet
@@ -23,11 +21,9 @@ Starting from v84, users can run a naïve fork of Caddy forwardproxy without the
 
 ## Download binaries
 
-See [latest release](https://github.com/klzgrad/naiveproxy/releases/latest). Linux, Windows, Mac OS, and [various OpenWrt targets](https://github.com/klzgrad/naiveproxy/wiki/OpenWrt-Support) are supported.
+[Download here](https://github.com/klzgrad/naiveproxy/releases/latest). Supported platforms include: Windows, Android (with [SagerNet](https://github.com/SagerNet/SagerNet)), Linux, Mac OS, and OpenWrt ([support status](https://github.com/klzgrad/naiveproxy/wiki/OpenWrt-Support)).
 
 Users should always use the latest version to keep signatures identical to Chrome.
-
-Note: On Linux libnss3 must be installed before using the prebuilt binary.
 
 ## Setup
 
@@ -68,9 +64,9 @@ See [USAGE.txt](https://github.com/klzgrad/naiveproxy/blob/master/USAGE.txt) for
 If you don't like to download binaries, you can build NaïveProxy.
 
 Prerequisites:
-* Ubuntu (apt-get install): git, python2, ninja-build (>= 1.7), pkg-config, libnss3-dev, curl, unzip, ccache (optional)
+* Ubuntu (apt-get install): git, python, ninja-build (>= 1.7), pkg-config, curl, unzip, ccache (optional)
 * MacOS (brew install): git, ninja, ccache (optional)
-* Windows ([choco install](https://chocolatey.org/)): git, python2, ninja, visualstudio2017community. See [Chromium's page](https://chromium.googlesource.com/chromium/src/+/master/docs/windows_build_instructions.md#Visual-Studio) for detail on Visual Studio setup requirements.
+* Windows ([choco install](https://chocolatey.org/)): git, python, ninja, visualstudio2017community. See [Chromium's page](https://chromium.googlesource.com/chromium/src/+/master/docs/windows_build_instructions.md#Visual-Studio) for detail on Visual Studio setup requirements.
 
 Build (output to `./out/Release/naive`):
 ```
@@ -80,6 +76,10 @@ cd naiveproxy/src
 ./build.sh
 ```
 The scripts download tools from Google servers with curl. You may need to set a proxy environment variable for curl, e.g. `export ALL_PROXY=socks5h://127.0.0.1:1080`.
+
+## Notes for downstream
+
+Do not use the master branch to track updates, as it rebases from a new root commit for every new Chrome release. Use stable releases and the associated tags to track new versions, where short release notes are also provided.
 
 ## FAQ
 
