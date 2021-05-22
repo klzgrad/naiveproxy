@@ -17,7 +17,7 @@ NaïveProxy uses Chrome's network stack to ensure its observable behavior is ide
 
 The frontend server can be any reverse proxy that is able to route HTTP/2 traffic based on HTTP authorization headers, preventing active probing of proxy existence. Known ones include Caddy with its forwardproxy plugin and HAProxy.
 
-The Naïve server here works as a forwarding proxy and a packet length padding layer. Caddy forwardproxy is also a forwarding proxy but it lacks a padding layer. A [fork](https://github.com/klzgrad/forwardproxy) adds the NaïveProxy padding layer to Caddy forwardproxy, combining both in one.
+The Naïve server here works as a forward proxy and a packet length padding layer. Caddy forwardproxy is also a forward proxy but it lacks a padding layer. A [fork](https://github.com/klzgrad/forwardproxy) adds the NaïveProxy padding layer to forwardproxy, combining both in one.
 
 ## Download binaries
 
