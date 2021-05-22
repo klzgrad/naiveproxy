@@ -27,7 +27,7 @@ Users should always use the latest version to keep signatures identical to Chrom
 
 ## Server setup
 
-The following describes the [naïve fork of Caddy](https://github.com/klzgrad/forwardproxy) setup.
+The following describes the naïve fork of forwardproxy setup.
 
 Build:
 ```sh
