@@ -6,18 +6,18 @@ The following traffic attacks are mitigated in NaïveProxy:
 
 * Website fingerprinting / traffic classification: [mitigated](https://arxiv.org/abs/1707.00641) by traffic multiplexing in HTTP/2.
 * [TLS parameter fingerprinting](https://arxiv.org/abs/1607.01639): defeated by reusing [Chrome's network stack](https://www.chromium.org/developers/design-documents/network-stack).
-* [Active probing](https://ensa.fi/active-probing/): defeated by *application fronting*, i.e. hiding proxy servers behind a commonly used frontend with application-layer routing.
+* [Active probing](https://ensa.fi/active-probing/): defeated by *application fronting*, i.e. hiding proxy servers behind a commonly used frontend server with application-layer routing.
 * Length-based traffic analysis: mitigated by length padding.
 
 ## Architecture
 
-[Browser → Naïve (client)] ⟶ Censor ⟶ [Frontend → Naïve (server)] ⟶ Internet
+[Browser → Naïve client] ⟶ Censor ⟶ [Frontend → Naïve server] ⟶ Internet
 
-NaïveProxy uses Chrome's network stack. Its visible traffic behavior is identical to regular HTTP/2 traffic between Chrome and standard Frontend (e.g. Caddy, HAProxy).
+NaïveProxy uses Chrome's network stack to ensure its observable behavior is identical to regular HTTP/2 traffic between Chrome and standard frontend servers.
 
-Frontend also reroutes unauthenticated users and active probes to a backend HTTP server, making it impossible to detect the existence of a proxy, like this: Probe ⟶ Frontend ⟶ index.html
+The frontend server can be any reverse proxy that is able to route HTTP/2 traffic based on HTTP authorization headers, preventing active probing of proxy existence. Known ones include Caddy with its forwardproxy plugin and HAProxy.
 
-Starting from v84, users can run a naïve fork of Caddy forwardproxy without the Naïve server.
+The Naïve server here works as a forwarding proxy and a packet length padding layer. Caddy forwardproxy is also a forwarding proxy but it lacks a padding layer. A [fork](https://github.com/klzgrad/forwardproxy) adds the NaïveProxy padding layer to Caddy forwardproxy, combining both in one.
 
 ## Download binaries
 
@@ -25,15 +25,17 @@ Starting from v84, users can run a naïve fork of Caddy forwardproxy without the
 
 Users should always use the latest version to keep signatures identical to Chrome.
 
-## Setup
+## Server setup
 
-On the server, build and run Caddy v2 with naïve fork of forwardproxy:
+The following describes the [naïve fork of Caddy](https://github.com/klzgrad/forwardproxy) setup.
+
+Build:
 ```sh
 go get -u github.com/caddyserver/xcaddy/cmd/xcaddy
 ~/go/bin/xcaddy build --with github.com/caddyserver/forwardproxy@caddy2=github.com/klzgrad/forwardproxy@naive
-sudo setcap cap_net_bind_service=+ep ./caddy
 ```
-Then `./caddy start` with the following Caddyfile (replace `user` and `pass` accordingly):
+
+Example Caddyfile (replace `user` and `pass` accordingly):
 ```
 :443, example.com
 tls me@example.com
@@ -47,9 +49,19 @@ route {
   file_server { root /var/www/html }
 }
 ```
-`:443` must appear first for this Caddyfile to work. For more advanced usage consider using [JSON for Caddy 2's config](https://caddyserver.com/docs/json/)..
+`:443` must appear first for this Caddyfile to work. For more advanced usage consider using [JSON for Caddy 2's config](https://caddyserver.com/docs/json/).
 
-Locally run `./naive` with the following `config.json` to get a SOCKS5 proxy at local port 1080.
+Run with the Caddyfile:
+```
+sudo setcap cap_net_bind_service=+ep ./caddy
+./caddy start
+```
+
+See also [Systemd unit example](https://github.com/klzgrad/naiveproxy/wiki/Run-Caddy-as-a-daemon) and [HAProxy setup](https://github.com/klzgrad/naiveproxy/wiki/HAProxy-Setup).
+
+## Client setup
+
+Run `./naive` with the following `config.json` to get a SOCKS5 proxy at local port 1080.
 ```json
 {
   "listen": "socks://127.0.0.1:1080",
@@ -57,16 +69,16 @@ Locally run `./naive` with the following `config.json` to get a SOCKS5 proxy at 
 }
 ```
 
-See [USAGE.txt](https://github.com/klzgrad/naiveproxy/blob/master/USAGE.txt) for more parameters in `config.json`. See also [Performance Tuning](https://github.com/klzgrad/naiveproxy/wiki/Performance-Tuning).
+See also [parameter usage](https://github.com/klzgrad/naiveproxy/blob/master/USAGE.txt) and [performance tuning](https://github.com/klzgrad/naiveproxy/wiki/Performance-Tuning).
 
 ## Build from source
 
 If you don't like to download binaries, you can build NaïveProxy.
 
 Prerequisites:
-* Ubuntu (apt-get install): git, python, ninja-build (>= 1.7), pkg-config, curl, unzip, ccache (optional)
+* Ubuntu (apt install): git, python, ninja-build (>= 1.7), pkg-config, curl, unzip, ccache (optional)
 * MacOS (brew install): git, ninja, ccache (optional)
-* Windows ([choco install](https://chocolatey.org/)): git, python, ninja, visualstudio2017community. See [Chromium's page](https://chromium.googlesource.com/chromium/src/+/master/docs/windows_build_instructions.md#Visual-Studio) for detail on Visual Studio setup requirements.
+* Windows ([choco install](https://chocolatey.org/)): git, python, ninja, visualstudio2019community. See [Chromium's page](https://chromium.googlesource.com/chromium/src/+/master/docs/windows_build_instructions.md#Visual-Studio) for detail on Visual Studio requirements.
 
 Build (output to `./out/Release/naive`):
 ```
