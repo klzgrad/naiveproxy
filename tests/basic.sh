@@ -47,7 +47,16 @@ test_naive() {
       name=naive$(echo "$arg" | tr -c 0-9a-z _)
       $naive $arg 2>$name.log & pid="$pid $!"
       tail -f $name.log & pid="$pid $!"
-      while ! grep -q 'Listening on' $name.log; do sleep 1; done
+      for i in $(seq 10); do
+        if grep -q 'Listening on' $name.log; then
+          break
+        fi
+        if [ $i -eq 10 ]; then
+          echo Timeout to start naive
+          exit 1
+        fi
+        sleep 1
+      done
     done
     test_proxy "$proxy"
   ); then
