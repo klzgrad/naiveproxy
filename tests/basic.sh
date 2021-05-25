@@ -53,6 +53,7 @@ test_naive() {
         fi
         if [ $i -eq 10 ]; then
           echo Timeout to start naive
+          ss -ntlp
           exit 1
         fi
         sleep 1
