@@ -1,0 +1,75 @@
+Name: Netwide Assembler
+Short Name: nasm
+URL: https://www.nasm.us/
+Version: 2.15.03rc6 / f1cf95480d9df9e7854a4be6844f86ff854e03d2
+CPEPrefix: cpe:/a:nasm:netwide_assembler:2.15.03rc6
+License: 2-Clause BSD
+License File: LICENSE
+Security Critical: no
+Source: https://github.com/netwide-assembler/nasm
+
+--[ DESCRIPTION ] ------------------
+This contains the source to NASM, the assembler used for parts of Chromium.
+
+
+--[ PATCHES ] ------------------
+* See README.patches for the full listing.
+
+If you make any changes to nasm which are not in upstream, please update the
+README.patches file with the following command:
+
+  ./find_patches.py > README.patches
+
+Note: This script only works if you have added upstream as a remote per the
+directions in updating below.
+
+
+--[ UPDATING ] ------------------
+To update, have clang in your system path (from //third_party/llvm-
+build/Release+Asserts/bin) then do the following:
+
+  git remote add upstream https://github.com/netwide-assembler/nasm.git
+  git fetch upstream
+  git merge upstream/master
+
+  # Maybe use git mergetool to resolve any conflicts with local patches.
+
+  # ***DO NOT USE*** git cl upload for this part or you will spam every author
+  # who committed something upstream with a Gerrit issue... :O You must also
+  # have the correct Gerrit permissions from one of the OWNERS to do this.
+  git push origin master
+
+  # You can safely use git cl upload for all of your own modifications past this
+  # point; I.e., once you have pushed all the commits from the git merge.
+
+  CC=clang CXX=clang++ CFLAGS="-std=c11 -Werror" ./autogen.sh
+  CC=clang CXX=clang++ CFLAGS="-std=c11 -Werror" ./configure
+  make perlreq
+  ./generate_nasm_sources.py
+  git add <any new .c/.h files which show up>
+
+  # Copy config/config.h to config-(mac|linux).h
+  # Revert config/config.h to the checked in version
+
+  git commit -a
+
+
+--[ CONFIG_H_ ] ------------------
+In the event any new config.h flags are added, you may need to regenerate the
+config.h for Linux and Mac -- maybe for Windows if they haven't fixed msvc.h.
+
+To run the script on macOS you can follow the same instructions as above after
+setting up autoconf; with Homebrew: brew install autoconf automake libtool
+
+You will likely need to set SDKROOT to point to the macOS SDK if you haven't
+setup Xcode in the past. If you have the hermetic macOS toolchain in your
+checkout just add:
+
+export SDKROOT=$path_to_chrome_src/build/mac_files/xcode_binaries/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk
+
+You can stop after configure. Then just follow the copy instructions above.
+
+
+--[ TODOS ] ------------------
+None at this time.
+
