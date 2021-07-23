@@ -1,0 +1,110 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# Contains flags that we'd like all Chromium .apks to use.
+
+# Keep line number information, useful for stack traces.
+-keepattributes SourceFile,LineNumberTable
+
+# Enable protobuf-related optimizations.
+-shrinkunusedprotofields
+
+# Allowing Proguard to change modifiers.
+-allowaccessmodification
+
+# Keep all CREATOR fields within Parcelable that are kept.
+-keepclassmembers class * implements android.os.Parcelable {
+  public static *** CREATOR;
+}
+
+# Keep all default constructors for used Fragments. Required since they are
+# called reflectively when fragments are reinflated after the app is killed.
+-keepclassmembers class * extends android.app.Fragment {
+  public <init>();
+}
+-keepclassmembers class * extends android.support.v4.app.Fragment {
+  public <init>();
+}
+-keepclassmembers class * extends androidx.fragment.app.Fragment {
+  public <init>();
+}
+
+# AndroidX classes that are inflated via reflection.
+-keep public class androidx.preference.Preference {
+    public <init>(android.content.Context, android.util.AttributeSet);
+}
+-keep public class androidx.preference.PreferenceScreen {
+    public <init>(android.content.Context, android.util.AttributeSet);
+}
+-keep public class androidx.preference.PreferenceCategory {
+    public <init>(android.content.Context, android.util.AttributeSet);
+}
+-keep public class androidx.preference.ListPreference {
+    public <init>(android.content.Context, android.util.AttributeSet);
+}
+
+# SearchView is used in website_preferences_menu.xml and is constructed by
+# Android using reflection.
+-keep class androidx.appcompat.widget.SearchView {
+  public <init>(...);
+}
+
+# Referenced by android.support.v7.preference.PreferenceInflater.
+-keep public class androidx.preference.SwitchPreference {}
+
+# Don't obfuscate Parcelables as they might be marshalled outside Chrome.
+# If we annotated all Parcelables that get put into Bundles other than
+# for saveInstanceState (e.g. PendingIntents), then we could actually keep the
+# names of just those ones. For now, we'll just keep them all.
+-keepnames class * implements android.os.Parcelable {}
+
+# Keep all enum values and valueOf methods. See
+# http://proguard.sourceforge.net/index.html#manual/examples.html
+# for the reason for this. Also, see http://crbug.com/248037.
+-keepclassmembers enum * {
+    public static **[] values();
+}
+
+# Allows Proguard freedom in removing these log related calls.
+-assumenosideeffects class android.util.Log {
+  static int d(...);
+  static int v(...);
+  static boolean isLoggable(...);
+}
+
+-assumenosideeffects class java.util.logging.Logger {
+    void finest(...);
+    void finer(...);
+    void fine(...);
+    void info(...);
+    void warning(...);
+    void severe(...);
+    void throwing(...);
+    void log(...);
+    void logp(...);
+    static java.util.logging.Logger getLogger(...) return null;
+    boolean isLoggable(...) return false;
+}
+
+-assumenosideeffects class java.util.logging.Level {
+  int intValue() return 0;
+}
+
+# This is to workaround crbug.com/1204690 - an old GMS app version crashes when
+# ObjectWrapper contains > 1 fields, and this prevents R8 from inserting a
+# synthetic field.
+-keep class com.google.android.gms.dynamic.ObjectWrapper {
+  <fields>;
+}
+
+# Workaround for crbug/1002847. Methods of BaseGmsClient are incorrectly
+# removed even though they are required for the derived class GmsClient
+# to correctly implement Api$Client.
+# TODO: remove once crbug/1002847 resolved.
+-keep public class com.google.android.gms.common.internal.BaseGmsClient {
+  public void disconnect();
+  public void dump(java.lang.String,java.io.FileDescriptor,java.io.PrintWriter,java.lang.String[]);
+  public int getMinApkVersion();
+  public boolean requiresSignIn();
+}
