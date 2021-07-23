@@ -81,6 +81,7 @@ bool IsFDOwned(int fd) {
 
 extern "C" {
 
+#if !defined(__MUSL__)
 int __close(int);
 
 __attribute__((visibility("default"), noinline)) int close(int fd) {
@@ -88,5 +89,6 @@ __attribute__((visibility("default"), noinline)) int close(int fd) {
     CrashOnFdOwnershipViolation();
   return __close(fd);
 }
+#endif
 
 }  // extern "C"
