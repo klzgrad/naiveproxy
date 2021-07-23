@@ -35,7 +35,7 @@ static_assert(sizeof(void*) != 8, "");
 #endif
 
 #if defined(PA_HAS_64_BITS_POINTERS) && \
-    (defined(OS_LINUX) || defined(OS_ANDROID))
+    (defined(OS_LINUX) || defined(OS_ANDROID)) && !defined(__UCLIBC__)
 // TODO(bikineev): Enable for ChromeOS.
 #define PA_STARSCAN_UFFD_WRITE_PROTECTOR_SUPPORTED
 #endif
