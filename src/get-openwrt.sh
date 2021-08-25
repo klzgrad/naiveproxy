@@ -30,8 +30,11 @@ cat >include.txt <<EOF
 ./include
 ./lib/*.o
 ./lib/gcc/*/libgcc.a
+./lib/gcc/*/libgcc_eh.a
 ./lib/libatomic.so*
+./lib/libatomic.a
 ./lib/libc.so
+./lib/libc.a
 ./lib/libdl.a
 ./lib/ld-*
 ./lib/libgcc_s.*
