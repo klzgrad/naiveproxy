@@ -12,6 +12,10 @@ if (current_toolchain == default_toolchain) {
 
 assert(current_os == "openwrt")
 
+declare_args() {
+  build_static = false
+}
+
 # This is included by reference in the //build/config/compiler config that
 # is applied to all targets. It is here to separate out the logic that is
 # Android-only.
@@ -24,7 +28,10 @@ config("compiler") {
     "__UCLIBC__",
   ]
 
-  if (current_cpu == "x86") {
+  if (build_static) {
+    # Musl static objects are not built with -fPIC, cannot use -static-pie.
+    ldflags += [ "-static" ]
+  } else if (current_cpu == "x86") {
     ldflags += [ "-Wl,--dynamic-linker=/lib/ld-musl-i386.so.1" ]
   } else if (current_cpu == "mipsel") {
     ldflags += [ "-Wl,--dynamic-linker=/lib/ld-musl-mipsel-sf.so.1" ]
