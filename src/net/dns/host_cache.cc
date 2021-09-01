@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <string>
 #include <vector>
+#include <unordered_set>
 
 #include "base/bind.h"
 #include "base/check_op.h"
