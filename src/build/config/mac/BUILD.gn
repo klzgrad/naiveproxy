@@ -1,0 +1,136 @@
+# Copyright (c) 2013 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/apple/symbols.gni")
+import("//build/config/c++/c++.gni")
+import("//build/config/mac/mac_sdk.gni")
+import("//build/config/sysroot.gni")
+
+# This is included by reference in the //build/config/compiler config that
+# is applied to all targets. It is here to separate out the logic.
+config("compiler") {
+  # These flags are shared between the C compiler and linker.
+  common_mac_flags = []
+
+  # CPU architecture.
+  if (current_cpu == "x64") {
+    clang_arch = "x86_64"
+  } else if (current_cpu == "x86") {
+    clang_arch = "i386"
+  } else if (current_cpu == "arm64") {
+    clang_arch = current_cpu
+  } else {
+    assert(false, "unknown current_cpu $current_cpu")
+  }
+  if (host_os == "mac") {
+    common_mac_flags += [
+      "-arch",
+      clang_arch,
+    ]
+  } else {
+    common_mac_flags += [ "--target=$clang_arch-apple-macos" ]
+  }
+
+  # This is here so that all files get recompiled after an Xcode update.
+  # (defines are passed via the command line, and build system rebuild things
+  # when their commandline changes). Nothing should ever read this define.
+  defines = [ "CR_XCODE_VERSION=$xcode_version" ]
+
+  asmflags = common_mac_flags
+  cflags = common_mac_flags
+
+  # Without this, the constructors and destructors of a C++ object inside
+  # an Objective C struct won't be called, which is very bad.
+  cflags_objcc = [ "-fobjc-call-cxx-cdtors" ]
+
+  ldflags = common_mac_flags
+
+  if (save_unstripped_output) {
+    ldflags += [ "-Wcrl,unstripped," + rebase_path(root_out_dir) ]
+  }
+
+  if (export_libcxxabi_from_executables) {
+    ldflags += [ "-Wl,-undefined,dynamic_lookup" ]
+  }
+}
+
+# This is included by reference in the //build/config/compiler:runtime_library
+# config that is applied to all targets. It is here to separate out the logic
+# that is Mac-only. Please see that target for advice on what should go in
+# :runtime_library vs. :compiler.
+config("runtime_library") {
+  common_flags = [
+    "-isysroot",
+    rebase_path(sysroot, root_build_dir),
+    "-mmacosx-version-min=$mac_deployment_target",
+  ]
+
+  asmflags = common_flags
+  cflags = common_flags
+  ldflags = common_flags
+
+  # Prevent Mac OS X AssertMacros.h (included by system header) from defining
+  # macros that collide with common names, like 'check', 'require', and
+  # 'verify'.
+  # http://opensource.apple.com/source/CarbonHeaders/CarbonHeaders-18.1/AssertMacros.h
+  defines = [ "__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0" ]
+}
+
+# On Mac, this is used for everything except static libraries.
+config("mac_dynamic_flags") {
+  ldflags = [ "-Wl,-ObjC" ]  # Always load Objective-C categories and classes.
+
+  if (is_component_build) {
+    ldflags += [
+      # Path for loading shared libraries for unbundled binaries.
+      "-Wl,-rpath,@loader_path/.",
+
+      # Path for loading shared libraries for bundled binaries. Get back from
+      # Binary.app/Contents/MacOS.
+      "-Wl,-rpath,@loader_path/../../..",
+    ]
+  }
+}
+
+# The ldflags referenced below are handled by
+# //build/toolchain/apple/linker_driver.py.
+# Remove this config if a target wishes to change the arguments passed to the
+# strip command during linking. This config by default strips all symbols
+# from a binary, but some targets may wish to specify an exports file to
+# preserve specific symbols.
+config("strip_all") {
+  if (enable_stripping) {
+    ldflags = [ "-Wcrl,strip,-x,-S" ]
+  }
+}
+
+# When building with Goma, all inputs must be relative to the build directory.
+# If using the system Xcode, which typically resides outside the build root, a
+# symlink to the SDK is created in the build directory, and the path to that
+# link is stored in $mac_sdk_path. If an action references a file in the SDK as
+# an input, GN will complain that no target generates the file because it is
+# below the $root_build_dir. The below action lists as outputs the files in the
+# SDK that are referenced as inputs to actions, so that GN thinks a target has
+# generated them. The list is centralized here, as multiple targets need to
+# reference the same files, and an output can only be generated once.
+#
+# The symbolic link for $mac_sdk_path is set up by
+# //build/config/apple/sdk_info.py in //build/config/mac/mac_sdk.gni.
+if (use_system_xcode && use_goma && target_os == "mac" &&
+    current_toolchain == default_toolchain) {
+  action("sdk_inputs") {
+    script = "//build/noop.py"
+    outputs = [
+      "$mac_sdk_path/usr/include/mach/exc.defs",
+      "$mac_sdk_path/usr/include/mach/mach_exc.defs",
+      "$mac_sdk_path/usr/include/mach/notify.defs",
+    ]
+  }
+} else {
+  group("sdk_inputs") {
+    if (current_toolchain != default_toolchain) {
+      public_deps = [ ":sdk_inputs($default_toolchain)" ]
+    }
+  }
+}

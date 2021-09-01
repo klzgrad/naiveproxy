@@ -1,0 +1,124 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/compiler/compiler.gni")
+import("nasm_sources.gni")
+
+configs_to_delete = [ "//build/config/compiler:chromium_code" ]
+
+# We'd like to disable sanitizers in all cases, but this is not possible with
+# MSAN due to its linkage with instrumented libraries. https://crbug.com/928357
+if (!is_msan) {
+  configs_to_delete += [
+    # Don't enable sanitizers for build tools. They slow down the overall build.
+    "//build/config/sanitizers:default_sanitizer_flags",
+  ]
+}
+
+configs_to_add = [ "//build/config/compiler:no_chromium_code" ]
+if (is_debug) {
+  configs_to_delete += [
+    # Build with full optimizations even on debug configurations, because some
+    # yasm build steps (highbd_sad4d_sse2.asm) can take ~33 seconds or more in
+    # debug component builds on Windows. Enabling compiler optimizations saves
+    #  ~5 seconds.
+    "//build/config/compiler:default_optimization",
+
+    # Don't define _DEBUG. Modest savings, but good for consistency.
+    "//build/config:debug",
+  ]
+
+  configs_to_add += [
+    "//build/config:release",
+    "//build/config/compiler:optimize_max",
+  ]
+  if (is_win) {
+    # This switches to using the release CRT. For yasm debug component builds
+    # of highbd_sad4d_sse2.asm on Windows this saved about 15 s.
+    configs_to_delete += [ "//build/config/win:default_crt" ]
+    configs_to_add += [ "//build/config/win:release_crt" ]
+
+    # Without no_default_deps, an implicit dependency on libc++ is added.
+    # libc++ may have been built referencing the debug CRT, but since we're
+    # explicitly using the release CRT, this would result in undefined symbol
+    # errors when linking, so we need to remove the implicit libc++ dependency.
+    no_default_deps = true
+  }
+}
+
+config("nasm_config") {
+  include_dirs = [
+    ".",
+    "asm",
+    "disasm",
+    "include",
+    "output",
+    "x86",
+  ]
+
+  defines = [ "HAVE_CONFIG_H" ]
+
+  if (is_clang) {
+    cflags = [
+      # The inline functions in NASM's headers flag this.
+      "-Wno-unused-function",
+
+      # NASM writes nasm_assert(!"some string literal").
+      "-Wno-string-conversion",
+
+      # NASM sometimes redefines macros from its config.h.
+      "-Wno-macro-redefined",
+
+      # NASM sometimes compares enums to unsigned integers.
+      "-Wno-sign-compare",
+
+      # NASM sometimes return null from nonnull.
+      "-Wno-nonnull",
+
+      # NASM sometimes uses uninitialized values.
+      "-Wno-uninitialized",
+    ]
+  } else if (is_win) {
+    # Please note that's a slightly different set of warnings.
+    cflags = [
+      # NASM sometimes redefines macros from its config.h.
+      "/wd4005",  # macro redefinition
+
+      # NASM sometimes compares enums to unsigned integers.
+      "/wd4018",  # sign compare
+
+      # char VS const char mismatch.
+      "/wd4028",  # formal parameter 1 different from declaration.
+
+      # NASM comment: Uninitialized -> all zero by C spec
+      # Or sometimes one const struct is forward declared for no reason.
+      "/wd4132",  # const object should be initialized
+
+      # NASM uses "(-x) & 0xFF" pattern to negate byte.
+      "/wd4146",  # unary minus operator applied to unsigned type
+    ]
+  }
+}
+
+if (current_toolchain == host_toolchain) {
+  executable("nasm") {
+    sources = nasmlib_sources + nasm_sources
+    sources += [
+      "config/config-linux.h",
+      "config/config-mac.h",
+      "config/config.h",
+      "config/msvc.h",
+      "config/unconfig.h",
+    ]
+
+    configs -= configs_to_delete
+    configs += configs_to_add
+    configs += [ ":nasm_config" ]
+
+    deps = [
+      # Default manifest on Windows (a no-op elsewhere).
+      "//build/win:default_exe_manifest",
+    ]
+  }
+}
