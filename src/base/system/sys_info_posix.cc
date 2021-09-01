@@ -100,7 +100,7 @@ bool IsStatsZeroIfUnlimited(const base::FilePath& path) {
   if (HANDLE_EINTR(statfs(path.value().c_str(), &stats)) != 0)
     return false;
 
-  switch (stats.f_type) {
+  switch (static_cast<int>(stats.f_type)) {
     case TMPFS_MAGIC:
     case static_cast<int>(HUGETLBFS_MAGIC):
     case static_cast<int>(RAMFS_MAGIC):
