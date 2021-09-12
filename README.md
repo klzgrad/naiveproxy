@@ -76,7 +76,7 @@ Run `./naive` with the following `config.json` to get a SOCKS5 proxy at local po
 }
 ```
 
-Or quic://user:pass@example.com, if it works better. See also [parameter usage](https://github.com/klzgrad/naiveproxy/blob/master/USAGE.txt) and [performance tuning](https://github.com/klzgrad/naiveproxy/wiki/Performance-Tuning).
+Or `quic://user:pass@example.com`, if it works better. See also [parameter usage](https://github.com/klzgrad/naiveproxy/blob/master/USAGE.txt) and [performance tuning](https://github.com/klzgrad/naiveproxy/wiki/Performance-Tuning).
 
 ## Build from source
 
