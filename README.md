@@ -37,6 +37,13 @@ go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
 
 Example Caddyfile (replace `user` and `pass` accordingly):
 ```
+{
+  servers {
+    protocol {
+      experimental_http3
+    }
+  }
+}
 :443, example.com
 tls me@example.com
 route {
