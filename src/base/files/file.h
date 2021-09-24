@@ -18,8 +18,9 @@
 #include "base/trace_event/base_tracing_forward.h"
 #include "build/build_config.h"
 
-#if defined(OS_BSD) || defined(OS_APPLE) || defined(OS_NACL) || \
-    defined(OS_FUCHSIA) || (defined(OS_ANDROID) && __ANDROID_API__ < 21)
+#if defined(OS_BSD) || defined(OS_APPLE) || defined(OS_NACL) ||             \
+    defined(OS_FUCHSIA) || (defined(OS_ANDROID) && __ANDROID_API__ < 21) || \
+    defined(__MUSL__)
 struct stat;
 namespace base {
 typedef struct stat stat_wrapper_t;
