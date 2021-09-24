@@ -19,7 +19,8 @@
 #include "build/build_config.h"
 
 #if BUILDFLAG(IS_BSD) || BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_NACL) || \
-    BUILDFLAG(IS_FUCHSIA) || (BUILDFLAG(IS_ANDROID) && __ANDROID_API__ < 21)
+    BUILDFLAG(IS_FUCHSIA) ||                                          \
+    (BUILDFLAG(IS_ANDROID) && __ANDROID_API__ < 21) || defined(__MUSL__)
 struct stat;
 namespace base {
 typedef struct stat stat_wrapper_t;
