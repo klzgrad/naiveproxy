@@ -1,0 +1,149 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/chromecast_build.gni")
+import("//build/config/sanitizers/sanitizers.gni")
+
+# Sanitizers replace the allocator, don't use our own.
+_is_using_sanitizers = is_asan || is_hwasan || is_lsan || is_tsan || is_msan
+
+# - Component build support is disabled on all platforms. It is known to cause
+#   issues on some (e.g. Windows with shims, Android with non-universal symbol
+#   wrapping), and has not been validated on others.
+# - Windows: debug CRT is not compatible, see below.
+# - Chromecast on Android: causes issues with crash reporting, see b/178423326.
+_disable_partition_alloc =
+    is_component_build || (is_win && is_debug) || (is_android && is_chromecast)
+_is_partition_alloc_platform = is_android || is_win || is_linux || is_chromeos
+
+# The debug CRT on Windows has some debug features that are incompatible with
+# the shim. NaCl in particular does seem to link some binaries statically
+# against the debug CRT with "is_nacl=false".
+if ((is_linux || is_chromeos || is_android || is_apple ||
+     (is_win && !is_component_build && !is_debug)) && !_is_using_sanitizers) {
+  _default_use_allocator_shim = true
+} else {
+  _default_use_allocator_shim = false
+}
+
+if (_default_use_allocator_shim && _is_partition_alloc_platform &&
+    !_disable_partition_alloc) {
+  _default_allocator = "partition"
+} else if (is_android || is_apple || _is_using_sanitizers || is_win ||
+           is_fuchsia || ((is_linux || is_chromeos) && target_cpu == "arm64") ||
+           (is_cast_audio_only && target_cpu == "arm")) {
+  # Temporarily disable tcmalloc on arm64 linux to get rid of compilation
+  # errors.
+  _default_allocator = "none"
+} else {
+  _default_allocator = "tcmalloc"
+}
+
+declare_args() {
+  # Memory allocator to use. Set to "none" to use default allocator.
+  use_allocator = _default_allocator
+
+  # Causes all the allocations to be routed via allocator_shim.cc.
+  use_allocator_shim = _default_use_allocator_shim
+
+  # Whether PartitionAlloc should be available for use or not.
+  # true makes PartitionAlloc linked to the executable or shared library and
+  # makes it available for use, but it doesn't mean that the default allocator
+  # is PartitionAlloc.  PartitionAlloc may or may not be the default allocator.
+  #
+  # |use_allocator = "partition"| makes PartitionAlloc the default allocator
+  # but it's effective only when |use_partition_alloc = true|.
+  #
+  # TODO(lizeb, yukishiino): Determine if |use_partition_alloc| is necessary or
+  # not, and redesign or remove the flag accordingly.  We may want to assert a
+  # possible conflict between |use_allocator = "partition"| and
+  # |use_partition_alloc = true| rather than prioritizing use_partition_alloc.
+  use_partition_alloc = !is_ios  # Never use PartitionAlloc on iOS.
+
+  # Set use_backup_ref_ptr true to use BackupRefPtr (BRP) as the implementation
+  # of raw_ptr<T>, and enable PartitionAlloc support for it. The _fake option
+  # doesn't enable BRP, but pretends it's enabled for the syntethic field trial
+  #(for testing purposes only).
+  use_backup_ref_ptr = false
+  use_backup_ref_ptr_fake = false
+
+  # If BRP is enabled, additional options are available:
+  # - enable_runtime_backup_ref_ptr_control: control BRP support at run-time
+  #   (disable in some processes)
+  # - put_ref_count_in_previous_slot: place the ref-count at the end of the
+  #   previous slot (or in metadata if a slot starts on the page boundary), as
+  #   opposed to the beginning of the slot.
+  # - never_remove_from_brp_pool_blocklist: never remove super-pages from the
+  #   BRP-pool block list
+  # - enable_backup_ref_ptr_slow_checks: enable additional safety checks that
+  #   are too expensive to have on by default.
+  enable_runtime_backup_ref_ptr_control = false
+  enable_backup_ref_ptr_in_renderer_process = false
+  put_ref_count_in_previous_slot = false
+  never_remove_from_brp_pool_blocklist = false
+  enable_backup_ref_ptr_slow_checks = false
+}
+
+if (!use_partition_alloc && use_allocator == "partition") {
+  # If there is a conflict, prioritize |use_partition_alloc| over
+  # |use_allocator|.
+  use_allocator = "none"
+}
+
+assert(use_allocator == "none" || use_allocator == "tcmalloc" ||
+       use_allocator == "partition")
+
+assert(!is_win || use_allocator != "tcmalloc",
+       "Tcmalloc doesn't work on Windows.")
+assert(!is_mac || use_allocator != "tcmalloc",
+       "Tcmalloc doesn't work on macOS.")
+assert(!is_ios || use_allocator != "tcmalloc", "Tcmalloc doesn't work on iOS.")
+
+assert(
+    !use_allocator_shim || is_linux || is_chromeos || is_android || is_win ||
+        is_apple,
+    "use_allocator_shim works only on Android, iOS, Linux, macOS, and Windows.")
+
+if (is_win && use_allocator_shim) {
+  assert(!is_component_build,
+         "The allocator shim doesn't work for the component build on Windows.")
+}
+
+# Prevent using BackupRefPtr when PartitionAlloc-Everywhere isn't used.
+# In theory, such a configuration is possible, but its scope would be limited to
+# only Blink partitions, which is currently not tested. Better to trigger an
+# error, than have BackupRefPtr silently disabled while believing it is enabled.
+if (!is_nacl) {
+  assert(!use_backup_ref_ptr || use_allocator == "partition",
+         "Can't use BackupRefPtr without PartitionAlloc-Everywhere")
+}
+
+# enable_runtime_backup_ref_ptr_control can only be used if use_backup_ref_ptr
+# is true.
+assert(use_backup_ref_ptr || !enable_runtime_backup_ref_ptr_control,
+       "Can't control BackupRefPtr at run-time if it isn't enabled at all")
+
+# enable_backup_ref_ptr_in_renderer_process can only be used if
+# enable_runtime_backup_ref_ptr_control is true.
+assert(
+    enable_runtime_backup_ref_ptr_control ||
+        !enable_backup_ref_ptr_in_renderer_process,
+    "Can't enable BackupRefPtr in renderer process if runtime control isn't enabled")
+
+# put_ref_count_in_previous_slot can only be used if use_backup_ref_ptr
+# is true.
+assert(
+    use_backup_ref_ptr || !put_ref_count_in_previous_slot,
+    "Can't put ref count in the previous slot if BackupRefPtr isn't enabled at all")
+
+# never_remove_from_brp_pool_blocklist can only be used if use_backup_ref_ptr
+# is true.
+assert(
+    use_backup_ref_ptr || !never_remove_from_brp_pool_blocklist,
+    "never_remove_from_brp_pool_blocklist requires BackupRefPtr to be enabled")
+
+# enable_backup_ref_ptr_slow_checks can only be used if use_backup_ref_ptr
+# is true.
+assert(use_backup_ref_ptr || !enable_backup_ref_ptr_slow_checks,
+       "Can't enable additional BackupRefPtr checks if it isn't enabled at all")

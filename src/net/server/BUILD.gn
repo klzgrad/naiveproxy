@@ -1,0 +1,84 @@
+# Copyright 2018 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//net/features.gni")
+import("//testing/libfuzzer/fuzzer_test.gni")
+
+static_library("http_server") {
+  public = []
+
+  # This target is being deprecated. Use //services/network/public/cpp/server
+  # instead.
+  visibility = [
+    ":net_http_server_fuzzer",
+    ":tests",
+    "//chrome/browser/devtools",
+    "//chrome/test/chromedriver/*",
+    "//content/browser",
+  ]
+
+  friend = [
+    ":net_http_server_fuzzer",
+    ":tests",
+    "//chrome/browser/devtools",
+    "//chrome/test/chromedriver/*",
+    "//content/browser",
+  ]
+
+  if (enable_websockets) {
+    sources = [
+      "http_connection.cc",
+      "http_connection.h",
+      "http_server.cc",
+      "http_server.h",
+      "http_server_request_info.cc",
+      "http_server_request_info.h",
+      "http_server_response_info.cc",
+      "http_server_response_info.h",
+      "web_socket.cc",
+      "web_socket.h",
+      "web_socket_encoder.cc",
+      "web_socket_encoder.h",
+    ]
+    configs += [ "//build/config/compiler:wexit_time_destructors" ]
+    deps = [
+      "//base",
+      "//net",
+    ]
+  }
+}
+
+source_set("tests") {
+  testonly = true
+  if (enable_websockets) {
+    sources = [
+      "http_connection_unittest.cc",
+      "http_server_response_info_unittest.cc",
+      "http_server_unittest.cc",
+      "web_socket_encoder_unittest.cc",
+    ]
+    deps = [
+      ":http_server",
+      "//base",
+      "//net",
+      "//net:test_support",
+      "//testing/gtest",
+    ]
+  }
+}
+
+if (enable_websockets) {
+  fuzzer_test("net_http_server_fuzzer") {
+    sources = [ "http_server_fuzzer.cc" ]
+    deps = [
+      ":http_server",
+      "//base",
+      "//net",
+      "//net:net_fuzzer_test_support",
+      "//net:test_support",
+    ]
+    dict = "//net/data/fuzzer_dictionaries/net_http_server_fuzzer.dict"
+    seed_corpus = "//net/data/fuzzer_data/http_server_requests/"
+  }
+}
