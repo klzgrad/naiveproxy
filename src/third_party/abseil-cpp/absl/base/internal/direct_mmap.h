@@ -41,13 +41,13 @@
 
 #ifdef __mips__
 // Include definitions of the ABI currently in use.
-#ifdef __BIONIC__
-// Android doesn't have sgidefs.h, but does have asm/sgidefs.h, which has the
+#ifndef __GLIBC__
+// Non-glibc doesn't have sgidefs.h, but does have asm/sgidefs.h, which has the
 // definitions we need.
 #include <asm/sgidefs.h>
 #else
 #include <sgidefs.h>
-#endif  // __BIONIC__
+#endif  // __GLIBC__
 #endif  // __mips__
 
 // SYS_mmap and SYS_munmap are not defined in Android.

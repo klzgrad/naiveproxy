@@ -166,7 +166,14 @@ extern "C" {
 
 #ifdef __mips__
 /* Include definitions of the ABI currently in use.                          */
+#ifndef __GLIBC__
+/* Non-glibc doesn't have sgidefs.h, but does have asm/sgidefs.h,
+ * which has the definitions we need.
+ */
+#include <asm/sgidefs.h>
+#else
 #include <sgidefs.h>
+#endif
 #endif
 
 #endif
