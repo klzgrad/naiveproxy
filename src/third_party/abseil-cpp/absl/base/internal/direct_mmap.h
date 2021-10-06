@@ -41,7 +41,7 @@
 
 #ifdef __mips__
 // Include definitions of the ABI currently in use.
-#ifdef __BIONIC__
+#if defined(__BIONIC__) || defined(__MUSL__)
 // Android doesn't have sgidefs.h, but does have asm/sgidefs.h, which has the
 // definitions we need.
 #include <asm/sgidefs.h>
