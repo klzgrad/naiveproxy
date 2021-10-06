@@ -120,7 +120,7 @@ extern "C" {
 
 #ifdef __mips__
 /* Include definitions of the ABI currently in use.                          */
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(__MUSL__)
 /* Android doesn't have sgidefs.h, but does have asm/sgidefs.h,
  * which has the definitions we need.
  */
