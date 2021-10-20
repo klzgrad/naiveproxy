@@ -1,0 +1,191 @@
+;; --------------------------------------------------------------------------
+;;   
+;;   Copyright 1996-2017 The NASM Authors - All Rights Reserved
+;;   See the file AUTHORS included with the NASM distribution for
+;;   the specific copyright holders.
+;;
+;;   Redistribution and use in source and binary forms, with or without
+;;   modification, are permitted provided that the following
+;;   conditions are met:
+;;
+;;   * Redistributions of source code must retain the above copyright
+;;     notice, this list of conditions and the following disclaimer.
+;;   * Redistributions in binary form must reproduce the above
+;;     copyright notice, this list of conditions and the following
+;;     disclaimer in the documentation and/or other materials provided
+;;     with the distribution.
+;;     
+;;     THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+;;     CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+;;     INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+;;     MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+;;     DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+;;     CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+;;     SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+;;     NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+;;     LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+;;     HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+;;     CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+;;     OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+;;     EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+;;
+;; --------------------------------------------------------------------------
+
+;
+; Smart alignment macros
+;
+USE: smartalign
+
+%imacro alignmode 1-2.nolist
+  %ifidni %1,nop
+    %define __?ALIGN_JMP_THRESHOLD?__ 16
+
+    %define __?ALIGN_16BIT_1B?__ 0x90
+    %define __?ALIGN_16BIT_GROUP?__ 1
+
+    %define __?ALIGN_32BIT_1B?__ 0x90
+    %define __?ALIGN_32BIT_GROUP?__ 1
+
+    %define __?ALIGN_64BIT_1B?__ 0x90
+    %define __?ALIGN_64BIT_GROUP?__ 1
+  %elifidni %1,generic
+    %define __?ALIGN_JMP_THRESHOLD?__ 8
+
+    %define __?ALIGN_16BIT_1B?__ 0x90
+    %define __?ALIGN_16BIT_2B?__ 0x89,0xf6
+    %define __?ALIGN_16BIT_3B?__ 0x8d,0x74,0x00
+    %define __?ALIGN_16BIT_4B?__ 0x8d,0xb4,0x00,0x00
+    %define __?ALIGN_16BIT_5B?__ 0x8d,0xb4,0x00,0x00,0x90
+    %define __?ALIGN_16BIT_6B?__ 0x8d,0xb4,0x00,0x00,0x89,0xff
+    %define __?ALIGN_16BIT_7B?__ 0x8d,0xb4,0x00,0x00,0x8d,0x7d,0x00
+    %define __?ALIGN_16BIT_8B?__ 0x8d,0xb4,0x00,0x00,0x8d,0xbd,0x00,0x00
+    %define __?ALIGN_16BIT_GROUP?__ 8
+
+    %define __?ALIGN_32BIT_1B?__ 0x90
+    %define __?ALIGN_32BIT_2B?__ 0x89,0xf6
+    %define __?ALIGN_32BIT_3B?__ 0x8d,0x76,0x00
+    %define __?ALIGN_32BIT_4B?__ 0x8d,0x74,0x26,0x00
+    %define __?ALIGN_32BIT_5B?__ 0x90,0x8d,0x74,0x26,0x00
+    %define __?ALIGN_32BIT_6B?__ 0x8d,0xb6,0x00,0x00,0x00,0x00
+    %define __?ALIGN_32BIT_7B?__ 0x8d,0xb4,0x26,0x00,0x00,0x00,0x00
+    %define __?ALIGN_32BIT_GROUP?__ 7
+
+    %define __?ALIGN_64BIT_1B?__ 0x90
+    %define __?ALIGN_64BIT_2B?__ 0x66,0x90
+    %define __?ALIGN_64BIT_3B?__ 0x66,0x66,0x90
+    %define __?ALIGN_64BIT_4B?__ 0x66,0x66,0x66,0x90
+    %define __?ALIGN_64BIT_GROUP?__ 4
+  %elifidni %1,k8
+    %define __?ALIGN_JMP_THRESHOLD?__ 16
+
+    %define __?ALIGN_16BIT_1B?__ 0x90
+    %define __?ALIGN_16BIT_2B?__ 0x66,0x90
+    %define __?ALIGN_16BIT_3B?__ 0x66,0x66,0x90
+    %define __?ALIGN_16BIT_4B?__ 0x66,0x66,0x66,0x90
+    %define __?ALIGN_16BIT_GROUP?__ 4
+
+    %define __?ALIGN_32BIT_1B?__ 0x90
+    %define __?ALIGN_32BIT_2B?__ 0x66,0x90
+    %define __?ALIGN_32BIT_3B?__ 0x66,0x66,0x90
+    %define __?ALIGN_32BIT_4B?__ 0x66,0x66,0x66,0x90
+    %define __?ALIGN_32BIT_GROUP?__ 4
+
+    %define __?ALIGN_64BIT_1B?__ 0x90
+    %define __?ALIGN_64BIT_2B?__ 0x66,0x90
+    %define __?ALIGN_64BIT_3B?__ 0x66,0x66,0x90
+    %define __?ALIGN_64BIT_4B?__ 0x66,0x66,0x66,0x90
+    %define __?ALIGN_64BIT_GROUP?__ 4
+  %elifidni %1,k7
+    %define __?ALIGN_JMP_THRESHOLD?__ 16
+
+    %define __?ALIGN_16BIT_1B?__ 0x90
+    %define __?ALIGN_16BIT_2B?__ 0x66,0x90
+    %define __?ALIGN_16BIT_3B?__ 0x66,0x66,0x90
+    %define __?ALIGN_16BIT_4B?__ 0x66,0x66,0x66,0x90
+    %define __?ALIGN_64BIT_GROUP?__ 4
+
+    %define __?ALIGN_32BIT_1B?__ 0x90
+    %define __?ALIGN_32BIT_2B?__ 0x8b,0xc0
+    %define __?ALIGN_32BIT_3B?__ 0x8d,0x04,0x20
+    %define __?ALIGN_32BIT_4B?__ 0x8d,0x44,0x20,0x00
+    %define __?ALIGN_32BIT_5B?__ 0x8d,0x44,0x20,0x00,0x90
+    %define __?ALIGN_32BIT_6B?__ 0x8d,0x80,0x00,0x00,0x00,0x00
+    %define __?ALIGN_32BIT_7B?__ 0x8d,0x04,0x05,0x00,0x00,0x00,0x00
+    %define __?ALIGN_32BIT_GROUP?__ 7
+
+    %define __?ALIGN_64BIT_1B?__ 0x90
+    %define __?ALIGN_64BIT_2B?__ 0x66,0x90
+    %define __?ALIGN_64BIT_3B?__ 0x66,0x66,0x90
+    %define __?ALIGN_64BIT_4B?__ 0x66,0x66,0x66,0x90
+    %define __?ALIGN_64BIT_GROUP?__ 4
+  %elifidni %1,p6
+    %define __?ALIGN_JMP_THRESHOLD?__ 16
+
+    %define __?ALIGN_16BIT_1B?__ 0x90
+    %define __?ALIGN_16BIT_2B?__ 0x66,0x90
+    %define __?ALIGN_16BIT_3B?__ 0x0f,0x1f,0x00
+    %define __?ALIGN_16BIT_4B?__ 0x0f,0x1f,0x40,0x00
+    %define __?ALIGN_16BIT_GROUP?__ 4
+
+    %define __?ALIGN_32BIT_1B?__ 0x90
+    %define __?ALIGN_32BIT_2B?__ 0x66,0x90
+    %define __?ALIGN_32BIT_3B?__ 0x0f,0x1f,0x00
+    %define __?ALIGN_32BIT_4B?__ 0x0f,0x1f,0x40,0x00
+    %define __?ALIGN_32BIT_5B?__ 0x0f,0x1f,0x44,0x00,0x00
+    %define __?ALIGN_32BIT_6B?__ 0x66,0x0f,0x1f,0x44,0x00,0x00
+    %define __?ALIGN_32BIT_7B?__ 0x0f,0x1f,0x80,0x00,0x00,0x00,0x00
+    %define __?ALIGN_32BIT_8B?__ 0x0f,0x1f,0x84,0x00,0x00,0x00,0x00,0x00
+    %define __?ALIGN_32BIT_GROUP?__ 8
+
+    %define __?ALIGN_64BIT_1B?__ 0x90
+    %define __?ALIGN_64BIT_2B?__ 0x66,0x90
+    %define __?ALIGN_64BIT_3B?__ 0x0f,0x1f,0x00
+    %define __?ALIGN_64BIT_4B?__ 0x0f,0x1f,0x40,0x00
+    %define __?ALIGN_64BIT_5B?__ 0x0f,0x1f,0x44,0x00,0x00
+    %define __?ALIGN_64BIT_6B?__ 0x66,0x0f,0x1f,0x44,0x00,0x00
+    %define __?ALIGN_64BIT_7B?__ 0x0f,0x1f,0x80,0x00,0x00,0x00,0x00
+    %define __?ALIGN_64BIT_8B?__ 0x0f,0x1f,0x84,0x00,0x00,0x00,0x00,0x00
+    %define __?ALIGN_64BIT_GROUP?__ 8
+  %else
+    %error unknown alignment mode: %1
+  %endif
+  %ifnempty %2
+    %ifidni %2,nojmp
+      %xdefine __?ALIGN_JMP_THRESHOLD?__ -1
+    %else
+      %xdefine __?ALIGN_JMP_THRESHOLD?__ %2
+    %endif
+  %endif
+  %xdefine __?ALIGNMODE?__ %1,__?ALIGN_JMP_THRESHOLD?__
+%endmacro
+
+%defalias __ALIGNMODE__ __?ALIGNMODE?__
+
+%unimacro align 1-2+.nolist
+%imacro align 1-2+.nolist
+  sectalign %1   ; align a segment as well
+  %ifnempty %2
+    times (((%1) - (($-$$) % (%1))) % (%1)) %2
+  %elif __?PASS?__ == 0 || __?PASS?__ == 3
+    times (((%1) - (($-$$) % (%1))) % (%1)) nop
+  %else
+    %push
+    %assign %$pad (((%1) - (($-$$) % (%1))) % (%1))
+    %if __?ALIGN_JMP_THRESHOLD?__ != -1 && %$pad > __?ALIGN_JMP_THRESHOLD?__
+      jmp %$end
+      ; We can't re-use %$pad here as $ will have changed!
+      times (((%1) - (($-$$) % (%1))) % (%1)) nop
+    %else
+      times (%$pad / __?ALIGN_%[__?BITS?__]BIT_GROUP?__) \
+        db __?ALIGN_%[__?BITS?__]BIT_%[__?ALIGN_%[__?BITS?__]BIT_GROUP?__]B?__
+      %assign %$pad %$pad % __?ALIGN_%[__?BITS?__]BIT_GROUP?__
+      %if %$pad > 0
+        db __?ALIGN_%[__?BITS?__]BIT_%[%$pad]B?__
+      %endif
+    %endif
+%$end:
+    %pop
+  %endif
+%endmacro
+
+	alignmode generic
