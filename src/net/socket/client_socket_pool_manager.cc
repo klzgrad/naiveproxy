@@ -292,7 +292,7 @@ int InitSocketHandleForRawConnect2(const HostPortPair& endpoint,
                                    CompletionOnceCallback callback) {
   DCHECK(socket_handle);
   return InitSocketPoolHelper(
-      {"http", endpoint.host(), endpoint.port()}, request_load_flags,
+      {"http", endpoint.HostForURL(), endpoint.port()}, request_load_flags,
       request_priority, session, proxy_info, ssl_config_for_origin,
       ssl_config_for_proxy,
       /*is_for_websockets=*/true, privacy_mode,
