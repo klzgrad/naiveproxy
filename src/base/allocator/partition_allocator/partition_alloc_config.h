@@ -35,7 +35,7 @@ static_assert(sizeof(void*) != 8, "");
 #endif
 
 #if defined(PA_HAS_64_BITS_POINTERS) && \
-    (defined(OS_LINUX) || defined(OS_ANDROID)) && !defined(__MUSL__)
+    (defined(OS_LINUX) || defined(OS_ANDROID))
 #include <linux/version.h>
 // TODO(bikineev): Enable for ChromeOS.
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0)
