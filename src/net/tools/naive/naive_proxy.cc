@@ -5,7 +5,6 @@
 
 #include "net/tools/naive/naive_proxy.h"
 
-#include <algorithm>
 #include <utility>
 
 #include "base/bind.h"
@@ -39,7 +38,7 @@ NaiveProxy::NaiveProxy(std::unique_ptr<ServerSocket> listen_socket,
       protocol_(protocol),
       listen_user_(listen_user),
       listen_pass_(listen_pass),
-      concurrency_(std::min(4, std::max(1, concurrency))),
+      concurrency_(concurrency),
       resolver_(resolver),
       session_(session),
       net_log_(

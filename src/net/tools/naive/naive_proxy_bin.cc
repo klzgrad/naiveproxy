@@ -137,7 +137,7 @@ void GetCommandLine(const base::CommandLine& proc, CommandLine* cmdline) {
                  "                                  redir (Linux only)\n"
                  "--proxy=<proto>://[<user>:<pass>@]<hostname>[:<port>]\n"
                  "                           proto: https, quic\n"
-                 "--concurrency=<N>          Use N connections, less secure\n"
+                 "--insecure-concurrency=<N> Use N connections, insecure\n"
                  "--extra-headers=...        Extra headers split by CRLF\n"
                  "--host-resolver-rules=...  Resolver rules\n"
                  "--resolver-range=...       Redirect resolver range\n"
@@ -155,7 +155,7 @@ void GetCommandLine(const base::CommandLine& proc, CommandLine* cmdline) {
 
   cmdline->listen = proc.GetSwitchValueASCII("listen");
   cmdline->proxy = proc.GetSwitchValueASCII("proxy");
-  cmdline->concurrency = proc.GetSwitchValueASCII("concurrency");
+  cmdline->concurrency = proc.GetSwitchValueASCII("insecure-concurrency");
   cmdline->extra_headers = proc.GetSwitchValueASCII("extra-headers");
   cmdline->host_resolver_rules =
       proc.GetSwitchValueASCII("host-resolver-rules");
@@ -189,7 +189,7 @@ void GetCommandLineFromConfig(const base::FilePath& config_path,
   if (proxy) {
     cmdline->proxy = *proxy;
   }
-  const auto* concurrency = value->FindStringKey("concurrency");
+  const auto* concurrency = value->FindStringKey("insecure-concurrency");
   if (concurrency) {
     cmdline->concurrency = *concurrency;
   }
@@ -296,7 +296,7 @@ bool ParseCommandLine(const CommandLine& cmdline, Params* params) {
 
   if (!cmdline.concurrency.empty()) {
     if (!base::StringToInt(cmdline.concurrency, &params->concurrency) ||
-        params->concurrency < 1 || params->concurrency > 4) {
+        params->concurrency < 1) {
       std::cerr << "Invalid concurrency" << std::endl;
       return false;
     }
