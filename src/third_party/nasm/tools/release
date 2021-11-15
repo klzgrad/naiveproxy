@@ -1,0 +1,111 @@
+#!/bin/bash -xe
+#
+# Generate a NASM release
+#
+# Usage: release version [destination]
+#
+
+version="$1"
+if [ -z "$1" ]; then
+    echo "Usage: $0 version [destination]" 1>&2
+    exit 1
+fi
+
+WHERE="$2"
+if [ -z "$WHERE" ]; then
+    WHERE=/var/tmp
+fi
+
+if [ -n "$GIT_DIR" ]; then
+    HERE="$GIT_DIR"
+else
+    HERE=`pwd`
+fi
+
+if [ x`cat version` != x"${version}" ]; then
+    echo "${version}" > version
+    git update-index version
+    git commit -m "Version ${version}" -- version
+fi
+git tag -m "NASM version ${version}" -f "nasm-${version}" 
+
+cd "$WHERE"
+rm -rf nasm-release.*
+work=nasm-release.$$
+mkdir $work
+cd $work
+unset GIT_DIR
+git clone -s -l "$HERE" nasm
+rm -rf nasm/.git nasm/.gitignore
+
+# How to invoke make if makej is not set
+makej="${makej:-make}"
+
+# Create files which are in the release but automatically generated
+cd nasm
+./autogen.sh
+./configure --prefix=/usr/local
+$makej perlreq spec manpages
+$makej alldeps
+$makej distclean
+cd ..
+
+# Clean up any previous attempt
+rm -f ../nasm-"$version".tar.gz  ../nasm-"$version"-xdoc.tar.gz
+rm -f ../nasm-"$version".tar.bz2 ../nasm-"$version"-xdoc.tar.bz2
+rm -f ../nasm-"$version".tar.xz  ../nasm-"$version"-xdoc.tar.xz
+rm -f ../nasm-"$version".zip     ../nasm-"$version"-xdoc.zip
+
+# Create tarfile (Unix convention: file includes prefix)
+mv nasm nasm-"$version"
+tar cvvf  nasm-"$version".tar nasm-"$version"
+xz    -9ek nasm-"$version".tar
+bzip2 -9k  nasm-"$version".tar
+gzip  -9   nasm-"$version".tar
+mv nasm-"$version".tar.gz nasm-"$version".tar.bz2 nasm-"$version".tar.xz ..
+
+# Create zipfile (DOS convention: no prefix, convert file endings)
+cd nasm-"$version"
+binext='jpg zip ico png pdf bin o obj exe com a lib xz'
+for e in $binext; do
+    xbin="$xbin -x *.$e -x *.$e.t"
+    ibin="$ibin -i *.$e -i *.$e.t"
+done
+# Text files
+zip -9Dlr ../../nasm-"$version".zip * $xbin
+# Binary files
+zip -9Dgr ../../nasm-"$version".zip * $ibin
+cd ..
+
+# Record what we have already generated
+find nasm-"$version" -not -type d -print > main
+
+# Create documentation
+cd nasm-"$version"
+./configure --prefix=/usr/local
+$makej doc
+# Remove intermediate files.
+$makej cleaner
+cd ..
+
+# Remove non-documentation
+cat main | xargs rm -f
+# Delete empty subdirectories
+find nasm-"$version"/doc -type d -exec rmdir '{}' \; 2>/dev/null || true
+
+# Create doc tarfile (don't include nasmdoc.pdf.xz as it is redundant)
+rm -f nasm-"$version"/doc/*.pdf.xz
+tar cvvf nasm-"$version"-xdoc.tar nasm-"$version"/doc
+xz    -9ek nasm-"$version"-xdoc.tar
+bzip2 -9k  nasm-"$version"-xdoc.tar
+gzip  -9   nasm-"$version"-xdoc.tar
+mv nasm-"$version"-xdoc.tar.gz nasm-"$version"-xdoc.tar.bz2 nasm-"$version"-xdoc.tar.xz ..
+
+# Create doc zipfile (DOS convention: no prefix, convert file endings)
+cd nasm-"$version"
+zip -9Dlr ../../nasm-"$version"-xdoc.zip doc $xbin
+zip -9Dgr ../../nasm-"$version"-xdoc.zip doc $ibin
+
+# Clean up
+cd ../..
+rm -rf "$work"
