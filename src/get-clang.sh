@@ -61,6 +61,6 @@ if [ "$USE_ANDROID_NDK" -a ! -d third_party/android_ndk ]; then
   git -c advice.detachedHead=false checkout "$android_ndk_version"
   rm -rf .git
   find toolchains -type f -regextype egrep \! -regex \
-    '.*(lib(atomic|gcc|gcc_real|compiler_rt-extras|android_support|unwind).a|crt.*o|lib(android|c|dl|log|m).so|usr/local.*|usr/include.*)' -delete
+    '.*(crt.*o|lib(android|c|dl|log|m).so|usr/local.*|usr/include.*)' -delete
   cd ../..
 fi
