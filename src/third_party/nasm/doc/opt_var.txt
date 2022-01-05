@@ -1,0 +1,116 @@
+                     NASM Optimizer Usage of
+              Certain Variables to Control Assembly
+
+                  prepared by:  John R Coffman
+                       date:  07-Mar-2005
+
+
+GLOBAL variables:
+        optimizing     optimization meta data (with level and flag info)
+        .level         -1 flags nasm 0.98 compatible operation;
+                            offsets usually are explicit (short/near)
+                            no optimization passes
+                        0 flags non-optimized assembly; forward
+                            references generate long offsets; always
+                            assembles
+                            no optimization passes
+                        2 or more specifies optmization passes.  5 is
+                            the actual recommended minimum setting
+                            optimization passes (2 or more, plus
+                            passes 1 and 2 will be required)
+        .flag           0 allow all optimizations
+                        1 disallow jump match optimization
+
+        pass0           0 flags an optimizer pass (multiple passes)
+                        1 flags pass1 (define labels)
+                        2 flags pass2 (spit out code)
+
+
+LOCAL variables:        local to 'assemble_file' (nasm.c)
+
+        pass_max        2 for non-optimized assembly
+                        4 or more for optimized assembly
+
+        pass            index of the FOR loop (1..pass_max)
+                        with optimized assembly, this variable is
+                            advanced to 'pass_max - 1' in the logic
+                            at the end of the loop to terminate
+                            an optimized assembly before all passes
+                            are used; i.e., when convergence has 
+                            occurred
+                
+
+        pass1           flag for making parts of the assembler do
+                            pass 1 behaviors on optimizer passes
+
+        pass2           flag for making parts of the assembler do
+                            pass 2 behaviors on optimizer passes
+
+        pass_cnt        benign counter for counting the actual
+                            number of passes taken.  Since 'pass'
+                            may be jerked upward early on optimized
+                            assembly, it does not accurately reflect
+                            the number of passes taken.
+                        always ends at 2 for non-optimized assembly
+
+
+
+        How the variables sequence:
+
+
+NON-OPTIMIZED assembly:
+
+                
+        pass0           1  2        all indicate, pass 1 and pass 2
+        pass1           1  2
+        pass2           1  2
+
+        pass            1  2
+   ----------------------------------------
+
+        pass_max        pre-set to 2
+        pass_cnt        ends at 2
+
+
+OPTIMIZED assembly:
+
+        optimizing      set to 2 or greater
+
+        pass0           0  0  0  0  0 ... 0  0  1  2
+        pass1           1  1  1  1  1 ... 1  1  1  2
+        pass2           1  2  2  2  2 ... 2  2  2  2
+
+        pass            1  2  3  4  5 ... 7  8  9  12
+
+        pass_max        pre-set to, say, 12
+        pass_cnt        ends at 10 for this assembly
+
+>From pass_cnt, the reported number of passes will be 1+8+1, meaning 
+8 optimization passes, plus pass 1, plus pass 2.
+
+Subroutines may check 'pass0' to see if an optimizer pass is in
+progress (pass0==0).  Many have arguments to tell what pass is in
+progress.  But these variables are passed in as 'pass1' or 'pass2'.
+
+>From the sequences above, 'pass' bears no relation to the desired
+pass 1 or pass 2 behavior of the assembler.  'pass1' is used to tell
+parts of the assembler, on multiple occasions, that pass 1 is in
+progress, and only once that pass 2 is being performed.  Other parts
+of the assembler need to be told only once that pass 1 is being
+performed, but may be told multiple times that pass 2 is being done.
+
+For instance, the preprocessor reset operation looks at pass1, and it
+thinks many pass 1 resets are being done, but only one pass 2 reset
+is done.  Also, certain errors are non-fatal on pass 1, but fatal on
+pass 2; hence, they are tied to the 'pass1' variable to determine the
+assembler pass number.
+
+Further, segment definitions look at the 'pass2' variable, since they
+do some initialization on pass 1, but are pretty much no-ops on pass
+2.  Hence, they should see pass 1 only once, but may see pass 2
+multiple times.
+
+
+ 
+[end]
+
