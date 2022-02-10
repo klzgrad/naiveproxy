@@ -40,7 +40,7 @@ fi
 if [ ! -f gn/out/gn ]; then
   gn_version=$(grep "'gn_version':" DEPS | cut -d"'" -f4)
   mkdir -p gn/out
-  curl -L "https://chrome-infra-packages.appspot.com/dl/gn/gn/$WITH_GN-amd64/+/$gn_version" -o gn.zip
+  curl -L "https://chrome-infra-packages.appspot.com/dl/gn/gn/$WITH_GN/+/$gn_version" -o gn.zip
   unzip gn.zip -d gn/out
   rm gn.zip
 fi

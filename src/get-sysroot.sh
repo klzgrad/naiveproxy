@@ -19,7 +19,7 @@ case "$ARCH" in
     WITH_CLANG=Linux_x64
     # See build/config/compiler/pgo/BUILD.gn
     WITH_PGO=linux
-    WITH_GN=linux
+    WITH_GN=linux-amd64
     if [ "$OPENWRT_FLAGS" ]; then
       eval "$OPENWRT_FLAGS"
       WITH_SYSROOT="out/sysroot-build/openwrt/$release/$arch"
@@ -63,7 +63,7 @@ case "$ARCH" in
     fi
     WITH_CLANG=Win
     USE_SCCACHE=y
-    WITH_GN=windows
+    WITH_GN=windows-amd64
     case "$target_cpu" in
       arm64) WITH_PGO=win-arm64;;
       x64) WITH_PGO=win64;;
@@ -77,11 +77,20 @@ case "$ARCH" in
       export CCACHE_CPP2=yes
       CCACHE=ccache
     fi
-    WITH_CLANG=Mac
-    WITH_GN=mac
+    MACHINE=$(uname -m)
+    if [ "$MACHINE" = "arm64" ]; then
+      WITH_CLANG=Mac_arm64
+      WITH_GN=mac-arm64
+      WITH_PGO_MACHINE=mac-arm
+    else
+      WITH_CLANG=Mac
+      WITH_GN=mac-amd64
+      WITH_PGO_MACHINE=mac
+    fi
     case "$target_cpu" in
       arm64) WITH_PGO=mac-arm;;
-      *) WITH_PGO=mac;;
+      x64) WITH_PGO=mac;;
+      *) WITH_PGO="$WITH_PGO_MACHINE";;
     esac
   ;;
 esac
