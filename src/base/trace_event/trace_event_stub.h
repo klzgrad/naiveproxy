@@ -226,19 +226,19 @@ class TracedArray;
 class TracedDictionary;
 class EventContext;
 
-class StaticString {
+class BASE_EXPORT StaticString {
  public:
   template <typename T>
   StaticString(T) {}
 };
 
-class DynamicString {
+class BASE_EXPORT DynamicString {
  public:
   template <typename T>
   explicit DynamicString(T) {}
 };
 
-class TracedValue {
+class BASE_EXPORT TracedValue {
  public:
   void WriteInt64(int64_t) && {}
   void WriteUInt64(uint64_t) && {}
@@ -253,7 +253,7 @@ class TracedValue {
   TracedArray WriteArray() &&;
 };
 
-class TracedDictionary {
+class BASE_EXPORT TracedDictionary {
  public:
   TracedValue AddItem(StaticString) { return TracedValue(); }
   TracedValue AddItem(DynamicString) { return TracedValue(); }
@@ -269,7 +269,7 @@ class TracedDictionary {
   TracedArray AddArray(DynamicString);
 };
 
-class TracedArray {
+class BASE_EXPORT TracedArray {
  public:
   TracedValue AppendItem() { return TracedValue(); }
 
@@ -281,7 +281,7 @@ class TracedArray {
 };
 
 template <class T>
-void WriteIntoTracedValue(TracedValue, T&&) {}
+BASE_EXPORT void WriteIntoTracedValue(TracedValue, T&&) {}
 
 }  // namespace perfetto
 
