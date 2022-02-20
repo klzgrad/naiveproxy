@@ -443,6 +443,7 @@ std::unique_ptr<URLRequestContext> BuildURLRequestContext(
     GURL proxy_gurl(proxy_url);
     if (proxy_url.compare(0, 7, "quic://") == 0) {
       proxy_url.replace(0, 4, "https");
+      proxy_gurl = GURL(proxy_url);
       auto* quic = context->quic_context()->params();
       quic->supported_versions = {quic::ParsedQuicVersion::RFCv1()};
       quic->origins_to_force_quic_on.insert(
