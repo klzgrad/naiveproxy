@@ -6,12 +6,20 @@
 
 namespace base {
 
-bool ContentUriExists(const FilePath& content_uri) {
-  return false;
+std::optional<std::string> TranslateOpenFlagsToJavaMode(uint32_t) {
+  return {};
 }
 
-File OpenContentUriForRead(const FilePath& content_uri) {
+File OpenContentUri(const FilePath&, uint32_t) {
   return {};
+}
+
+int64_t GetContentUriFileSize(const FilePath&) {
+  return -1;
+}
+
+bool ContentUriExists(const FilePath&) {
+  return false;
 }
 
 std::string GetContentUriMimeType(const FilePath& content_uri) {
@@ -25,10 +33,6 @@ bool MaybeGetFileDisplayName(const FilePath& content_uri,
 
 bool DeleteContentUri(const FilePath& content_uri) {
   return false;
-}
-
-FilePath GetContentUriFromFilePath(const FilePath& file_path) {
-  return {};
 }
 
 }  // namespace base
