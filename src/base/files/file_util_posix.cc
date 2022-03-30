@@ -990,7 +990,7 @@ bool GetFileInfo(const FilePath& file_path, File::Info* results) {
     // Fstat on a virtual content-uri will get size=0 and last_modified=now.
     // Fix size, and set last_modified=0 to at least make it stable.
     if (success && results->size == 0) {
-      int64_t size = GetContentUriFileSize(file_path);
+      int64_t size = 0;
       if (size >= 0) {
         results->size = size;
         results->last_modified = Time();
