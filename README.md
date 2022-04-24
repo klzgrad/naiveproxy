@@ -27,7 +27,7 @@ Users should always use the latest version to keep signatures identical to Chrom
 
 ## Server setup
 
-The following describes the naïve fork of forwardproxy setup.
+The following describes the naïve fork of forwardproxy setup. **(Golang version < 1.18)**  
 
 Build:
 ```sh
