@@ -2,11 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// ninja -C out/Release cronet
-// g++ components/cronet/native/sample/bidi_example.cc -I
-// components/cronet/native/generated -I components/cronet/native/include -I
-// components/grpc_support/include/ out/Release/libcronet.100.0.4896.60.so
-// LD_LIBRARY_PATH=out/Release ./a.out
+// g++ bidi_example.cc libcronet.100.0.4896.60.so
+// LD_LIBRARY_PATH=$PWD ./a.out
 #include <atomic>
 #include <iostream>
 #include <string>
