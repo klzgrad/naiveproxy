@@ -13,6 +13,7 @@ if [ "$1" = debug ]; then
 else
   out=out/Release
   flags="
+    use_thin_lto=false is_cfi=false
     is_official_build=true
     exclude_unwind_tables=true
     enable_resource_allowlist_generation=false
@@ -68,4 +69,4 @@ export DEPOT_TOOLS_WIN_TOOLCHAIN=0
 
 ./gn/out/gn gen "$out" --args="$flags $EXTRA_FLAGS" --script-executable=$PYTHON
 
-ninja -C "$out" naive
+ninja -C "$out" naive cronet

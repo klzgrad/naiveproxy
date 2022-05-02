@@ -107,6 +107,10 @@ void CreateSpdyHeadersFromHttpRequest(const HttpRequestInfo& info,
   HttpRequestHeaders::Iterator it(request_headers);
   while (it.GetNext()) {
     std::string name = base::ToLowerASCII(it.name());
+    if (info.method == "CONNECT" && name == "_real_authority") {
+      (*headers)[spdy::kHttp2AuthorityHeader] = it.value();
+      continue;
+    }
     if (name.empty() || name[0] == ':' || name == "connection" ||
         name == "proxy-connection" || name == "transfer-encoding" ||
         name == "host") {
