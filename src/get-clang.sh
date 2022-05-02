@@ -57,7 +57,7 @@ if [ "$USE_ANDROID_NDK" -a ! -d third_party/android_ndk ]; then
   git clone --depth=1 --filter=blob:none --no-checkout https://chromium.googlesource.com/android_ndk.git third_party/android_ndk
   cd third_party/android_ndk
   git sparse-checkout init --cone
-  git sparse-checkout set /sources/android/cpufeatures /toolchains/llvm/prebuilt
+  git sparse-checkout set sources/android/cpufeatures toolchains/llvm/prebuilt
   git -c advice.detachedHead=false checkout "$android_ndk_version"
   rm -rf .git
   find toolchains -type f -regextype egrep \! -regex \
