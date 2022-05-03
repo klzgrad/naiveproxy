@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/compiler_specific.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
@@ -112,7 +113,7 @@ class BidirectionalStreamAdapter
 
   void OnCanceled() override;
 
-  bidirectional_stream* c_stream() const { return c_stream_.get(); }
+  bidirectional_stream* c_stream() { return &c_stream_; }
 
   static grpc_support::BidirectionalStream* GetStream(
       bidirectional_stream* stream);
@@ -122,75 +123,82 @@ class BidirectionalStreamAdapter
  private:
   void DestroyOnNetworkThread();
 
+  // C side
+  bidirectional_stream c_stream_;
+  bidirectional_stream_callback c_callback_;
   // None of these objects are owned by |this|.
   raw_ptr<net::URLRequestContextGetter> request_context_getter_;
   raw_ptr<grpc_support::BidirectionalStream> bidirectional_stream_;
-  // C side
-  std::unique_ptr<bidirectional_stream> c_stream_;
-  raw_ptr<bidirectional_stream_callback> c_callback_;
 };
 
 BidirectionalStreamAdapter::BidirectionalStreamAdapter(
     stream_engine* engine,
     void* annotation,
     bidirectional_stream_callback* callback)
-    : request_context_getter_(
-          reinterpret_cast<net::URLRequestContextGetter*>(engine->obj)),
-      c_stream_(std::make_unique<bidirectional_stream>()),
-      c_callback_(callback) {
+    : c_stream_{this, annotation},
+      c_callback_(*callback),
+      request_context_getter_(
+          reinterpret_cast<net::URLRequestContextGetter*>(engine->obj)) {
   DCHECK(request_context_getter_);
   bidirectional_stream_ =
       new grpc_support::BidirectionalStream(request_context_getter_, this);
-  c_stream_->obj = this;
-  c_stream_->annotation = annotation;
 }
 
 BidirectionalStreamAdapter::~BidirectionalStreamAdapter() {}
 
+// See crbug.com/771365, crbug.com/1018834
+NO_SANITIZE("cfi-icall")
 void BidirectionalStreamAdapter::OnStreamReady() {
-  DCHECK(c_callback_->on_response_headers_received);
-  c_callback_->on_stream_ready(c_stream());
+  DCHECK(c_callback_.on_response_headers_received);
+  c_callback_.on_stream_ready(c_stream());
 }
 
+NO_SANITIZE("cfi-icall")
 void BidirectionalStreamAdapter::OnHeadersReceived(
     const spdy::Http2HeaderBlock& headers_block,
     const char* negotiated_protocol) {
-  DCHECK(c_callback_->on_response_headers_received);
+  DCHECK(c_callback_.on_response_headers_received);
   HeadersArray response_headers(headers_block);
-  c_callback_->on_response_headers_received(c_stream(), &response_headers,
-                                            negotiated_protocol);
+  c_callback_.on_response_headers_received(c_stream(), &response_headers,
+                                           negotiated_protocol);
 }
 
+NO_SANITIZE("cfi-icall")
 void BidirectionalStreamAdapter::OnDataRead(char* data, int size) {
-  DCHECK(c_callback_->on_read_completed);
-  c_callback_->on_read_completed(c_stream(), data, size);
+  DCHECK(c_callback_.on_read_completed);
+  c_callback_.on_read_completed(c_stream(), data, size);
 }
 
+NO_SANITIZE("cfi-icall")
 void BidirectionalStreamAdapter::OnDataSent(const char* data) {
-  DCHECK(c_callback_->on_write_completed);
-  c_callback_->on_write_completed(c_stream(), data);
+  DCHECK(c_callback_.on_write_completed);
+  c_callback_.on_write_completed(c_stream(), data);
 }
 
+NO_SANITIZE("cfi-icall")
 void BidirectionalStreamAdapter::OnTrailersReceived(
     const spdy::Http2HeaderBlock& trailers_block) {
-  DCHECK(c_callback_->on_response_trailers_received);
+  DCHECK(c_callback_.on_response_trailers_received);
   HeadersArray response_trailers(trailers_block);
-  c_callback_->on_response_trailers_received(c_stream(), &response_trailers);
+  c_callback_.on_response_trailers_received(c_stream(), &response_trailers);
 }
 
+NO_SANITIZE("cfi-icall")
 void BidirectionalStreamAdapter::OnSucceeded() {
-  DCHECK(c_callback_->on_succeded);
-  c_callback_->on_succeded(c_stream());
+  DCHECK(c_callback_.on_succeded);
+  c_callback_.on_succeded(c_stream());
 }
 
+NO_SANITIZE("cfi-icall")
 void BidirectionalStreamAdapter::OnFailed(int error) {
-  DCHECK(c_callback_->on_failed);
-  c_callback_->on_failed(c_stream(), error);
+  DCHECK(c_callback_.on_failed);
+  c_callback_.on_failed(c_stream(), error);
 }
 
+NO_SANITIZE("cfi-icall")
 void BidirectionalStreamAdapter::OnCanceled() {
-  DCHECK(c_callback_->on_canceled);
-  c_callback_->on_canceled(c_stream());
+  DCHECK(c_callback_.on_canceled);
+  c_callback_.on_canceled(c_stream());
 }
 
 grpc_support::BidirectionalStream* BidirectionalStreamAdapter::GetStream(
