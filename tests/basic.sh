@@ -7,6 +7,25 @@ naive="$PWD/$1"
 
 . ./get-sysroot.sh
 
+if [ "$WITH_ANDROID_IMG" ]; then
+  rootfs="$PWD/out/sysroot-build/android/$WITH_ANDROID_IMG"
+elif [ "$WITH_SYSROOT" ]; then
+  rootfs="$PWD/$WITH_SYSROOT"
+fi
+if [ "$rootfs" -a "$target_os" != "" ]; then
+  if [ "$target_cpu" = "x64" -o "$target_cpu" = "x86" ]; then
+    cp "$naive" "$rootfs"
+    mkdir -p "$rootfs"/dev "$rootfs"/proc
+    sudo mount --bind /dev "$rootfs"/dev
+    sudo mount -t proc proc "$rootfs"/proc
+    sudo chroot "$rootfs" /naive --help | grep '^Usage: naive'
+    sudo umount "$rootfs"/dev "$rootfs"/proc
+    rm -rf "$rootfs"/dev "$rootfs"/proc
+    rm -f "$rootfs"/naive
+    exit 0
+  fi
+fi
+
 if [ "$WITH_SYSROOT" -a "$WITH_QEMU" ]; then
   naive="qemu-$WITH_QEMU -L $PWD/$WITH_SYSROOT $naive"
 fi

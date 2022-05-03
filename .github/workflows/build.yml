@@ -96,9 +96,13 @@ jobs:
         arch: [x64, x86, arm64, arm, mipsel, mips64el]
     env:
       EXTRA_FLAGS: 'target_cpu="${{ matrix.arch }}"'
-      BUNDLE: 'naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}'
+      BUNDLE: naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}
+      CRONET_BUNDLE: cronet-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v2
+      - uses: actions/setup-go@v3
+        with:
+          go-version: '^1.18.1'
       - name: Cache toolchains (Linux, OpenWrt, Android)
         uses: actions/cache@v2
         with:
@@ -126,24 +130,35 @@ jobs:
           restore-keys: ccache-linux-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-
       - run: sudo apt update
       - run: sudo apt install ninja-build pkg-config qemu-user ccache
+      - run: sudo apt remove -y qemu-user-binfmt
+      - run: wget https://snapshot.debian.org/archive/debian/20220515T152741Z/pool/main/q/qemu/qemu-user-static_7.0%2Bdfsg-6_amd64.deb
+      - run: sudo dpkg -i qemu-user-static_7.0+dfsg-6_amd64.deb
       # libc6-i386 interferes with x86 build
       - run: sudo apt remove libc6-i386
       - run: ./get-clang.sh
       - run: ccache -s
       - run: ./build.sh
       - run: ccache -s
+      - run: ./go-build.sh
+        working-directory: src/out/Release/cronet
       - run: ../tests/basic.sh out/Release/naive
-      - run: mkdir ${{ env.BUNDLE }} && cp out/Release/naive config.json ../LICENSE ../USAGE.txt ${{ env.BUNDLE }}
-      - run: tar cJf ../${{ env.BUNDLE }}.tar.xz ${{ env.BUNDLE }}
-      - uses: actions/upload-release-asset@v1
+      - name: Pack and upload naiveproxy assets
         if: ${{ github.event_name == 'release' }}
+        run: |
+          mkdir ${{ env.BUNDLE }}
+          cp out/Release/naive config.json ../LICENSE ../USAGE.txt ${{ env.BUNDLE }}
+          tar cJf ${{ env.BUNDLE }}.tar.xz ${{ env.BUNDLE }}
+          hub release edit -a ${{ env.BUNDLE }}.tar.xz -m "" "${GITHUB_REF##*/}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ${{ env.BUNDLE }}.tar.xz
-          asset_name: ${{ env.BUNDLE }}.tar.xz
-          asset_content_type: application/octet-stream
+      - name: Pack and upload cronet assets
+        if: ${{ github.event_name == 'release' }}
+        run: |
+          mv out/Release/cronet ${{ env.CRONET_BUNDLE }}
+          tar cJf ${{ env.CRONET_BUNDLE }}.tar.xz ${{ env.CRONET_BUNDLE }}
+          hub release edit -a ${{ env.CRONET_BUNDLE }}.tar.xz -m "" "${GITHUB_REF##*/}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: openssl sha256 out/Release/naive >sha256sum.txt
       - run: echo "SHA256SUM=$(cut -d' ' -f2 sha256sum.txt)" >>$GITHUB_ENV
       - uses: actions/upload-artifact@v2
@@ -159,9 +174,13 @@ jobs:
         arch: [x64, x86, arm64, arm]
     env:
       EXTRA_FLAGS: 'target_cpu="${{ matrix.arch }}" target_os="android"'
-      BUNDLE: 'naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}'
+      BUNDLE: naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}
+      CRONET_BUNDLE: cronet-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v2
+      - uses: actions/setup-go@v3
+        with:
+          go-version: '^1.18.1'
       - name: Cache toolchains (Linux, OpenWrt, Android)
         uses: actions/cache@v2
         with:
@@ -194,26 +213,36 @@ jobs:
           restore-keys: ccache-android-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-
       - run: sudo apt update
       - run: sudo apt install ninja-build pkg-config qemu-user ccache
+      - run: sudo apt remove -y qemu-user-binfmt
+      - run: wget https://snapshot.debian.org/archive/debian/20220515T152741Z/pool/main/q/qemu/qemu-user-static_7.0%2Bdfsg-6_amd64.deb
+      - run: sudo dpkg -i qemu-user-static_7.0+dfsg-6_amd64.deb
       # libc6-i386 interferes with x86 build
       - run: sudo apt remove libc6-i386
       - run: ./get-clang.sh
       - run: ccache -s
       - run: ./build.sh
       - run: ccache -s
-      - run: ./get-android-sys.sh && ../tests/basic.sh out/Release/naive
-        # qemu-user segfaults with x64 or x86 android builds here.
-        if: ${{ matrix.arch != 'x64' && matrix.arch != 'x86' }}
-      - run: mkdir ${{ env.BUNDLE }} && cp out/Release/naive config.json ../LICENSE ../USAGE.txt ${{ env.BUNDLE }}
-      - run: tar cJf ../${{ env.BUNDLE }}.tar.xz ${{ env.BUNDLE }}
-      - uses: actions/upload-release-asset@v1
+      - run: ./get-android-sys.sh
+      - run: ./go-build.sh
+        working-directory: src/out/Release/cronet
+      - run: ../tests/basic.sh out/Release/naive
+      - name: Pack and upload naiveproxy assets
         if: ${{ github.event_name == 'release' }}
+        run: |
+          mkdir ${{ env.BUNDLE }}
+          cp out/Release/naive config.json ../LICENSE ../USAGE.txt ${{ env.BUNDLE }}
+          tar cJf ${{ env.BUNDLE }}.tar.xz ${{ env.BUNDLE }}
+          hub release edit -a ${{ env.BUNDLE }}.tar.xz -m "" "${GITHUB_REF##*/}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ${{ env.BUNDLE }}.tar.xz
-          asset_name: ${{ env.BUNDLE }}.tar.xz
-          asset_content_type: application/octet-stream
+      - name: Pack and upload cronet assets
+        if: ${{ github.event_name == 'release' }}
+        run: |
+          mv out/Release/cronet ${{ env.CRONET_BUNDLE }}
+          tar cJf ${{ env.CRONET_BUNDLE }}.tar.xz ${{ env.CRONET_BUNDLE }}
+          hub release edit -a ${{ env.CRONET_BUNDLE }}.tar.xz -m "" "${GITHUB_REF##*/}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: openssl sha256 out/Release/naive >sha256sum.txt
       - run: echo "SHA256SUM=$(cut -d' ' -f2 sha256sum.txt)" >>$GITHUB_ENV
       - uses: actions/upload-artifact@v2
@@ -229,9 +258,13 @@ jobs:
         arch: [x64, x86, arm64]
     env:
       EXTRA_FLAGS: 'target_cpu="${{ matrix.arch }}"'
-      BUNDLE: 'naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}'
+      BUNDLE: naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}
+      CRONET_BUNDLE: cronet-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v2
+      - uses: actions/setup-go@v3
+        with:
+          go-version: '^1.18.1'
       - name: Cache toolchains
         uses: actions/cache@v2
         with:
@@ -265,20 +298,28 @@ jobs:
       - run: ~/.cargo/bin/sccache -s
       - run: ./build.sh
       - run: ~/.cargo/bin/sccache -s
+      - run: ./go-build.sh
+        working-directory: src/out/Release/cronet
       - run: ../tests/basic.sh out/Release/naive
         # No real or emulated environment is available to test this.
         if: ${{ matrix.arch != 'arm64' }}
-      - run: mkdir ${{ env.BUNDLE }} && cp out/Release/naive.exe config.json ../LICENSE ../USAGE.txt ${{ env.BUNDLE }}
-      - run: 7z a ../${{ env.BUNDLE }}.zip ${{ env.BUNDLE }}
-      - uses: actions/upload-release-asset@v1
+      - name: Pack and upload naiveproxy assets
         if: ${{ github.event_name == 'release' }}
+        run: |
+          mkdir ${{ env.BUNDLE }}
+          cp out/Release/naive config.json ../LICENSE ../USAGE.txt ${{ env.BUNDLE }}
+          7z a ../${{ env.BUNDLE }}.zip ${{ env.BUNDLE }}
+          hub release edit -a ${{ env.BUNDLE }}.zip -m "" "${GITHUB_REF##*/}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ${{ env.BUNDLE }}.zip
-          asset_name: ${{ env.BUNDLE }}.zip
-          asset_content_type: application/octet-stream
+      - name: Pack and upload cronet assets
+        if: ${{ github.event_name == 'release' }}
+        run: |
+          mv out/Release/cronet ${{ env.CRONET_BUNDLE }}
+          7z a ../${{ env.CRONET_BUNDLE }}.zip ${{ env.CRONET_BUNDLE }}
+          hub release edit -a ${{ env.CRONET_BUNDLE }}.zip -m "" "${GITHUB_REF##*/}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: openssl sha256 out/Release/naive.exe >sha256sum.txt
       - run: echo "SHA256SUM=$(cut -d' ' -f2 sha256sum.txt)" >>$GITHUB_ENV
       - uses: actions/upload-artifact@v2
@@ -294,9 +335,13 @@ jobs:
         arch: [x64, arm64]
     env:
       EXTRA_FLAGS: 'target_cpu="${{ matrix.arch }}"'
-      BUNDLE: 'naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}'
+      BUNDLE: naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}
+      CRONET_BUNDLE: cronet-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v2
+      - uses: actions/setup-go@v3
+        with:
+          go-version: '^1.18.1'
       - name: Cache toolchains and PGO
         uses: actions/cache@v2
         with:
@@ -319,20 +364,28 @@ jobs:
       - run: ccache -s
       - run: ./build.sh
       - run: ccache -s
+      - run: ./go-build.sh
+        working-directory: src/out/Release/cronet
       - run: ../tests/basic.sh out/Release/naive
         # No real or emulated environment is available to test this.
         if: ${{ matrix.arch != 'arm64' }}
-      - run: mkdir ${{ env.BUNDLE }} && cp out/Release/naive config.json ../LICENSE ../USAGE.txt ${{ env.BUNDLE }}
-      - run: tar cJf ../${{ env.BUNDLE }}.tar.xz ${{ env.BUNDLE }}
-      - uses: actions/upload-release-asset@v1
+      - name: Pack and upload naiveproxy assets
         if: ${{ github.event_name == 'release' }}
+        run: |
+          mkdir ${{ env.BUNDLE }}
+          cp out/Release/naive config.json ../LICENSE ../USAGE.txt ${{ env.BUNDLE }}
+          tar cJf ${{ env.BUNDLE }}.tar.xz ${{ env.BUNDLE }}
+          hub release edit -a ${{ env.BUNDLE }}.tar.xz -m "" "${GITHUB_REF##*/}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ${{ env.BUNDLE }}.tar.xz
-          asset_name: ${{ env.BUNDLE }}.tar.xz
-          asset_content_type: application/octet-stream
+      - name: Pack and upload cronet assets
+        if: ${{ github.event_name == 'release' }}
+        run: |
+          mv out/Release/cronet ${{ env.CRONET_BUNDLE }}
+          tar cJf ${{ env.CRONET_BUNDLE }}.tar.xz ${{ env.CRONET_BUNDLE }}
+          hub release edit -a ${{ env.CRONET_BUNDLE }}.tar.xz -m "" "${GITHUB_REF##*/}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: openssl sha256 out/Release/naive >sha256sum.txt
       - run: echo "SHA256SUM=$(cut -d' ' -f2 sha256sum.txt)" >>$GITHUB_ENV
       - uses: actions/upload-artifact@v2
@@ -426,21 +479,25 @@ jobs:
           - arch: mipsel_24kc
             openwrt: 'target=ramips subtarget=rt305x'
             target_cpu: mipsel
-            extra: 'mips_arch_variant="r2" mips_float_abi="soft" mips_tune="24kc" use_lld=false use_gold=false use_thin_lto=false chrome_pgo_phase=0'
+            extra: 'mips_arch_variant="r2" mips_float_abi="soft" mips_tune="24kc"'
           - arch: mipsel_74kc
             openwrt: 'target=ramips subtarget=rt3883'
             target_cpu: mipsel
-            extra: 'mips_arch_variant="r2" mips_float_abi="soft" mips_tune="74kc" use_lld=false use_gold=false use_thin_lto=false chrome_pgo_phase=0'
+            extra: 'mips_arch_variant="r2" mips_float_abi="soft" mips_tune="74kc"'
           - arch: mipsel_mips32
             openwrt: 'target=bcm47xx subtarget=generic'
             target_cpu: mipsel
-            extra: 'mips_arch_variant="r1" mips_float_abi="soft" use_lld=false use_gold=false use_thin_lto=false chrome_pgo_phase=0'
+            extra: 'mips_arch_variant="r1" mips_float_abi="soft"'
     env:
       EXTRA_FLAGS: target_cpu="${{ matrix.target_cpu }}" target_os="openwrt" use_allocator="none" use_allocator_shim=false use_partition_alloc=false ${{ matrix.extra }}
       OPENWRT_FLAGS: arch=${{ matrix.arch }} release=21.02.2 gcc_ver=8.4.0 ${{ matrix.openwrt }}
       BUNDLE: naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}
+      CRONET_BUNDLE: cronet-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v2
+      - uses: actions/setup-go@v3
+        with:
+          go-version: '^1.18.1'
       - name: Cache toolchains (Linux, OpenWrt, Android)
         uses: actions/cache@v2
         with:
@@ -468,24 +525,36 @@ jobs:
           restore-keys: ccache-openwrt-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-
       - run: sudo apt update
       - run: sudo apt install ninja-build pkg-config qemu-user ccache
+      - run: sudo apt remove -y qemu-user-binfmt
+      - run: wget https://snapshot.debian.org/archive/debian/20220515T152741Z/pool/main/q/qemu/qemu-user-static_7.0%2Bdfsg-6_amd64.deb
+      - run: sudo dpkg -i qemu-user-static_7.0+dfsg-6_amd64.deb
       # libc6-i386 interferes with x86 build
       - run: sudo apt remove libc6-i386
       - run: ./get-clang.sh
       - run: ccache -s
       - run: ./build.sh
       - run: ccache -s
+      - run: ./go-build.sh
+        working-directory: src/out/Release/cronet
+        if: ${{ ! contains(matrix.extra, 'build_static=true') }}
       - run: ../tests/basic.sh out/Release/naive
-      - run: mkdir ${{ env.BUNDLE }} && cp out/Release/naive config.json ../LICENSE ../USAGE.txt ${{ env.BUNDLE }}
-      - run: tar cJf ../${{ env.BUNDLE }}.tar.xz ${{ env.BUNDLE }}
-      - uses: actions/upload-release-asset@v1
+      - name: Pack and upload naiveproxy assets
         if: ${{ github.event_name == 'release' }}
+        run: |
+          mkdir ${{ env.BUNDLE }}
+          cp out/Release/naive config.json ../LICENSE ../USAGE.txt ${{ env.BUNDLE }}
+          tar cJf ${{ env.BUNDLE }}.tar.xz ${{ env.BUNDLE }}
+          hub release edit -a ${{ env.BUNDLE }}.tar.xz -m "" "${GITHUB_REF##*/}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ${{ env.BUNDLE }}.tar.xz
-          asset_name: ${{ env.BUNDLE }}.tar.xz
-          asset_content_type: application/octet-stream
+      - name: Pack and upload cronet assets
+        if: ${{ github.event_name == 'release' && ! contains(matrix.extra, 'build_static=true') }}
+        run: |
+          mv out/Release/cronet ${{ env.CRONET_BUNDLE }}
+          tar cJf ${{ env.CRONET_BUNDLE }}.tar.xz ${{ env.CRONET_BUNDLE }}
+          hub release edit -a ${{ env.CRONET_BUNDLE }}.tar.xz -m "" "${GITHUB_REF##*/}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: openssl sha256 out/Release/naive >sha256sum.txt
       - run: echo "SHA256SUM=$(cut -d' ' -f2 sha256sum.txt)" >>$GITHUB_ENV
       - uses: actions/upload-artifact@v2

@@ -52,6 +52,7 @@ case "$ARCH" in
     fi
   ;;
   MINGW*|MSYS*)
+    ARCH=Windows
     if [ -f "$HOME"/.cargo/bin/sccache* ]; then
       export PATH="$PATH:$HOME/.cargo/bin"
       CCACHE=sccache
