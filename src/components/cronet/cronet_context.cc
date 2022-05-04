@@ -12,6 +12,7 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <string>
 #include <utility>
 
 #include "base/base64.h"
@@ -53,7 +54,10 @@
 #include "net/log/net_log_util.h"
 #include "net/net_buildflags.h"
 #include "net/nqe/network_quality_estimator_params.h"
+#include "net/proxy_resolution/configured_proxy_resolution_service.h"
+#include "net/proxy_resolution/proxy_config.h"
 #include "net/proxy_resolution/proxy_config_service_fixed.h"
+#include "net/proxy_resolution/proxy_config_with_annotation.h"
 #include "net/proxy_resolution/proxy_resolution_service.h"
 #include "net/third_party/quiche/src/quic/core/quic_versions.h"
 #include "net/url_request/url_request_context.h"
@@ -352,9 +356,24 @@ CronetContext::NetworkTasks::BuildDefaultURLRequestContext(
   net::URLRequestContextBuilder context_builder;
   SetSharedURLRequestContextBuilderConfig(&context_builder);
 
-  context_builder.set_proxy_resolution_service(
-      cronet::CreateProxyResolutionService(std::move(proxy_config_service),
-                                           g_net_log.Get().net_log()));
+  const auto proxy_server_it =
+      context_config_->experimental_options.find("proxy_server");
+  std::string proxy_server_str = "direct://";
+  if (proxy_server_it != context_config_->experimental_options.end()) {
+    const base::Value& value = proxy_server_it->second;
+    if (value.is_string()) {
+      proxy_server_str = value.GetString();
+    }
+  }
+  net::ProxyConfig proxy_config;
+  proxy_config.proxy_rules().ParseFromString(proxy_server_str);
+  auto proxy_service =
+      net::ConfiguredProxyResolutionService::CreateWithoutProxyResolver(
+          std::make_unique<net::ProxyConfigServiceFixed>(
+              net::ProxyConfigWithAnnotation(proxy_config,
+                                             MISSING_TRAFFIC_ANNOTATION)),
+          g_net_log.Get().net_log());
+  context_builder.set_proxy_resolution_service(std::move(proxy_service));
 
   if (context_config_->enable_network_quality_estimator) {
     std::unique_ptr<net::NetworkQualityEstimatorParams> nqe_params =
