@@ -32,7 +32,7 @@
 #include "components/prefs/pref_value_store.h"
 #include "components/prefs/prefs_export.h"
 
-#if BUILDFLAG(IS_ANDROID)
+#if 0
 #include "base/android/scoped_java_ref.h"
 #endif
 
@@ -41,7 +41,7 @@ class PrefNotifierImpl;
 class PrefObserver;
 class PrefRegistry;
 class PrefStore;
-#if BUILDFLAG(IS_ANDROID)
+#if 0
 class PrefServiceAndroid;
 #endif
 
@@ -405,7 +405,7 @@ class COMPONENTS_PREFS_EXPORT PrefService {
   void RemoveStandaloneBrowserPref(const std::string& path);
 #endif
 
-#if BUILDFLAG(IS_ANDROID)
+#if 0
   base::android::ScopedJavaLocalRef<jobject> GetJavaObject();
 #endif
 
@@ -526,7 +526,7 @@ class COMPONENTS_PREFS_EXPORT PrefService {
   // of registered preferences are.
   mutable PreferenceMap prefs_map_;
 
-#if BUILDFLAG(IS_ANDROID)
+#if 0
   // Manage and fetch the java object that wraps this PrefService on
   // android.
   std::unique_ptr<PrefServiceAndroid> pref_service_android_;
