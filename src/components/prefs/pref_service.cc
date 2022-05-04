@@ -33,7 +33,7 @@
 #include "components/prefs/value_map_pref_store.h"
 #endif
 
-#if BUILDFLAG(IS_ANDROID)
+#if 0
 #include "components/prefs/android/pref_service_android.h"
 #endif
 
@@ -508,7 +508,7 @@ void PrefService::RemovePrefObserverAllPrefs(PrefObserver* obs) {
   pref_notifier_->RemovePrefObserverAllPrefs(obs);
 }
 
-#if BUILDFLAG(IS_ANDROID)
+#if 0
 base::android::ScopedJavaLocalRef<jobject> PrefService::GetJavaObject() {
   if (!pref_service_android_) {
     pref_service_android_ = std::make_unique<PrefServiceAndroid>(this);
