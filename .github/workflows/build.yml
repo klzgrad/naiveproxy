@@ -93,9 +93,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [x64, x86, arm64, arm, mipsel, mips64el]
+        include:
+          - arch: x64
+          - arch: x86
+          - arch: arm64
+          - arch: arm
+          - arch: mipsel
+            extra: chrome_pgo_phase=0
+          - arch: mips64el
+            extra: chrome_pgo_phase=0
     env:
-      EXTRA_FLAGS: 'target_cpu="${{ matrix.arch }}"'
+      EXTRA_FLAGS: target_cpu="${{ matrix.arch }}" ${{ matrix.extra }}
       BUNDLE: 'naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}'
     steps:
       - uses: actions/checkout@v2
@@ -122,8 +130,8 @@ jobs:
         uses: actions/cache@v2
         with:
           path: ~/.ccache
-          key: ccache-linux-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-${{ steps.ccache-timestamp.outputs.date }}
-          restore-keys: ccache-linux-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-
+          key: ccache-linux-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-4-${{ steps.ccache-timestamp.outputs.date }}
+          restore-keys: ccache-linux-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-4-
       - run: sudo apt update
       - run: sudo apt install ninja-build pkg-config qemu-user ccache
       # libc6-i386 interferes with x86 build
@@ -468,8 +476,8 @@ jobs:
         uses: actions/cache@v2
         with:
           path: ~/.ccache
-          key: ccache-openwrt-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-${{ steps.ccache-timestamp.outputs.date }}
-          restore-keys: ccache-openwrt-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-
+          key: ccache-openwrt-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-4-${{ steps.ccache-timestamp.outputs.date }}
+          restore-keys: ccache-openwrt-${{ matrix.arch }}-${{ hashFiles('CHROMIUM_VERSION') }}-4-
       - run: sudo apt update
       - run: sudo apt install ninja-build pkg-config qemu-user ccache
       # libc6-i386 interferes with x86 build
@@ -481,6 +489,7 @@ jobs:
       - run: ../tests/basic.sh out/Release/naive
       - run: mkdir ${{ env.BUNDLE }} && cp out/Release/naive config.json ../LICENSE ../USAGE.txt ${{ env.BUNDLE }}
       - run: cp out/Release/libcronet* components/cronet/native/generated/cronet.idl_c.h components/cronet/native/include/*.h components/grpc_support/include/*.h components/cronet/native/sample/bidi_example.cc ${{ env.BUNDLE }}
+        if: ${{ ! contains(matrix.extra, 'build_static=true') }}
       - run: tar cJf ../${{ env.BUNDLE }}.tar.xz ${{ env.BUNDLE }}
       - uses: actions/upload-release-asset@v1
         if: ${{ github.event_name == 'release' }}
