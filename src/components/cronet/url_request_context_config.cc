@@ -758,6 +758,14 @@ void URLRequestContextConfig::SetContextBuilderExperimentalOptions(
         continue;
       }
       session_params->spdy_go_away_on_ip_change = iter.second.GetBool();
+    } else if (iter.first == "proxy_server") {
+      if (!iter.second.is_string()) {
+        LOG(ERROR) << "\"" << iter.first << "\" config params \"" << iter.second
+                   << "\" is not a string";
+        effective_experimental_options.erase(iter.first);
+        continue;
+      }
+      // Handled in CronetContext::NetworkTasks::BuildDefaultURLRequestContext.
     } else {
       LOG(WARNING) << "Unrecognized Cronet experimental option \"" << iter.first
                    << "\" with params \"" << iter.second;
