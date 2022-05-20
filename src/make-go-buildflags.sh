@@ -200,7 +200,7 @@ if [ "$target_cpu" = 'mipsel' -o "$target_cpu" = 'mips64el' ]; then
 elif [ "$target_cpu" = 'arm64' -a "$ARCH" = 'Windows' ]; then
   # CGO does not support PIE for windows/arm64.
   buildmode_flag=
-elif [ "$target_cpu" = 'x86' -a "$target_os" != '' ]; then
+elif [ "$target_cpu" = 'x86' -a "$target_os" = '' ]; then
   # Segfaults if built with PIE in regular Linux.  TODO: Find out why.
   buildmode_flag=
 fi
