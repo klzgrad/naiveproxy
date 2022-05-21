@@ -21,14 +21,18 @@ namespace cronet {
 
 namespace {
 
-scoped_refptr<base::SingleThreadTaskRunner> InitializeAndCreateTaskRunner() {
+scoped_refptr<base::SingleThreadTaskRunner> InitializeAndCreateTaskRunner(
+    const char* enable_features,
+    const char* disable_features) {
 // Cronet tests sets AtExitManager as part of TestSuite, so statically linked
 // library is not allowed to set its own.
 #if !defined(CRONET_TESTS_IMPLEMENTATION)
   std::ignore = new base::AtExitManager;
 #endif
 
-  base::FeatureList::InitializeInstance(std::string(), std::string());
+  base::FeatureList::InitializeInstance(
+      enable_features ? enable_features : "",
+      disable_features ? disable_features : "");
 
   // Note that in component builds this ThreadPoolInstance will be shared with
   // the calling process, if it also depends on //base. In particular this means
@@ -39,16 +43,19 @@ scoped_refptr<base::SingleThreadTaskRunner> InitializeAndCreateTaskRunner() {
   return base::ThreadPool::CreateSingleThreadTaskRunner({});
 }
 
-base::SingleThreadTaskRunner* InitTaskRunner() {
+base::SingleThreadTaskRunner* InitTaskRunner(
+    const char* enable_features = nullptr,
+    const char* disable_features = nullptr) {
   static scoped_refptr<base::SingleThreadTaskRunner> init_task_runner =
-      InitializeAndCreateTaskRunner();
+      InitializeAndCreateTaskRunner(enable_features, disable_features);
   return init_task_runner.get();
 }
 
 }  // namespace
 
-void EnsureInitialized() {
-  std::ignore = InitTaskRunner();
+void EnsureInitialized(const char* enable_features,
+                       const char* disable_features) {
+  std::ignore = InitTaskRunner(enable_features, disable_features);
 }
 
 bool OnInitThread() {

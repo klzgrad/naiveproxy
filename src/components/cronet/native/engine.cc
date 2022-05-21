@@ -7,6 +7,7 @@
 #include <unordered_set>
 #include <utility>
 
+#include "base/base_switches.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/files/file_path.h"
@@ -102,6 +103,23 @@ Cronet_EngineImpl::~Cronet_EngineImpl() {
 
 Cronet_RESULT Cronet_EngineImpl::StartWithParams(
     Cronet_EngineParamsPtr params) {
+  absl::optional<base::Value::Dict> experimental_options =
+      URLRequestContextConfig::ParseExperimentalOptions(
+          params->experimental_options);
+  if (experimental_options) {
+    const base::Value* feature_list =
+        experimental_options->Find("feature_list");
+    if (feature_list != nullptr && feature_list->is_dict()) {
+      const std::string* enable_features =
+          feature_list->GetDict().FindString(switches::kEnableFeatures);
+      const std::string* disable_features =
+          feature_list->GetDict().FindString(switches::kDisableFeatures);
+      cronet::EnsureInitialized(
+          enable_features ? enable_features->c_str() : nullptr,
+          disable_features ? disable_features->c_str() : nullptr);
+    }
+  }
+
   cronet::EnsureInitialized();
   base::AutoLock lock(lock_);
 
