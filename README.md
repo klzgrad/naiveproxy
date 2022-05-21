@@ -1,8 +1,10 @@
-# NaïveProxy ![build workflow](https://github.com/klzgrad/naiveproxy/actions/workflows/build.yml/badge.svg)
+# NaïveProxy and Cronet ![build workflow](https://github.com/klzgrad/naiveproxy/actions/workflows/build.yml/badge.svg)
 
-NaïveProxy uses Chrome's network stack to camouflage traffic with strong censorship resistence and low detectablility. Reusing Chrome's stack also ensures best practices in performance and security.
+NaïveProxy uses Chromium's network stack to camouflage traffic with strong censorship resistence and low detectablility. Reusing Chrome's stack also ensures best practices in performance and security.
 
-The following traffic attacks are mitigated in NaïveProxy:
+Cronet is a library similarly derived from Chromium's network stack, but its official releases are limited to Android and iOS. NaïveProxy's fork of Cronet provides binary releases of its native API, support for multiple platforms, and support for creating Go apps with cgo and the [cronet-go](https://github.com/SagerNet/cronet-go) bindings.
+
+The following traffic attacks are mitigated by using Chromium's network stack:
 
 * Website fingerprinting / traffic classification: [mitigated](https://arxiv.org/abs/1707.00641) by traffic multiplexing in HTTP/2.
 * [TLS parameter fingerprinting](https://arxiv.org/abs/1607.01639): defeated by reusing [Chrome's network stack](https://www.chromium.org/developers/design-documents/network-stack).
@@ -13,17 +15,19 @@ The following traffic attacks are mitigated in NaïveProxy:
 
 [Browser → Naïve client] ⟶ Censor ⟶ [Frontend → Naïve server] ⟶ Internet
 
-NaïveProxy uses Chrome's network stack to ensure its observable behavior is identical to regular HTTP/2 traffic between Chrome and standard frontend servers.
+NaïveProxy uses Chromium's network stack to parrot traffic between regular Chrome browsers and standard frontend servers.
 
-The frontend server can be any reverse proxy that is able to route HTTP/2 traffic based on HTTP authorization headers, preventing active probing of proxy existence. Known ones include Caddy with its forwardproxy plugin and HAProxy.
+The frontend server can be any well-known reverse proxy that is able to route HTTP/2 traffic based on HTTP authorization headers, preventing active probing of proxy existence. Known ones include Caddy with its forwardproxy plugin and HAProxy.
 
 The Naïve server here works as a forward proxy and a packet length padding layer. Caddy forwardproxy is also a forward proxy but it lacks a padding layer. A [fork](https://github.com/klzgrad/forwardproxy) adds the NaïveProxy padding layer to forwardproxy, combining both in one.
 
-## Download binaries
+## Download NaïveProxy and Cronet binaries
 
 [Download here](https://github.com/klzgrad/naiveproxy/releases/latest). Supported platforms include: Windows, Android (with [SagerNet](https://github.com/SagerNet/SagerNet)), Linux, Mac OS, and OpenWrt ([support status](https://github.com/klzgrad/naiveproxy/wiki/OpenWrt-Support)).
 
 Users should always use the latest version to keep signatures identical to Chrome.
+
+Build from source: Please see [.github/workflows/build.yml](https://github.com/klzgrad/naiveproxy/blob/master/.github/workflows/build.yml).
 
 ## Server setup
 
@@ -78,70 +82,75 @@ Run `./naive` with the following `config.json` to get a SOCKS5 proxy at local po
 
 Or `quic://user:pass@example.com`, if it works better. See also [parameter usage](https://github.com/klzgrad/naiveproxy/blob/master/USAGE.txt) and [performance tuning](https://github.com/klzgrad/naiveproxy/wiki/Performance-Tuning).
 
-## Build from source
-
-If you don't like to download binaries, you can build NaïveProxy.
-
-Prerequisites:
-* Ubuntu (apt install): git, python, ninja-build (>= 1.7), pkg-config, curl, unzip, ccache (optional)
-* MacOS (brew install): git, ninja, ccache (optional)
-* Windows ([choco install](https://chocolatey.org/)): git, python, ninja, visualstudio2019community. See [Chromium's page](https://chromium.googlesource.com/chromium/src/+/master/docs/windows_build_instructions.md#Visual-Studio) for detail on Visual Studio requirements.
-
-Build (output to `./out/Release/naive`):
-```
-git clone --depth 1 https://github.com/klzgrad/naiveproxy.git
-cd naiveproxy/src
-./get-clang.sh
-./build.sh
-```
-The scripts download tools from Google servers with curl. You may need to set a proxy environment variable for curl, e.g. `export ALL_PROXY=socks5h://127.0.0.1:1080`.
-
 ## Notes for downstream
 
 Do not use the master branch to track updates, as it rebases from a new root commit for every new Chrome release. Use stable releases and the associated tags to track new versions, where short release notes are also provided.
 
-## FAQ
+## Padding protocol, an informal specification
 
-### Why not use Go, Node, etc. for TLS?
+The design of this padding protocol opts for low overhead and easier implementation, in the belief that proliferation of expendable, improvised circumvention protocol designs is a better logistical impediment to censorship research than sophisicated designs.
 
-Their TLS stacks have distinct features that can be [easily detected](https://arxiv.org/abs/1607.01639). TLS parameters are generally very informative and distinguishable. Most client-originated traffic comes from browsers, putting the custom network stacks in the minority.
+### Proxy payload padding
 
-Previously, Tor tried to mimic Firefox's TLS signature and still got [identified and blocked by firewalls](https://groups.google.com/d/msg/traffic-obf/BpFSCVgi5rs/nCqNwoeRKQAJ), because that signature was of an outdated version of Firefox and the firewall determined the rate of collateral damage would be acceptable. If we use the signature of the most commonly used browser, the collateral damage of blocking it would be unacceptable.
+NaïveProxy proxies bidirectional streams through HTTP/2 (or HTTP/3) CONNECT tunnels. The bidirectional streams operate in a sequence of reads and writes of data. The first `kFirstPaddings` (8) reads and writes in a bidirectional stream after the stream is established are padded in this format:
+```c
+struct PaddedData {
+  uint8_t original_data_size_high;  // original_data_size / 256
+  uint8_t original_data_size_low;  // original_data_size % 256
+  uint8_t padding_size;
+  uint8_t original_data[original_data_size];
+  uint8_t padding[padding_size];
+};
+```
+`padding_size` is a random integer uniformally distributed in [0, `kMaxPaddingSize`] (`kMaxPaddingSize`: 255). `original_data_size` cannot be greater than 65535, or it has to be split into several reads or writes.
 
-### Why not use Go, Node, etc. for performance?
+`kFirstPaddings` is chosen to be 8 to flatten the packet length distribution spikes formed from common initial handshakes:
+- Common client initial sequence: 1. TLS ClientHello; 2. TLS ChangeCipherSpec, Finished; 3. H2 Magic, SETTINGS, WINDOW_UPDATE; 4. H2 HEADERS GET; 5. H2 SETTINGS ACK.
+- Common server initial sequence: 1. TLS ServerHello, ChangeCipherSpec, ...; 2. TLS Certificate, ...; 3. H2 SETTINGS; 4. H2 WINDOW_UPDATE; 5. H2 SETTINGS ACK; 6. H2 HEADERS 200 OK.
 
-Any languages can be used for high performance architectures, but not all architectures have high performance.
+Reads and writers after `kFirstPaddings` are unpadded to avoid performance overhead. Also later packet lengths are usually considered less informative.
 
-Go, Node, etc. make it easy to implement a 1:1 connection proxy model, i.e. creating one upstream connection for every user connection. Then under this model the performance goal is lower overhead in setting up each upstream connection. Toward that goal people start to reinvent their own 0-RTT cryptographic protocols (badly) as TLS goes out of the window because it either spends take several round trips in handshakes or makes it [a pain to set up 0-RTT properly](https://tools.ietf.org/html/rfc8446#section-8). Then people also start to look at low level optimization such as TCP Fast Open.
+### H2 RST_STREAM frame padding
 
-Meanwhile, Google has removed the code for TCP Fast Open in Chromium altogether (they [authored](https://tools.ietf.org/html/rfc7413) the RFC of TCP Fast Open in 2014). The literal reason given for this reversal was
+In experiments, NaïveProxy tends to send too many RST_STREAM frames per session, an uncommon behavior from regular browsers. To solve this, an END_STREAM DATA frame padded with total length distributed in [48, 72] is prepended to the RST_STREAM frame so it looks like a HEADERS frame. The server often replies to this with a WINDOW_UPDATE because padding is accounted in flow control. Whether this results in a new uncommon behavior is still unclear. 
 
-> We never enabled it by default, and have no plans to, so we should just remove it.  QUIC also makes it less useful, and TLS 1.2 0-RTT session restore means it potentially mutates state.
+### H2 HEADERS frame padding
 
-And the real reason Google never enabled TCP Fast Open by default is that it was dragged down by middleboxes and [never really worked](https://blog.donatas.net/blog/2017/03/09/tfo/). In Linux kernel there is a sysctl called `tcp_fastopen_blackhole_timeout_sec`, and whenever a SYN packet is dropped, TCP Fast Open is blackholed for this much time, starting at one hour and increasing exponentially, rendering it practically useless. Today TCP Fast Open accounts for [0.1% of the Internet traffic](https://ieeexplore.ieee.org/document/8303960/), so using it actually makes you highly detectable!
+The CONNECT request and response frames are too short and too uncommon. To make its length similar to realistic HEADERS frames, a `padding` header is filled with a sequence of symbols that are not Huffman coded and are pseudo-random enough to avoid being indexed. The length of the padding sequence is randomly distributed in [16, 32] (request) or [30, 62] (response).
 
-It was obvious to Google then and is obvious to us now that the road to zero latency at the cost of compromising security and interoperability is a dead end under the 1:1 connection model, which is why Google pursued connection persistence and 1:N connection multiplexing in HTTP/2 and more radical overhaul of HTTP/TLS/TCP in QUIC. In a 1:N connection model, the cost of setting up the first connection is amortized, and the following connections cost nothing to set up without any security or stability compromises, and the race to zero connection latency becomes irrelevant.
+### Opt-in of padding protocol
 
-Complex, battle-tested logic for connection management was [implemented](https://web.archive.org/web/20161222115511/https://insouciant.org/tech/connection-management-in-chromium/) in Chromium. The same thing is not so easy to do again from scratch with the aforementioned languages.
+NaïveProxy clients should interoperate with any regular HTTP/2 proxies unaware of this padding protocol. NaïveProxy servers (i.e. any proxy server capable of the this padding protocol) should interoperate with any regular HTTP/2 clients (e.g. regular browsers) unaware of this padding protocol.
 
-### Why not reinvent cryptos?
+NaïveProxy servers and clients determines whether the counterpart is capable of this padding protocol by the presence of the `padding` header in the CONNECT request and response respectively. The padding procotol is enabled only if the `padding` header exists.
 
-Because the first rule of cryptography is: [Don't roll your](http://loup-vaillant.fr/articles/rolling-your-own-crypto) [own cryptos](https://security.stackexchange.com/questions/18197/why-shouldnt-we-roll-our-own).
+The first CONNECT request to a server cannot use "Fast Open" to send payload before response, because the server's padding capability has not been determined from the first response and it's unknown whether to send padded or unpadded payload for Fast Open.
 
-If you do roll your own cryptos, see what [happened](https://groups.google.com/d/msg/traffic-obf/CWO0peBJLGc/Py-clLSTBwAJ) with Shadowsocks. (Spoiler: it encrypts, but doesn't authenticate, leading to active probing exploits, and more exploits after duct-tape fixes.)
+## Changes from upstream
 
-### Why not use HTTP/2 proxy from browser directly?
-
-You may have wondered why not use Chrome directly if NaïveProxy reuses Chrome's network stack. The answer is yes, you can. You will get 80% of what NaïveProxy does (TLS, connection multiplexing, application fronting) without NaïveProxy, which is also what makes NaïveProxy indistinguishable from normal traffic. Simply point your browser to Caddy as an HTTP/2 or HTTP/3 forward proxy directly.
-
-But this setup is prone to basic traffic analysis due to lack of obfuscation and predictable packet sizes in TLS handshakes. [The bane of "TLS-in-TLS" tunnels](http://blog.zorinaq.com/my-experience-with-the-great-firewall-of-china/) is that this combination is just so different from any normal protocols (nobody does 3-way handshakes twice in a row) and the record sizes of TLS handshakes are so predictable that no machine learning is needed to [detect it](https://github.com/shadowsocks/shadowsocks-org/issues/86#issuecomment-362809854).
-
-The browser will introduce an extra 1RTT delay during proxied connection setup because of its interpretation of HTTP RFCs. The browser will wait for a 200 response after a CONNECT request, incurring unnecessary latency. NaïveProxy does HTTP Fast CONNECT similar to TCP Fast Open, i.e. sending subsequent data immediately after CONNECT without this 1RTT delay. Also, you may have to type in the password for the proxy every time you open the browser. NaïveProxy sends the password automatically.
-
-Thus, traffic obfuscation, HTTP Fast CONNECT, and auto-authentication are the crucial last 20% provided by NaïveProxy. These can't be really achieved inside Chrome as extensions/apps because they don't have access to sockets. So instead, NaïveProxy extracts Chromium's network stack without all the other baggage to build a small binary (4% of a full Chrome build).
-
-But if you don't need the best performance, and unobfuscated TLS-in-TLS somehow still works for you, you can just keep using Caddy proxy with your browser.
-
-### Why no "CDN support"?
-
-Take Cloudflare for example. https://www.cloudflare.com/terms/ says: "Use of the Service for serving video (unless purchased separately as a Paid Service) or a disproportionate percentage of pictures, audio files, or other non-HTML content, is prohibited." Proxying traffic is definitely prohibited by the terms in this context.
+- Minimize source code and build size (1% of the original)
+- Disable exceptions and RTTI, except on Mac and Android.
+- (Android, Linux) Use the builtin verifier instead of the system verifier (drop dependency of NSS on Linux) and read the system trust store from (following Go's behavior in crypto/x509/root_unix.go and crypto/x509/root_linux.go):
+  - The file in environment variable SSL_CERT_FILE
+  - The first available file of
+    -  /etc/ssl/certs/ca-certificates.crt (Debian/Ubuntu/Gentoo etc.)
+    -  /etc/pki/tls/certs/ca-bundle.crt (Fedora/RHEL 6)
+    -  /etc/ssl/ca-bundle.pem (OpenSUSE)
+    -  /etc/pki/tls/cacert.pem (OpenELEC)
+    -  /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem (CentOS/RHEL 7)
+    -  /etc/ssl/cert.pem (Alpine Linux)
+  - Files in the directory of environment variable SSL_CERT_DIR
+  - Files in the first available directory of
+    -  /etc/ssl/certs (SLES10/SLES11, https://golang.org/issue/12139)
+    -  /etc/pki/tls/certs (Fedora/RHEL)
+    -  /system/etc/security/cacerts (Android)
+- Handle AIA response in PKCS#7 format
+- Allow higher socket limits for proxies
+- Force tunneling for all sockets
+- Support HTTP/2 and HTTP/3 CONNECT tunnel Fast Open using the `fastopen` header
+- Pad RST_STREAM frames
+- Support OpenWrt builds
+- (Cronet) Allow passing in `-connect-authority` header to override the CONNECT authority field
+- (Cronet) Disable system proxy resolution and use fixed proxy resolution specified by experimental option `proxy_server`
+- (Cronet) Support setting base::FeatureList by experimental option `feature_list`
+- (Cronet) Support setting the network isolation key of a stream with `-network-isolation-key` header
