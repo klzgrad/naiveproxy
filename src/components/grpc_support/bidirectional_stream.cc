@@ -21,6 +21,7 @@
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "net/base/request_priority.h"
+#include "net/base/schemeful_site.h"
 #include "net/http/bidirectional_stream.h"
 #include "net/http/bidirectional_stream_request_info.h"
 #include "net/http/http_network_session.h"
@@ -96,8 +97,20 @@ int BidirectionalStream::Start(const char* url,
   request_info->priority = static_cast<net::RequestPriority>(priority);
   // Http method is a token, just as header name.
   request_info->method = method;
-  if (!net::HttpUtil::IsValidHeaderName(request_info->method))
+  if (!net::HttpUtil::IsValidHeaderName(request_info->method)) {
+    LOG(ERROR) << "Invalid method " << request_info->method;
     return -1;
+  }
+  std::string network_isolation_key_header;
+  if (headers.GetHeader("-network-isolation-key",
+                        &network_isolation_key_header)) {
+    net::SchemefulSite site(GURL{network_isolation_key_header});
+    if (site.opaque()) {
+      LOG(ERROR) << "Invalid -network-isolation-key "
+                 << network_isolation_key_header;
+      return -1;
+    }
+  }
   request_info->extra_headers.CopyFrom(headers);
   request_info->end_stream_on_headers = end_of_stream;
   write_end_of_stream_ = end_of_stream;
