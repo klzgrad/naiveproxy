@@ -259,12 +259,14 @@ struct URLRequestContextConfig {
       // not specify for other targets.
       absl::optional<double> network_thread_priority);
 
+ public:
   // Parses experimental options from their JSON format to the format used
   // internally.
   // Returns an empty optional if the operation was unsuccessful.
   static absl::optional<base::Value::Dict> ParseExperimentalOptions(
       std::string unparsed_experimental_options);
 
+ private:
   // Makes appropriate changes to settings in |this|.
   void SetContextConfigExperimentalOptions();
 
