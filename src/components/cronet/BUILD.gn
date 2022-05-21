@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/buildflag_header.gni")
+import("//build/config/c++/c++.gni")
 import("//build/toolchain/toolchain.gni")
 import("//build/util/lastchange.gni")
 import("//build/util/process_version.gni")
@@ -76,7 +77,7 @@ source_set("metrics_util") {
 # For platforms on which the native Cronet library is used, build the library,
 # a cronet_tests binary that exercises it, and a unit-tests binary.
 # Android and iOS have their own platform-specific rules to build Cronet.
-if (is_android) {
+if (false) {
   group("cronet_package") {
     testonly = true
     deps = [ "//components/cronet/android:cronet_package_android" ]
@@ -86,6 +87,114 @@ if (is_android) {
     deps = [ "//components/cronet/ios:cronet_package_ios" ]
   }
 } else {
+  static_library("cronet_static") {
+    deps = [
+      "//base",
+      "//components/cronet:cronet_common",
+      "//components/cronet/native:cronet_native_impl",
+      "//net",
+    ]
+
+    if (use_custom_libcxx) {
+      deps += [
+        # Add shared_library_deps to include custom libc++ into dependencies.
+        # They are by default only added to executable(), loadable_module(), and
+        # shared_library() targets, but cronet_static_complete library needs it as well to
+        # avoid linking with different versions of libc++.
+        "//build/config:shared_library_deps",
+      ]
+    }
+
+    sources = [ "cronet_global_state_stubs.cc" ]
+
+    complete_static_lib = true
+    configs -= [ "//build/config/compiler:thin_archive" ]
+  }
+
+  executable("cronet_example") {
+    testonly = true
+    sources = [ "native/sample/bidi_example.cc" ]
+    deps = [
+      "//components/cronet",
+      "//components/cronet/native:cronet_native_headers",
+    ]
+    if ((is_linux || is_chromeos) && !is_component_build) {
+      public_configs = [ "//build/config/gcc:rpath_for_built_shared_libraries" ]
+    }
+  }
+
+  executable("cronet_example_external") {
+    testonly = true
+    no_default_deps = true
+    sources = [ "native/sample/bidi_example.cc" ]
+    deps = [ ":cronet" ]
+    configs -= [
+      "//build/config:feature_flags",
+      "//build/config/compiler:afdo",
+      "//build/config/compiler:afdo_optimize_size",
+      "//build/config/compiler:cet_shadow_stack",
+      "//build/config/compiler:chromium_code",
+      "//build/config/compiler:default_include_dirs",
+      "//build/config/compiler:default_init_stack_vars",
+      "//build/config/compiler:default_optimization",
+      "//build/config/compiler:default_stack_frames",
+      "//build/config/compiler:default_symbols",
+      "//build/config/compiler:no_exceptions",
+      "//build/config/compiler:no_rtti",
+      "//build/config/compiler:runtime_library",
+      "//build/config/compiler:thin_archive",
+      "//build/config/compiler/pgo:default_pgo_flags",
+      "//build/config/coverage:default_coverage",
+      "//build/config/sanitizers:default_sanitizer_flags",
+      "//build/config/clang:find_bad_constructs",
+      "//build/config/clang:extra_warnings",
+    ]
+    configs += [ "//components/cronet/native:cronet_native_include_config" ]
+    if (is_linux) {
+      configs += [ "//build/config/linux:runtime_library" ]
+    } else if (is_mac) {
+      configs += [ "//build/config/mac:runtime_library" ]
+    } else if (is_android) {
+      configs += [ "//build/config/android:runtime_library" ]
+    }
+  }
+
+  executable("cronet_example_external_static") {
+    testonly = true
+    no_default_deps = true
+    sources = [ "native/sample/bidi_example.cc" ]
+    deps = [ ":cronet_static" ]
+    configs -= [
+      "//build/config:feature_flags",
+      "//build/config/compiler:afdo",
+      "//build/config/compiler:afdo_optimize_size",
+      "//build/config/compiler:cet_shadow_stack",
+      "//build/config/compiler:chromium_code",
+      "//build/config/compiler:default_include_dirs",
+      "//build/config/compiler:default_init_stack_vars",
+      "//build/config/compiler:default_optimization",
+      "//build/config/compiler:default_stack_frames",
+      "//build/config/compiler:default_symbols",
+      "//build/config/compiler:no_exceptions",
+      "//build/config/compiler:no_rtti",
+      "//build/config/compiler:runtime_library",
+      "//build/config/compiler:thin_archive",
+      "//build/config/compiler/pgo:default_pgo_flags",
+      "//build/config/coverage:default_coverage",
+      "//build/config/sanitizers:default_sanitizer_flags",
+      "//build/config/clang:find_bad_constructs",
+      "//build/config/clang:extra_warnings",
+    ]
+    configs += [ "//components/cronet/native:cronet_native_include_config" ]
+    if (is_linux) {
+      configs += [ "//build/config/linux:runtime_library" ]
+    } else if (is_mac) {
+      configs += [ "//build/config/mac:runtime_library" ]
+    } else if (is_android) {
+      configs += [ "//build/config/android:runtime_library" ]
+    }
+  }
+
   config("shared_library_public_config") {
     if (is_mac && !is_component_build) {
       # Executable targets that depend on the shared libraries below need to have
@@ -94,7 +203,7 @@ if (is_android) {
     }
   }
 
-  _cronet_shared_lib_name = "cronet.$chrome_version_full"
+  _cronet_shared_lib_name = "cronet"
   _cronet_shared_lib_file_name =
       "$shlib_prefix$_cronet_shared_lib_name$shlib_extension"
 
