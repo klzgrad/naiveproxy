@@ -31,7 +31,8 @@ void PostTaskToInitThread(const base::Location& posted_from,
 // or binding to an existing thread, to run initialization and process
 // network notifications on. The implementation must be thread-safe and
 // idempotent, and must complete initialization before returning.
-void EnsureInitialized();
+void EnsureInitialized(const char* enable_features = nullptr,
+                       const char* disable_features = nullptr);
 
 // Creates a proxy config service appropriate for this platform that fetches the
 // system proxy settings. Cronet will call this API only after a prior call

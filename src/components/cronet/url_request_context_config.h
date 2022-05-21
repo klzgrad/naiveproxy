@@ -216,6 +216,12 @@ struct URLRequestContextConfig {
       // not specify for other targets.
       absl::optional<double> network_thread_priority);
 
+  // Parses experimental options from their JSON format to the format used
+  // internally.
+  // Returns an empty optional if the operation was unsuccessful.
+  static absl::optional<base::Value::DictStorage> ParseExperimentalOptions(
+      std::string unparsed_experimental_options);
+
  private:
   URLRequestContextConfig(
       // Enable QUIC.
@@ -252,12 +258,6 @@ struct URLRequestContextConfig {
       // values. On iOS, corresponds to NSThread::setThreadPriority values. Do
       // not specify for other targets.
       absl::optional<double> network_thread_priority);
-
-  // Parses experimental options from their JSON format to the format used
-  // internally.
-  // Returns an empty optional if the operation was unsuccessful.
-  static absl::optional<base::Value::DictStorage> ParseExperimentalOptions(
-      std::string unparsed_experimental_options);
 
   // Makes appropriate changes to settings in |this|.
   void SetContextConfigExperimentalOptions();
