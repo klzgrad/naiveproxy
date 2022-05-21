@@ -146,7 +146,8 @@ void PostTaskToInitThread(const base::Location& posted_from,
   g_init_task_executor->task_runner()->PostTask(posted_from, std::move(task));
 }
 
-void EnsureInitialized() {
+void EnsureInitialized(const char* /*enable_features*/,
+                       const char* /*disable_features*/) {
   if (g_init_task_executor) {
     // Ensure that init is done on the init thread.
     g_init_thread_init_done.Wait();
