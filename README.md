@@ -99,7 +99,7 @@ struct PaddedData {
   uint8_t original_data_size_low;  // original_data_size % 256
   uint8_t padding_size;
   uint8_t original_data[original_data_size];
-  uint8_t padding[padding_size];
+  uint8_t zeros[padding_size];
 };
 ```
 `padding_size` is a random integer uniformally distributed in [0, `kMaxPaddingSize`] (`kMaxPaddingSize`: 255). `original_data_size` cannot be greater than 65535, or it has to be split into several reads or writes.
@@ -108,7 +108,7 @@ struct PaddedData {
 - Common client initial sequence: 1. TLS ClientHello; 2. TLS ChangeCipherSpec, Finished; 3. H2 Magic, SETTINGS, WINDOW_UPDATE; 4. H2 HEADERS GET; 5. H2 SETTINGS ACK.
 - Common server initial sequence: 1. TLS ServerHello, ChangeCipherSpec, ...; 2. TLS Certificate, ...; 3. H2 SETTINGS; 4. H2 WINDOW_UPDATE; 5. H2 SETTINGS ACK; 6. H2 HEADERS 200 OK.
 
-Reads and writers after `kFirstPaddings` are unpadded to avoid performance overhead. Also later packet lengths are usually considered less informative.
+Further reads and writes after `kFirstPaddings` are unpadded to avoid performance overhead. Also later packet lengths are usually considered less informative.
 
 ### H2 RST_STREAM frame padding
 
@@ -130,6 +130,7 @@ The first CONNECT request to a server cannot use "Fast Open" to send payload bef
 
 - Minimize source code and build size (1% of the original)
 - Disable exceptions and RTTI, except on Mac and Android.
+- Support OpenWrt builds
 - (Android, Linux) Use the builtin verifier instead of the system verifier (drop dependency of NSS on Linux) and read the system trust store from (following Go's behavior in crypto/x509/root_unix.go and crypto/x509/root_linux.go):
   - The file in environment variable SSL_CERT_FILE
   - The first available file of
@@ -149,7 +150,6 @@ The first CONNECT request to a server cannot use "Fast Open" to send payload bef
 - Force tunneling for all sockets
 - Support HTTP/2 and HTTP/3 CONNECT tunnel Fast Open using the `fastopen` header
 - Pad RST_STREAM frames
-- Support OpenWrt builds
 - (Cronet) Allow passing in `-connect-authority` header to override the CONNECT authority field
 - (Cronet) Disable system proxy resolution and use fixed proxy resolution specified by experimental option `proxy_server`
 - (Cronet) Support setting base::FeatureList by experimental option `feature_list`
