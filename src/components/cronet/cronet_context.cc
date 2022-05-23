@@ -244,6 +244,10 @@ CronetContext::NetworkTasks::~NetworkTasks() {
 
   if (net::NetworkChangeNotifier::AreNetworkHandlesSupported())
     net::NetworkChangeNotifier::RemoveNetworkObserver(this);
+
+  if (default_cert_net_fetcher_) {
+    default_cert_net_fetcher_->Shutdown();
+  }
 }
 
 void CronetContext::InitRequestContextOnInitThread() {
@@ -420,6 +424,9 @@ CronetContext::NetworkTasks::BuildDefaultURLRequestContext(
         g_net_log.Get().net_log(), &context_builder);
   }
 
+  default_cert_net_fetcher_ = base::MakeRefCounted<net::CertNetFetcherURLRequest>();
+  context_builder.SetCertVerifier(net::CertVerifier::CreateDefault(default_cert_net_fetcher_));
+
   auto context = context_builder.Build();
 
   // Set up host cache persistence if it's enabled. Happens after building the
@@ -430,6 +437,8 @@ CronetContext::NetworkTasks::BuildDefaultURLRequestContext(
         host_cache, context_config_->host_cache_persistence_delay_ms,
         g_net_log.Get().net_log());
   }
+
+  default_cert_net_fetcher_->SetURLRequestContext(context.get());
 
   SetSharedURLRequestContextConfig(context.get());
   return context;
