@@ -20,6 +20,7 @@
 #include "base/values.h"
 #include "components/prefs/json_pref_store.h"
 #include "net/base/network_change_notifier.h"
+#include "net/cert_net/cert_net_fetcher_url_request.h"
 #include "net/nqe/effective_connection_type.h"
 #include "net/nqe/effective_connection_type_observer.h"
 #include "net/nqe/network_quality_estimator.h"
@@ -334,6 +335,9 @@ class CronetContext {
     base::flat_map<net::NetworkChangeNotifier::NetworkHandle,
                    std::unique_ptr<net::URLRequestContext>>
         contexts_;
+
+    scoped_refptr<net::CertNetFetcherURLRequest> default_cert_net_fetcher_;
+
     // Shorthand for the default context (needed by
     // components/cronet/android/test/cronet_test_util.cc).
     raw_ptr<net::URLRequestContext> default_context_;
