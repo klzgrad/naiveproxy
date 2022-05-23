@@ -34,6 +34,7 @@
 #include "net/nqe/network_quality_estimator_params.h"
 #include "net/quic/set_quic_flag.h"
 #include "net/reporting/reporting_policy.h"
+#include "net/socket/client_socket_pool_manager.h"
 #include "net/socket/ssl_client_socket.h"
 #include "net/ssl/ssl_key_logger_impl.h"
 #include "net/third_party/quiche/src/quiche/quic/core/quic_packets.h"
@@ -774,6 +775,62 @@ void URLRequestContextConfig::SetContextBuilderExperimentalOptions(
       }
       // Already handled in Cronet_EngineImpl::StartWithParams.
       // Only checks and reports errors here.
+    } else if (iter->first == "socket_limits") {
+      if (!iter->second.is_dict()) {
+        LOG(ERROR) << "\"" << iter->first << "\" config params \""
+                   << iter->second << "\" is not a dictionary value";
+        effective_experimental_options.Remove(iter->first);
+        continue;
+      }
+      bool has_errors = false;
+      for (const auto limit : iter->second.GetDict()) {
+        void (*set_limit)(net::HttpNetworkSession::SocketPoolType pool_type,
+                          int socket_count);
+        if (limit.first == "max_sockets_per_pool") {
+          set_limit = &net::ClientSocketPoolManager::set_max_sockets_per_pool;
+        } else if (limit.first == "max_sockets_per_proxy_server") {
+          set_limit =
+              &net::ClientSocketPoolManager::set_max_sockets_per_proxy_server;
+        } else if (limit.first == "max_sockets_per_group") {
+          set_limit = &net::ClientSocketPoolManager::set_max_sockets_per_group;
+        } else {
+          has_errors = true;
+          break;
+        }
+        if (!limit.second.is_dict()) {
+          has_errors = true;
+          break;
+        }
+        for (const auto pool_count : limit.second.GetDict()) {
+          net::HttpNetworkSession::SocketPoolType pool_type;
+          if (pool_count.first == "NORMAL_SOCKET_POOL") {
+            pool_type = net::HttpNetworkSession::NORMAL_SOCKET_POOL;
+          } else if (pool_count.first == "WEBSOCKET_SOCKET_POOL") {
+            pool_type = net::HttpNetworkSession::WEBSOCKET_SOCKET_POOL;
+          } else {
+            LOG(ERROR) << "Invalid pool_type " << pool_count.first;
+            has_errors = true;
+            break;
+          }
+
+          absl::optional<int> socket_count = pool_count.second.GetIfInt();
+          if (!socket_count.has_value() || socket_count.value() <= 0) {
+            LOG(ERROR) << "Invalid socket_count " << pool_count.second;
+            has_errors = true;
+            break;
+          }
+
+          set_limit(pool_type, socket_count.value());
+        }
+        if (has_errors)
+          break;
+      }
+      if (has_errors) {
+        LOG(ERROR) << "\"" << iter->first << "\" config params \""
+                   << iter->second << "\" has invalid value";
+        effective_experimental_options.Remove(iter->first);
+        continue;
+      }
     } else {
       LOG(WARNING) << "Unrecognized Cronet experimental option \""
                    << iter->first << "\" with params \"" << iter->second;
