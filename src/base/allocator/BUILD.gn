@@ -1,0 +1,97 @@
+# Copyright (c) 2013 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//base/allocator/allocator.gni")
+import("//build/buildflag_header.gni")
+import("//build/config/compiler/compiler.gni")
+import("//build/config/dcheck_always_on.gni")
+
+buildflag_header("buildflags") {
+  header = "buildflags.h"
+  _use_partition_alloc_as_malloc = use_allocator == "partition"
+  assert(use_allocator_shim || !_use_partition_alloc_as_malloc,
+         "Partition alloc requires the allocator shim")
+
+  # BackupRefPtr(BRP) build flags.
+  _use_backup_ref_ptr = use_backup_ref_ptr && use_partition_alloc && !is_nacl
+  _put_ref_count_in_previous_slot =
+      put_ref_count_in_previous_slot && _use_backup_ref_ptr
+  _enable_backup_ref_ptr_slow_checks =
+      enable_backup_ref_ptr_slow_checks && _use_backup_ref_ptr
+  _enable_dangling_raw_ptr_checks =
+      enable_dangling_raw_ptr_checks && _use_backup_ref_ptr
+
+  # MTECheckedPtr is exclusive against BRP (asserted at declaration).
+  # MTECheckedPtr requires 64-bit pointers (not available in NaCl).
+  _use_mte_checked_ptr = use_mte_checked_ptr && !is_nacl
+
+  _record_alloc_info = false
+
+  flags = [
+    "USE_ALLOCATOR_SHIM=$use_allocator_shim",
+    "USE_PARTITION_ALLOC=$use_partition_alloc",
+    "USE_PARTITION_ALLOC_AS_MALLOC=$_use_partition_alloc_as_malloc",
+
+    "USE_BACKUP_REF_PTR=$_use_backup_ref_ptr",
+    "USE_ASAN_BACKUP_REF_PTR=$use_asan_backup_ref_ptr",
+    "ENABLE_BACKUP_REF_PTR_SLOW_CHECKS=$_enable_backup_ref_ptr_slow_checks",
+    "ENABLE_DANGLING_RAW_PTR_CHECKS=$_enable_dangling_raw_ptr_checks",
+    "PUT_REF_COUNT_IN_PREVIOUS_SLOT=$_put_ref_count_in_previous_slot",
+
+    # Not to be used directly - see `partition_alloc_config.h`.
+    "USE_MTE_CHECKED_PTR=$_use_mte_checked_ptr",
+
+    "USE_FAKE_BINARY_EXPERIMENT=$use_fake_binary_experiment",
+
+    "RECORD_ALLOC_INFO=$_record_alloc_info",
+  ]
+}
+
+if (is_apple) {
+  source_set("early_zone_registration_mac") {
+    sources = [
+      "early_zone_registration_mac.cc",
+      "early_zone_registration_mac.h",
+    ]
+
+    deps = [ ":buildflags" ]
+  }
+}
+
+# Used to shim malloc symbols on Android. see //base/allocator/README.md.
+config("wrap_malloc_symbols") {
+  ldflags = [
+    "-Wl,-wrap,calloc",
+    "-Wl,-wrap,free",
+    "-Wl,-wrap,malloc",
+    "-Wl,-wrap,memalign",
+    "-Wl,-wrap,posix_memalign",
+    "-Wl,-wrap,pvalloc",
+    "-Wl,-wrap,realloc",
+    "-Wl,-wrap,valloc",
+
+    # <stdlib.h> functions
+    "-Wl,-wrap,realpath",
+
+    # <string.h> functions
+    "-Wl,-wrap,strdup",
+    "-Wl,-wrap,strndup",
+
+    # <unistd.h> functions
+    "-Wl,-wrap,getcwd",
+
+    # <stdio.h> functions
+    "-Wl,-wrap,asprintf",
+    "-Wl,-wrap,vasprintf",
+  ]
+}
+
+config("mac_no_default_new_delete_symbols") {
+  if (!is_component_build) {
+    # This is already set when we compile libc++, see
+    # buildtools/third_party/libc++/BUILD.gn. But it needs to be set here as well,
+    # since the shim defines the symbols, to prevent them being exported.
+    cflags = [ "-fvisibility-global-new-delete-hidden" ]
+  }
+}
