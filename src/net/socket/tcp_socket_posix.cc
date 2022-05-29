@@ -471,9 +471,6 @@ void TCPSocketPosix::Close() {
   // trace event for this case so that it can be correlated with jank in traces.
   // Use the "base" category since "net" isn't enabled by default. See
   // https://crbug.com/1194888.
-  TRACE_EVENT("base", PeerIsZeroIPv4(*this)
-                          ? perfetto::StaticString{"CloseSocketTCP.PeerIsZero"}
-                          : perfetto::StaticString{"CloseSocketTCP"});
 #endif  // BUILDFLAG(IS_APPLE) && !BUILDFLAG(CRONET_BUILD)
   socket_.reset();
   tag_ = SocketTag();
