@@ -126,7 +126,7 @@ int InitSocketHandleForWebSocketRequest(
     const ClientSocketPool::ProxyAuthCallback& proxy_auth_callback);
 
 NET_EXPORT int InitSocketHandleForRawConnect2(
-    const HostPortPair& endpoint,
+    url::SchemeHostPort endpoint,
     HttpNetworkSession* session,
     int request_load_flags,
     RequestPriority request_priority,

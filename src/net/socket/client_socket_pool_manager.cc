@@ -275,7 +275,7 @@ int InitSocketHandleForWebSocketRequest(
       std::move(callback), proxy_auth_callback);
 }
 
-int InitSocketHandleForRawConnect2(const HostPortPair& endpoint,
+int InitSocketHandleForRawConnect2(url::SchemeHostPort endpoint,
                                    HttpNetworkSession* session,
                                    int request_load_flags,
                                    RequestPriority request_priority,
@@ -289,9 +289,8 @@ int InitSocketHandleForRawConnect2(const HostPortPair& endpoint,
                                    CompletionOnceCallback callback) {
   DCHECK(socket_handle);
   return InitSocketPoolHelper(
-      {"http", endpoint.HostForURL(), endpoint.port()}, request_load_flags,
-      request_priority, session, proxy_info, ssl_config_for_origin,
-      ssl_config_for_proxy,
+      std::move(endpoint), request_load_flags, request_priority, session,
+      proxy_info, ssl_config_for_origin, ssl_config_for_proxy,
       /*is_for_websockets=*/true, privacy_mode,
       std::move(network_isolation_key), SecureDnsPolicy::kDisable, SocketTag(),
       net_log, 0, socket_handle, HttpNetworkSession::NORMAL_SOCKET_POOL,

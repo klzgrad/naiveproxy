@@ -19,6 +19,7 @@
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
 #include "net/base/privacy_mode.h"
+#include "net/base/url_util.h"
 #include "net/proxy_resolution/proxy_info.h"
 #include "net/socket/client_socket_handle.h"
 #include "net/socket/client_socket_pool_manager.h"
@@ -27,6 +28,7 @@
 #include "net/tools/naive/http_proxy_socket.h"
 #include "net/tools/naive/redirect_resolver.h"
 #include "net/tools/naive/socks5_server_socket.h"
+#include "url/scheme_host_port.h"
 
 #if defined(OS_LINUX)
 #include <linux/netfilter_ipv4.h>
@@ -243,8 +245,12 @@ int NaiveConnection::DoConnectServer() {
 #endif
   }
 
-  if (origin.IsEmpty()) {
-    LOG(ERROR) << "Connection " << id_ << " to invalid origin";
+  url::CanonHostInfo host_info;
+  url::SchemeHostPort endpoint(
+      "http", CanonicalizeHost(origin.host(), &host_info), origin.port(),
+      url::SchemeHostPort::ALREADY_CANONICALIZED);
+  if (!endpoint.IsValid()) {
+    LOG(ERROR) << "Connection " << id_ << " to invalid origin " << origin.ToString();
     return ERR_ADDRESS_INVALID;
   }
 
@@ -252,7 +258,7 @@ int NaiveConnection::DoConnectServer() {
 
   // Ignores socket limit set by socket pool for this type of socket.
   return InitSocketHandleForRawConnect2(
-      origin, session_, LOAD_IGNORE_LIMITS, MAXIMUM_PRIORITY, proxy_info_,
+      std::move(endpoint), session_, LOAD_IGNORE_LIMITS, MAXIMUM_PRIORITY, proxy_info_,
       server_ssl_config_, proxy_ssl_config_, PRIVACY_MODE_DISABLED,
       network_isolation_key_, net_log_, server_socket_handle_.get(),
       io_callback_);
