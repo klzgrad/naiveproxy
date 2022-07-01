@@ -247,7 +247,7 @@ int NaiveConnection::DoConnectServer() {
 
   url::CanonHostInfo host_info;
   url::SchemeHostPort endpoint(
-      "http", CanonicalizeHost(origin.host(), &host_info), origin.port(),
+      "http", CanonicalizeHost(origin.HostForURL(), &host_info), origin.port(),
       url::SchemeHostPort::ALREADY_CANONICALIZED);
   if (!endpoint.IsValid()) {
     LOG(ERROR) << "Connection " << id_ << " to invalid origin " << origin.ToString();
