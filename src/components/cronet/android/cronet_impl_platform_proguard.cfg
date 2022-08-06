@@ -1,0 +1,6 @@
+# Proguard config for apps that depend on cronet_impl_platform_java.jar.
+
+# This constructor is called using the reflection from Cronet API (cronet_api.jar).
+-keep class org.chromium.net.impl.JavaCronetProvider {
+    public <init>(android.content.Context);
+}
