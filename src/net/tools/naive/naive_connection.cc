@@ -220,10 +220,20 @@ int NaiveConnection::DoConnectServer() {
 #if defined(OS_LINUX)
     const auto* socket =
         static_cast<const TCPClientSocket*>(client_socket_.get());
+    IPEndPoint local_address;
+    int rv;
+    rv = socket->GetLocalAddress(&local_address);
+    if (rv != OK) {
+      LOG(ERROR) << "Connection " << id_ << " cannot get local address";
+      return rv;
+    }
     int sd = socket->SocketDescriptorForTesting();
     SockaddrStorage dst;
-    int rv;
-    rv = getsockopt(sd, SOL_IP, SO_ORIGINAL_DST, dst.addr, &dst.addr_len);
+    if (local_address.GetFamily() == ADDRESS_FAMILY_IPV4) {
+      rv = getsockopt(sd, SOL_IP, SO_ORIGINAL_DST, dst.addr, &dst.addr_len);
+    } else {
+      rv = getsockopt(sd, SOL_IPV6, SO_ORIGINAL_DST, dst.addr, &dst.addr_len);
+    }
     if (rv == 0) {
       IPEndPoint ipe;
       if (ipe.FromSockAddr(dst.addr, dst.addr_len)) {
