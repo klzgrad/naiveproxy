@@ -220,16 +220,17 @@ int NaiveConnection::DoConnectServer() {
 #if defined(OS_LINUX)
     const auto* socket =
         static_cast<const TCPClientSocket*>(client_socket_.get());
-    IPEndPoint local_address;
+    IPEndPoint peer_endpoint;
     int rv;
-    rv = socket->GetLocalAddress(&local_address);
+    rv = socket->GetPeerAddress(&peer_endpoint);
     if (rv != OK) {
-      LOG(ERROR) << "Connection " << id_ << " cannot get local address";
+      LOG(ERROR) << "Connection " << id_ << " cannot get peer address";
       return rv;
     }
     int sd = socket->SocketDescriptorForTesting();
     SockaddrStorage dst;
-    if (local_address.GetFamily() == ADDRESS_FAMILY_IPV4) {
+    if (peer_endpoint.GetFamily() == ADDRESS_FAMILY_IPV4 ||
+        peer_endpoint.address().IsIPv4MappedIPv6()) {
       rv = getsockopt(sd, SOL_IP, SO_ORIGINAL_DST, dst.addr, &dst.addr_len);
     } else {
       rv = getsockopt(sd, SOL_IPV6, SO_ORIGINAL_DST, dst.addr, &dst.addr_len);
@@ -249,6 +250,9 @@ int NaiveConnection::DoConnectServer() {
           return ERR_ADDRESS_INVALID;
         }
       }
+    } else {
+      LOG(ERROR) << "Failed to get original destination address";
+      return ERR_ADDRESS_INVALID;
     }
 #else
     static_cast<void>(resolver_);
@@ -260,7 +264,8 @@ int NaiveConnection::DoConnectServer() {
       "http", CanonicalizeHost(origin.HostForURL(), &host_info), origin.port(),
       url::SchemeHostPort::ALREADY_CANONICALIZED);
   if (!endpoint.IsValid()) {
-    LOG(ERROR) << "Connection " << id_ << " to invalid origin " << origin.ToString();
+    LOG(ERROR) << "Connection " << id_ << " to invalid origin "
+               << origin.ToString();
     return ERR_ADDRESS_INVALID;
   }
 
@@ -268,8 +273,8 @@ int NaiveConnection::DoConnectServer() {
 
   // Ignores socket limit set by socket pool for this type of socket.
   return InitSocketHandleForRawConnect2(
-      std::move(endpoint), session_, LOAD_IGNORE_LIMITS, MAXIMUM_PRIORITY, proxy_info_,
-      server_ssl_config_, proxy_ssl_config_, PRIVACY_MODE_DISABLED,
+      std::move(endpoint), session_, LOAD_IGNORE_LIMITS, MAXIMUM_PRIORITY,
+      proxy_info_, server_ssl_config_, proxy_ssl_config_, PRIVACY_MODE_DISABLED,
       network_isolation_key_, net_log_, server_socket_handle_.get(),
       io_callback_);
 }

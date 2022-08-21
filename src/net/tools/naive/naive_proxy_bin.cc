@@ -264,7 +264,7 @@ bool ParseCommandLine(const CommandLine& cmdline, Params* params) {
       params->listen_pass = base::UnescapeBinaryURLComponent(url.password());
     }
     if (!url.host().empty()) {
-      params->listen_addr = url.host();
+      params->listen_addr = url.HostNoBrackets();
     }
     if (!url.port().empty()) {
       if (!base::StringToInt(url.port(), &params->listen_port)) {
