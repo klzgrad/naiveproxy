@@ -235,7 +235,7 @@
 #endif
 #if __has_cpp_attribute(clang::musttail) && !defined(__arm__) && \
     !defined(_ARCH_PPC) && !defined(__wasm__) &&                 \
-    !(defined(_MSC_VER) && defined(_M_IX86))
+    !(defined(_MSC_VER) && defined(_M_IX86)) && !defined(__mips__)
 #  ifndef PROTO2_OPENSOURCE
 // Compilation fails on ARM32: b/195943306
 // Compilation fails on powerpc64le: b/187985113
