@@ -64,8 +64,8 @@ constexpr size_t kNewAlign = alignof(std::max_align_t);
 #endif
 constexpr size_t kStringAlign = alignof(std::string);
 
-static_assert((kStringAlign > kNewAlign ? kStringAlign : kNewAlign) >= 8, "");
-static_assert(alignof(ExplicitlyConstructedArenaString) >= 8, "");
+static_assert((kStringAlign > kNewAlign ? kStringAlign : kNewAlign) >= 4, "");
+static_assert(alignof(ExplicitlyConstructedArenaString) >= 4, "");
 
 }  // namespace
 
