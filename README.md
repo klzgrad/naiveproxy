@@ -43,9 +43,7 @@ Example Caddyfile (replace `user` and `pass` accordingly):
 ```
 {
   servers {
-    protocol {
-      experimental_http3
-    }
+    protocols h1 h2 h3
   }
 }
 :443, example.com
@@ -57,7 +55,9 @@ route {
     hide_via
     probe_resistance
   }
-  file_server { root /var/www/html }
+  file_server {
+    root /var/www/html
+  }
 }
 ```
 `:443` must appear first for this Caddyfile to work. For more advanced usage consider using [JSON for Caddy 2's config](https://caddyserver.com/docs/json/).
