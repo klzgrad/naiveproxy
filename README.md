@@ -47,7 +47,6 @@ Example Caddyfile (replace `user` and `pass` accordingly):
   }
 }
 :443, example.com
-tls me@example.com
 route {
   forward_proxy {
     basic_auth user pass
