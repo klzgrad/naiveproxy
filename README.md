@@ -42,22 +42,21 @@ go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
 Example Caddyfile (replace `user` and `pass` accordingly):
 ```
 {
-  servers {
-    protocols h1 h2 h3
-  }
+	order forward_proxy before file_server
+	servers :443 {
+		protocols h1 h2 h3
+	}
 }
-:443, example.com
-tls me@example.com
-route {
-  forward_proxy {
-    basic_auth user pass
-    hide_ip
-    hide_via
-    probe_resistance
-  }
-  file_server {
-    root /var/www/html
-  }
+:443, example.com {
+	forward_proxy {
+		basic_auth user pass
+		hide_ip
+		hide_via
+		probe_resistance
+	}
+	file_server {
+		root /var/www/html
+	}
 }
 ```
 `:443` must appear first for this Caddyfile to work. For more advanced usage consider using [JSON for Caddy 2's config](https://caddyserver.com/docs/json/).
