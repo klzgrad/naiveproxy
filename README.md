@@ -48,6 +48,7 @@ Example Caddyfile (replace `user` and `pass` accordingly):
 	}
 }
 :443, example.com {
+	tls <email> #This configuration is optional
 	forward_proxy {
 		basic_auth user pass
 		hide_ip
