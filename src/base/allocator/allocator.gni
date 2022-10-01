@@ -1,0 +1,157 @@
+# Copyright 2019 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/chromecast_build.gni")
+import("//build/config/sanitizers/sanitizers.gni")
+
+if (is_ios) {
+  import("//build/config/ios/ios_sdk.gni")
+}
+
+# Sanitizers replace the allocator, don't use our own.
+_is_using_sanitizers = is_asan || is_hwasan || is_lsan || is_tsan || is_msan
+
+# - Component build support is disabled on all platforms. It is known to cause
+#   issues on some (e.g. Windows with shims, Android with non-universal symbol
+#   wrapping), and has not been validated on others.
+# - Windows: debug CRT is not compatible, see below.
+_disable_partition_alloc = is_component_build || (is_win && is_debug)
+
+# - NaCl: No plans to support it.
+# - iOS: not done yet.
+_is_partition_alloc_platform = !is_nacl && !is_ios
+
+# Under Windows Debug the allocator shim is not compatible with CRT.
+#     NaCl in particular does seem to link some binaries statically
+#     against the debug CRT with "is_nacl=false".
+# Under Fuchsia the allocator shim is only required for PA-E.
+# For all other platforms & configurations, the shim is required, to replace
+#     the default system allocators, e.g. with Partition Alloc.
+if ((is_linux || is_chromeos || is_android || is_apple ||
+     (is_fuchsia && !_disable_partition_alloc) ||
+     (is_win && !is_component_build && !is_debug)) && !_is_using_sanitizers) {
+  _default_use_allocator_shim = true
+} else {
+  _default_use_allocator_shim = false
+}
+
+if (_default_use_allocator_shim && _is_partition_alloc_platform &&
+    !_disable_partition_alloc) {
+  _default_allocator = "partition"
+} else {
+  _default_allocator = "none"
+}
+
+declare_args() {
+  # Memory allocator to use. Set to "none" to use default allocator.
+  use_allocator = _default_allocator
+
+  # Causes all the allocations to be routed via allocator_shim.cc.
+  use_allocator_shim = _default_use_allocator_shim
+
+  # Whether PartitionAlloc should be available for use or not.
+  # true makes PartitionAlloc linked to the executable or shared library and
+  # makes it available for use. It doesn't mean that the default allocator
+  # is PartitionAlloc, which is governed by |use_allocator|.
+  #
+  # This flag is currently set to false only on Cronet bots, because Cronet
+  # doesn't use PartitionAlloc at all, and doesn't wish to incur the library
+  # size increase (crbug.com/674570).
+  use_partition_alloc = true
+}
+
+if (!use_partition_alloc && use_allocator == "partition") {
+  # If there is a conflict, prioritize |use_partition_alloc| over
+  # |use_allocator|.
+  use_allocator = "none"
+}
+
+assert(use_allocator == "none" || use_allocator == "partition")
+
+assert(
+    !use_allocator_shim || is_linux || is_chromeos || is_android || is_win ||
+        is_fuchsia || is_apple,
+    "use_allocator_shim works only on Android, iOS, Linux, macOS, Fuchsia, " +
+        "and Windows.")
+
+if (is_win && use_allocator_shim) {
+  # TODO(crbug.com/1245317): Add a comment indicating why the shim doesn't work.
+  assert(!is_component_build,
+         "The allocator shim doesn't work for the component build on Windows.")
+}
+
+_is_brp_supported = (is_win || is_android || is_linux || is_mac ||
+                     is_chromeos) && use_allocator == "partition"
+
+_is_mcp_supported = is_win && use_allocator == "partition"
+
+declare_args() {
+  # We jam MTECheckedPtr off by default, but can set it to
+  # `_is_mcp_supported` to activate it.
+  use_mte_checked_ptr = false
+}
+
+declare_args() {
+  # Set use_backup_ref_ptr true to use BackupRefPtr (BRP) as the implementation
+  # of raw_ptr<T>, and enable PartitionAlloc support for it.
+  # We also disable BRP in the presence of MTECheckedPtr, which is almost
+  # never enabled.
+  use_backup_ref_ptr = _is_brp_supported && !use_mte_checked_ptr
+}
+
+assert(!(use_backup_ref_ptr && use_mte_checked_ptr),
+       "MTECheckedPtr conflicts with BRP.")
+
+declare_args() {
+  # If BRP is enabled, additional options are available:
+  # - put_ref_count_in_previous_slot: place the ref-count at the end of the
+  #   previous slot (or in metadata if a slot starts on the page boundary), as
+  #   opposed to the beginning of the slot.
+  # - enable_backup_ref_ptr_slow_checks: enable additional safety checks that
+  #   are too expensive to have on by default.
+  # - enable_dangling_raw_ptr_checks: enable checking raw_ptr do not become
+  #   dangling during their lifetime.
+  put_ref_count_in_previous_slot = use_backup_ref_ptr
+  enable_backup_ref_ptr_slow_checks = false
+  enable_dangling_raw_ptr_checks = false
+
+  # The supported platforms are supposed to match `_is_brp_supported`, but we
+  # enable the feature on Linux early because it's most widely used for security
+  # research
+  use_asan_backup_ref_ptr = is_asan && (is_win || is_android || is_linux)
+}
+
+# Prevent using BackupRefPtr when PartitionAlloc-Everywhere isn't used.
+# In theory, such a configuration is possible, but its scope would be limited to
+# only Blink partitions, which is currently not tested. Better to trigger an
+# error, than have BackupRefPtr silently disabled while believing it is enabled.
+if (!is_nacl) {
+  assert(!use_backup_ref_ptr || use_allocator == "partition",
+         "Can't use BackupRefPtr without PartitionAlloc-Everywhere")
+}
+
+# put_ref_count_in_previous_slot can only be used if use_backup_ref_ptr
+# is true.
+assert(
+    use_backup_ref_ptr || !put_ref_count_in_previous_slot,
+    "Can't put ref count in the previous slot if BackupRefPtr isn't enabled at all")
+
+# enable_backup_ref_ptr_slow_checks can only be used if use_backup_ref_ptr
+# is true.
+assert(use_backup_ref_ptr || !enable_backup_ref_ptr_slow_checks,
+       "Can't enable additional BackupRefPtr checks if it isn't enabled at all")
+
+# enable_dangling_raw_ptr_checks can only be used if use_backup_ref_ptr
+# is true.
+assert(
+    use_backup_ref_ptr || !enable_dangling_raw_ptr_checks,
+    "Can't enable dangling raw_ptr checks if BackupRefPtr isn't enabled at all")
+
+# BackupRefPtr and AsanBackupRefPtr are mutually exclusive variants of raw_ptr.
+assert(
+    !use_backup_ref_ptr || !use_asan_backup_ref_ptr,
+    "Both BackupRefPtr and AsanBackupRefPtr can't be enabled at the same time")
+
+assert(!use_asan_backup_ref_ptr || is_asan,
+       "AsanBackupRefPtr requires AddressSanitizer")
