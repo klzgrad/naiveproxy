@@ -42,15 +42,10 @@ go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
 Example Caddyfile (replace `user` and `pass` accordingly):
 ```
 {
-  servers {
-    protocol {
-      experimental_http3
-    }
-  }
+  order forward_proxy before file_server
 }
-:443, example.com
-tls me@example.com
-route {
+:443, example.com {
+  tls me@example.com
   forward_proxy {
     basic_auth user pass
     hide_ip
