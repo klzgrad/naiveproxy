@@ -71,7 +71,7 @@ for line in stdout.decode("utf-8").split('\n'):
       continue
     version = [int(part) for part in match.group(1).split('.')]
 
-  if version < MAX_ALLOWED_GLIBC_VERSION:
+  if version <= MAX_ALLOWED_GLIBC_VERSION:
     old_supported_version = supported_version.get(base_name, ([-1], -1))
     supported_version[base_name] = max((version, index), old_supported_version)
   if is_default:

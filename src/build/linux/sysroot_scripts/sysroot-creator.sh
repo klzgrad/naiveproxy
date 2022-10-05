@@ -427,7 +427,7 @@ HacksAndPatchesARM64() {
   HacksAndPatchesCommon aarch64 linux-gnu true
   # Skip reversion_glibc.py. Glibc is compiled in a way where many libm math
   # functions do not have compatibility symbols for versions <= 2.17.
-  # ReversionGlibc aarch64 linux-gnu
+  ReversionGlibc aarch64 linux-gnu
 }
 
 HacksAndPatchesARMEL() {
