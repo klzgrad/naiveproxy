@@ -153,3 +153,11 @@ The first CONNECT request to a server cannot use "Fast Open" to send payload bef
 - (Cronet) Support setting the network isolation key of a stream with `-network-isolation-key` header
 - (Cronet) Add certificate net fetcher
 - (Cronet) Support setting socket limits by experimental option `socket_limits`
+
+## Known weaknesses
+
+* HTTP CONNECT Fast Open creates back to back h2 packets consistently, which should not appear so often. This could be fixed with a little bit of corking but it would require surgical change deep in Chromium h2 stack, not very easy to do.
+* TLS over TLS requires more handshake round trips than needed by common h2 requests, that is, no h2 requests need these many back and forth handshakes. There is no simple way to avoid this besides doing MITM proxying, breaking E2E encryption.
+* TLS over TLS overhead causes visible packet length enlargement and lack of small packets. Removing this overhead also requires MITM proxying.
+* Packet length obfuscation partly relies on h2 multiplexing, which does not work if there is only one connection, a scenario not uncommon. It is not clear how to create covering co-connections organically (i.e. not hard coded).
+* Multiplexing requires use of a few long-lived tunnel connections. It is not clearly how long is appropriate for parroting and how to convincingly rotate the connections if there is an age limit or how to detect and recover stuck tunnel connections convincingly.
