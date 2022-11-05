@@ -15,6 +15,7 @@
 #include "base/strings/strcat.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "net/base/io_buffer.h"
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
@@ -30,7 +31,7 @@
 #include "net/tools/naive/socks5_server_socket.h"
 #include "url/scheme_host_port.h"
 
-#if defined(OS_LINUX)
+#if BUILDFLAG(IS_LINUX)
 #include <linux/netfilter_ipv4.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -217,7 +218,7 @@ int NaiveConnection::DoConnectServer() {
         static_cast<const HttpProxySocket*>(client_socket_.get());
     origin = socket->request_endpoint();
   } else if (protocol_ == ClientProtocol::kRedir) {
-#if defined(OS_LINUX)
+#if BUILDFLAG(IS_LINUX)
     const auto* socket =
         static_cast<const TCPClientSocket*>(client_socket_.get());
     IPEndPoint peer_endpoint;
