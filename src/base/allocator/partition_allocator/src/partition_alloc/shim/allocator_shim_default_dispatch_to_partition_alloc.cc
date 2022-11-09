@@ -1111,7 +1111,9 @@ SHIM_ALWAYS_EXPORT int mallopt(int cmd, int value) __THROW {
 
 #endif  // !PA_BUILDFLAG(IS_APPLE) && !PA_BUILDFLAG(IS_ANDROID)
 
-#if PA_BUILDFLAG(IS_LINUX) || PA_BUILDFLAG(IS_CHROMEOS)
+#if defined(__MUSL__)
+// Musl does not support struct mallinfo.
+#elif PA_BUILDFLAG(IS_LINUX) || PA_BUILDFLAG(IS_CHROMEOS)
 SHIM_ALWAYS_EXPORT struct mallinfo mallinfo(void) __THROW {
   partition_alloc::SimplePartitionStatsDumper allocator_dumper;
   // TODO(crbug.com/477186304): Dump stats for all alloc tokens, by accumulating
