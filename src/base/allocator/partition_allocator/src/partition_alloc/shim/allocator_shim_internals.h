@@ -9,7 +9,8 @@
 
 #if defined(__GNUC__)
 
-#if BUILDFLAG(IS_POSIX)
+// Musl does not provide sys/cdefs.h
+#if BUILDFLAG(IS_POSIX) && !defined(__MUSL__)
 #include <sys/cdefs.h>  // for __THROW
 #endif
 
