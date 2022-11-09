@@ -14,7 +14,9 @@
 
 #if defined(__GNUC__)
 
-#if PA_BUILDFLAG(IS_POSIX)
+#if defined(__MUSL__)
+// Musl does not provide sys/cdefs.h
+#elif PA_BUILDFLAG(IS_POSIX)
 #include <sys/cdefs.h>  // for __THROW
 #endif
 
