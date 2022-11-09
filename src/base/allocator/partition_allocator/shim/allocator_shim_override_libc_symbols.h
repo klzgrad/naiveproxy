@@ -22,6 +22,12 @@
 
 #include "base/allocator/partition_allocator/shim/allocator_shim_internals.h"
 
+// Musl does not specify anything for malloc() etc.
+#if defined(__MUSL__)
+#undef __THROW
+#define __THROW
+#endif
+
 extern "C" {
 
 // WARNING: Whenever a new function is added there (which, surprisingly enough,
