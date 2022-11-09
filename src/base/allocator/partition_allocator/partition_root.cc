@@ -238,7 +238,12 @@ void PartitionAllocMallocInitOnce() {
   if (!g_global_init_called.compare_exchange_strong(expected, true))
     return;
 
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+#if defined(__MUSL__)
+  // Musl calls malloc() in pthread_atfork(), resulting in a deadlock.
+  static_cast<void>(BeforeForkInParent);
+  static_cast<void>(AfterForkInParent);
+  static_cast<void>(AfterForkInChild);
+#elif BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
   // When fork() is called, only the current thread continues to execute in the
   // child process. If the lock is held, but *not* by this thread when fork() is
   // called, we have a deadlock.
