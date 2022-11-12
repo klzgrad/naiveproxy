@@ -397,7 +397,12 @@ void DiscardSystemPagesInternal(uintptr_t address, size_t length) {
   // performance benefits unclear.
   //
   // Therefore, we just do the simple thing: MADV_DONTNEED.
-  PA_PCHECK(0 == madvise(ptr, length, MADV_DONTNEED));
+  int ret = madvise(ptr, length, MADV_DONTNEED);
+  if (ret && errno == ENOSYS) {
+    // Ignores when the kernel is built without CONFIG_ADVISE_SYSCALLS
+    return;
+  }
+  PA_PCHECK(ret == 0);
 #endif  // BUILDFLAG(IS_APPLE)
 }
 
