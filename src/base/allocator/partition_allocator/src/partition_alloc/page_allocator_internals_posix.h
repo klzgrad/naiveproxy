@@ -324,6 +324,9 @@ void DiscardSystemPagesInternal(uintptr_t address, size_t length) {
     ret = madvise(ptr, length, MADV_DONTNEED);
   }
   PA_PCHECK(ret == 0);
+#elif defined(NO_MADVISE_SYSCALL)
+  static_cast<void>(ptr);
+  static_cast<void>(length);
 #else   // PA_BUILDFLAG(IS_APPLE)
   // We have experimented with other flags, but with suboptimal results.
   //
