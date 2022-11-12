@@ -260,6 +260,8 @@ constexpr PA_COMPONENT_EXPORT(
     PARTITION_ALLOC) bool DecommittedMemoryIsAlwaysZeroed() {
 #if BUILDFLAG(IS_APPLE)
   return false;
+#elif defined(NO_MADVISE_SYSCALL)
+  return false;
 #else
   return true;
 #endif
