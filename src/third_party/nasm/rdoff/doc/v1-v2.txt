@@ -1,0 +1,62 @@
+Differences between RDOFF versions 1 & 2
+========================================
+
+This document is designed primarily for people maintaining code which
+uses RDOFF version 1, and would like to upgrade that code to work
+with version 2.
+
+The main changes are summarised here:
+
+Overall format
+==============
+
+The overall format has changed somewhat since version 1, in order
+to make RDOFF more flexible. After the file type identifier (which
+has been changed to 'RDOFF2', obviously), there is now a 4 byte
+integer describing the length of the object module. This allows
+multiple objects to be concatenated, while the loader can easily
+build an index of the locations of each object. This isn't as
+pointless as it sounds; I'm using RDOFF in a microkernel operating
+system, and this is the ideal way of loading multiple driver modules
+at boot time.
+
+There are also no longer a fixed number of segments; instead there
+is a list of segments, immediately following the header.
+Each segment is preceded by a 10 byte header giving information about
+that segment. This header has the following format:
+
+Length	Description
+2	Type
+2	Number
+2	Reserved
+4	Length
+
+'Type' is a number describing what sort of segment it is (eg text, data,
+comment, debug info). See 'rdoff2.txt' for a list of the segment types.
+'Number' is the number used to refer to the segment in the header records.
+Not all segments will be loaded; it is only intended that one code
+and one data segment will be loaded into memory. It is possible, however,
+for a loaded segment to contain a reference to an unloaded segment.
+This is an error, and should be flagged at load time. Or maybe you should
+load the segment... its up to you, really.
+
+The segment's data immediately follows the end of the segment header.
+
+HEADER RECORDS
+==============
+
+All of the header records have changed in this version, but not
+substantially. Each record type has had a content-length code added,
+a single byte immediately following the type byte. This contains the
+length of the rest of the record (excluding the type and length bytes,
+but including the terminating nulls on any strings in the record).
+
+There are two new record types, Segment Relocation (6), and FAR import (7).
+The record formats are identical to Relocation (1) and import (2). They are
+only of real use on systems using segmented architectures. Systems using
+a flat model should treat FAR import (7) exactly the same as an import (2),
+and should either flag segment relocation as an error, or attempt to figure
+out whether it is a reference to a code or data symbol, and set the value
+referenced to the according selector value. I am opting for the former
+approach, and would recommend that others working on 32 bit flat systems
+do the same.
