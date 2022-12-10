@@ -60,6 +60,7 @@
 #include "net/tools/naive/naive_protocol.h"
 #include "net/tools/naive/naive_proxy.h"
 #include "net/tools/naive/naive_proxy_delegate.h"
+#include "net/tools/naive/partition_alloc_support.h"
 #include "net/tools/naive/redirect_resolver.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_request_context.h"
@@ -67,7 +68,6 @@
 #include "url/gurl.h"
 #include "url/scheme_host_port.h"
 #include "url/url_util.h"
-#include "net/tools/naive/partition_alloc_support.h"
 
 #if BUILDFLAG(IS_APPLE)
 #include "base/mac/scoped_nsautorelease_pool.h"
@@ -223,14 +223,6 @@ void GetCommandLineFromConfig(const base::FilePath& config_path,
   }
 }
 
-std::string GetProxyFromURL(const GURL& url) {
-  std::string str = url.GetWithEmptyPath().spec();
-  if (str.size() && str.back() == '/') {
-    str.pop_back();
-  }
-  return str;
-}
-
 bool ParseCommandLine(const CommandLine& cmdline, Params* params) {
   params->protocol = net::ClientProtocol::kSocks5;
   params->listen_addr = "0.0.0.0";
@@ -287,11 +279,13 @@ bool ParseCommandLine(const CommandLine& cmdline, Params* params) {
   remove_auth.ClearPassword();
   GURL url_no_auth = url.ReplaceComponents(remove_auth);
   if (!cmdline.proxy.empty()) {
-    if (!url.is_valid()) {
+    params->proxy_url = url_no_auth.GetWithEmptyPath().spec();
+    if (params->proxy_url.empty()) {
       std::cerr << "Invalid proxy URL" << std::endl;
       return false;
+    } else if (params->proxy_url.back() == '/') {
+      params->proxy_url.pop_back();
     }
-    params->proxy_url = GetProxyFromURL(url_no_auth);
     net::GetIdentityFromURL(url, &params->proxy_user, &params->proxy_pass);
   }
 
