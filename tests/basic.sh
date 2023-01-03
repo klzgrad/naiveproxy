@@ -16,4 +16,5 @@ elif [ "$WITH_SYSROOT" ]; then
 fi
 
 cd /tmp
-python3 "$script_dir"/basic.py --naive="$naive" --rootfs="$rootfs" --target_cpu="$target_cpu"
+python3 "$script_dir"/basic.py --naive="$naive" --rootfs="$rootfs" --target_cpu="$target_cpu" --server_protocol=https
+python3 "$script_dir"/basic.py --naive="$naive" --rootfs="$rootfs" --target_cpu="$target_cpu" --server_protocol=http
