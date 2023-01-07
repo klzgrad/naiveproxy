@@ -15,6 +15,7 @@
 #include "base/sys_byteorder.h"
 #include "net/base/ip_address.h"
 #include "net/base/net_errors.h"
+#include "net/base/url_util.h"
 #include "net/http/http_request_headers.h"
 #include "net/log/net_log.h"
 #include "net/third_party/quiche/src/quiche/spdy/core/hpack/hpack_constants.h"
@@ -279,20 +280,26 @@ int HttpProxySocket::DoHeaderReadComplete(int result) {
   }
 
   // HttpProxyClientSocket uses CONNECT for all endpoints.
+  // GET is also supported.
   auto first_line_end = buffer_.find("\r\n");
   auto first_space = buffer_.find(' ');
+  bool is_http_1_0 = false;
   if (first_space == std::string::npos || first_space + 1 >= first_line_end) {
     return ERR_INVALID_ARGUMENT;
   }
-  if (buffer_.compare(0, first_space, "CONNECT") != 0) {
-    return ERR_INVALID_ARGUMENT;
+  if (buffer_.compare(0, first_space, HttpRequestHeaders::kConnectMethod) ==
+      0) {
+    auto second_space = buffer_.find(' ', first_space + 1);
+    if (second_space == std::string::npos || second_space >= first_line_end) {
+      LOG(WARNING) << "Invalid request: " << buffer_.substr(0, first_line_end);
+      return ERR_INVALID_ARGUMENT;
+    }
+    request_endpoint_ = HostPortPair::FromString(
+        buffer_.substr(first_space + 1, second_space - (first_space + 1)));
+  } else {
+    // postprobe endpoint handling
+    is_http_1_0 = true;
   }
-  auto second_space = buffer_.find(' ', first_space + 1);
-  if (second_space == std::string::npos || second_space >= first_line_end) {
-    return ERR_INVALID_ARGUMENT;
-  }
-  request_endpoint_ = HostPortPair::FromString(
-      buffer_.substr(first_space + 1, second_space - (first_space + 1)));
 
   auto second_line = first_line_end + 2;
   HttpRequestHeaders headers;
@@ -301,12 +308,51 @@ int HttpProxySocket::DoHeaderReadComplete(int result) {
     headers_str = buffer_.substr(second_line, header_end - second_line);
     headers.AddHeadersFromString(headers_str);
   }
+
+  if (is_http_1_0) {
+    std::string host_str;
+    if (!headers.GetHeader(HttpRequestHeaders::kHost, &host_str)) {
+      return ERR_INVALID_ARGUMENT;
+    }
+
+    std::string host;
+    int port;
+    if (!ParseHostAndPort(host_str, &host, &port)) {
+      LOG(WARNING) << "Invalid Host: " << host_str;
+      return ERR_INVALID_ARGUMENT;
+    }
+    request_endpoint_.set_host(host);
+    if (port != -1)
+      request_endpoint_.set_port(port);
+    else
+      request_endpoint_.set_port(80);
+  }
+
   if (headers.HasHeader("padding")) {
     padding_detector_delegate_->SetClientPaddingSupport(
         PaddingSupport::kCapable);
   } else {
     padding_detector_delegate_->SetClientPaddingSupport(
         PaddingSupport::kIncapable);
+  }
+
+  if (is_http_1_0) {
+    // Regerate http header to make sure don't leak them to end servers
+    HttpRequestHeaders sanitized_headers = headers;
+    sanitized_headers.RemoveHeader(HttpRequestHeaders::kProxyConnection);
+    sanitized_headers.RemoveHeader(HttpRequestHeaders::kProxyAuthorization);
+    std::stringstream ss;
+    ss << buffer_.substr(0, first_line_end);
+    ss << "\r\n";
+    ss << sanitized_headers.ToString();
+    ss << "\r\n";
+    ss << "\r\n";
+    ss << buffer_.substr(header_end + 4);
+    buffer_ = ss.str();
+    // Skip padding write for raw http proxy
+    completed_handshake_ = true;
+    next_state_ = STATE_NONE;
+    return OK;
   }
 
   buffer_ = buffer_.substr(header_end + 4);
