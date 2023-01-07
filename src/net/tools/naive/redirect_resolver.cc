@@ -98,15 +98,23 @@ int RedirectResolver::HandleReadResult(int result) {
     return ERR_INVALID_ARGUMENT;
   }
 
-  int size;
-  if (query.qtype() == dns_protocol::kTypeA) {
+  auto name_or = DnsDomainToString(query.qname());
+  DnsResponse response;
+  absl::optional<DnsQuery> query_opt;
+  query_opt.emplace(query.id(), query.qname(), query.qtype());
+  if (!name_or || !IsValidDNSDomain(name_or.value())) {
+    response =
+        DnsResponse(query.id(), /*is_authoritative=*/false, /*answers=*/{},
+                    /*authority_records=*/{}, /*additional_records=*/{},
+                    query_opt, dns_protocol::kRcodeFORMERR);
+  } else if (query.qtype() != dns_protocol::kTypeA) {
+    response =
+        DnsResponse(query.id(), /*is_authoritative=*/false, /*answers=*/{},
+                    /*authority_records=*/{}, /*additional_records=*/{},
+                    query_opt, dns_protocol::kRcodeNOTIMP);
+  } else {
     Resolution res;
 
-    auto name_or = DnsDomainToString(query.qname());
-    if (!name_or) {
-      LOG(INFO) << "Malformed DNS query from " << recv_address_.ToString();
-      return ERR_INVALID_ARGUMENT;
-    }
     const auto& name = name_or.value();
 
     auto by_name_lookup = resolution_by_name_.emplace(name, resolutions_.end());
@@ -196,29 +204,16 @@ int RedirectResolver::HandleReadResult(int result) {
     uint32_t addr = by_name->second->addr;
     record.SetOwnedRdata(IPAddressToPackedString(
         IPAddress(addr >> 24, addr >> 16, addr >> 8, addr)));
-    absl::optional<DnsQuery> query_opt;
-    query_opt.emplace(query.id(), query.qname(), query.qtype());
-    DnsResponse response(query.id(), /*is_authoritative=*/false,
-                         /*answers=*/{std::move(record)},
-                         /*authority_records=*/{}, /*additional_records=*/{},
-                         query_opt);
-    size = response.io_buffer_size();
-    if (size > buffer_->size() || !response.io_buffer()) {
-      return ERR_NO_BUFFER_SPACE;
-    }
-    std::memcpy(buffer_->data(), response.io_buffer()->data(), size);
-  } else {
-    absl::optional<DnsQuery> query_opt;
-    query_opt.emplace(query.id(), query.qname(), query.qtype());
-    DnsResponse response(query.id(), /*is_authoritative=*/false, /*answers=*/{},
-                         /*authority_records=*/{}, /*additional_records=*/{},
-                         query_opt, dns_protocol::kRcodeSERVFAIL);
-    size = response.io_buffer_size();
-    if (size > buffer_->size() || !response.io_buffer()) {
-      return ERR_NO_BUFFER_SPACE;
-    }
-    std::memcpy(buffer_->data(), response.io_buffer()->data(), size);
+    response = DnsResponse(query.id(), /*is_authoritative=*/false,
+                           /*answers=*/{std::move(record)},
+                           /*authority_records=*/{}, /*additional_records=*/{},
+                           query_opt);
   }
+  int size = response.io_buffer_size();
+  if (size > buffer_->size() || !response.io_buffer()) {
+    return ERR_NO_BUFFER_SPACE;
+  }
+  std::memcpy(buffer_->data(), response.io_buffer()->data(), size);
 
   return socket_->SendTo(
       buffer_.get(), size, recv_address_,
