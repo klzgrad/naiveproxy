@@ -315,6 +315,8 @@ TaskAnnotator::LongTaskTracker::~LongTaskTracker() {
     TRACE_EVENT_END("scheduler.long_tasks",
                     perfetto::Track::ThreadScoped(task_annotator_),
                     task_end_time);
+    std::ignore = pending_task_;
+    std::ignore = task_annotator_;
   }
 #if !BUILDFLAG(ENABLE_BASE_TRACING)
   // Suppress the unused variable warning when TRACE_EVENT macros are turned
