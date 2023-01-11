@@ -312,6 +312,8 @@ TaskAnnotator::LongTaskTracker::~LongTaskTracker() {
     TRACE_EVENT_END("scheduler.long_tasks",
                     perfetto::Track::ThreadScoped(task_annotator_),
                     task_end_time);
+    std::ignore = pending_task_;
+    std::ignore = task_annotator_;
   }
 }
 
