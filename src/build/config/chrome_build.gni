@@ -1,0 +1,64 @@
+# Copyright 2015 The Chromium Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+declare_args() {
+  # Select the desired branding flavor. False means normal Chromium branding,
+  # true means official Google Chrome branding (requires extra Google-internal
+  # resources).
+  is_chrome_branded = false
+
+  # Whether to enable the Chrome for Testing (CfT) branding flavor. This flag
+  # is not compatible with `is_chrome_branded`, therefore both of them cannot
+  # be simultaneously enabled.
+  #
+  # Note: CfT is not intended to be used as a test runner to run tests in this
+  # repository.
+  #
+  # Design document: https://goo.gle/chrome-for-testing
+  is_chrome_for_testing_branded = false
+
+  # Whether to use internal Chrome for Testing (CfT) icons.
+  # If set to true, use Google-internal icons, otherwise fall back to Chromium icons.
+  #
+  # This flag can only be set to true for CfT builds.
+  use_internal_chrome_for_testing_icons = false
+
+  # Set to true to enable settings for high end Android devices, typically
+  # enhancing speed at the expense of resources such as binary sizes and memory.
+  is_high_end_android = false
+}
+
+assert(
+    !is_chrome_for_testing_branded || !is_chrome_branded,
+    "Chrome for Testing (`is_chrome_for_testing_branded`) requires Chromium flavor (`is_chrome_branded = False`)")
+
+assert(
+    is_chrome_for_testing_branded || !use_internal_chrome_for_testing_icons,
+    "Use of internal Chrome for Testing icons (`use_internal_chrome_for_testing_icons`) requires CfT flavor (`is_chrome_for_testing_branded = True`)")
+
+declare_args() {
+  # Refers to the subdirectory for branding in various places including
+  # chrome/app/theme.
+  #
+  # `branding_path_product` must not contain slashes.
+  if (is_chrome_for_testing_branded) {
+    if (use_internal_chrome_for_testing_icons) {
+      branding_path_component = "google_chrome/google_chrome_for_testing"
+    } else {
+      branding_path_component = "chromium"
+    }
+    branding_path_product = "chromium"
+  } else if (is_chrome_branded) {
+    branding_path_component = "google_chrome"
+    branding_path_product = "google_chrome"
+  } else {
+    branding_path_component = "chromium"
+    branding_path_product = "chromium"
+  }
+}
+
+declare_args() {
+  # The path to the BRANDING file in chrome/app/theme.
+  branding_file_path = "//chrome/app/theme/$branding_path_component/BRANDING"
+}

@@ -1,0 +1,52 @@
+# Copyright 2019 The Chromium Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//base/allocator/partition_allocator/partition_alloc.gni")
+import("//build_overrides/partition_alloc.gni")
+
+if (is_ios) {
+  import("//build/config/ios/ios_sdk.gni")
+}
+
+declare_args() {
+  # Causes all the allocations to be routed via allocator_shim.cc.
+  use_allocator_shim = use_allocator_shim_default
+
+  # RAW_PTR_EXCLUSION macro is disabled on official builds because it increased
+  # binary size. This flag can be used to enable it for official builds too.
+  force_enable_raw_ptr_exclusion = false
+}
+
+assert(
+    !use_allocator_shim || is_linux || is_chromeos || is_android || is_win ||
+        is_fuchsia || is_apple,
+    "use_allocator_shim works only on Android, iOS, Linux, macOS, Fuchsia, " +
+        "and Windows.")
+
+if (is_win && use_allocator_shim) {
+  # TODO(crbug.com/1245317): Add a comment indicating why the shim doesn't work.
+  assert(!is_component_build,
+         "The allocator shim doesn't work for the component build on Windows.")
+}
+
+# Chromium-specific asserts. External embedders _may_ elect to use these
+# features even without PA-E.
+if (!use_partition_alloc_as_malloc) {
+  # In theory, BackupRefPtr/MTECheckedPtr will work just fine without
+  # PartitionAlloc-Everywhere, but their scope would be limited to partitions
+  # that are invoked explicitly (not via malloc). These are only Blink
+  # partition, where we currently don't even use raw_ptr<T>.
+  assert(!enable_backup_ref_ptr_support,
+         "Chromium does not use BRP without PA-E")
+  assert(!enable_mte_checked_ptr_support,
+         "Chromium does not use MTECheckedPtr without PA-E")
+
+  # Pointer compression works only if all pointers are guaranteed to be
+  # allocated by PA (in one of its core pools, to be precise). In theory,
+  # this could be useful with partitions that are invoked explicitly. In
+  # practice, the pointers we have in mind for compression (scoped_refptr<>,
+  # unique_ptr<>) require PA-E.
+  assert(!enable_pointer_compression_support,
+         "Pointer compressions likely doesn't make sense without PA-E")
+}
