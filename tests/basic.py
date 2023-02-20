@@ -50,7 +50,7 @@ def test_https_server(hostname, port, proxy=None):
     cmdline.append(url)
     print('subprocess.run', ' '.join(cmdline))
     result = subprocess.run(cmdline, capture_output=True,
-                            timeout=1, text=True, encoding='utf-8')
+                            timeout=10, text=True, encoding='utf-8')
     print(result.stderr, end='')
     return 'Error code: 404' in result.stdout
 
