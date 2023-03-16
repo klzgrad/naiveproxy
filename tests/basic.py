@@ -13,6 +13,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--naive', required=True)
 parser.add_argument('--rootfs')
 parser.add_argument('--target_cpu')
+parser.add_argument('--server_protocol', choices=['http', 'https'], default='https')
 argv = parser.parse_args()
 
 if argv.rootfs:
@@ -21,6 +22,8 @@ if argv.rootfs:
     except OSError:
         pass
 
+server_protocol = argv.server_protocol
+
 _, certfile = tempfile.mkstemp()
 
 result = subprocess.run(
@@ -28,14 +31,16 @@ result = subprocess.run(
 result.check_returncode()
 
 HTTPS_SERVER_HOSTNAME = '127.0.0.1'
-HTTP_SERVER_PORT = 60443
-ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-ssl_context.load_cert_chain(certfile=certfile)
+HTTP_SERVER_PORT = 60443 if server_protocol == 'https' else 60080
+
 httpd = http.server.HTTPServer(
     (HTTPS_SERVER_HOSTNAME, HTTP_SERVER_PORT), http.server.SimpleHTTPRequestHandler)
 httpd.timeout = 1
 httpd.allow_reuse_address = True
-httpd.socket = ssl_context.wrap_socket(httpd.socket, server_side=True)
+if server_protocol == 'https':
+    ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ssl_context.load_cert_chain(certfile=certfile)
+    httpd.socket = ssl_context.wrap_socket(httpd.socket, server_side=True)
 
 httpd_thread = threading.Thread(
     target=lambda httpd: httpd.serve_forever(), args=(httpd,), daemon=True)
@@ -43,7 +48,7 @@ httpd_thread.start()
 
 
 def test_https_server(hostname, port, proxy=None):
-    url = f'https://{hostname}:{port}/404'
+    url = f'{server_protocol}://{hostname}:{port}/404'
     cmdline = ['curl', '-k', '-s']
     if proxy:
         cmdline.extend(['--proxy', proxy])
