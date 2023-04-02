@@ -21,7 +21,7 @@ The Naïve server here works as a forward proxy and a packet length padding laye
 
 ## Download NaïveProxy
 
-[Download here](https://github.com/klzgrad/naiveproxy/releases/latest). Supported platforms include: Windows, Android (with [SagerNet](https://github.com/SagerNet/SagerNet)), Linux, Mac OS, and OpenWrt ([support status](https://github.com/klzgrad/naiveproxy/wiki/OpenWrt-Support)).
+Download [here](https://github.com/klzgrad/naiveproxy/releases/latest). Supported platforms include: Windows, Android (with [SagerNet](https://github.com/SagerNet/SagerNet)), Linux, Mac OS, and OpenWrt ([support status](https://github.com/klzgrad/naiveproxy/wiki/OpenWrt-Support)).
 
 Users should always use the latest version to keep signatures identical to Chrome.
 
@@ -29,9 +29,9 @@ Build from source: Please see [.github/workflows/build.yml](https://github.com/k
 
 ## Server setup
 
-The following describes the naïve fork of forwardproxy setup.
+The following describes the naïve fork of Caddy forwardproxy setup.
 
-Build:
+Download [here](https://github.com/klzgrad/forwardproxy/releases/latest) or build from source:
 ```sh
 go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
 ~/go/bin/xcaddy build --with github.com/caddyserver/forwardproxy@caddy2=github.com/klzgrad/forwardproxy@naive
@@ -55,7 +55,7 @@ Example Caddyfile (replace `user` and `pass` accordingly):
   }
 }
 ```
-`:443` must appear first for this Caddyfile to work. For more advanced usage consider using [JSON for Caddy 2's config](https://caddyserver.com/docs/json/).
+`:443` must appear first for this Caddyfile to work. See Caddyfile [docs](https://caddyserver.com/docs/caddyfile/directives/tls) for customizing TLS certificates. For more advanced usage consider using [JSON for Caddy 2's config](https://caddyserver.com/docs/json/).
 
 Run with the Caddyfile:
 ```
