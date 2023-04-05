@@ -45,6 +45,7 @@
 #include "net/dns/public/host_resolver_source.h"
 
 #if BUILDFLAG(IS_WIN)
+#include "base/strings/utf_string_conversions.h"
 #include "net/base/winsock_init.h"
 #endif
 
