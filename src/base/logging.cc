@@ -20,6 +20,7 @@
 #include "base/debug/crash_logging.h"
 #include "base/immediate_crash.h"
 #include "base/pending_task.h"
+#include "base/process/process_handle.h"
 #include "base/strings/string_piece.h"
 #include "base/task/common/task_annotator.h"
 #include "base/trace_event/base_tracing.h"
