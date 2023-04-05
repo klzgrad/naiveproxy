@@ -1,0 +1,250 @@
+# Copyright 2021 The Chromium Project. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/chrome_build.gni")
+import("//build/config/compiler/compiler.gni")
+import("//build/config/sanitizers/sanitizers.gni")
+import("//build/toolchain/toolchain.gni")
+
+if (is_android) {
+  import("//build/config/android/config.gni")
+}
+
+declare_args() {
+  # Whether to allow Rust code to be part of the Chromium *build process*.
+  # This can be used to create Rust test binaries, even if the flag below
+  # is false.
+  enable_rust = false
+
+  # Individual Rust components.
+  #
+  # The base::JSONReader implementation.
+  enable_rust_json = true
+
+  # Support for chrome://crash-rust to check crash dump collection works.
+  enable_rust_crash = true
+
+  # Use experimental Rust toolchain built in-tree. See //tools/rust. For now,
+  # only use it for linux targets. The package only has prebuilt libs for linux.
+  # More targets will be added later.
+  #
+  # Ideally this should check `current_os` so that e.g. Android builds will use
+  # the Android toolchain for target artifacts and the Chromium Rust toolchain
+  # for host artifacts. Currently there is an std mixup in //build/rust/std that
+  # prevents this.
+  #
+  # TODO(https://crbug.com/1245714): fix std handling and check `current_os`.
+  use_chromium_rust_toolchain = target_os == "linux" && host_os == "linux"
+
+  # Build libstd locally with GN and use that instead of the prebuilts, where
+  # applicable. If this is false the prebuilt libstd will always be used. If
+  # true, the local build is only used with the Chromium Rust toolchain and only
+  # on supported platforms and GN targets.
+  enable_local_libstd = true
+
+  # Chromium currently has a Rust toolchain for Android and Linux, but
+  # if you wish to experiment on more platforms you can use this
+  # argument to specify an alternative toolchain.
+  # This should be an absolute path to a directory
+  # containing a 'bin' directory and others. Commonly
+  # <home dir>/.rustup/toolchains/nightly-<something>-<something>
+  rust_sysroot_absolute = ""
+
+  # If you're using a Rust toolchain as specified by rust_sysroot_absolute,
+  # you can specify whether it supports nacl here.
+  rust_toolchain_supports_nacl = false
+
+  # Any extra std rlibs in your Rust toolchain, relative to the standard
+  # Rust toolchain. Typically used with 'use_unverified_rust_toolchain' = true
+  added_rust_stdlib_libs = []
+
+  # Any removed std rlibs in your Rust toolchain, relative to the standard
+  # Rust toolchain. Typically used with 'use_unverified_rust_toolchain' = true
+  removed_rust_stdlib_libs = []
+
+  # Non-rlib libs provided in the toolchain sysroot. Usually this is empty, but
+  # e.g. the Android Rust Toolchain provides a libunwind.a that rustc expects.
+  extra_sysroot_libs = []
+
+  # Use goma for Rust builds. Experimental. The only known problem is
+  # b/193072381, but then again, we don't expect a build speedup before much
+  # more work is done.
+  use_goma_rust = false
+
+  # The host toolchain to use when you don't want sanitizers enabled. By default
+  # it is the regular toolchain, but when that toolchain has sanitizers, then
+  # this variable is changed to avoid them.
+  host_toolchain_no_sanitizers = host_toolchain
+}
+
+# Platform support for "official" toolchains (Android or Chromium)
+android_toolchain_supports_platform =
+    (!is_nacl &&
+     (is_android && (current_cpu == "arm" || current_cpu == "arm64" ||
+                     current_cpu == "x64" || current_cpu == "x86"))) ||
+    (is_linux && current_cpu == "x64")
+chromium_toolchain_supports_platform =
+    !is_nacl && is_linux && current_cpu == "x64"
+custom_toolchain_supports_platform = !is_nacl || rust_toolchain_supports_nacl
+
+toolchain_has_rust =
+    enable_rust &&
+    ((use_chromium_rust_toolchain && chromium_toolchain_supports_platform) ||
+     (!use_chromium_rust_toolchain && android_toolchain_supports_platform) ||
+     (rust_sysroot_absolute != "" && custom_toolchain_supports_platform))
+
+# The rustc_revision is used to introduce a dependency on the toolchain version
+# (so e.g. rust targets are rebuilt, and the standard library is re-copied when
+# the toolchain changes). It is left empty for custom toolchains.
+rustc_revision = ""
+if (toolchain_has_rust && rust_sysroot_absolute == "") {
+  if (use_chromium_rust_toolchain) {
+    update_rust_args = [ "--print-package-version" ]
+    rustc_revision = exec_script("//tools/rust/update_rust.py",
+                                 update_rust_args,
+                                 "trim string")
+  } else {
+    # Android toolchain version.
+    rustc_revision = "rustc 1.64.0-dev (Android Rust Toolchain version 9099361)"
+  }
+}
+
+# TODO(crbug.com/1278030): To build unit tests for Android we need to build
+# them as a dylib and put them into an APK. We should reuse all the same logic
+# for gtests from the `//testing/test:test` template.
+can_build_rust_unit_tests = toolchain_has_rust && !is_android
+
+# Whether to build chrome://crash/rust support.
+build_rust_crash = toolchain_has_rust && enable_rust_crash
+
+# We want to store rust_sysroot as a source-relative variable for ninja
+# portability. In practice if an external toolchain was specified, it might
+# be an absolute path, but we'll do our best.
+if (enable_rust) {
+  if (rust_sysroot_absolute != "") {
+    rust_sysroot = get_path_info(rust_sysroot_absolute, "abspath")
+    use_unverified_rust_toolchain = true
+  } else if (use_chromium_rust_toolchain) {
+    if (host_os != "linux") {
+      assert(
+          false,
+          "Attempt to use Chromium Rust toolchain on an unsupported platform")
+    }
+
+    rust_sysroot = "//third_party/rust-toolchain"
+    use_unverified_rust_toolchain = false
+  } else {
+    if (host_os != "linux") {
+      assert(false,
+             "Attempt to use Android Rust toolchain on an unsupported platform")
+    }
+
+    rust_sysroot = "//third_party/android_rust_toolchain/toolchain"
+    use_unverified_rust_toolchain = false
+    extra_sysroot_libs += [ "libunwind.a" ]
+  }
+}
+
+# Figure out the Rust target triple (aka 'rust_abi_target')
+#
+# This is here rather than in the toolchain files because it's used also by
+# //build/rust/std to find the Rust standard library and construct a sysroot for
+# rustc invocations.
+#
+# The list of architectures supported by Rust is here:
+# https://doc.rust-lang.org/nightly/rustc/platform-support.html. We map Chromium
+# targets to Rust targets comprehensively despite not having official support
+# (see '*_toolchain_supports_platform above') to enable experimentation with
+# other toolchains.
+rust_abi_target = ""
+if (is_linux) {
+  cpu = current_cpu
+  if (cpu == "arm64") {
+    cpu = "aarch64"
+  } else if (cpu == "x64") {
+    cpu = "x86_64"
+  }
+  rust_abi_target = cpu + "-unknown-linux-gnu"
+} else if (is_android) {
+  import("//build/config/android/abi.gni")
+  rust_abi_target = android_abi_target
+  if (rust_abi_target == "arm-linux-androideabi") {
+    # Android clang target specifications mostly match Rust, but this
+    # is an exception
+    rust_abi_target = "armv7-linux-androideabi"
+  }
+} else if (is_fuchsia) {
+  if (current_cpu == "arm64") {
+    rust_abi_target = "aarch64-fuchsia"
+  } else if (current_cpu == "x64") {
+    rust_abi_target = "x86_64-fuchsia"
+  } else {
+    assert(false, "Architecture not supported")
+  }
+} else if (is_ios) {
+  if (current_cpu == "arm64") {
+    rust_abi_target = "aarch64-apple-ios"
+  } else if (current_cpu == "arm") {
+    # There's also an armv7s-apple-ios, which targets a more recent ARMv7
+    # generation CPU found in later iPhones. We'll go with the older one for
+    # maximal compatibility. As we come to support all the different platforms
+    # with Rust, we might want to be more precise here.
+    rust_abi_target = "armv7-apple-ios"
+  } else if (current_cpu == "x64") {
+    rust_abi_target = "x86_64-apple-ios"
+  } else if (current_cpu == "x86") {
+    rust_abi_target = "i386-apple-ios"
+  } else {
+    assert(false, "Architecture not supported")
+  }
+} else if (is_win) {
+  rust_abi_target = "x86_64-pc-windows-msvc"
+}
+
+assert(!toolchain_has_rust || rust_abi_target != "")
+
+# This variable is passed to the Rust libstd build.
+rust_target_arch = ""
+if (current_cpu == "x86") {
+  rust_target_arch = "x86"
+} else if (current_cpu == "x64") {
+  rust_target_arch = "x86_64"
+} else if (current_cpu == "arm") {
+  rust_target_arch = "arm"
+} else if (current_cpu == "arm64") {
+  rust_target_arch = "aarch64"
+} else if (current_cpu == "mipsel") {
+  rust_target_arch = "mips"
+} else if (current_cpu == "mips64el") {
+  rust_target_arch = "mips64"
+} else if (current_cpu == "s390x") {
+  rust_target_arch = "s390x"
+} else if (current_cpu == "ppc64") {
+  rust_target_arch = "powerpc64"
+} else if (current_cpu == "riscv64") {
+  rust_target_arch = "riscv64"
+}
+
+assert(!toolchain_has_rust || rust_target_arch != "")
+
+# Determine whether the local libstd can and should be built.
+local_libstd_supported = enable_local_libstd && use_chromium_rust_toolchain
+
+# Arguments for Rust invocation.
+# This is common between gcc/clang, Mac and Windows toolchains so specify once,
+# here. This is not the complete command-line: toolchains should add -o
+# and probably --emit arguments too.
+rustc_common_args = "--crate-name {{crate_name}} {{source}} --crate-type {{crate_type}} {{rustflags}}"
+
+# Rust procedural macros are shared objects loaded into a prebuilt host rustc
+# binary. To build them, we obviously need to build for the host. Not only that,
+# but because the host rustc is prebuilt, it lacks the machinery to be able to
+# load shared objects built using sanitizers (ASAN etc.) For that reason, we need
+# to use a host toolchain that lacks sanitizers. This is only strictly necessary
+# for procedural macros, but we may also choose to build standalone Rust host
+# executable tools using the same toolchain, as they're likely to depend upon
+# similar dependencies (syn, quote etc.) and it saves a little build time.
+if (using_sanitizer || toolchain_disables_sanitizers) {
+  host_toolchain_no_sanitizers = "${host_toolchain}_no_sanitizers"
+}

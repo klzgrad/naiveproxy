@@ -1,0 +1,218 @@
+# Copyright (c) 2015, Google Inc.
+#
+# Permission to use, copy, modify, and/or distribute this software for any
+# purpose with or without fee is hereby granted, provided that the above
+# copyright notice and this permission notice appear in all copies.
+#
+# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+# WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+# SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+# WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION
+# OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+# CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+vars = {
+  'chromium_git': 'https://chromium.googlesource.com',
+
+  'checkout_clang': False,
+  'checkout_sde': False,
+  'checkout_nasm': False,
+  'checkout_libcxx': False,
+  'vs_version': '2017',
+
+  # Run the following command to see the latest builds in CIPD:
+  #  cipd describe PACKAGE_NAME -version latest
+
+  # infra/3pp/tools/cmake/linux-amd64
+  'cmake_version': 'version:2@3.25.0.chromium.5',
+  # infra/3pp/tools/go/linux-amd64
+  'go_version': 'version:2@1.19.3',
+
+  # Update the following from
+  # https://chromium.googlesource.com/chromium/src/+/main/DEPS
+  'android_sdk_platform-tools_version': 'RSI3iwryh7URLGRgJHsCvUxj092woTPnKt4pwFcJ6L8C',
+  'android_ndk_revision': '8388a2be5421311dc75c5f937aae13d821a27f3d',
+  'libfuzzer_revision': 'debe7d2d1982e540fbd6bd78604bf001753f9e74',
+  'libcxx_revision': 'cd0a05047451dfbdef5ba85f97ac4888e432a377',
+  'libcxxabi_revision': '1a32724f721e1c3b6c590a07fe4a954344f15e48',
+  'ninja_version': 'version:2@1.8.2.chromium.3',
+}
+
+deps = {
+  'boringssl/util/bot/android_ndk': {
+    'url': Var('chromium_git') + '/android_ndk.git' + '@' + Var('android_ndk_revision'),
+    'condition': 'checkout_android',
+  },
+
+  'boringssl/util/bot/android_sdk/public': {
+    'packages': [{
+      'package': 'chromium/third_party/android_sdk/public/platform-tools',
+      'version': Var('android_sdk_platform-tools_version'),
+    }],
+    'condition': 'checkout_android',
+    'dep_type': 'cipd',
+  },
+
+  # TODO(davidben): Merge the three CMake directories. Now that we use CIPD,
+  # which supports a ${{platform}} marker, there is nothing platform-specific
+  # about this anymore. However, the recipe still expects CMake to be found at
+  # these directories, so this needs to be coordinated with a change there.
+  'boringssl/util/bot/cmake-linux64': {
+    'packages': [{
+      'package': 'infra/3pp/tools/cmake/${{platform}}',
+      'version': Var('cmake_version'),
+    }],
+    'condition': 'host_os == "linux"',
+    'dep_type': 'cipd',
+  },
+
+  'boringssl/util/bot/cmake-mac': {
+    'packages': [{
+      'package': 'infra/3pp/tools/cmake/${{platform}}',
+      'version': Var('cmake_version'),
+    }],
+    'condition': 'host_os == "mac"',
+    'dep_type': 'cipd',
+  },
+
+  'boringssl/util/bot/cmake-win32': {
+    'packages': [{
+      'package': 'infra/3pp/tools/cmake/${{platform}}',
+      'version': Var('cmake_version'),
+    }],
+    'condition': 'host_os == "win"',
+    'dep_type': 'cipd',
+  },
+
+  'boringssl/util/bot/golang': {
+    'packages': [{
+      'package': 'infra/3pp/tools/go/${{platform}}',
+      'version': Var('go_version'),
+    }],
+    'dep_type': 'cipd',
+  },
+
+  'boringssl/util/bot/libFuzzer': {
+    'url': Var('chromium_git') + '/chromium/llvm-project/compiler-rt/lib/fuzzer.git' +'@' + Var('libfuzzer_revision'),
+    'condition': 'checkout_fuzzer',
+  },
+
+  'boringssl/util/bot/libcxx': {
+    'url': Var('chromium_git') + '/external/github.com/llvm/llvm-project/libcxx.git' + '@' + Var('libcxx_revision'),
+    'condition': 'checkout_libcxx',
+  },
+  'boringssl/util/bot/libcxxabi': {
+    'url': Var('chromium_git') + '/external/github.com/llvm/llvm-project/libcxxabi.git' + '@' + Var('libcxxabi_revision'),
+    'condition': 'checkout_libcxx',
+  },
+
+  'boringssl/util/bot/ninja': {
+    'packages': [{
+      'package': 'infra/3pp/tools/ninja/${{platform}}',
+      'version': Var('ninja_version'),
+    }],
+    'dep_type': 'cipd',
+  }
+}
+
+recursedeps = [
+  # android_tools pulls in the NDK from a separate repository.
+  'boringssl/util/bot/android_tools',
+]
+
+hooks = [
+  {
+    'name': 'perl_win32',
+    'pattern': '.',
+    'condition': 'host_os == "win"',
+    'action': [ 'download_from_google_storage',
+                '--no_resume',
+                '--platform=win32',
+                '--no_auth',
+                '--bucket', 'chromium-tools',
+                '-s', 'boringssl/util/bot/perl-win32.zip.sha1',
+    ],
+  },
+  {
+    'name': 'perl_win32_extract',
+    'pattern': '.',
+    'condition': 'host_os == "win"',
+    'action': [ 'python3',
+                'boringssl/util/bot/extract.py',
+                '--no-prefix',
+                'boringssl/util/bot/perl-win32.zip',
+                'boringssl/util/bot/perl-win32/',
+    ],
+  },
+  {
+    'name': 'nasm_win32',
+    'pattern': '.',
+    'condition': 'host_os == "win" and checkout_nasm',
+    'action': [ 'download_from_google_storage',
+                '--no_resume',
+                '--platform=win32',
+                '--no_auth',
+                '--bucket', 'chromium-tools',
+                '-s', 'boringssl/util/bot/nasm-win32.exe.sha1',
+    ],
+  },
+  {
+    'name': 'win_toolchain',
+    'pattern': '.',
+    'condition': 'host_os == "win"',
+    'action': [ 'python3',
+                'boringssl/util/bot/vs_toolchain.py',
+                'update',
+                Var('vs_version'),
+    ],
+  },
+  {
+    'name': 'clang',
+    'pattern': '.',
+    'condition': 'checkout_clang',
+    'action': [ 'python3',
+                'boringssl/util/bot/update_clang.py',
+    ],
+  },
+  {
+    'name': 'sde_linux64',
+    'pattern': '.',
+    'condition': 'checkout_sde and host_os == "linux"',
+    'action': [ 'download_from_google_storage',
+                '--no_resume',
+                '--bucket', 'chrome-boringssl-sde',
+                '-s', 'boringssl/util/bot/sde-linux64.tar.xz.sha1'
+    ],
+  },
+  {
+    'name': 'sde_linux64_extract',
+    'pattern': '.',
+    'condition': 'checkout_sde and host_os == "linux"',
+    'action': [ 'python3',
+                'boringssl/util/bot/extract.py',
+                'boringssl/util/bot/sde-linux64.tar.xz',
+                'boringssl/util/bot/sde-linux64/',
+    ],
+  },
+  {
+    'name': 'sde_win32',
+    'pattern': '.',
+    'condition': 'checkout_sde and host_os == "win"',
+    'action': [ 'download_from_google_storage',
+                '--no_resume',
+                '--bucket', 'chrome-boringssl-sde',
+                '-s', 'boringssl/util/bot/sde-win32.tar.xz.sha1'
+    ],
+  },
+  {
+    'name': 'sde_win32_extract',
+    'pattern': '.',
+    'condition': 'checkout_sde and host_os == "win"',
+    'action': [ 'python3',
+                'boringssl/util/bot/extract.py',
+                'boringssl/util/bot/sde-win32.tar.xz',
+                'boringssl/util/bot/sde-win32/',
+    ],
+  },
+]
