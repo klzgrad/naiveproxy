@@ -28,6 +28,7 @@
 #include "net/dns/dns_names_util.h"
 
 #if BUILDFLAG(IS_WIN)
+#include "base/strings/utf_string_conversions.h"
 #include "net/base/winsock_init.h"
 #endif
 
