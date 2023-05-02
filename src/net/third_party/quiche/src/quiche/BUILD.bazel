@@ -1,0 +1,507 @@
+# Copyright 2022 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+load(
+    "//build:source_list.bzl",
+    "binary_http_hdrs",
+    "binary_http_srcs",
+    "default_platform_impl_hdrs",
+    "default_platform_impl_srcs",
+    "default_platform_impl_test_support_hdrs",
+    "default_platform_impl_test_support_srcs",
+    "default_platform_impl_tool_support_hdrs",
+    "default_platform_impl_tool_support_srcs",
+    "io_test_support_hdrs",
+    "io_test_support_srcs",
+    "io_tests_srcs",
+    "io_tool_support_hdrs",
+    "io_tool_support_srcs",
+    "oblivious_http_hdrs",
+    "oblivious_http_srcs",
+    "quiche_core_hdrs",
+    "quiche_core_srcs",
+    "quiche_test_support_hdrs",
+    "quiche_test_support_srcs",
+    "quiche_tests_srcs",
+    "quiche_tool_support_hdrs",
+    "quiche_tool_support_srcs",
+)
+load("//build:test.bzl", "test_suite_from_source_list")
+
+licenses(["notice"])
+
+package(
+    default_visibility = ["//visibility:private"],
+    features = [
+        "parse_headers",
+        "layering_check",
+    ],
+)
+
+cc_library(
+    name = "quiche_flags_list",
+    textual_hdrs = [
+        "common/quiche_protocol_flags_list.h",
+    ],
+)
+
+cc_library(
+    name = "quic_flags_list",
+    textual_hdrs = [
+        "quic/core/quic_flags_list.h",
+        "quic/core/quic_protocol_flags_list.h",
+    ],
+)
+
+cc_library(
+    name = "binary_http",
+    srcs = binary_http_srcs,
+    hdrs = binary_http_hdrs,
+    deps = [
+        ":quiche_core",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_library(
+    name = "oblivious_http",
+    srcs = oblivious_http_srcs,
+    hdrs = oblivious_http_hdrs,
+    deps = [
+        ":quiche_core",
+        "@boringssl//:crypto",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:optional",
+    ],
+)
+
+# QUICHE_EXPORT is used by all platform definitions, and thus needs to be handled separately.
+cc_library(
+    name = "quiche_platform_default_quiche_export",
+    hdrs = [
+        "common/platform/default/quiche_platform_impl/quiche_export_impl.h",
+    ],
+    strip_include_prefix = "common/platform/default",
+)
+
+cc_library(
+    name = "quiche_platform_quiche_export",
+    hdrs = [
+        "common/platform/api/quiche_export.h",
+    ],
+    deps = [":quiche_platform_default_quiche_export"],
+)
+
+cc_library(
+    name = "quiche_platform_default",
+    srcs = default_platform_impl_srcs,
+    hdrs = default_platform_impl_hdrs,
+    strip_include_prefix = "common/platform/default",
+    deps = [
+        ":quic_flags_list",
+        ":quiche_flags_list",
+        ":quiche_platform_quiche_export",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/debugging:stacktrace",
+        "@com_google_absl//absl/debugging:symbolize",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/synchronization",
+        "@com_google_absl//absl/time",
+        "@com_google_absl//absl/types:optional",
+        "@com_google_googleurl//url",
+    ],
+)
+
+cc_library(
+    name = "quiche_platform_default_tools",
+    srcs = default_platform_impl_tool_support_srcs,
+    hdrs = default_platform_impl_tool_support_hdrs,
+    strip_include_prefix = "common/platform/default",
+    deps = [
+        ":quiche_core",
+        "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/flags:parse",
+        "@com_google_absl//absl/flags:usage",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:optional",
+        "@com_google_googletest//:gtest",
+    ],
+)
+
+cc_library(
+    name = "quiche_platform_default_testonly",
+    testonly = 1,
+    srcs = default_platform_impl_test_support_srcs,
+    hdrs = default_platform_impl_test_support_hdrs,
+    strip_include_prefix = "common/platform/default",
+    deps = [
+        ":quiche_core",
+        "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/flags:parse",
+        "@com_google_absl//absl/flags:usage",
+        "@com_google_googletest//:gtest",
+    ],
+)
+
+proto_library(
+    name = "quiche_protobufs",
+    srcs = [
+        "quic/core/proto/cached_network_parameters.proto",
+        "quic/core/proto/crypto_server_config.proto",
+        "quic/core/proto/source_address_token.proto",
+    ],
+)
+
+cc_proto_library(
+    name = "quiche_protobufs_cc_proto",
+    deps = [":quiche_protobufs"],
+)
+
+proto_library(
+    name = "quiche_protobufs_testonly",
+    srcs = [
+        "quic/test_tools/send_algorithm_test_result.proto",
+    ],
+)
+
+cc_proto_library(
+    name = "quiche_protobufs_testonly_cc_proto",
+    deps = [":quiche_protobufs_testonly"],
+)
+
+cc_library(
+    name = "quiche_core",
+    srcs = quiche_core_srcs,
+    hdrs = quiche_core_hdrs,
+    textual_hdrs = ["http2/hpack/hpack_static_table_entries.inc"],
+    deps = [
+        ":quiche_platform_default",
+        ":quiche_protobufs_cc_proto",
+        "@boringssl//:crypto",
+        "@boringssl//:ssl",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/cleanup",
+        "@com_google_absl//absl/container:btree",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/container:inlined_vector",
+        "@com_google_absl//absl/container:node_hash_map",
+        "@com_google_absl//absl/hash",
+        "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/numeric:int128",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/time",
+        "@com_google_absl//absl/types:optional",
+        "@com_google_absl//absl/types:span",
+        "@com_google_absl//absl/types:variant",
+        "@com_google_googleurl//url",
+        "@com_google_quic_trace//quic_trace:quic_trace_cc_proto",
+        "@zlib",
+    ],
+)
+
+cc_library(
+    name = "quiche_tool_support",
+    srcs = quiche_tool_support_srcs,
+    hdrs = quiche_tool_support_hdrs,
+    deps = [
+        ":quiche_core",
+        ":quiche_platform_default_tools",
+        "@boringssl//:crypto",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/types:optional",
+        "@com_google_absl//absl/types:span",
+        "@com_google_googletest//:gtest",
+        "@com_google_googleurl//url",
+    ],
+)
+
+cc_library(
+    name = "quiche_test_support",
+    testonly = 1,
+    srcs = quiche_test_support_srcs,
+    hdrs = quiche_test_support_hdrs,
+    deps = [
+        ":binary_http",
+        ":quiche_core",
+        ":quiche_platform_default_testonly",
+        ":quiche_protobufs_testonly_cc_proto",
+        ":quiche_tool_support",
+        "@boringssl//:crypto",
+        "@boringssl//:ssl",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/types:optional",
+        "@com_google_googletest//:gtest",
+        "@com_google_googleurl//url",
+    ],
+)
+
+cc_library(
+    name = "quic_toy_client",
+    srcs = [
+        "quic/tools/quic_toy_client.cc",
+    ],
+    hdrs = [
+        "quic/tools/quic_toy_client.h",
+    ],
+    deps = [
+        ":io_tool_support",
+        ":quiche_core",
+        ":quiche_platform_default",
+        ":quiche_tool_support",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+test_suite_from_source_list(
+    name = "quiche_tests",
+    srcs = quiche_tests_srcs,
+    data = glob([
+        "common/platform/api/testdir/**",
+        "quic/test_tools/quic_http_response_cache_data/**",
+    ]),
+    deps = [
+        ":binary_http",
+        ":oblivious_http",
+        ":quiche_core",
+        ":quiche_platform_default_testonly",
+        ":quiche_protobufs_testonly_cc_proto",
+        ":quiche_test_support",
+        ":quiche_tool_support",
+        "@boringssl//:crypto",
+        "@boringssl//:ssl",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/container:node_hash_map",
+        "@com_google_absl//absl/functional:bind_front",
+        "@com_google_absl//absl/hash",
+        "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/numeric:int128",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/types:optional",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_googleurl//url",
+    ],
+)
+
+cc_library(
+    name = "io_tool_support",
+    srcs = io_tool_support_srcs,
+    hdrs = io_tool_support_hdrs,
+    deps = [
+        ":quiche_core",
+        ":quiche_platform_default_tools",
+        ":quiche_tool_support",
+        "@boringssl//:crypto",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/cleanup",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/types:optional",
+        "@com_google_absl//absl/types:span",
+        "@com_google_absl//absl/types:variant",
+        "@com_google_googleurl//url",
+    ],
+)
+
+cc_library(
+    name = "io_test_support",
+    testonly = 1,
+    srcs = io_test_support_srcs,
+    hdrs = io_test_support_hdrs,
+    deps = [
+        ":io_tool_support",
+        ":quiche_core",
+        ":quiche_platform_default_tools",
+        ":quiche_test_support",
+        ":quiche_tool_support",
+        "@boringssl//:crypto",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/cleanup",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/types:optional",
+        "@com_google_absl//absl/types:span",
+        "@com_google_absl//absl/types:variant",
+        "@com_google_googletest//:gtest",
+        "@com_google_googleurl//url",
+    ],
+)
+
+test_suite_from_source_list(
+    name = "io_tests",
+    srcs = io_tests_srcs,
+    data = glob([
+        "common/platform/api/testdir/**",
+        "quic/test_tools/quic_http_response_cache_data/**",
+    ]),
+    deps = [
+        ":binary_http",
+        ":io_test_support",
+        ":io_tool_support",
+        ":quiche_core",
+        ":quiche_platform_default_testonly",
+        ":quiche_protobufs_testonly_cc_proto",
+        ":quiche_test_support",
+        ":quiche_tool_support",
+        "@boringssl//:crypto",
+        "@boringssl//:ssl",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/cleanup",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/container:node_hash_map",
+        "@com_google_absl//absl/functional:bind_front",
+        "@com_google_absl//absl/hash",
+        "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/numeric:int128",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/time",
+        "@com_google_absl//absl/types:optional",
+        "@com_google_absl//absl/types:span",
+        "@com_google_absl//absl/types:variant",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_googleurl//url",
+    ],
+)
+
+# TODO(vasilvv): make a rule that generates cc_binary rules for all _bin targets.
+cc_binary(
+    name = "quic_packet_printer",
+    srcs = ["quic/tools/quic_packet_printer_bin.cc"],
+    deps = [
+        ":quiche_core",
+        ":quiche_tool_support",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_binary(
+    name = "crypto_message_printer",
+    srcs = ["quic/tools/crypto_message_printer_bin.cc"],
+    deps = [
+        ":quiche_core",
+        ":quiche_tool_support",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_binary(
+    name = "quic_client",
+    srcs = ["quic/tools/quic_client_bin.cc"],
+    deps = [
+        ":io_tool_support",
+        ":quic_toy_client",
+        ":quiche_core",
+        ":quiche_tool_support",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_binary(
+    name = "masque_client",
+    srcs = ["quic/masque/masque_client_bin.cc"],
+    deps = [
+        ":io_tool_support",
+        ":quiche_core",
+        ":quiche_tool_support",
+        "@com_google_absl//absl/strings",
+        "@com_google_googleurl//url",
+    ],
+)
+
+cc_binary(
+    name = "masque_server",
+    srcs = ["quic/masque/masque_server_bin.cc"],
+    deps = [
+        ":io_tool_support",
+        ":quiche_core",
+        ":quiche_platform_default",
+        ":quiche_platform_default_tools",
+        ":quiche_tool_support",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+# Indicate that QUICHE APIs are explicitly unstable by providing only
+# appropriately named aliases as publicly visible targets.
+alias(
+    name = "quiche_unstable_api",
+    actual = ":quiche_core",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "binary_http_unstable_api",
+    actual = ":binary_http",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "oblivious_http_unstable_api",
+    actual = ":oblivious_http",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "quiche_unstable_api_tool_support",
+    actual = ":quiche_tool_support",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "quiche_unstable_api_test_support",
+    actual = ":quiche_test_support",
+    visibility = ["//visibility:public"],
+)
