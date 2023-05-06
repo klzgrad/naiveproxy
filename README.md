@@ -21,7 +21,7 @@ The Naïve server here works as a forward proxy and a packet length padding laye
 
 ## Download NaïveProxy
 
-Download [here](https://github.com/klzgrad/naiveproxy/releases/latest). Supported platforms include: Windows, Android (with [NekoBox](https://github.com/MatsuriDayo/NekoBoxForAndroid)), Linux, Mac OS, and OpenWrt ([support status](https://github.com/klzgrad/naiveproxy/wiki/OpenWrt-Support)).
+Download [here](https://github.com/klzgrad/naiveproxy/releases/latest). Supported platforms include: Windows, Android ([NekoBox](https://github.com/MatsuriDayo/NekoBoxForAndroid) with [naive-plugin](https://github.com/SagerNet/SagerNet/releases)), Linux, Mac OS, and OpenWrt ([support status](https://github.com/klzgrad/naiveproxy/wiki/OpenWrt-Support)).
 
 Users should always use the latest version to keep signatures identical to Chrome.
 
