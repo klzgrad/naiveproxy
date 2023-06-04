@@ -9,8 +9,12 @@
 #include "net/base/net_export.h"
 #include "net/cert/pki/trust_store.h"
 #include "net/cert/pki/trust_store_in_memory.h"
-#include "net/cert/root_store_proto_lite/root_store.pb.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+
+// Forward declares this so root_store.pb.h would not be a public dependency.
+namespace chrome_root_store {
+class RootStore;
+}
 
 namespace net {
 
