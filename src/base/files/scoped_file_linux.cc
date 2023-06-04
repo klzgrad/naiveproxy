@@ -82,6 +82,7 @@ bool IsFDOwned(int fd) {
 
 }  // namespace base
 
+#ifndef OPENWRT_BUILD_STATIC
 #if !defined(COMPONENT_BUILD)
 using LibcCloseFuncPtr = int (*)(int);
 
@@ -114,3 +115,4 @@ __attribute__((visibility("default"), noinline)) int close(int fd) {
 
 }       // extern "C"
 #endif  // !defined(COMPONENT_BUILD)
+#endif  // OPENWRT_BUILD_STATIC
