@@ -81,6 +81,8 @@ bool IsFDOwned(int fd) {
 
 }  // namespace base
 
+#ifndef OPENWRT_BUILD_STATIC
+
 using LibcCloseFuncPtr = int (*)(int);
 
 // Load the libc close symbol to forward to from the close wrapper.
@@ -110,3 +112,5 @@ __attribute__((visibility("default"), noinline)) int close(int fd) {
 }
 
 }  // extern "C"
+
+#endif  // OPENWRT_BUILD_STATIC
