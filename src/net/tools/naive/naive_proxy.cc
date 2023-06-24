@@ -5,6 +5,7 @@
 
 #include "net/tools/naive/naive_proxy.h"
 
+#include <string>
 #include <utility>
 
 #include "base/functional/bind.h"
@@ -20,7 +21,7 @@
 #include "net/socket/client_socket_pool_manager.h"
 #include "net/socket/server_socket.h"
 #include "net/socket/stream_socket.h"
-#include "net/tools/naive/http_proxy_socket.h"
+#include "net/tools/naive/http_proxy_server_socket.h"
 #include "net/tools/naive/naive_proxy_delegate.h"
 #include "net/tools/naive/socks5_server_socket.h"
 
@@ -33,7 +34,8 @@ NaiveProxy::NaiveProxy(std::unique_ptr<ServerSocket> listen_socket,
                        int concurrency,
                        RedirectResolver* resolver,
                        HttpNetworkSession* session,
-                       const NetworkTrafficAnnotationTag& traffic_annotation)
+                       const NetworkTrafficAnnotationTag& traffic_annotation,
+                       const std::vector<PaddingType>& supported_padding_types)
     : listen_socket_(std::move(listen_socket)),
       protocol_(protocol),
       listen_user_(listen_user),
@@ -44,7 +46,8 @@ NaiveProxy::NaiveProxy(std::unique_ptr<ServerSocket> listen_socket,
       net_log_(
           NetLogWithSource::Make(session->net_log(), NetLogSourceType::NONE)),
       last_id_(0),
-      traffic_annotation_(traffic_annotation) {
+      traffic_annotation_(traffic_annotation),
+      supported_padding_types_(supported_padding_types) {
   const auto& proxy_config = static_cast<ConfiguredProxyResolutionService*>(
                                  session_->proxy_resolution_service())
                                  ->config();
@@ -125,9 +128,9 @@ void NaiveProxy::DoConnect() {
                                                   listen_user_, listen_pass_,
                                                   traffic_annotation_);
   } else if (protocol_ == ClientProtocol::kHttp) {
-    socket = std::make_unique<HttpProxySocket>(std::move(accepted_socket_),
-                                               padding_detector_delegate.get(),
-                                               traffic_annotation_);
+    socket = std::make_unique<HttpProxyServerSocket>(
+        std::move(accepted_socket_), padding_detector_delegate.get(),
+        traffic_annotation_, supported_padding_types_);
   } else if (protocol_ == ClientProtocol::kRedir) {
     socket = std::move(accepted_socket_);
   } else {
@@ -135,7 +138,8 @@ void NaiveProxy::DoConnect() {
   }
 
   last_id_++;
-  const auto& nak = network_anonymization_keys_[last_id_ % concurrency_];
+  int tunnel_session_id = last_id_ % concurrency_;
+  const auto& nak = network_anonymization_keys_[tunnel_session_id];
   auto connection_ptr = std::make_unique<NaiveConnection>(
       last_id_, protocol_, std::move(padding_detector_delegate), proxy_info_,
       server_ssl_config_, proxy_ssl_config_, resolver_, session_, nak, net_log_,

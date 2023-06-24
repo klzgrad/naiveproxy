@@ -3,15 +3,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "net/tools/naive/http_proxy_socket.h"
+#include "net/tools/naive/http_proxy_server_socket.h"
 
+#include <algorithm>
 #include <cstring>
 #include <utility>
+#include <vector>
 
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/rand_util.h"
+#include "base/strings/string_split.h"
 #include "base/sys_byteorder.h"
 #include "net/base/ip_address.h"
 #include "net/base/net_errors.h"
@@ -19,6 +22,7 @@
 #include "net/http/http_request_headers.h"
 #include "net/log/net_log.h"
 #include "net/third_party/quiche/src/quiche/spdy/core/hpack/hpack_constants.h"
+#include "net/tools/naive/naive_protocol.h"
 #include "net/tools/naive/naive_proxy_delegate.h"
 
 namespace net {
@@ -33,11 +37,12 @@ constexpr int kMinPaddingSize = 30;
 constexpr int kMaxPaddingSize = kMinPaddingSize + 32;
 }  // namespace
 
-HttpProxySocket::HttpProxySocket(
+HttpProxyServerSocket::HttpProxyServerSocket(
     std::unique_ptr<StreamSocket> transport_socket,
     ClientPaddingDetectorDelegate* padding_detector_delegate,
-    const NetworkTrafficAnnotationTag& traffic_annotation)
-    : io_callback_(base::BindRepeating(&HttpProxySocket::OnIOComplete,
+    const NetworkTrafficAnnotationTag& traffic_annotation,
+    const std::vector<PaddingType>& supported_padding_types)
+    : io_callback_(base::BindRepeating(&HttpProxyServerSocket::OnIOComplete,
                                        base::Unretained(this))),
       transport_(std::move(transport_socket)),
       padding_detector_delegate_(padding_detector_delegate),
@@ -46,17 +51,18 @@ HttpProxySocket::HttpProxySocket(
       was_ever_used_(false),
       header_write_size_(-1),
       net_log_(transport_->NetLog()),
-      traffic_annotation_(traffic_annotation) {}
+      traffic_annotation_(traffic_annotation),
+      supported_padding_types_(supported_padding_types) {}
 
-HttpProxySocket::~HttpProxySocket() {
+HttpProxyServerSocket::~HttpProxyServerSocket() {
   Disconnect();
 }
 
-const HostPortPair& HttpProxySocket::request_endpoint() const {
+const HostPortPair& HttpProxyServerSocket::request_endpoint() const {
   return request_endpoint_;
 }
 
-int HttpProxySocket::Connect(CompletionOnceCallback callback) {
+int HttpProxyServerSocket::Connect(CompletionOnceCallback callback) {
   DCHECK(transport_);
   DCHECK_EQ(STATE_NONE, next_state_);
   DCHECK(!user_callback_);
@@ -75,7 +81,7 @@ int HttpProxySocket::Connect(CompletionOnceCallback callback) {
   return rv;
 }
 
-void HttpProxySocket::Disconnect() {
+void HttpProxyServerSocket::Disconnect() {
   completed_handshake_ = false;
   transport_->Disconnect();
 
@@ -85,23 +91,23 @@ void HttpProxySocket::Disconnect() {
   user_callback_.Reset();
 }
 
-bool HttpProxySocket::IsConnected() const {
+bool HttpProxyServerSocket::IsConnected() const {
   return completed_handshake_ && transport_->IsConnected();
 }
 
-bool HttpProxySocket::IsConnectedAndIdle() const {
+bool HttpProxyServerSocket::IsConnectedAndIdle() const {
   return completed_handshake_ && transport_->IsConnectedAndIdle();
 }
 
-const NetLogWithSource& HttpProxySocket::NetLog() const {
+const NetLogWithSource& HttpProxyServerSocket::NetLog() const {
   return net_log_;
 }
 
-bool HttpProxySocket::WasEverUsed() const {
+bool HttpProxyServerSocket::WasEverUsed() const {
   return was_ever_used_;
 }
 
-bool HttpProxySocket::WasAlpnNegotiated() const {
+bool HttpProxyServerSocket::WasAlpnNegotiated() const {
   if (transport_) {
     return transport_->WasAlpnNegotiated();
   }
@@ -109,7 +115,7 @@ bool HttpProxySocket::WasAlpnNegotiated() const {
   return false;
 }
 
-NextProto HttpProxySocket::GetNegotiatedProtocol() const {
+NextProto HttpProxyServerSocket::GetNegotiatedProtocol() const {
   if (transport_) {
     return transport_->GetNegotiatedProtocol();
   }
@@ -117,7 +123,7 @@ NextProto HttpProxySocket::GetNegotiatedProtocol() const {
   return kProtoUnknown;
 }
 
-bool HttpProxySocket::GetSSLInfo(SSLInfo* ssl_info) {
+bool HttpProxyServerSocket::GetSSLInfo(SSLInfo* ssl_info) {
   if (transport_) {
     return transport_->GetSSLInfo(ssl_info);
   }
@@ -125,19 +131,19 @@ bool HttpProxySocket::GetSSLInfo(SSLInfo* ssl_info) {
   return false;
 }
 
-int64_t HttpProxySocket::GetTotalReceivedBytes() const {
+int64_t HttpProxyServerSocket::GetTotalReceivedBytes() const {
   return transport_->GetTotalReceivedBytes();
 }
 
-void HttpProxySocket::ApplySocketTag(const SocketTag& tag) {
+void HttpProxyServerSocket::ApplySocketTag(const SocketTag& tag) {
   return transport_->ApplySocketTag(tag);
 }
 
 // Read is called by the transport layer above to read. This can only be done
 // if the HTTP header is complete.
-int HttpProxySocket::Read(IOBuffer* buf,
-                          int buf_len,
-                          CompletionOnceCallback callback) {
+int HttpProxyServerSocket::Read(IOBuffer* buf,
+                                int buf_len,
+                                CompletionOnceCallback callback) {
   DCHECK(completed_handshake_);
   DCHECK_EQ(STATE_NONE, next_state_);
   DCHECK(!user_callback_);
@@ -159,7 +165,7 @@ int HttpProxySocket::Read(IOBuffer* buf,
 
   int rv = transport_->Read(
       buf, buf_len,
-      base::BindOnce(&HttpProxySocket::OnReadWriteComplete,
+      base::BindOnce(&HttpProxyServerSocket::OnReadWriteComplete,
                      base::Unretained(this), std::move(callback)));
   if (rv > 0)
     was_ever_used_ = true;
@@ -167,8 +173,8 @@ int HttpProxySocket::Read(IOBuffer* buf,
 }
 
 // Write is called by the transport layer. This can only be done if the
-// SOCKS handshake is complete.
-int HttpProxySocket::Write(
+// HTTP CONNECT request is complete.
+int HttpProxyServerSocket::Write(
     IOBuffer* buf,
     int buf_len,
     CompletionOnceCallback callback,
@@ -180,7 +186,7 @@ int HttpProxySocket::Write(
 
   int rv = transport_->Write(
       buf, buf_len,
-      base::BindOnce(&HttpProxySocket::OnReadWriteComplete,
+      base::BindOnce(&HttpProxyServerSocket::OnReadWriteComplete,
                      base::Unretained(this), std::move(callback)),
       traffic_annotation);
   if (rv > 0)
@@ -188,15 +194,15 @@ int HttpProxySocket::Write(
   return rv;
 }
 
-int HttpProxySocket::SetReceiveBufferSize(int32_t size) {
+int HttpProxyServerSocket::SetReceiveBufferSize(int32_t size) {
   return transport_->SetReceiveBufferSize(size);
 }
 
-int HttpProxySocket::SetSendBufferSize(int32_t size) {
+int HttpProxyServerSocket::SetSendBufferSize(int32_t size) {
   return transport_->SetSendBufferSize(size);
 }
 
-void HttpProxySocket::DoCallback(int result) {
+void HttpProxyServerSocket::DoCallback(int result) {
   DCHECK_NE(ERR_IO_PENDING, result);
   DCHECK(user_callback_);
 
@@ -205,7 +211,7 @@ void HttpProxySocket::DoCallback(int result) {
   std::move(user_callback_).Run(result);
 }
 
-void HttpProxySocket::OnIOComplete(int result) {
+void HttpProxyServerSocket::OnIOComplete(int result) {
   DCHECK_NE(STATE_NONE, next_state_);
   int rv = DoLoop(result);
   if (rv != ERR_IO_PENDING) {
@@ -213,8 +219,8 @@ void HttpProxySocket::OnIOComplete(int result) {
   }
 }
 
-void HttpProxySocket::OnReadWriteComplete(CompletionOnceCallback callback,
-                                          int result) {
+void HttpProxyServerSocket::OnReadWriteComplete(CompletionOnceCallback callback,
+                                                int result) {
   DCHECK_NE(ERR_IO_PENDING, result);
   DCHECK(callback);
 
@@ -223,7 +229,7 @@ void HttpProxySocket::OnReadWriteComplete(CompletionOnceCallback callback,
   std::move(callback).Run(result);
 }
 
-int HttpProxySocket::DoLoop(int last_io_result) {
+int HttpProxyServerSocket::DoLoop(int last_io_result) {
   DCHECK_NE(next_state_, STATE_NONE);
   int rv = last_io_result;
   do {
@@ -253,14 +259,50 @@ int HttpProxySocket::DoLoop(int last_io_result) {
   return rv;
 }
 
-int HttpProxySocket::DoHeaderRead() {
+int HttpProxyServerSocket::DoHeaderRead() {
   next_state_ = STATE_HEADER_READ_COMPLETE;
 
   handshake_buf_ = base::MakeRefCounted<IOBuffer>(kBufferSize);
   return transport_->Read(handshake_buf_.get(), kBufferSize, io_callback_);
 }
 
-int HttpProxySocket::DoHeaderReadComplete(int result) {
+std::optional<PaddingType> HttpProxyServerSocket::ParsePaddingHeaders(
+    const HttpRequestHeaders& headers) {
+  bool has_padding = headers.HasHeader(kPaddingHeader);
+  std::string padding_type_request;
+  bool has_padding_type_request =
+      headers.GetHeader(kPaddingTypeRequestHeader, &padding_type_request);
+
+  if (!has_padding_type_request) {
+    // Backward compatibility with before kVariant1 when the padding-version
+    // header does not exist.
+    if (has_padding) {
+      return PaddingType::kVariant1;
+    } else {
+      return PaddingType::kNone;
+    }
+  }
+
+  std::vector<base::StringPiece> padding_type_strs = base::SplitStringPiece(
+      padding_type_request, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+  for (base::StringPiece padding_type_str : padding_type_strs) {
+    std::optional<PaddingType> padding_type =
+        ParsePaddingType(padding_type_str);
+    if (!padding_type.has_value()) {
+      LOG(ERROR) << "Invalid padding type: " << padding_type_str;
+      return std::nullopt;
+    }
+    if (std::find(supported_padding_types_.begin(),
+                  supported_padding_types_.end(),
+                  *padding_type) != supported_padding_types_.end()) {
+      return padding_type;
+    }
+  }
+  LOG(ERROR) << "No padding type is supported: " << padding_type_request;
+  return std::nullopt;
+}
+
+int HttpProxyServerSocket::DoHeaderReadComplete(int result) {
   if (result < 0)
     return result;
 
@@ -273,23 +315,21 @@ int HttpProxySocket::DoHeaderReadComplete(int result) {
     return ERR_MSG_TOO_BIG;
   }
 
-  auto header_end = buffer_.find("\r\n\r\n");
+  size_t header_end = buffer_.find("\r\n\r\n");
   if (header_end == std::string::npos) {
     next_state_ = STATE_HEADER_READ;
     return OK;
   }
 
-  // HttpProxyClientSocket uses CONNECT for all endpoints.
-  // GET is also supported.
-  auto first_line_end = buffer_.find("\r\n");
-  auto first_space = buffer_.find(' ');
+  size_t first_line_end = buffer_.find("\r\n");
+  size_t first_space = buffer_.find(' ');
   bool is_http_1_0 = false;
   if (first_space == std::string::npos || first_space + 1 >= first_line_end) {
     return ERR_INVALID_ARGUMENT;
   }
   if (buffer_.compare(0, first_space, HttpRequestHeaders::kConnectMethod) ==
       0) {
-    auto second_space = buffer_.find(' ', first_space + 1);
+    size_t second_space = buffer_.find(' ', first_space + 1);
     if (second_space == std::string::npos || second_space >= first_line_end) {
       LOG(WARNING) << "Invalid request: " << buffer_.substr(0, first_line_end);
       return ERR_INVALID_ARGUMENT;
@@ -301,7 +341,7 @@ int HttpProxySocket::DoHeaderReadComplete(int result) {
     is_http_1_0 = true;
   }
 
-  auto second_line = first_line_end + 2;
+  size_t second_line = first_line_end + 2;
   HttpRequestHeaders headers;
   std::string headers_str;
   if (second_line < header_end) {
@@ -328,13 +368,11 @@ int HttpProxySocket::DoHeaderReadComplete(int result) {
       request_endpoint_.set_port(80);
   }
 
-  if (headers.HasHeader("padding")) {
-    padding_detector_delegate_->SetClientPaddingSupport(
-        PaddingSupport::kCapable);
-  } else {
-    padding_detector_delegate_->SetClientPaddingSupport(
-        PaddingSupport::kIncapable);
+  std::optional<PaddingType> padding_type = ParsePaddingHeaders(headers);
+  if (!padding_type.has_value()) {
+    return ERR_INVALID_ARGUMENT;
   }
+  padding_detector_delegate_->SetClientPaddingType(*padding_type);
 
   if (is_http_1_0) {
     // Regerate http header to make sure don't leak them to end servers
@@ -361,7 +399,7 @@ int HttpProxySocket::DoHeaderReadComplete(int result) {
   return OK;
 }
 
-int HttpProxySocket::DoHeaderWrite() {
+int HttpProxyServerSocket::DoHeaderWrite() {
   next_state_ = STATE_HEADER_WRITE_COMPLETE;
 
   // Adds padding.
@@ -378,7 +416,7 @@ int HttpProxySocket::DoHeaderWrite() {
                            io_callback_, traffic_annotation_);
 }
 
-int HttpProxySocket::DoHeaderWriteComplete(int result) {
+int HttpProxyServerSocket::DoHeaderWriteComplete(int result) {
   if (result < 0)
     return result;
 
@@ -391,11 +429,11 @@ int HttpProxySocket::DoHeaderWriteComplete(int result) {
   return OK;
 }
 
-int HttpProxySocket::GetPeerAddress(IPEndPoint* address) const {
+int HttpProxyServerSocket::GetPeerAddress(IPEndPoint* address) const {
   return transport_->GetPeerAddress(address);
 }
 
-int HttpProxySocket::GetLocalAddress(IPEndPoint* address) const {
+int HttpProxyServerSocket::GetLocalAddress(IPEndPoint* address) const {
   return transport_->GetLocalAddress(address);
 }
 

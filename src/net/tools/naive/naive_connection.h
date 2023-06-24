@@ -14,6 +14,7 @@
 #include "base/time/time.h"
 #include "net/base/completion_once_callback.h"
 #include "net/base/completion_repeating_callback.h"
+#include "net/tools/naive/naive_padding_socket.h"
 #include "net/tools/naive/naive_protocol.h"
 #include "net/tools/naive/naive_proxy_delegate.h"
 
@@ -111,7 +112,7 @@ class NaiveConnection {
   std::unique_ptr<StreamSocket> client_socket_;
   std::unique_ptr<ClientSocketHandle> server_socket_handle_;
 
-  StreamSocket* sockets_[kNumDirections];
+  std::unique_ptr<NaivePaddingSocket> sockets_[kNumDirections];
   scoped_refptr<IOBuffer> read_buffers_[kNumDirections];
   scoped_refptr<DrainableIOBuffer> write_buffers_[kNumDirections];
   int errors_[kNumDirections];
@@ -122,11 +123,6 @@ class NaiveConnection {
   bool early_pull_pending_;
   bool can_push_to_server_;
   int early_pull_result_;
-
-  int num_paddings_[kNumDirections];
-  PaddingState read_padding_state_;
-  int payload_length_;
-  int padding_length_;
 
   bool full_duplex_;
 

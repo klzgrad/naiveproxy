@@ -426,8 +426,9 @@ std::unique_ptr<URLRequestContext> BuildURLRequestContext(
   builder.SetCertVerifier(
       CertVerifier::CreateDefault(std::move(cert_net_fetcher)));
 
-  builder.set_proxy_delegate(
-      std::make_unique<NaiveProxyDelegate>(params.extra_headers));
+  builder.set_proxy_delegate(std::make_unique<NaiveProxyDelegate>(
+      params.extra_headers,
+      std::vector<PaddingType>{PaddingType::kVariant1, PaddingType::kNone}));
 
   auto context = builder.Build();
 
@@ -584,10 +585,12 @@ int main(int argc, char* argv[]) {
         params.resolver_prefix);
   }
 
-  net::NaiveProxy naive_proxy(std::move(listen_socket), params.protocol,
-                              params.listen_user, params.listen_pass,
-                              params.concurrency, resolver.get(), session,
-                              kTrafficAnnotation);
+  net::NaiveProxy naive_proxy(
+      std::move(listen_socket), params.protocol, params.listen_user,
+      params.listen_pass, params.concurrency, resolver.get(), session,
+      kTrafficAnnotation,
+      std::vector<net::PaddingType>{net::PaddingType::kVariant1,
+                                    net::PaddingType::kNone});
 
   base::RunLoop().Run();
 

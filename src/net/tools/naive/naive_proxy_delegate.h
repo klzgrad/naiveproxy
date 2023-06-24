@@ -6,12 +6,15 @@
 
 #include <cstdint>
 #include <map>
+#include <optional>
 #include <string>
+#include <vector>
 
 #include "base/strings/string_piece.h"
 #include "net/base/net_errors.h"
 #include "net/base/proxy_delegate.h"
 #include "net/base/proxy_server.h"
+#include "net/http/http_request_headers.h"
 #include "net/proxy_resolution/proxy_retry_info.h"
 #include "net/tools/naive/naive_protocol.h"
 #include "url/gurl.h"
@@ -23,18 +26,11 @@ void InitializeNonindexCodes();
 void FillNonindexHeaderValue(uint64_t unique_bits, char* buf, int len);
 
 class ProxyInfo;
-class HttpRequestHeaders;
-class HttpResponseHeaders;
-
-enum class PaddingSupport {
-  kUnknown = 0,
-  kCapable,
-  kIncapable,
-};
 
 class NaiveProxyDelegate : public ProxyDelegate {
  public:
-  explicit NaiveProxyDelegate(const HttpRequestHeaders& extra_headers);
+  NaiveProxyDelegate(const HttpRequestHeaders& extra_headers,
+                     const std::vector<PaddingType>& supported_padding_types);
   ~NaiveProxyDelegate() override;
 
   void OnResolveProxy(const GURL& url,
@@ -51,18 +47,25 @@ class NaiveProxyDelegate : public ProxyDelegate {
       const ProxyServer& proxy_server,
       const HttpResponseHeaders& response_headers) override;
 
-  PaddingSupport GetProxyServerPaddingSupport(const ProxyServer& proxy_server);
+  // Returns empty if the padding type has not been negotiated.
+  std::optional<PaddingType> GetProxyServerPaddingType(
+      const ProxyServer& proxy_server);
 
  private:
-  const HttpRequestHeaders& extra_headers_;
-  std::map<ProxyServer, PaddingSupport> padding_state_by_server_;
+  std::optional<PaddingType> ParsePaddingHeaders(
+      const HttpResponseHeaders& headers);
+
+  HttpRequestHeaders extra_headers_;
+
+  // Empty value means padding type has not been negotiated.
+  std::map<ProxyServer, std::optional<PaddingType>> padding_type_by_server_;
 };
 
 class ClientPaddingDetectorDelegate {
  public:
   virtual ~ClientPaddingDetectorDelegate() = default;
 
-  virtual void SetClientPaddingSupport(PaddingSupport padding_support) = 0;
+  virtual void SetClientPaddingType(PaddingType padding_type) = 0;
 };
 
 class PaddingDetectorDelegate : public ClientPaddingDetectorDelegate {
@@ -72,22 +75,19 @@ class PaddingDetectorDelegate : public ClientPaddingDetectorDelegate {
                           ClientProtocol client_protocol);
   ~PaddingDetectorDelegate() override;
 
-  bool IsPaddingSupportKnown();
-  Direction GetPaddingDirection();
-  void SetClientPaddingSupport(PaddingSupport padding_support) override;
+  std::optional<PaddingType> GetClientPaddingType();
+  std::optional<PaddingType> GetServerPaddingType();
+  void SetClientPaddingType(PaddingType padding_type) override;
 
  private:
-  PaddingSupport GetClientPaddingSupport();
-  PaddingSupport GetServerPaddingSupport();
-
   NaiveProxyDelegate* naive_proxy_delegate_;
   const ProxyServer& proxy_server_;
   ClientProtocol client_protocol_;
 
-  PaddingSupport detected_client_padding_support_;
+  std::optional<PaddingType> detected_client_padding_type_;
   // The result is only cached during one connection, so it's still dynamically
   // updated in the following connections after server changes support.
-  PaddingSupport cached_server_padding_support_;
+  std::optional<PaddingType> cached_server_padding_type_;
 };
 
 }  // namespace net

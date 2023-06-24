@@ -3,13 +3,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef NET_TOOLS_NAIVE_HTTP_PROXY_SOCKET_H_
-#define NET_TOOLS_NAIVE_HTTP_PROXY_SOCKET_H_
+#ifndef NET_TOOLS_NAIVE_HTTP_PROXY_SERVER_SOCKET_H_
+#define NET_TOOLS_NAIVE_HTTP_PROXY_SERVER_SOCKET_H_
 
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/memory/scoped_refptr.h"
 #include "net/base/completion_once_callback.h"
@@ -17,27 +18,31 @@
 #include "net/base/host_port_pair.h"
 #include "net/base/io_buffer.h"
 #include "net/base/ip_endpoint.h"
+#include "net/http/http_request_headers.h"
 #include "net/log/net_log_with_source.h"
 #include "net/socket/connection_attempts.h"
 #include "net/socket/next_proto.h"
 #include "net/socket/stream_socket.h"
 #include "net/ssl/ssl_info.h"
+#include "net/tools/naive/naive_protocol.h"
 
 namespace net {
 struct NetworkTrafficAnnotationTag;
 class ClientPaddingDetectorDelegate;
 
 // This StreamSocket is used to setup a HTTP CONNECT tunnel.
-class HttpProxySocket : public StreamSocket {
+class HttpProxyServerSocket : public StreamSocket {
  public:
-  HttpProxySocket(std::unique_ptr<StreamSocket> transport_socket,
-                  ClientPaddingDetectorDelegate* padding_detector_delegate,
-                  const NetworkTrafficAnnotationTag& traffic_annotation);
-  HttpProxySocket(const HttpProxySocket&) = delete;
-  HttpProxySocket& operator=(const HttpProxySocket&) = delete;
+  HttpProxyServerSocket(
+      std::unique_ptr<StreamSocket> transport_socket,
+      ClientPaddingDetectorDelegate* padding_detector_delegate,
+      const NetworkTrafficAnnotationTag& traffic_annotation,
+      const std::vector<PaddingType>& supported_padding_types);
+  HttpProxyServerSocket(const HttpProxyServerSocket&) = delete;
+  HttpProxyServerSocket& operator=(const HttpProxyServerSocket&) = delete;
 
   // On destruction Disconnect() is called.
-  ~HttpProxySocket() override;
+  ~HttpProxyServerSocket() override;
 
   const HostPortPair& request_endpoint() const;
 
@@ -89,6 +94,9 @@ class HttpProxySocket : public StreamSocket {
   int DoHeaderRead();
   int DoHeaderReadComplete(int result);
 
+  std::optional<PaddingType> ParsePaddingHeaders(
+      const HttpRequestHeaders& headers);
+
   CompletionRepeatingCallback io_callback_;
 
   // Stores the underlying socket.
@@ -116,7 +124,9 @@ class HttpProxySocket : public StreamSocket {
 
   // Traffic annotation for socket control.
   const NetworkTrafficAnnotationTag& traffic_annotation_;
+
+  std::vector<PaddingType> supported_padding_types_;
 };
 
 }  // namespace net
-#endif  // NET_TOOLS_NAIVE_HTTP_PROXY_SOCKET_H_
+#endif  // NET_TOOLS_NAIVE_HTTP_PROXY_SERVER_SOCKET_H_
