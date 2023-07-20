@@ -379,13 +379,13 @@ int HttpProxyServerSocket::DoHeaderReadComplete(int result) {
     HttpRequestHeaders sanitized_headers = headers;
     sanitized_headers.RemoveHeader(HttpRequestHeaders::kProxyConnection);
     sanitized_headers.RemoveHeader(HttpRequestHeaders::kProxyAuthorization);
-    std::stringstream ss;
-    ss << buffer_.substr(0, first_line_end);
-    ss << "\r\n";
+
+    std::ostringstream ss;
+    ss << buffer_.substr(0, first_line_end) << "\r\n";
     ss << sanitized_headers.ToString();
-    ss << "\r\n";
-    ss << "\r\n";
-    ss << buffer_.substr(header_end + 4);
+    if (buffer_.size() > header_end + 4) {
+      ss << buffer_.substr(header_end + 4);
+    }
     buffer_ = ss.str();
     // Skip padding write for raw http proxy
     completed_handshake_ = true;
