@@ -87,8 +87,13 @@ if (current_cpu == "x64" || current_cpu == "arm64" || current_cpu == "arm64e" ||
 # TODO(crbug.com/329199197): Clean this up when experiments are complete.
 use_large_empty_slot_span_ring = true
 
+# Disables for Android ARM64 because it actually requires API 31+.
+# See partition_alloc/tagging.cc:
+# mallopt can be loaded after API 26.
+# mallopt M_BIONIC_SET_HEAP_TAGGING_LEVEL can be called after API 31.
+# Disables for OpenWrt Musl which lacks the required ifunc support.
 has_memory_tagging = current_cpu == "arm64" && is_clang && !is_asan &&
-                     !is_hwasan && (is_linux || is_android)
+                     !is_hwasan && is_linux && current_os != "openwrt"
 
 declare_args() {
   # Debug configuration.
