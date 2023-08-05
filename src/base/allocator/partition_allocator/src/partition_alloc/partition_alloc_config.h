@@ -152,10 +152,11 @@ static_assert(sizeof(void*) != 8, "");
   (!BUILDFLAG(PUT_REF_COUNT_IN_PREVIOUS_SLOT) && \
    defined(ARCH_CPU_LITTLE_ENDIAN))
 
-#define PA_CONFIG_HAS_MEMORY_TAGGING()              \
-  (defined(ARCH_CPU_ARM64) && defined(__clang__) && \
-   !defined(ADDRESS_SANITIZER) &&                   \
-   (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_ANDROID)))
+#define PA_CONFIG_HAS_MEMORY_TAGGING()                \
+  (defined(ARCH_CPU_ARM64) && defined(__clang__) &&   \
+   !defined(ADDRESS_SANITIZER) &&                     \
+   (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_ANDROID))) && \
+      defined(LIBC_GLIBC)
 
 #if PA_CONFIG(HAS_MEMORY_TAGGING)
 static_assert(sizeof(void*) == 8);
