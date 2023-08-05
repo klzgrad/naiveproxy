@@ -1,0 +1,335 @@
+// Copyright 2023 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package private_membership.anonymous_tokens;
+
+import "quiche/blind_sign_auth/proto/timestamp.proto";
+
+// Different use cases for the Anonymous Tokens service.
+// Next ID: 9
+enum AnonymousTokensUseCase {
+  // Test use cases here.
+  ANONYMOUS_TOKENS_USE_CASE_UNDEFINED = 0;
+  TEST_USE_CASE = 1;
+  TEST_USE_CASE_2 = 2;
+  TEST_USE_CASE_3 = 4;
+  TEST_USE_CASE_4 = 5;
+  TEST_USE_CASE_5 = 6;
+
+  PROVABLY_PRIVATE_NETWORK = 3;
+  CHROME_IP_BLINDING = 7;
+  NOCTOGRAM_PPISSUER = 8;
+}
+
+// An enum describing different types of available hash functions.
+enum HashType {
+  AT_HASH_TYPE_UNDEFINED = 0;
+  AT_TEST_HASH_TYPE = 1;
+  AT_HASH_TYPE_SHA256 = 2;
+  AT_HASH_TYPE_SHA384 = 3;
+  // Add more hash types if necessary.
+}
+
+// An enum describing different types of hash functions that can be used by the
+// mask generation function.
+enum MaskGenFunction {
+  AT_MGF_UNDEFINED = 0;
+  AT_TEST_MGF = 1;
+  AT_MGF_SHA256 = 2;
+  AT_MGF_SHA384 = 3;
+  // Add more hash types if necessary.
+}
+
+// An enum describing different types of message masking.
+enum MessageMaskType {
+  AT_MESSAGE_MASK_TYPE_UNDEFINED = 0;
+  AT_MESSAGE_MASK_XOR = 1;
+  AT_MESSAGE_MASK_CONCAT = 2;
+}
+
+//  Proto representation for RSA private key.
+message RSAPrivateKey {
+  // Modulus.
+  bytes n = 1;
+  // Public exponent.
+  bytes e = 2;
+  // Private exponent.
+  bytes d = 3;
+  // The prime factor p of n.
+  bytes p = 4;
+  // The prime factor q of n.
+  bytes q = 5;
+  // d mod (p - 1).
+  bytes dp = 6;
+  // d mod (q - 1).
+  bytes dq = 7;
+  // Chinese Remainder Theorem coefficient q^(-1) mod p.
+  bytes crt = 8;
+}
+
+// Proto representation for RSA public key.
+message RSAPublicKey {
+  // Modulus.
+  bytes n = 1;
+  // Public exponent.
+  bytes e = 2;
+}
+
+// Next ID: 13
+message RSABlindSignaturePublicKey {
+  // Use case associated with this public key.
+  bytes use_case = 9;
+
+  // Version number of public key.
+  int64 key_version = 1;
+
+  // Serialization of the public key.
+  bytes serialized_public_key = 2;
+
+  // Timestamp of expiration.
+  //
+  // Note that we will not return keys whose expiration times are in the past.
+  quiche.protobuf.Timestamp expiration_time = 3;
+
+  // Key becomes valid at key_validity_start_time.
+  quiche.protobuf.Timestamp key_validity_start_time = 8;
+
+  // Hash function used in computing hash of the signing message
+  // (see https://tools.ietf.org/html/rfc8017#section-9.1.1)
+  HashType sig_hash_type = 4;
+
+  // Hash function used in MGF1 (a mask generation function based on a
+  // hash function) (see https://tools.ietf.org/html/rfc8017#appendix-B.2.1).
+  MaskGenFunction mask_gen_function = 5;
+
+  // Length in bytes of the salt (see
+  // https://tools.ietf.org/html/rfc8017#section-9.1.1)
+  int64 salt_length = 6;
+
+  // Key size: bytes of RSA key.
+  int64 key_size = 7;
+
+  // Type of masking of message (see https://eprint.iacr.org/2022/895.pdf).
+  MessageMaskType message_mask_type = 10;
+
+  // Length of message mask in bytes.
+  int64 message_mask_size = 11;
+
+  // Conveys whether public metadata support is enabled and RSA blind signatures
+  // with public metadata protocol should be used. If false, standard RSA blind
+  // signatures are used and all public metadata inputs are ignored.
+  bool public_metadata_support = 12;
+}
+
+message AnonymousTokensPublicKeysGetRequest {
+  // Use case associated with this request.
+  //
+  // Returns an error if the token type does not support public key verification
+  // for the requested use_case.
+  bytes use_case = 1;
+
+  // Key version associated with this request.
+  //
+  // Returns an error if the token type does not support public key verification
+  // for the requested use_case and key_version combination.
+  //
+  // If unset, all valid possibilities for the key are returned.
+  int64 key_version = 2;
+
+  // Public key that becomes valid at or before this requested time and not
+  // after. More explicitly, we need the requested key to be valid at the
+  // requested key_validity_start_time.
+  //
+  // If unset it will be set to current time.
+  quiche.protobuf.Timestamp key_validity_start_time = 3
+      ;
+
+  // Public key that is definitely not valid after this particular time. If
+  // unset / null, only keys that are indefinitely valid are returned.
+  //
+  // Note: It is possible that the key becomes invalid before this time. But the
+  // key should not be valid after this time.
+  quiche.protobuf.Timestamp key_validity_end_time = 4
+      ;
+}
+
+message AnonymousTokensPublicKeysGetResponse {
+  // List of currently valid RSA public keys.
+  repeated RSABlindSignaturePublicKey rsa_public_keys = 1;
+}
+
+message AnonymousTokensSignRequest {
+  // Next ID: 5
+  message BlindedToken {
+    // Use case associated with this request.
+    bytes use_case = 1;
+
+    // Version of key used to sign and generate the token.
+    int64 key_version = 2;
+
+    // Public metadata to be tied to the `blinded message` (serialized_token).
+    //
+    // The length of public metadata must fit in 4 bytes.
+    bytes public_metadata = 4;
+
+    // Serialization of the token.
+    bytes serialized_token = 3;
+  }
+
+  // Token(s) that have been blinded by the user, not yet signed
+  repeated BlindedToken blinded_tokens = 1;
+}
+
+message AnonymousTokensSignResponse {
+  //  Next ID: 6
+  message AnonymousToken {
+    // Use case associated with this anonymous token.
+    bytes use_case = 1;
+
+    // Version of key used to sign and generate the token.
+    int64 key_version = 2;
+
+    // Public metadata tied to the input (serialized_blinded_message) and the
+    // `blinded` signature (serialized_token).
+    //
+    // The length of public metadata must fit in 4 bytes.
+    bytes public_metadata = 4;
+
+    // The serialized_token in BlindedToken in the AnonymousTokensSignRequest.
+    bytes serialized_blinded_message = 5;
+
+    // Serialization of the signed token. This will have to be `unblinded` by
+    // the user before it can be used / redeemed.
+    bytes serialized_token = 3;
+  }
+
+  // Returned anonymous token(s)
+  repeated AnonymousToken anonymous_tokens = 1;
+}
+
+message AnonymousTokensRedemptionRequest {
+  // Next ID: 7
+  message AnonymousTokenToRedeem {
+    // Use case associated with this anonymous token that needs to be redeemed.
+    bytes use_case = 1;
+
+    // Version of key associated with this anonymous token that needs to be
+    // redeemed.
+    int64 key_version = 2;
+
+    // Public metadata to be used for redeeming the signature
+    // (serialized_unblinded_token).
+    //
+    // The length of public metadata must fit in 4 bytes.
+    bytes public_metadata = 4;
+
+    // Serialization of the unblinded anonymous token that needs to be redeemed.
+    bytes serialized_unblinded_token = 3;
+
+    // Plaintext input message to verify the signature for.
+    bytes plaintext_message = 5;
+
+    // Nonce used to mask plaintext message before cryptographic verification.
+    bytes message_mask = 6;
+  }
+
+  // One or more anonymous tokens to redeem.
+  repeated AnonymousTokenToRedeem anonymous_tokens_to_redeem = 1;
+}
+
+message AnonymousTokensRedemptionResponse {
+  // Next ID: 9
+  message AnonymousTokenRedemptionResult {
+    // Use case associated with this redeemed anonymous token.
+    bytes use_case = 3;
+
+    // Version of key associated with this redeemed anonymous token.
+    int64 key_version = 4;
+
+    // Public metadata used for verifying the signature
+    // (serialized_unblinded_token).
+    //
+    // The length of public metadata must fit in 4 bytes.
+    bytes public_metadata = 5;
+
+    // Serialization of this redeemed unblinded anonymous token.
+    bytes serialized_unblinded_token = 6;
+
+    // Unblinded input message that the signature was verified against.
+    bytes plaintext_message = 7;
+
+    // Nonce used to mask plaintext message before cryptographic verification.
+    bytes message_mask = 8;
+
+    // Returns true if and only if the anonymous token was redeemed
+    // successfully i.e. token was cryptographically verified, all relevant
+    // state in the server was updated successfully and the token was not
+    // redeemed already.
+    //
+    bool verified = 1;
+
+    // Returns true if and only if the anonymous token has already been
+    // redeemed.
+    bool double_spent = 2;
+  }
+
+  // Redemption response for requested anonymous tokens.
+  repeated AnonymousTokenRedemptionResult anonymous_token_redemption_results =
+      1;
+}
+
+// Plaintext message with public metadata.
+message PlaintextMessageWithPublicMetadata {
+  // Message to be signed.
+  bytes plaintext_message = 1;
+
+  // Public metadata to be tied to the signature.
+  bytes public_metadata = 2;
+}
+
+// Proto representing a token created during the blind signing protocol.
+message RSABlindSignatureToken {
+  // Resulting token from the blind signing protocol.
+  bytes token = 1;
+
+  // Nonce used to mask messages.
+  bytes message_mask = 2;
+}
+
+// Proto representing a token along with the input.
+message RSABlindSignatureTokenWithInput {
+  // Input consisting of plaintext message and public metadata.
+  PlaintextMessageWithPublicMetadata input = 1;
+
+  // Resulting token after blind signing protocol.
+  RSABlindSignatureToken token = 2;
+}
+
+// Proto representing redemption result along with the token and the token
+// input.
+message RSABlindSignatureRedemptionResult {
+  // Proto representing a token along with the input.
+  RSABlindSignatureTokenWithInput token_with_input = 1;
+
+  // This is set to true if and only if the anonymous token was redeemed
+  // successfully i.e. token was cryptographically verified, all relevant
+  // state in the redemption server was updated successfully and the token was
+  // not redeemed already.
+  bool redeemed = 2;
+
+  // True if and only if the token was redeemed before.
+  bool double_spent = 3;
+}
