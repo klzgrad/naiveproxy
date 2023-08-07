@@ -78,6 +78,8 @@ def start_naive(naive_args):
         with_qemu = 'mips64el'
     elif argv.target_cpu == 'riscv64':
         with_qemu = 'riscv64'
+    elif argv.target_cpu == 'ppc64':
+        with_qemu = 'ppc64el'
 
     if argv.rootfs:
         if not with_qemu:
@@ -148,15 +150,14 @@ def test_naive_once(proxy, *args, **kwargs):
     proxy = proxy.format_map(port_dict)
 
     config_file = kwargs.get('config_file', 'config.json')
-    if argv.rootfs:
-        config_file = os.path.join(argv.rootfs, config_file)
     config_content = kwargs.get('config_content')
     if config_content is not None:
         config_content = config_content.format_map(port_dict)
         with open(config_file, 'w') as f:
-            f.write('{')
-            f.write(config_content)
-            f.write('}')
+            f.write('{' + config_content + '}')
+        if argv.rootfs:
+            with open(os.path.join(argv.rootfs, config_file), 'w') as f:
+                f.write('{' + config_content + '}')
 
     naive_procs = []
 

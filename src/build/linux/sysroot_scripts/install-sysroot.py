@@ -37,7 +37,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 URL_PREFIX = 'https://commondatastorage.googleapis.com'
 URL_PATH = 'chrome-linux-sysroot/toolchain'
 
-VALID_ARCHS = ('amd64', 'i386', 'armhf', 'arm64', 'armel', 'mipsel', 'mips64el', 'riscv64')
+VALID_ARCHS = ('amd64', 'i386', 'armhf', 'arm64', 'armel', 'mipsel', 'mips64el', 'riscv64', 'ppc64el')
 
 ARCH_TRANSLATIONS = {
     'x64': 'amd64',
@@ -45,6 +45,7 @@ ARCH_TRANSLATIONS = {
     'arm': 'armhf',
     'mips': 'mipsel',
     'mips64': 'mips64el',
+    'ppc64': 'ppc64el',
 }
 
 DEFAULT_TARGET_PLATFORM = 'bullseye'

@@ -42,6 +42,7 @@ case "$ARCH" in
         mipsel) SYSROOT_ARCH=mipsel;;
         mips64el) SYSROOT_ARCH=mips64el;;
         riscv64) SYSROOT_ARCH=riscv64;;
+        ppc64) SYSROOT_ARCH=ppc64el;;
       esac
       if [ "$SYSROOT_ARCH" ]; then
         WITH_SYSROOT="out/sysroot-build/bullseye/bullseye_${SYSROOT_ARCH}_staging"

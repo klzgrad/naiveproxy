@@ -99,6 +99,15 @@ DEBIAN_PACKAGES_MIPS64EL="
 DEBIAN_PACKAGES_RISCV64="
 "
 
+DEBIAN_PACKAGES_PPC64EL="
+  libasan6
+  libitm1
+  liblsan0
+  libquadmath0
+  libtsan0
+  libubsan1
+"
+
 readonly REQUIRED_TOOLS="curl xzcat"
 
 ######################################################################
@@ -220,6 +229,10 @@ SetEnvironmentVariables() {
       DEBIAN_PACKAGES_ARCH="${DEBIAN_PACKAGES_RISCV64}"
       # RISCV64 has no support in bookworm
       APT_SOURCES_LIST=("https://snapshot.debian.org/archive/debian-ports/20230724T141507Z/ sid main")
+      ;;
+    ppc64el)
+      TRIPLE=powerpc64le-linux-gnu
+      DEBIAN_PACKAGES_ARCH="${DEBIAN_PACKAGES_PPC64EL}"
       ;;
     *)
       echo "ERROR: Unsupported architecture: $ARCH"
