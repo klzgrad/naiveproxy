@@ -301,12 +301,13 @@ int NaiveConnection::DoConnectServerComplete(int result) {
 }
 
 int NaiveConnection::Run(CompletionOnceCallback callback) {
-  DCHECK(sockets_[kClient]);
   DCHECK(sockets_[kServer]);
   DCHECK_EQ(next_state_, STATE_NONE);
   DCHECK(!connect_callback_);
 
-  if (errors_[kClient] != OK)
+  // The client-side socket may be closed before the server-side
+  // socket is connected.
+  if (errors_[kClient] != OK || sockets_[kClient] == nullptr)
     return errors_[kClient];
   if (errors_[kServer] != OK)
     return errors_[kServer];
