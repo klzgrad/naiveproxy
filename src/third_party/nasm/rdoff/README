@@ -1,0 +1,185 @@
+*******
+This file is getting obsolete. RDOFF documentation is written in Texinfo now.
+Directory doc/ contains Texinfo source (rdoff.texi) and makefile for creating
+different output formats (info, HTML, PostScript and PDF).
+*******
+
+RDOFF Utilities, version 0.3.2
+==============================
+
+The files contained in this directory are the C source code of a set
+of tools (and general purpose library files) for the manipulation of
+RDOFF version 2 object files. Note that these programs (with the
+exception of 'rdfdump') will NOT work with version 1 object files.
+Version 1 of RDOFF is no longer supported.
+
+There is also a 'doc' directory with 'v1-v2' file, which documents the
+differences between RDOFF 1 and 2, and an 'rdoff2.texi' (texinfo source),
+with complete documentation for the new format.
+
+Here is a brief summary of the programs' usage:
+
+
+rdfdump
+=======
+
+This tool prints a list of the header records in an RDOFF object in
+human-readable form, and optionally prints a hex dump of the contents
+of the segments.
+
+Usage:
+	rdfdump [-v] filename
+
+The -v flag specifies that the hex dump (see above) should be printed.
+
+Changes from previous versions:
+
+* rdfdump supports both version 1 and 2 of RDOFF.
+* rdfdump now gives warnings if the RDOFF2 format is violated (it
+  looks for incorrect lengths for header records, and checks the
+  overall length count at the start of the file)
+
+
+ldrdf
+=====
+
+This tool is a version of unix 'ld' (or DOS 'link') for use with RDOFF
+files. It is capable of linking RDOFF objects, and libraries produced
+with the 'rdlib' utility discussed below.
+
+In normal usage, its command line takes the form:
+
+	ldrdf [-o output-file] object files [-llibrary ...]
+
+Modules in libraries are not linked to the program unless they are
+referred to.
+
+Most of its options are not implemented, but those that are are listed here:
+
+  -2	redirect all output from stderr to stdout. It is useful for some
+  	systems which don't have such a redirection in shell (e.g. DOS).
+
+  -v	increase verbosity level. Currently 4 verbosity levels are
+	available: default (which only prints error information), normal
+	(which prints information about the produced object, -v), medium
+	(which prints information about what the program is doing, -v -v)
+	and high (which prints all available information, -v -v -v).
+
+  -a	change alignment value to which multiple segments combigned into
+	a single segment should be aligned (must be either 1, 2, 4, 8,
+	16, 32 or 256. Default is 16).
+
+  -s	strip exported symbols from output file. Symbols marked as
+  	SYM_GLOBAL are never stripped.
+
+  -x	warn about unresolved symbols.
+
+  -xe	issue an error when at least one symbol is unresolved.
+
+  -o name	write output to file <name>. The default output filename
+		is 'aout.rdx'.
+
+  -j path	specify search path for object files. Default path is a
+  		current directory.
+
+  -L path	specify search path for libraries. Default path is a
+  		current directory.
+
+  -g file	embed 'file' as a first header record with type 'generic'.
+
+
+rdx
+===
+
+This program simply loads and executes an RDOFF object, by calling
+'_main', which it expects to be a C-style function, which will accept
+two parameters, argc and argv in normal C style.
+
+
+rdflib
+======
+
+This program creates a library file for use with ldrdf.
+
+It is supplied with a shell script 'makelib' which should probably be used
+to create libraries.
+
+Usage:
+	rdflib command library [optional arguments]
+
+Valid commands are:
+
+	c	Create (or truncate) the library
+	a	Add a module (requires a filename and a name to give the
+		module, ie 'rdflib a libc.rdl strcpy.rdf strcpy' puts the
+		file 'strcpy.rdf' into 'libc.rdl', and calls it 'strcpy'.
+	x	Extract (arguments are the opposite to the 'a' command,
+		ie you'd do 'rdflib x libc.rdl strcpy strcpy.rdf to get
+		a copy of strcpy.rdf back out again...)
+        t       List modules in the library
+	d	Delete modules from library
+	r	Replace a module in library with a new file
+
+
+Library functions
+=================
+
+The files 'rdoff.c', 'rdoff.h', 'rdfload.c' and 'rdfload.h' contain
+code which you may find useful. They retain the same interface as
+the previous version, so any code that used them previously should
+still work OK (maybe). 'rdoff.c' contains at the top a line:
+
+#define STRICT_ERRORS
+
+Comment this line out if you wish to use record types other than the
+7 predefined types; it will then not report such records as an error,
+but accept them gracefully, and read them byte for byte into
+a 'generic record' (see the definition of GenericRec in 'rdoff.h').
+
+If you are using these functions to write RDF modules (rather than
+just reading them), then please note the existance of a new function
+'rdfaddsegment(rdf_headerbuf,long)'. This must be called once for
+each segment in your object, to tell the header writing functions
+how long the segment is.
+
+
+BUGS
+====
+
+This product has recently undergone a major revision, and as such there
+are probably several bugs left over from the testing phase (although the
+previous version had quite a few that have now been fixed!). Could you
+please report any bugs to maintainers at the addresses below, including the
+following information:
+
+  - A description of the bug
+  - What you think the program should be doing
+  - Which programs you are using
+  - Which operating system you are using, and which C compiler was used to
+    compile the programs (or state that the pre-compiled versions were used).
+  - If appropriate, any of the following:
+    * source code (preferably cut down to a minimum that will still assemble
+      and show the bug)
+    * the output of rdfdump on produced modules (or send the module if the
+      problem is in code generated)
+    * exact descriptions of error messages/symptoms/etc
+
+
+TODO
+====
+
+There are still various things unimplemented that we would like to add.
+If you want to find out what these are, search near the top of each *.c
+file for a comment containing the word 'TODO'. A brief list is given here:
+
+- Improve the performace of ldrdf (there are several enhancements I can think
+  of that wouldn't be too hard to add)
+- Stop assuming that we're on a little endian machine
+- Check for more bugs
+
+
+MAINTAINERS
+===========
+
+Yuri Zaporozhets <r_tty@yahoo.co.uk> - primary maintainer
+Julian Hall <jules@dsf.org.uk> - original designer and author
