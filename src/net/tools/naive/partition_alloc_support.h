@@ -9,8 +9,6 @@
 namespace naive_partition_alloc_support {
 
 void ReconfigureEarly();
-void ReconfigureAfterFeatureListInit();
-void ReconfigureAfterTaskRunnerInit();
 
 }  // namespace naive_partition_alloc_support
 

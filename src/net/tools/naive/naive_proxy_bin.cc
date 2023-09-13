@@ -9,6 +9,7 @@
 #include <memory>
 #include <string>
 
+#include "base/allocator/partition_alloc_support.h"
 #include "base/at_exit.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
@@ -145,7 +146,9 @@ class MultipleListenCollector : public base::DuplicateSwitchHandler {
     }
   }
 
-  const std::vector<std::string>& GetAllValues() const { return all_values_; }
+  const std::vector<std::string>& GetAllValues() const {
+    return all_values_;
+  }
 
  private:
   std::vector<std::string> all_values_;
@@ -539,7 +542,8 @@ int main(int argc, char* argv[]) {
       net::HttpNetworkSession::NORMAL_SOCKET_POOL,
       kDefaultMaxSocketsPerGroup * kExpectedMaxUsers);
 
-  naive_partition_alloc_support::ReconfigureAfterFeatureListInit();
+  base::allocator::PartitionAllocSupport::Get()
+      ->ReconfigureAfterFeatureListInit(/*process_type=*/"");
 
 #if BUILDFLAG(IS_APPLE)
   base::mac::ScopedNSAutoreleasePool pool;
@@ -576,7 +580,8 @@ int main(int argc, char* argv[]) {
   base::SingleThreadTaskExecutor io_task_executor(base::MessagePumpType::IO);
   base::ThreadPoolInstance::CreateAndStartWithDefaultParams("naive");
 
-  naive_partition_alloc_support::ReconfigureAfterTaskRunnerInit();
+  base::allocator::PartitionAllocSupport::Get()
+      ->ReconfigureAfterTaskRunnerInit(/*process_type=*/"");
 
   if (!params.ssl_key_path.empty()) {
     net::SSLClientSocket::SetSSLKeyLogger(
