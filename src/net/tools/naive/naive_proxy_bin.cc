@@ -9,14 +9,18 @@
 #include <memory>
 #include <string>
 
+#include "base/allocator/allocator_check.h"
 #include "base/allocator/partition_alloc_support.h"
+#include "base/allocator/partition_allocator/shim/allocator_shim.h"
 #include "base/at_exit.h"
+#include "base/check.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/json/json_file_value_serializer.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
+#include "base/process/memory.h"
 #include "base/rand_util.h"
 #include "base/run_loop.h"
 #include "base/strings/escape.h"
@@ -61,7 +65,6 @@
 #include "net/tools/naive/naive_protocol.h"
 #include "net/tools/naive/naive_proxy.h"
 #include "net/tools/naive/naive_proxy_delegate.h"
-#include "net/tools/naive/partition_alloc_support.h"
 #include "net/tools/naive/redirect_resolver.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_request_context.h"
@@ -71,6 +74,7 @@
 #include "url/url_util.h"
 
 #if BUILDFLAG(IS_APPLE)
+#include "base/allocator/early_zone_registration_mac.h"
 #include "base/mac/scoped_nsautorelease_pool.h"
 #endif
 
@@ -526,12 +530,70 @@ std::unique_ptr<URLRequestContext> BuildURLRequestContext(
 }  // namespace net
 
 int main(int argc, char* argv[]) {
-  naive_partition_alloc_support::ReconfigureEarly();
+  // chrome/app/chrome_exe_main_mac.cc: main()
+#if BUILDFLAG(IS_APPLE)
+  partition_alloc::EarlyMallocZoneRegistration();
+#endif
+
+  // content/app/content_main.cc: RunContentProcess()
+#if BUILDFLAG(IS_MAC)
+  base::mac::ScopedNSAutoreleasePool pool;
+#endif
+
+  // content/app/content_main.cc: RunContentProcess()
+#if BUILDFLAG(IS_APPLE) && BUILDFLAG(USE_ALLOCATOR_SHIM)
+  // The static initializer function for initializing PartitionAlloc
+  // InitializeDefaultMallocZoneWithPartitionAlloc() would be removed by the
+  // linker if allocator_shim.o is not referenced by the following call,
+  // resulting in undefined behavior of accessing uninitialized TLS
+  // data in PurgeCurrentThread() when PA is enabled.
+  allocator_shim::InitializeAllocatorShim();
+#endif
+
+  // content/app/content_main.cc: RunContentProcess()
+  base::EnableTerminationOnOutOfMemory();
+
+  auto multiple_listens = std::make_unique<MultipleListenCollector>();
+  MultipleListenCollector& multiple_listens_ref = *multiple_listens;
+  base::CommandLine::SetDuplicateSwitchHandler(std::move(multiple_listens));
+
+  // content/app/content_main.cc: RunContentProcess()
+  base::CommandLine::Init(argc, argv);
+
+  // content/app/content_main.cc: RunContentProcess()
+  base::EnableTerminationOnHeapCorruption();
+
+  // content/app/content_main.cc: RunContentProcess()
+  //   content/app/content_main_runner_impl.cc: Initialize()
+  base::AtExitManager exit_manager;
+  std::string process_type = "";
+  base::allocator::PartitionAllocSupport::Get()->ReconfigureEarlyish(
+      process_type);
+
+  // content/app/content_main.cc: RunContentProcess()
+  //   content/app/content_main_runner_impl.cc: Initialize()
+  // If we are on a platform where the default allocator is overridden (e.g.
+  // with PartitionAlloc on most platforms) smoke-tests that the overriding
+  // logic is working correctly. If not causes a hard crash, as its unexpected
+  // absence has security implications.
+  CHECK(base::allocator::IsAllocatorInitialized());
+
+  // content/app/content_main.cc: RunContentProcess()
+  //   content/app/content_main_runner_impl.cc: Run()
+  base::FeatureList::InitializeInstance(
+      "PartitionConnectionsByNetworkIsolationKey", std::string());
+
+  base::allocator::PartitionAllocSupport::Get()
+      ->ReconfigureAfterFeatureListInit(/*process_type=*/"");
+
+  base::SingleThreadTaskExecutor io_task_executor(base::MessagePumpType::IO);
+  base::ThreadPoolInstance::CreateAndStartWithDefaultParams("naive");
+
+  base::allocator::PartitionAllocSupport::Get()->ReconfigureAfterTaskRunnerInit(
+      process_type);
 
   url::AddStandardScheme("quic",
                          url::SCHEME_WITH_HOST_PORT_AND_USER_INFORMATION);
-  base::FeatureList::InitializeInstance(
-      "PartitionConnectionsByNetworkIsolationKey", std::string());
   net::ClientSocketPoolManager::set_max_sockets_per_pool(
       net::HttpNetworkSession::NORMAL_SOCKET_POOL,
       kDefaultMaxSocketsPerPool * kExpectedMaxUsers);
@@ -541,20 +603,6 @@ int main(int argc, char* argv[]) {
   net::ClientSocketPoolManager::set_max_sockets_per_group(
       net::HttpNetworkSession::NORMAL_SOCKET_POOL,
       kDefaultMaxSocketsPerGroup * kExpectedMaxUsers);
-
-  base::allocator::PartitionAllocSupport::Get()
-      ->ReconfigureAfterFeatureListInit(/*process_type=*/"");
-
-#if BUILDFLAG(IS_APPLE)
-  base::mac::ScopedNSAutoreleasePool pool;
-#endif
-
-  base::AtExitManager exit_manager;
-
-  auto multiple_listens = std::make_unique<MultipleListenCollector>();
-  MultipleListenCollector& multiple_listens_ref = *multiple_listens;
-  base::CommandLine::SetDuplicateSwitchHandler(std::move(multiple_listens));
-  base::CommandLine::Init(argc, argv);
 
   CommandLine cmdline;
 
@@ -576,12 +624,6 @@ int main(int argc, char* argv[]) {
     return EXIT_FAILURE;
   }
   CHECK(logging::InitLogging(params.log_settings));
-
-  base::SingleThreadTaskExecutor io_task_executor(base::MessagePumpType::IO);
-  base::ThreadPoolInstance::CreateAndStartWithDefaultParams("naive");
-
-  base::allocator::PartitionAllocSupport::Get()
-      ->ReconfigureAfterTaskRunnerInit(/*process_type=*/"");
 
   if (!params.ssl_key_path.empty()) {
     net::SSLClientSocket::SetSSLKeyLogger(
