@@ -91,6 +91,18 @@ case "$EXTRA_FLAGS" in
   ;;
 esac
 
+# OpenWrt static builds are bad with Clang 18+ and ThinLTO.
+# Segfaults in fstack-protector on ARM.
+# See https://github.com/llvm/llvm-project/issues/64999
+case "$EXTRA_FLAGS" in
+*build_static=true*)
+  if [ "$target_cpu" = "arm" ]; then
+    flags="$flags"'
+      use_thin_lto=false'
+  fi
+  ;;
+esac
+
 rm -rf "./$out"
 mkdir -p out
 
