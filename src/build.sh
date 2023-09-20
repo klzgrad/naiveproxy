@@ -75,6 +75,15 @@ if [ "$target_cpu" = "mipsel" -o "$target_cpu" = "mips64el" ]; then
     chrome_pgo_phase=0'
 fi
 
+# OpenWrt static builds are bad with Clang 18+ and ThinLTO.
+# Segfaults in fstack-protector on ARM.
+case "$EXTRA_FLAGS" in
+*build_static=true*)
+  flags="$flags"'
+    use_thin_lto=false'
+  ;;
+esac
+
 rm -rf "./$out"
 mkdir -p out
 
