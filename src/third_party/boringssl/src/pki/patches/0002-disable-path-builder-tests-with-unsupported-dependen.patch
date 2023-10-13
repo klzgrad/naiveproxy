@@ -1,0 +1,112 @@
+From 0c4866b5b94854983697ebc362efba8d05e5cb86 Mon Sep 17 00:00:00 2001
+From: Bob Beck <bbe@google.com>
+Date: Fri, 2 Jun 2023 11:08:50 +0200
+Subject: [PATCH 2/2] disable path builder tests with unsupported dependencies
+
+---
+ net/cert/pki/path_builder_unittest.cc | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/net/cert/pki/path_builder_unittest.cc b/net/cert/pki/path_builder_unittest.cc
+index 2ee48ce3f5ecc..3a9ead52f0d54 100644
+--- a/net/cert/pki/path_builder_unittest.cc
++++ b/net/cert/pki/path_builder_unittest.cc
+@@ -32,6 +32,7 @@ namespace net {
+ 
+ namespace {
+ 
++#if !defined(_BORINGSSL_LIBPKI_)
+ using ::testing::_;
+ using ::testing::ElementsAre;
+ using ::testing::Exactly;
+@@ -41,6 +42,7 @@ using ::testing::Return;
+ using ::testing::SaveArg;
+ using ::testing::SetArgPointee;
+ using ::testing::StrictMock;
++#endif  // !_BORINGSSL_LIBPKI_
+ 
+ class TestPathBuilderDelegate : public SimplePathBuilderDelegate {
+  public:
+@@ -159,6 +161,7 @@ class AsyncCertIssuerSourceStatic : public CertIssuerSource {
+ }
+ 
+ const void* kKey = &kKey;
++#if !defined(_BORINGSSL_LIBPKI_)
+ class TrustStoreThatStoresUserData : public TrustStore {
+  public:
+   class Data : public base::SupportsUserData::Data {
+@@ -200,6 +203,7 @@ TEST(PathBuilderResultUserDataTest, ModifyUserDataInConstructor) {
+   ASSERT_TRUE(data);
+   EXPECT_EQ(1234, data->value);
+ }
++#endif  // !_BORINGSSL_LIBPKI_
+ 
+ class PathBuilderMultiRootTest : public ::testing::Test {
+  public:
+@@ -1564,6 +1568,7 @@ TEST_F(PathBuilderKeyRolloverTest, TestDuplicateIntermediateAndRoot) {
+   EXPECT_EQ(newroot_->der_cert(), path.certs[2]->der_cert());
+ }
+ 
++#if !defined(_BORINGSSL_LIBPKI_)
+ class MockCertIssuerSourceRequest : public CertIssuerSource::Request {
+  public:
+   MOCK_METHOD2(GetNext, void(ParsedCertificateList*, base::SupportsUserData*));
+@@ -1576,6 +1581,7 @@ class MockCertIssuerSource : public CertIssuerSource {
+   MOCK_METHOD2(AsyncGetIssuersOf,
+                void(const ParsedCertificate*, std::unique_ptr<Request>*));
+ };
++#endif  // !_BORINGSSL_LIBPKI_
+ 
+ // Helper class to pass the Request to the PathBuilder when it calls
+ // AsyncGetIssuersOf. (GoogleMock has a ByMove helper, but it apparently can
+@@ -1611,6 +1617,7 @@ class AppendCertToList {
+   std::shared_ptr<const ParsedCertificate> cert_;
+ };
+ 
++#if !defined(_BORINGSSL_LIBPKI_)
+ // Test that a single CertIssuerSource returning multiple async batches of
+ // issuers is handled correctly. Due to the StrictMocks, it also tests that path
+ // builder does not request issuers of certs that it shouldn't.
+@@ -1780,6 +1787,7 @@ TEST_F(PathBuilderKeyRolloverTest, TestDuplicateAsyncIntermediates) {
+   EXPECT_EQ(newintermediate_, path1.certs[1]);
+   EXPECT_EQ(newroot_, path1.certs[2]);
+ }
++#endif  // !_BORINGSSL_LIBPKI_
+ 
+ class PathBuilderSimpleChainTest : public ::testing::Test {
+  public:
+@@ -1934,6 +1942,7 @@ class CertPathBuilderDelegateBase : public SimplePathBuilderDelegate {
+   }
+ };
+ 
++#if !defined(_BORINGSSL_LIBPKI_)
+ class MockPathBuilderDelegate : public CertPathBuilderDelegateBase {
+  public:
+   MOCK_METHOD2(CheckPathAfterVerification,
+@@ -1949,6 +1958,7 @@ TEST_F(PathBuilderCheckPathAfterVerificationTest, NoOpToValidPath) {
+   CertPathBuilder::Result result = RunPathBuilder(nullptr, &delegate);
+   EXPECT_TRUE(result.HasValidPath());
+ }
++#endif  // !_BORINGSSL_LIBPKI_
+ 
+ DEFINE_CERT_ERROR_ID(kWarningFromDelegate, "Warning from delegate");
+ 
+@@ -2000,6 +2010,7 @@ TEST_F(PathBuilderCheckPathAfterVerificationTest, AddsErrorToValidPath) {
+   EXPECT_TRUE(cert2_errors->ContainsError(kErrorFromDelegate));
+ }
+ 
++#if !defined(_BORINGSSL_LIBPKI_)
+ TEST_F(PathBuilderCheckPathAfterVerificationTest, NoopToAlreadyInvalidPath) {
+   StrictMock<MockPathBuilderDelegate> delegate;
+   // Just verify that the hook is called (on an invalid path).
+@@ -2032,6 +2043,7 @@ TEST_F(PathBuilderCheckPathAfterVerificationTest, SetsDelegateData) {
+ 
+   EXPECT_EQ(0xB33F, data->value);
+ }
++#endif  // !_BORINGSSL_LIBPKI_
+ 
+ TEST(PathBuilderPrioritizationTest, DatePrioritization) {
+   std::string test_dir =
+-- 
+2.41.0.694.ge786442a9b-goog
+
