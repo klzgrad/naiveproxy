@@ -21,6 +21,23 @@ fi
 
 . ./get-sysroot.sh
 
+# ccache
+case "$host_os" in
+  linux|mac)
+    if which ccache >/dev/null 2>&1; then
+      export CCACHE_SLOPPINESS=time_macros
+      export CCACHE_BASEDIR="$PWD"
+      export CCACHE_CPP2=yes
+      CCACHE=ccache
+    fi
+  ;;
+  win)
+    if [ -f "$HOME"/.cargo/bin/sccache* ]; then
+      export PATH="$PATH:$HOME/.cargo/bin"
+      CCACHE=sccache
+    fi
+  ;;
+esac
 if [ "$CCACHE" ]; then
   flags="$flags
     cc_wrapper=\"$CCACHE\""
@@ -59,15 +76,17 @@ if [ "$WITH_SYSROOT" ]; then
     target_sysroot=\"//$WITH_SYSROOT\""
 fi
 
-if [ "$USE_AFDO" ]; then
-  flags="$flags"'
-    clang_sample_profile_path="//chrome/android/profiles/afdo.prof"'
-fi
-
-if [ "$ARCH" = "Darwin" ]; then
+if [ "$host_os" = "mac" ]; then
   flags="$flags"'
     enable_dsyms=false'
 fi
+
+case "$EXTRA_FLAGS" in
+*target_os=\"android\"*)
+  flags="$flags"'
+    is_high_end_android=true'
+  ;;
+esac
 
 if [ "$target_cpu" = "mipsel" -o "$target_cpu" = "mips64el" ]; then
   flags="$flags"'
