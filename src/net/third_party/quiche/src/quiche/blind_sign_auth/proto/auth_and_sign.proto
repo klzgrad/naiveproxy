@@ -1,0 +1,85 @@
+// Copyright 2023 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package privacy.ppn;
+
+import "quiche/blind_sign_auth/proto/attestation.proto";
+import "quiche/blind_sign_auth/proto/key_services.proto";
+import "quiche/blind_sign_auth/proto/public_metadata.proto";
+
+// Client is requesting to auth using the provided auth token.
+// Next ID: 16
+message AuthAndSignRequest {
+  reserved 3, 13;
+
+  // A 'bearer' oauth token to be validated.
+  // https://datatracker.ietf.org/doc/html/rfc6750#section-6.1.1
+  string oauth_token = 1;
+
+  // A string uniquely identifying the strategy this client should be
+  // authenticated with.
+  string service_type = 2;
+
+  // A set of blinded tokens to be signed by zinc. b64 encoded.
+  repeated string blinded_token = 4;
+
+  // A sha256 of the public key PEM used in generated `blinded_token`. This
+  // Ensures the signer signs with the matching key. Only required if key_type
+  // is ZINC_KEY_TYPE.
+  string public_key_hash = 5;
+
+  oneof attestation_data {
+    AndroidAttestationData android_attestation_data = 6;
+    IosAttestationData ios_attestation_data = 7;
+  }
+  privacy.ppn.AttestationData attestation = 8;
+
+  privacy.ppn.KeyType key_type = 10;
+
+  privacy.ppn.PublicMetadataInfo public_metadata_info = 11;
+
+  // Indicates which key to use for signing. Only set if key type is
+  // PUBLIC_METADATA.
+  int64 key_version = 12;
+
+  // Only set one of this or public_metadata_info. Uses IETF privacy pass
+  // extensions spec for format.
+  bytes public_metadata_extensions = 14;
+
+  // For PUBLIC_METADATA key types, if this value is set to false, the
+  // final public exponent is derived by using the RSA public exponent, the
+  // RSA modulus and the public metadata. If this value is set to true, only
+  // the RSA modulus and the public metadata will be used.
+  bool do_not_use_rsa_public_exponent = 15;
+}
+
+message AuthAndSignResponse {
+  reserved 1, 2, 3;
+
+  // A set of signatures corresponding by index to `blinded_token` in the
+  // request. b64 encoded.
+  repeated string blinded_token_signature = 4;
+
+  // The marconi server hostname bridge-proxy used to set up tunnel.
+  string copper_controller_hostname = 5;
+
+  // The base64 encoding of override_region token and signature for white listed
+  // users in the format of "${Region}.${timestamp}.${signature}".
+  string region_token_and_signature = 6;
+
+  // The APN type bridge-proxy use to deside which APN to use for connecting.
+  string apn_type = 7;
+}
