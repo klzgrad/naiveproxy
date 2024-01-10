@@ -77,6 +77,13 @@ Run `./naive` with the following `config.json` to get a SOCKS5 proxy at local po
 
 Or `quic://user:pass@example.com`, if it works better. See also [parameter usage](https://github.com/klzgrad/naiveproxy/blob/master/USAGE.txt) and [performance tuning](https://github.com/klzgrad/naiveproxy/wiki/Performance-Tuning).
 
+## Third-party integration
+
+* [v2rayN](https://github.com/2dust/v2rayN), GUI client, Windows
+* [NekoBox for Android](https://github.com/MatsuriDayo/NekoBoxForAndroid), Proxy toolchain, Android
+* [NekoRay / NekoBox For PC](https://github.com/MatsuriDayo/nekoray), Qt based GUI, Windows, Linux
+* [Yet Another Shadow Socket](https://github.com/Chilledheart/yass), NaïveProxy-compatible forward proxy, Android, iOS, Windows, macOS, Linux, FreeBSD 
+
 ## Notes for downstream
 
 Do not use the master branch to track updates, as it rebases from a new root commit for every new Chrome release. Use stable releases and the associated tags to track new versions, where short release notes are also provided.
@@ -121,7 +128,7 @@ NaïveProxy servers and clients determines whether the counterpart is capable of
 
 The first CONNECT request to a server cannot use "Fast Open" to send payload before response, because the server's padding capability has not been determined from the first response and it's unknown whether to send padded or unpadded payload for Fast Open.
 
-## Changes from upstream
+## Changes from Chromium upstream
 
 - Minimize source code and build size (1% of the original)
 - Disable exceptions and RTTI, except on Mac and Android.
@@ -154,3 +161,4 @@ The first CONNECT request to a server cannot use "Fast Open" to send payload bef
 * TLS over TLS overhead also causes packets to consistently exceed MTU limits, which should not happen for an originating user agent. Fixing this requires re-segmentation and it is not easy to do.
 * Packet length obfuscation partly relies on h2 multiplexing, which does not work if there is only one connection, a scenario not uncommon. It is not clear how to create covering co-connections organically (i.e. not hard coded).
 * Multiplexing requires use of a few long-lived tunnel connections. It is not clearly how long is appropriate for parroting and how to convincingly rotate the connections if there is an age limit or how to detect and recover stuck tunnel connections convincingly.
+
