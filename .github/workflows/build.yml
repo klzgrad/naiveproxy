@@ -168,10 +168,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [x64, x86, arm64, arm]
+        include:
+          - arch: x64
+            abi: x86_64
+          - arch: x86
+            abi: x86
+          - arch: arm64
+            abi: arm64-v8a
+          - arch: arm
+            abi: armeabi-v7a
     env:
       EXTRA_FLAGS: 'target_cpu="${{ matrix.arch }}" target_os="android"'
-      BUNDLE: naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}
+      BUNDLE: naiveproxy-plugin-${{ github.event.release.tag_name || 'v1' }}-${{ matrix.abi }}.apk
     steps:
       - uses: actions/checkout@v4
       - name: Cache toolchains (Linux, OpenWrt, Android)
@@ -219,20 +227,31 @@ jobs:
       - run: ccache -s
       - run: ./get-android-sys.sh
       - run: ../tests/basic.sh out/Release/naive
-      - name: Pack naiveproxy assets
+      - name: Gradle cache
+        uses: actions/cache@v3
+        with:
+          path: ~/.gradle
+          key: gradle-${{ hashFiles('**/*.gradle.kts') }}
+      - name: Create APK
+        working-directory: apk
+        env:
+          APK_ABI: ${{ matrix.abi }}
+          APK_VERSION_NAME: ${{ github.event.release.tag_name || 'v1' }}
+          KEYSTORE_PASS: ${{ secrets.KEYSTORE_PASS }}
         run: |
-          mkdir ${{ env.BUNDLE }}
-          cp out/Release/naive config.json ../LICENSE ../USAGE.txt ${{ env.BUNDLE }}
-          tar cJf ${{ env.BUNDLE }}.tar.xz ${{ env.BUNDLE }}
-          openssl sha256 out/Release/naive >sha256sum.txt
+          mkdir -p app/libs/$APK_ABI
+          cp ../src/out/Release/naive app/libs/$APK_ABI/libnaive.so
+          ./gradlew :app:assembleRelease
+          openssl sha256 app/build/outputs/apk/release/${{ env.BUNDLE }} >sha256sum.txt
           echo "SHA256SUM=$(cut -d' ' -f2 sha256sum.txt)" >>$GITHUB_ENV
       - uses: actions/upload-artifact@v3
         with:
-          name: ${{ env.BUNDLE }}.tar.xz naive executable sha256 ${{ env.SHA256SUM }}
-          path: src/sha256sum.txt
+          name: ${{ env.BUNDLE }} sha256 ${{ env.SHA256SUM }}
+          path: apk/sha256sum.txt
       - name: Upload naiveproxy assets
         if: ${{ github.event_name == 'release' }}
-        run: gh release upload "${GITHUB_REF##*/}" ${{ env.BUNDLE }}.tar.xz --clobber
+        working-directory: apk/app/build/outputs/apk/release
+        run: gh release upload "${GITHUB_REF##*/}" ${{ env.BUNDLE }} --clobber
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   win:
@@ -394,108 +413,108 @@ jobs:
       matrix:
         include:
           - arch: x86_64
-            openwrt: 'target=x86 subtarget=64'
+            openwrt: "target=x86 subtarget=64"
             target_cpu: x64
           - arch: x86
-            openwrt: 'target=x86 subtarget=generic'
+            openwrt: "target=x86 subtarget=generic"
             target_cpu: x86
           - arch: aarch64_cortex-a53
-            openwrt: 'target=sunxi subtarget=cortexa53'
+            openwrt: "target=sunxi subtarget=cortexa53"
             target_cpu: arm64
             extra: 'arm_cpu="cortex-a53"'
           - arch: aarch64_cortex-a53-static
-            openwrt: 'target=sunxi subtarget=cortexa53'
+            openwrt: "target=sunxi subtarget=cortexa53"
             target_cpu: arm64
             extra: 'arm_cpu="cortex-a53" build_static=true no_madvise_syscall=true'
           - arch: aarch64_cortex-a72
-            openwrt: 'target=mvebu subtarget=cortexa72'
+            openwrt: "target=mvebu subtarget=cortexa72"
             target_cpu: arm64
             extra: 'arm_cpu="cortex-a72"'
           - arch: aarch64_cortex-a72-static
-            openwrt: 'target=mvebu subtarget=cortexa72'
+            openwrt: "target=mvebu subtarget=cortexa72"
             target_cpu: arm64
             extra: 'arm_cpu="cortex-a72" build_static=true no_madvise_syscall=true'
           - arch: aarch64_generic
-            openwrt: 'target=rockchip subtarget=armv8'
+            openwrt: "target=rockchip subtarget=armv8"
             target_cpu: arm64
           - arch: aarch64_generic-static
-            openwrt: 'target=rockchip subtarget=armv8'
+            openwrt: "target=rockchip subtarget=armv8"
             target_cpu: arm64
-            extra: 'build_static=true no_madvise_syscall=true'
+            extra: "build_static=true no_madvise_syscall=true"
           - arch: arm_arm1176jzf-s_vfp
-            openwrt: 'target=bcm27xx subtarget=bcm2708'
+            openwrt: "target=bcm27xx subtarget=bcm2708"
             target_cpu: arm
             extra: 'arm_version=0 arm_cpu="arm1176jzf-s" arm_fpu="vfp" arm_float_abi="hard" arm_use_neon=false arm_use_thumb=false'
           - arch: arm_arm926ej-s
-            openwrt: 'target=mxs subtarget=generic'
+            openwrt: "target=mxs subtarget=generic"
             target_cpu: arm
             extra: 'arm_version=0 arm_cpu="arm926ej-s" arm_float_abi="soft" arm_use_neon=false arm_use_thumb=false'
           - arch: arm_cortex-a15_neon-vfpv4
-            openwrt: 'target=armsr subtarget=armv7'
+            openwrt: "target=armsr subtarget=armv7"
             target_cpu: arm
             extra: 'arm_version=0 arm_cpu="cortex-a15" arm_fpu="neon-vfpv4" arm_float_abi="hard" arm_use_neon=true'
           - arch: arm_cortex-a5_vfpv4
-            openwrt: 'target=at91 subtarget=sama5'
+            openwrt: "target=at91 subtarget=sama5"
             target_cpu: arm
             extra: 'arm_version=0 arm_cpu="cortex-a5" arm_fpu="vfpv4" arm_float_abi="hard" arm_use_neon=false'
           - arch: arm_cortex-a7
-            openwrt: 'target=mediatek subtarget=mt7629'
+            openwrt: "target=mediatek subtarget=mt7629"
             target_cpu: arm
             extra: 'arm_version=0 arm_cpu="cortex-a7" arm_float_abi="soft" arm_use_neon=false'
           - arch: arm_cortex-a7_neon-vfpv4
-            openwrt: 'target=sunxi subtarget=cortexa7'
+            openwrt: "target=sunxi subtarget=cortexa7"
             target_cpu: arm
             extra: 'arm_version=0 arm_cpu="cortex-a7" arm_fpu="neon-vfpv4" arm_float_abi="hard" arm_use_neon=true'
           - arch: arm_cortex-a7_vfpv4
-            openwrt: 'target=at91 subtarget=sama7'
+            openwrt: "target=at91 subtarget=sama7"
             target_cpu: arm
             extra: 'arm_version=0 arm_cpu="cortex-a7" arm_fpu="vfpv4" arm_float_abi="hard" arm_use_neon=false'
           - arch: arm_cortex-a7_neon-vfpv4-static
-            openwrt: 'target=sunxi subtarget=cortexa7'
+            openwrt: "target=sunxi subtarget=cortexa7"
             target_cpu: arm
             extra: 'arm_version=0 arm_cpu="cortex-a7" arm_fpu="neon-vfpv4" arm_float_abi="hard" arm_use_neon=true build_static=true no_madvise_syscall=true'
           - arch: arm_cortex-a8_vfpv3
-            openwrt: 'target=sunxi subtarget=cortexa8'
+            openwrt: "target=sunxi subtarget=cortexa8"
             target_cpu: arm
             extra: 'arm_version=0 arm_cpu="cortex-a8" arm_fpu="vfpv3" arm_float_abi="hard" arm_use_neon=false'
           - arch: arm_cortex-a9
-            openwrt: 'target=bcm53xx subtarget=generic'
+            openwrt: "target=bcm53xx subtarget=generic"
             target_cpu: arm
             extra: 'arm_version=0 arm_cpu="cortex-a9" arm_float_abi="soft" arm_use_neon=false'
           - arch: arm_cortex-a9-static
-            openwrt: 'target=bcm53xx subtarget=generic'
+            openwrt: "target=bcm53xx subtarget=generic"
             target_cpu: arm
             extra: 'arm_version=0 arm_cpu="cortex-a9" arm_float_abi="soft" arm_use_neon=false build_static=true no_madvise_syscall=true'
           - arch: arm_cortex-a9_neon
-            openwrt: 'target=zynq subtarget=generic'
+            openwrt: "target=zynq subtarget=generic"
             target_cpu: arm
             extra: 'arm_version=0 arm_cpu="cortex-a9" arm_fpu="neon" arm_float_abi="hard" arm_use_neon=true'
           - arch: arm_cortex-a9_vfpv3-d16
-            openwrt: 'target=tegra subtarget=generic'
+            openwrt: "target=tegra subtarget=generic"
             target_cpu: arm
             extra: 'arm_version=0 arm_cpu="cortex-a9" arm_fpu="vfpv3-d16" arm_float_abi="hard" arm_use_neon=false'
           - arch: arm_mpcore
-            openwrt: 'target=oxnas subtarget=ox820'
+            openwrt: "target=oxnas subtarget=ox820"
             target_cpu: arm
             extra: 'arm_version=0 arm_cpu="mpcore" arm_float_abi="soft" arm_use_neon=false arm_use_thumb=false'
           - arch: arm_xscale
-            openwrt: 'target=kirkwood subtarget=generic'
+            openwrt: "target=kirkwood subtarget=generic"
             target_cpu: arm
             extra: 'arm_version=0 arm_cpu="xscale" arm_float_abi="soft" arm_use_neon=false arm_use_thumb=false'
           - arch: mipsel_24kc
-            openwrt: 'target=ramips subtarget=rt305x'
+            openwrt: "target=ramips subtarget=rt305x"
             target_cpu: mipsel
             extra: 'mips_arch_variant="r2" mips_float_abi="soft"'
           - arch: mipsel_24kc-static
-            openwrt: 'target=ramips subtarget=rt305x'
+            openwrt: "target=ramips subtarget=rt305x"
             target_cpu: mipsel
             extra: 'mips_arch_variant="r2" mips_float_abi="soft" build_static=true no_madvise_syscall=true'
           - arch: mipsel_mips32
-            openwrt: 'target=bcm47xx subtarget=generic'
+            openwrt: "target=bcm47xx subtarget=generic"
             target_cpu: mipsel
             extra: 'mips_arch_variant="r1" mips_float_abi="soft"'
           - arch: riscv64
-            openwrt: 'target=sifiveu subtarget=generic'
+            openwrt: "target=sifiveu subtarget=generic"
             target_cpu: riscv64
     env:
       EXTRA_FLAGS: target_cpu="${{ matrix.target_cpu }}" target_os="openwrt" ${{ matrix.extra }}
