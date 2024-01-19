@@ -1,0 +1,412 @@
+# Copyright 2021 The Chromium Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/rust.gni")
+import("//build/rust/rust_unit_test.gni")
+
+# The //build directory is re-used for non-Chromium products. We do not support
+# cxx bindings in such contexts, because //third_party may be missing.
+if (build_with_chromium) {
+  import("//third_party/rust/cxx/chromium_integration/rust_cxx.gni")
+}
+
+# Creates a Rust target (rlib, executable, proc macro etc.) with ability to
+# understand some handy variables such as "edition" and "features" and also to
+# build any associated unit tests.
+#
+# Normally, you should not use this directly. Use either
+# - cargo_crate.gni - for 3p crates only
+# - rust_static_library.gni - for 1p Rust code
+#
+# Because the common use of this is rust_static_library, all the documentation
+# for the supported options is given in rust_static_library.gni. Please refer
+# over there.
+#
+# If you're using rust_target directly, you will also need to specify:
+# target_type executable, rust_library etc. per GN norms
+#
+# There is one area where this differs from `rust_static_library`: configs.
+# Here, you must specify `executable_configs` or `library_configs` depending on
+# the type of thing you're generating. This is so that different defaults can
+# be provided.
+
+template("rust_target") {
+  _target_name = target_name
+  _crate_name = target_name
+  if (defined(invoker.crate_name)) {
+    _crate_name = invoker.crate_name
+  }
+  _generate_crate_root =
+      defined(invoker.generate_crate_root) && invoker.generate_crate_root
+
+  # Only one of `crate_root` or `generate_crate_root` can be specified, or
+  # neither.
+  assert(!defined(invoker.crate_root) || !_generate_crate_root)
+
+  if (defined(invoker.output_dir) && invoker.output_dir != "") {
+    # This is where the build target (.exe, .rlib, etc) goes.
+    _output_dir = invoker.output_dir
+  }
+
+  # This is where the OUT_DIR environment variable points to when running a
+  # build script and when compiling the build target, for consuming generated
+  # files.
+  _env_out_dir = "$target_gen_dir/$_target_name"
+
+  _allow_unsafe = false
+  if (defined(invoker.allow_unsafe)) {
+    _allow_unsafe = invoker.allow_unsafe
+  }
+
+  if (_generate_crate_root) {
+    generated_file("${_target_name}_crate_root") {
+      outputs = [ "${target_gen_dir}/${target_name}.rs" ]
+      contents = [
+        "// Generated crate root for ${_target_name}.",
+        "// @generated",
+        "",
+      ]
+      foreach(rs, invoker.sources) {
+        rs_path_from_root = rebase_path(rs, target_gen_dir)
+        contents += [ "#[path = \"${rs_path_from_root}\"]" ]
+
+        # Drop the file extension from the module name.
+        rs_modname = string_replace(rs, ".rs", "")
+
+        # Replace invalid "/" chars in the source file path.
+        rs_modname = string_replace(rs_modname, "/", "_")
+
+        # Since source files are specified relative to the BUILD.gn they may
+        # also have ".." path components.
+        rs_modname = string_replace(rs_modname, "..", "dotdot")
+        contents += [
+          "mod ${rs_modname};",
+          "",
+        ]
+      }
+    }
+    _generated_crate_root = get_target_outputs(":${_target_name}_crate_root")
+    _crate_root = _generated_crate_root[0]
+  } else if (defined(invoker.crate_root)) {
+    _crate_root = invoker.crate_root
+  } else if (invoker.target_type == "executable") {
+    _crate_root = "src/main.rs"
+  } else {
+    _crate_root = "src/lib.rs"
+  }
+
+  _testonly = false
+  if (defined(invoker.testonly)) {
+    _testonly = invoker.testonly
+  }
+  if (defined(invoker.visibility)) {
+    _visibility = invoker.visibility
+  }
+
+  _rustflags = []
+  if (defined(invoker.rustflags)) {
+    _rustflags += invoker.rustflags
+  }
+  if (defined(invoker.features)) {
+    foreach(i, invoker.features) {
+      _rustflags += [ "--cfg=feature=\"${i}\"" ]
+    }
+  }
+  _edition = "2021"
+  if (defined(invoker.edition)) {
+    _edition = invoker.edition
+  }
+
+  assert(!defined(configs))
+  _configs = [ "//build/rust:edition_${_edition}" ]
+  _test_configs = []
+  if (invoker.target_type == "executable") {
+    _configs += invoker.executable_configs
+  } else if (invoker.target_type == "rust_proc_macro") {
+    _configs += invoker.proc_macro_configs
+    _test_configs += [ "//build/rust:proc_macro_extern" ]
+  } else if (invoker.target_type == "shared_library") {
+    _configs += invoker.shared_library_configs
+  } else {
+    _configs += invoker.library_configs
+  }
+
+  if (invoker.target_type == "rust_proc_macro") {
+    _main_target_suffix = "${target_name}__proc_macro"
+  } else {
+    _main_target_suffix = "__rlib"
+  }
+
+  _deps = []
+  if (defined(invoker.deps)) {
+    _deps += invoker.deps
+  }
+  _public_deps = []
+  if (defined(invoker.public_deps)) {
+    _public_deps += invoker.public_deps
+  }
+  if (defined(invoker.aliased_deps)) {
+    _aliased_deps = invoker.aliased_deps
+  } else {
+    _aliased_deps = {
+    }
+  }
+
+  _is_data_dep = defined(invoker.is_data_dep) && invoker.is_data_dep
+
+  _build_unit_tests = false
+  if (defined(invoker.build_native_rust_unit_tests)) {
+    _build_unit_tests =
+        invoker.build_native_rust_unit_tests && can_build_rust_unit_tests
+  }
+
+  # Declares that the Rust crate generates bindings between C++ and Rust via the
+  # Cxx crate. It may generate C++ headers and/or use the cxx crate macros to
+  # generate Rust code internally, depending on what bindings are declared. If
+  # set, it's a set of rust files that include Cxx bindings declarations.
+  _cxx_bindings = []
+  assert(!defined(invoker.cxx_bindings) || enable_cxx,
+         "cxx bindings are not supported when building rust targets " +
+             "outside the Chromium build.")
+  if (defined(invoker.cxx_bindings)) {
+    _cxx_bindings = invoker.cxx_bindings
+  }
+  _rustenv = [ "OUT_DIR=" +
+               rebase_path(_env_out_dir, get_path_info(_crate_root, "dir")) ]
+  if (defined(invoker.rustenv)) {
+    _rustenv += invoker.rustenv
+  }
+
+  # We require that all source files are listed, even though this is
+  # not a requirement for rustc. The reason is to ensure that tools
+  # such as `gn deps` give the correct answer, and thus we trigger
+  # the right test suites etc. on code change.
+  # TODO(crbug.com/1256930) - verify this is correct
+  assert(defined(invoker.sources), "sources must be listed")
+
+  if (invoker.target_type == "rust_proc_macro" &&
+      !toolchain_for_rust_host_build_tools) {
+    # Redirect to the proc macro toolchain, which uses prebuilt stdlib libraries
+    # that are not built with panic=abort.
+    group(_target_name) {
+      testonly = _testonly
+      if (defined(_visibility)) {
+        visibility = _visibility
+      }
+      public_deps =
+          [ ":${_target_name}${_main_target_suffix}($rust_macro_toolchain)" ]
+    }
+
+    not_needed(invoker, "*")
+    not_needed([
+                 "_allow_unsafe",
+                 "_build_unit_tests",
+                 "_crate_root",
+                 "_crate_name",
+                 "_cxx_bindings",
+                 "_deps",
+                 "_aliased_deps",
+                 "_is_data_dep",
+                 "_rustc_metadata",
+                 "_out_dir",
+                 "_public_deps",
+                 "_rustenv",
+                 "_rustflags",
+                 "_support_use_from_cpp",
+                 "_testonly",
+                 "_visibility",
+               ])
+  } else {
+    _rustc_metadata = ""
+    if (defined(invoker.rustc_metadata)) {
+      _rustc_metadata = invoker.rustc_metadata
+    }
+
+    # Add a metadata-influenced suffix to the output name for libraries only.
+    _output_suffix = ""
+    if (invoker.target_type == "rust_library" && _rustc_metadata != "") {
+      _output_suffix = "-${_rustc_metadata}"
+    }
+
+    group(_target_name) {
+      testonly = _testonly
+      if (defined(_visibility)) {
+        visibility = _visibility
+      }
+
+      # Both the C++ bindings (if present) and the Rust crate should be treated
+      # like direct dependencies, so we expose them both in public_deps.
+      public_deps = [ ":${_target_name}${_main_target_suffix}" ]
+
+      # TODO(danakj): This would not be needed if we stopped forwarding through
+      # a group in the common (non-procmacro) case.
+      if (_is_data_dep) {
+        data_deps = [ ":${_target_name}${_main_target_suffix}" ]
+      }
+
+      if (_cxx_bindings != []) {
+        public_deps += [ ":${_target_name}_cxx_generated" ]
+
+        # Additionally, C++ bindings generated by Cxx can include C++ types
+        # that come from the Cxx library, such as `rust::Str`. So any C++
+        # target that depends on a rust target directly may need access to Cxx
+        # as well, which means it must appear in public_deps.
+        public_deps += [ "//build/rust:cxx_cppdeps" ]
+      } else if (!defined(invoker.no_std) || !invoker.no_std) {
+        # If C++ depends on and links in the library, we need to make sure C++
+        # links in the Rust stdlib. This is orthogonal to if the library exports
+        # bindings for C++ to use.
+        deps = [ "//build/rust/std:stdlib_for_clang" ]
+      }
+    }
+
+    _rust_deps = _deps
+    _rust_aliased_deps = _aliased_deps
+    _rust_public_deps = _public_deps
+    _cxx_deps = _deps
+
+    # The Rust target (and unit tests) need the Cxx crate when using it to
+    # generate bindings.
+    if (_cxx_bindings != []) {
+      _rust_deps += [ "//build/rust:cxx_rustdeps" ]
+
+      # C++ targets can depend on the Rust target from the BUILD.gn file to
+      # access the headers generated from it
+      _rust_public_deps += [ ":${_target_name}_cxx_generated" ]
+    }
+
+    if (!defined(invoker.no_std) || !invoker.no_std) {
+      _rust_deps += [ "//build/rust/std:stdlib_for_rustc" ]
+    }
+
+    # You must go through the groups above to get to these targets.
+    _visibility = []
+    _visibility = [ ":${_target_name}" ]
+
+    if (_build_unit_tests) {
+      _unit_test_target = "${_target_name}_unittests"
+      if (defined(invoker.unit_test_target)) {
+        _unit_test_target = invoker.unit_test_target
+      }
+
+      rust_unit_test(_unit_test_target) {
+        testonly = true
+        crate_root = _crate_root
+        sources = invoker.sources + [ crate_root ]
+        rustflags = _rustflags
+        env_out_dir = _env_out_dir
+        if (defined(invoker.unit_test_output_dir)) {
+          output_dir = invoker.unit_test_output_dir
+        }
+        deps = _rust_deps + _public_deps
+        aliased_deps = _rust_aliased_deps
+        public_deps = [ ":${_target_name}" ]
+        if (defined(invoker.test_deps)) {
+          deps += invoker.test_deps
+        }
+        inputs = []
+        if (defined(invoker.inputs)) {
+          inputs += invoker.inputs
+        }
+        if (defined(invoker.test_inputs)) {
+          inputs += invoker.test_inputs
+        }
+        if (defined(invoker.executable_configs)) {
+          configs = []
+          configs += invoker.executable_configs
+        }
+        configs += _test_configs
+        rustenv = _rustenv
+
+        if (!_allow_unsafe) {
+          configs += [ "//build/rust:forbid_unsafe" ]
+        }
+      }
+    } else {
+      not_needed([
+                   "_crate_root",
+                   "_crate_name",
+                   "_rustc_metadata",
+                   "_test_configs",
+                 ])
+      not_needed(invoker, [ "executable_configs" ])
+    }
+
+    target(invoker.target_type, "${_target_name}${_main_target_suffix}") {
+      forward_variables_from(invoker,
+                             "*",
+                             TESTONLY_AND_VISIBILITY + [
+                                   "features",
+                                   "deps",
+                                   "aliased_deps",
+                                   "public_deps",
+                                   "rustflags",
+                                   "rustenv",
+                                   "configs",
+                                   "unit_test_output_dir",
+                                   "unit_test_target",
+                                   "test_inputs",
+                                 ])
+
+      testonly = _testonly
+      visibility = _visibility
+      crate_name = _crate_name
+      crate_root = _crate_root
+      configs = []
+      configs = _configs
+      deps = _rust_deps
+      aliased_deps = _rust_aliased_deps
+      public_deps = _rust_public_deps
+      rustflags = _rustflags
+      if (_rustc_metadata != "") {
+        rustflags += [ "-Cmetadata=${_rustc_metadata}" ]
+      }
+      rustenv = _rustenv
+
+      if (_generate_crate_root) {
+        deps += [ ":${_target_name}_crate_root" ]
+        sources += [ _crate_root ]
+      }
+
+      # The Rust tool() declarations, like C++ ones, use the output_name and
+      # output_dir, so that GN targets can override these if needed. Here we
+      # give them their default values, or allow them to be overridden.
+      if (defined(_output_dir)) {
+        output_dir = _output_dir
+      }
+      if (!defined(output_name) || output_name == "") {
+        output_name = "${crate_name}${_output_suffix}"
+      }
+
+      if (!_allow_unsafe) {
+        configs += [ "//build/rust:forbid_unsafe" ]
+      }
+    }
+
+    if (_cxx_bindings != []) {
+      rust_cxx("${_target_name}_cxx_generated") {
+        testonly = _testonly
+        visibility = [ ":${_target_name}${_main_target_suffix}" ]
+        if (defined(_visibility)) {
+          visibility += _visibility
+        }
+        sources = _cxx_bindings
+        deps = _cxx_deps + _public_deps
+        configs = _configs
+
+        if (is_component_build) {
+          # In a component_build the cxx bindings may be linked into a shared
+          # library at any point up the dependency tree, so always export.
+          export_symbols = true
+        } else if (invoker.target_type == "shared_library") {
+          export_symbols = true
+        } else {
+          export_symbols = false
+        }
+      }
+    } else {
+      not_needed([ "_cxx_deps" ])
+    }
+  }
+}
