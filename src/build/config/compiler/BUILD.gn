@@ -1377,6 +1377,13 @@ config("compiler_codegen") {
     }
   }
 
+  # Fix float ABI information not being passed in LLVM bitcode for LTO
+  # and link failure with -mdouble-float being incorrectly used by default
+  # while the bitcode was compiled with -msoft-float.
+  # See https://discourse.llvm.org/t/myterious-soft-float-output-in-lto-cache/70753
+  if (current_cpu == "mipsel" && !is_debug && use_thin_lto && is_a_target_toolchain && mips_float_abi == "soft") {
+    ldflags += [ "-Wl,-mllvm,-mattr=+soft-float" ]
+  }
   asmflags = cflags
 }
 
