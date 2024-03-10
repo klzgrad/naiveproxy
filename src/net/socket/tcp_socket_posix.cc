@@ -387,6 +387,17 @@ int TCPSocketPosix::GetPeerAddress(IPEndPoint* address) const {
 
 int TCPSocketPosix::SetDefaultOptionsForServer() {
   DCHECK(socket_);
+
+#if BUILDFLAG(IS_LINUX)
+  int reuseport = 1;
+  int rv =
+      setsockopt(socket_->socket_fd(), SOL_SOCKET, SO_REUSEPORT,
+                 reinterpret_cast<const char*>(&reuseport), sizeof(reuseport));
+  if (rv < 0) {
+    return MapSystemError(errno);
+  }
+#endif
+
   return AllowAddressReuse();
 }
 
