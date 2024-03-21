@@ -1,0 +1,121 @@
+; NASM macro set to make interfacing to 32-bit programs easier
+; Also cool little macros to make NASM emulate some MASM things.
+;
+; Originally included in NASM.  Modifications by Peter Johnson, 1999.
+;
+
+%imacro proc 1                  ; begin a procedure definition
+%push proc
+          global %1
+%1:       push  ebp
+          mov   ebp, esp
+%assign %$arg 8
+;%assign %$argnum 0
+%define %$procname %1
+%endmacro
+
+%imacro arg 0-1 4               ; used with the argument name as a label
+%00       equ %$arg
+;%assign %$argnum %$argnum+1
+;.arg%$argnum   equ     %1
+%assign %$arg %1+%$arg
+%endmacro
+
+%imacro endproc 0
+%ifnctx proc
+%error Mismatched `endproc'/`proc'
+%else
+;        mov     esp, ebp
+;        pop     ebp
+%ifdef LEGACY_ENDPROC
+        ret
+%endif
+;__end_%$procname:               ; useful for calculating function size
+;          global %{$procname}_arglen
+;%{$procname}_arglen    equ     %$arg-8
+;%assign %$i 1
+;%rep %$argnum
+;          global %{$procname}_arg%$i
+;%{$procname}_arg%$i    equ     %{$procname}.arg%$i
+;%assign %$i %$i+1
+;%endrep
+%pop
+%endif
+%endmacro
+
+; redefine ret instructions for in-proc cases
+%imacro ret 0-1
+%ifnctx proc
+	ret	%1
+%else
+	mov	esp, ebp
+	pop	ebp
+	ret	%1
+%endif
+%endmacro
+
+%imacro retf 0-1
+%ifnctx proc
+	retf	%1
+%else
+	mov	esp, ebp
+	pop	ebp
+	retf	%1
+%endif
+%endmacro
+
+%imacro retn 0-1
+%ifnctx proc
+	retn	%1
+%else
+	mov	esp, ebp
+	pop	ebp
+	retn	%1
+%endif
+%endmacro
+
+; invoke calls a C function
+; defaults to word (16 bit) size parameters
+%macro invoke 1-*
+%rotate -1
+;%define invoketype word
+%rep (%0-1)
+;       %ifidni %1,dword
+;               %define invoketype dword
+;       %elifidni %1,word
+;               %define invoketype word
+;       %elifidni %1,byte
+;               %define invoketype byte
+;       %else
+        %ifidni %1, cs
+                o16 push %1
+        %elifidni %1, ds
+                o16 push %1
+        %elifidni %1, es
+                o16 push %1
+        %elifidni %1, fs
+                o16 push %1
+        %elifidni %1, gs
+                o16 push %1
+        %elifidni %1, word cs
+                o16 push %1
+        %elifidni %1, word ds
+                o16 push %1
+        %elifidni %1, word es
+                o16 push %1
+        %elifidni %1, word fs
+                o16 push %1
+        %elifidni %1, word gs
+                o16 push %1
+        %else
+                push %1
+        %endif
+;       %endif
+        %rotate -1
+%endrep
+call %1
+%if (%0!=1)
+        add esp, byte %{1}_arglen
+%endif
+%endmacro
+
