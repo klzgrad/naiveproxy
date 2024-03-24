@@ -92,6 +92,13 @@ case "$EXTRA_FLAGS" in
   ;;
 esac
 
+# See https://github.com/llvm/llvm-project/issues/86430
+if [ "$target_os" = "linux" -a "$target_cpu" = "x64" ]; then
+  flags="$flags"'
+    use_cfi_icall=false'
+fi
+
+
 rm -rf "./$out"
 mkdir -p out
 
