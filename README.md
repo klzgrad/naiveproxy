@@ -34,7 +34,7 @@ The following describes the naïve fork of Caddy forwardproxy setup.
 Download [here](https://github.com/klzgrad/forwardproxy/releases/latest) or build from source:
 ```sh
 go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
-~/go/bin/xcaddy build --with github.com/caddyserver/forwardproxy@caddy2=github.com/klzgrad/forwardproxy@naive
+~/go/bin/xcaddy build --with github.com/caddyserver/forwardproxy=github.com/klzgrad/forwardproxy@naive
 ```
 
 Example Caddyfile (replace `user` and `pass` accordingly):
