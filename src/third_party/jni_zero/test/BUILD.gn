@@ -1,0 +1,69 @@
+# Copyright 2024 The Chromium Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+import("//build/config/android/rules.gni")
+import("//third_party/jni_zero/jni_zero.gni")
+
+# All targets in this file are meant as compile tests only to make sure the
+# generated code compiles for all edgecases.
+
+generate_jni("test_jni") {
+  sources = [
+    "java/src/org/jni_zero/SampleForAnnotationProcessor.java",
+    "java/src/org/jni_zero/SampleForTests.java",
+  ]
+}
+
+android_library("dummy_java") {
+  sources = [
+    "java/src/org/dummy/MyClass.java",
+    "java/src/org/dummy/MyInterface.java",
+  ]
+}
+
+android_library("test_java") {
+  srcjar_deps = [ ":test_jni" ]
+  sources = [
+    "java/src/org/jni_zero/SampleForAnnotationProcessor.java",
+    "java/src/org/jni_zero/SampleForTests.java",
+  ]
+
+  deps = [
+    ":dummy_java",
+    "//third_party/jni_zero:jni_zero_java",
+  ]
+}
+
+source_set("test_native_side") {
+  deps = [
+    ":test_jni",
+    "//third_party/jni_zero",
+  ]
+  sources = [
+    "sample_for_tests.cc",
+    "sample_for_tests.h",
+  ]
+}
+
+shared_library_with_jni("test_lib") {
+  sources = [ "../sample/sample_entry_point.cc" ]
+
+  deps = [
+    ":test_native_side",
+    "//third_party/jni_zero",
+  ]
+  java_targets = [ ":compile_only_test_jni_apk" ]
+  remove_uncalled_jni = true
+}
+
+# This apk is meant to be a compile only test to make sure the generated code,
+# both java and native, compiles for all the edgecases. APK itself is not meant
+# to be run or installed on a device since a lot of internal implementations are
+# empty stubs and are just meant for the compiler or linker to see.
+android_apk("compile_only_test_jni_apk") {
+  apk_name = "TestJni"
+  android_manifest = "../sample/AndroidManifest.xml"
+  deps = [ ":test_java" ]
+  shared_libraries = [ ":test_lib" ]
+  srcjar_deps = [ ":test_lib__jni_registration" ]
+}
