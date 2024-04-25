@@ -479,9 +479,24 @@ std::unique_ptr<URLRequestContext> BuildURLRequestContext(
   builder.DisableHttpCache();
   builder.set_net_log(net_log);
 
+  std::string proxy_url = params.proxy_url;
+  bool force_quic = false;
+  if (proxy_url.compare(0, 7, "quic://") == 0) {
+    proxy_url.replace(0, 4, "https");
+    force_quic = true;
+  }
+
   ProxyConfig proxy_config;
-  proxy_config.proxy_rules().ParseFromString(params.proxy_url);
-  LOG(INFO) << "Proxying via " << params.proxy_url;
+  proxy_config.proxy_rules().ParseFromString(proxy_url);
+  if (force_quic) {
+    const ProxyServer& proxy_server =
+        proxy_config.proxy_rules().single_proxies.First().First();
+    proxy_config.proxy_rules().single_proxies.SetSingleProxyChain(
+        ProxyChain::ForIpProtection({ProxyServer(
+            ProxyServer::Scheme::SCHEME_QUIC, proxy_server.host_port_pair())}));
+  }
+  LOG(INFO) << "Proxying via "
+            << proxy_config.proxy_rules().single_proxies.ToDebugString();
   auto proxy_service =
       ConfiguredProxyResolutionService::CreateWithoutProxyResolver(
           std::make_unique<ProxyConfigServiceFixed>(
@@ -507,11 +522,8 @@ std::unique_ptr<URLRequestContext> BuildURLRequestContext(
       !params.proxy_pass.empty()) {
     auto* session = context->http_transaction_factory()->GetSession();
     auto* auth_cache = session->http_auth_cache();
-    std::string proxy_url = params.proxy_url;
     GURL proxy_gurl(proxy_url);
-    if (proxy_url.compare(0, 7, "quic://") == 0) {
-      proxy_url.replace(0, 4, "https");
-      proxy_gurl = GURL(proxy_url);
+    if (force_quic) {
       auto* quic = context->quic_context()->params();
       quic->supported_versions = {quic::ParsedQuicVersion::RFCv1()};
       quic->origins_to_force_quic_on.insert(
