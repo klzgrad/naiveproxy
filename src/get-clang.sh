@@ -3,7 +3,16 @@ set -ex
 
 . ./get-sysroot.sh
 
-if [ "$SYSROOT_ARCH" -a ! -d ./"$WITH_SYSROOT/lib" ]; then
+if [ "$SYSROOT_ARCH" = "loong64" -a ! -d ./"$WITH_SYSROOT/target" ]; then
+mkdir -p "$WITH_SYSROOT"
+pushd "$WITH_SYSROOT"
+curl -L https://github.com/loongson/build-tools/releases/download/2023.08.08/CLFS-loongarch64-8.1-x86_64-cross-tools-gcc-glibc.tar.xz | tar --strip-components=1 --xz -xf -
+cp -fv ./loongarch64-unknown-linux-gnu/lib/libatomic.so target/lib64/
+cp -fv ./loongarch64-unknown-linux-gnu/lib/libgcc_s.so target/lib64/
+cp -fv ./loongarch64-unknown-linux-gnu/lib/libgcc_s.so.1 target/lib64/
+rm -rf bin include libexec loongarch64-unknown-linux-gnu share
+popd
+elif [ "$SYSROOT_ARCH" -a ! -d ./"$WITH_SYSROOT/lib" ]; then
   ./build/linux/sysroot_scripts/sysroot_creator.py build "$SYSROOT_ARCH"
 fi
 

@@ -11,6 +11,8 @@ naive="$PWD/$1"
 
 if [ "$WITH_ANDROID_IMG" ]; then
   rootfs="$PWD/out/sysroot-build/android/$WITH_ANDROID_IMG"
+elif [ "$SYSROOT_ARCH" = "loong64" -a "$WITH_SYSROOT" ]; then
+  rootfs="$PWD/$WITH_SYSROOT/target"
 elif [ "$WITH_SYSROOT" ]; then
   rootfs="$PWD/$WITH_SYSROOT"
 fi

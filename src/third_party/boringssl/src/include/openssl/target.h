@@ -45,6 +45,12 @@
 #define OPENSSL_RISCV64
 #elif defined(__riscv) && __SIZEOF_POINTER__ == 4
 #define OPENSSL_32_BIT
+#elif defined(__loongarch__) && !defined(__loongarch_lp64)
+#define OPENSSL_32_BIT
+#define OPENSSL_LOONGARCH
+#elif defined(__loongarch__) && defined(__loongarch_lp64)
+#define OPENSSL_64_BIT
+#define OPENSSL_LOONGARCH64
 #elif defined(__pnacl__)
 #define OPENSSL_32_BIT
 #define OPENSSL_PNACL

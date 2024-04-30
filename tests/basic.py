@@ -78,6 +78,8 @@ def start_naive(naive_args, config_file):
         with_qemu = 'mips64el'
     elif argv.target_cpu == 'riscv64':
         with_qemu = 'riscv64'
+    elif argv.target_cpu == 'loong64':
+        with_qemu = 'loongarch64'
 
     if argv.rootfs:
         if not with_qemu:

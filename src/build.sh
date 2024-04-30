@@ -71,7 +71,10 @@ flags="$flags"'
   enable_dangling_raw_ptr_checks=false
 '
 
-if [ "$WITH_SYSROOT" ]; then
+if [ "$SYSROOT_ARCH" = "loong64" -a "$WITH_SYSROOT" ]; then
+  flags="$flags
+    target_sysroot=\"//$WITH_SYSROOT/target\""
+elif [ "$WITH_SYSROOT" ]; then
   flags="$flags
     target_sysroot=\"//$WITH_SYSROOT\""
 fi

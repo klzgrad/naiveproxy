@@ -257,6 +257,8 @@ std::string SysInfo::ProcessCPUArchitecture() {
   return "ARM_64";
 #elif defined(ARCH_CPU_RISCV64)
   return "RISCV_64";
+#elif defined(ARCH_CPU_LOONGARCH64)
+  return "LOONGARCH_64";
 #else
   return std::string();
 #endif

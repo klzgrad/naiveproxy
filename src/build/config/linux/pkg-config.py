@@ -59,6 +59,8 @@ def SetConfigPath(options):
     sys.exit(1)
 
   libdir = sysroot + '/usr/' + options.system_libdir + '/pkgconfig'
+  if arch == 'loong64':
+    libdir += ':' + sysroot + '/usr/' + 'lib64' + '/pkgconfig'
   libdir += ':' + sysroot + '/usr/share/pkgconfig'
   os.environ['PKG_CONFIG_LIBDIR'] = libdir
   return libdir
