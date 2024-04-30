@@ -13,6 +13,7 @@
 #include "base/allocator/partition_alloc_support.h"
 #include "base/allocator/partition_allocator/src/partition_alloc/shim/allocator_shim.h"
 #include "base/at_exit.h"
+#include "base/base_switches.h"
 #include "base/check.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
@@ -34,6 +35,7 @@
 #include "build/build_config.h"
 #include "components/version_info/version_info.h"
 #include "net/base/auth.h"
+#include "net/base/features.h"
 #include "net/base/network_isolation_key.h"
 #include "net/base/url_util.h"
 #include "net/cert/cert_verifier.h"
@@ -94,6 +96,8 @@ struct CommandLine {
   std::string extra_headers;
   std::string host_resolver_rules;
   std::string resolver_range;
+  std::string enable_features;
+  std::string disable_features;
   bool no_log;
   base::FilePath log;
   base::FilePath log_net_log;
@@ -188,6 +192,7 @@ void GetCommandLine(const base::CommandLine& proc,
     exit(EXIT_SUCCESS);
   }
 
+
   cmdline->listens = multiple_listens.GetAllValues();
   cmdline->proxy = proc.GetSwitchValueASCII("proxy");
   cmdline->concurrency = proc.GetSwitchValueASCII("insecure-concurrency");
@@ -195,6 +200,8 @@ void GetCommandLine(const base::CommandLine& proc,
   cmdline->host_resolver_rules =
       proc.GetSwitchValueASCII("host-resolver-rules");
   cmdline->resolver_range = proc.GetSwitchValueASCII("resolver-range");
+  cmdline->enable_features = proc.GetSwitchValueASCII(switches::kEnableFeatures);
+  cmdline->disable_features = proc.GetSwitchValueASCII(switches::kDisableFeatures);
   cmdline->no_log = !proc.HasSwitch("log");
   cmdline->log = proc.GetSwitchValuePath("log");
   cmdline->log_net_log = proc.GetSwitchValuePath("log-net-log");
@@ -234,6 +241,7 @@ void GetCommandLineFromConfig(const base::FilePath& config_path,
       }
     }
   }
+
   const std::string* proxy = value_dict->FindString("proxy");
   if (proxy) {
     cmdline->proxy = *proxy;
@@ -255,6 +263,14 @@ void GetCommandLineFromConfig(const base::FilePath& config_path,
   const std::string* resolver_range = value_dict->FindString("resolver-range");
   if (resolver_range) {
     cmdline->resolver_range = *resolver_range;
+  }
+  const std::string* enable_features = value_dict->FindString(switches::kEnableFeatures);
+  if (enable_features) {
+    cmdline->enable_features = *enable_features;
+  }
+  const std::string* disable_features = value_dict->FindString(switches::kDisableFeatures);
+  if (disable_features) {
+    cmdline->disable_features = *disable_features;
   }
   cmdline->no_log = true;
   const std::string* log = value_dict->FindString("log");
@@ -542,6 +558,8 @@ std::unique_ptr<URLRequestContext> BuildURLRequestContext(
 }  // namespace net
 
 int main(int argc, char* argv[]) {
+  base::FeatureList::FailOnFeatureAccessWithoutFeatureList();
+
   // chrome/app/chrome_exe_main_mac.cc: main()
 #if BUILDFLAG(IS_APPLE)
   partition_alloc::EarlyMallocZoneRegistration();
@@ -592,8 +610,39 @@ int main(int argc, char* argv[]) {
 
   // content/app/content_main.cc: RunContentProcess()
   //   content/app/content_main_runner_impl.cc: Run()
-  base::FeatureList::InitInstance("PartitionConnectionsByNetworkIsolationKey",
-                                  std::string());
+  CommandLine cmdline;
+
+  Params params;
+  const auto& proc = *base::CommandLine::ForCurrentProcess();
+  const auto& args = proc.GetArgs();
+  if (args.empty()) {
+    if (proc.argv().size() >= 2) {
+      GetCommandLine(proc, &cmdline, multiple_listens_ref);
+    } else {
+      auto path = base::FilePath::FromUTF8Unsafe("config.json");
+      GetCommandLineFromConfig(path, &cmdline);
+    }
+  } else {
+    base::FilePath path(args[0]);
+    GetCommandLineFromConfig(path, &cmdline);
+  }
+  if (!ParseCommandLine(cmdline, &params)) {
+    return EXIT_FAILURE;
+  }
+
+  if (!cmdline.enable_features.empty()) {
+    cmdline.enable_features += ",PartitionConnectionsByNetworkIsolationKey";
+  } else {
+    cmdline.enable_features += "PartitionConnectionsByNetworkIsolationKey";
+  }
+
+  base::FeatureList::InitInstance(cmdline.enable_features, cmdline.disable_features);
+
+  if (base::FeatureList::IsEnabled(net::features::kPostQuantumKyber)) {
+    std::cout << "enabled post quantum kyber curves" << std::endl;
+  } else {
+    std::cout << "disabled post quantum kyber curves" << std::endl;
+  }
 
   base::allocator::PartitionAllocSupport::Get()
       ->ReconfigureAfterFeatureListInit(/*process_type=*/"");
@@ -616,25 +665,6 @@ int main(int argc, char* argv[]) {
       net::HttpNetworkSession::NORMAL_SOCKET_POOL,
       kDefaultMaxSocketsPerGroup * kExpectedMaxUsers);
 
-  CommandLine cmdline;
-
-  Params params;
-  const auto& proc = *base::CommandLine::ForCurrentProcess();
-  const auto& args = proc.GetArgs();
-  if (args.empty()) {
-    if (proc.argv().size() >= 2) {
-      GetCommandLine(proc, &cmdline, multiple_listens_ref);
-    } else {
-      auto path = base::FilePath::FromUTF8Unsafe("config.json");
-      GetCommandLineFromConfig(path, &cmdline);
-    }
-  } else {
-    base::FilePath path(args[0]);
-    GetCommandLineFromConfig(path, &cmdline);
-  }
-  if (!ParseCommandLine(cmdline, &params)) {
-    return EXIT_FAILURE;
-  }
   CHECK(logging::InitLogging(params.log_settings));
 
   if (!params.ssl_key_path.empty()) {
