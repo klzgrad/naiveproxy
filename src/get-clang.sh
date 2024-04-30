@@ -23,7 +23,7 @@ if [ "$host_os" = mac -a "$host_cpu" = arm64 ]; then
 fi
 mkdir -p third_party/llvm-build/Release+Asserts
 cd tools/clang/scripts
-CLANG_REVISION=$($PYTHON -c 'import update; print(update.PACKAGE_VERSION)')
+CLANG_REVISION=$("$PYTHON" -c 'import update; print(update.PACKAGE_VERSION)')
 cd -
 echo $CLANG_REVISION >third_party/llvm-build/Release+Asserts/cr_build_revision
 if [ ! -d third_party/llvm-build/Release+Asserts/bin ]; then

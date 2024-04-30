@@ -3,6 +3,7 @@
 set -ex
 
 script_dir=$(dirname "$PWD/$0")
+PYTHON="$(which python3 2>/dev/null || which python 2>/dev/null)"
 
 [ "$1" ] || exit 1
 naive="$PWD/$1"
@@ -16,5 +17,5 @@ elif [ "$WITH_SYSROOT" ]; then
 fi
 
 cd /tmp
-python3 "$script_dir"/basic.py --naive="$naive" --rootfs="$rootfs" --target_cpu="$target_cpu" --server_protocol=https
-python3 "$script_dir"/basic.py --naive="$naive" --rootfs="$rootfs" --target_cpu="$target_cpu" --server_protocol=http
+"$PYTHON" "$script_dir"/basic.py --naive="$naive" --rootfs="$rootfs" --target_cpu="$target_cpu" --server_protocol=https
+"$PYTHON" "$script_dir"/basic.py --naive="$naive" --rootfs="$rootfs" --target_cpu="$target_cpu" --server_protocol=http
