@@ -192,6 +192,10 @@ bool NaiveConfig::Parse(const base::Value::Dict& value) {
     }
   }
 
+  if (const base::Value* v = value.Find("no-post-quantum")) {
+    no_post_quantum = true;
+  }
+
   return true;
 }
 

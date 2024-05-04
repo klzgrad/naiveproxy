@@ -54,6 +54,8 @@ struct NaiveConfig {
 
   base::FilePath ssl_key_log_file;
 
+  std::optional<bool> no_post_quantum;
+
   NaiveConfig();
   NaiveConfig(const NaiveConfig&);
   ~NaiveConfig();

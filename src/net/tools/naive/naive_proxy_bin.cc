@@ -212,6 +212,21 @@ std::unique_ptr<URLRequestContext> BuildURLRequestContext(
       config.extra_headers,
       std::vector<PaddingType>{PaddingType::kVariant1, PaddingType::kNone}));
 
+  if (config.no_post_quantum == true) {
+    struct NoPostQuantum : public SSLConfigService {
+      SSLContextConfig GetSSLContextConfig() override {
+        SSLContextConfig config;
+        config.post_quantum_override = false;
+        return config;
+      }
+
+      bool CanShareConnectionWithClientCerts(std::string_view) const override {
+        return false;
+      }
+    };
+    builder.set_ssl_config_service(std::make_unique<NoPostQuantum>());
+  }
+
   auto context = builder.Build();
 
   if (!config.proxy_url.empty() && !config.proxy_user.empty() &&
@@ -358,6 +373,7 @@ int main(int argc, char* argv[]) {
                  "--log[=<path>]             Log to stderr, or file\n"
                  "--log-net-log=<path>       Save NetLog\n"
                  "--ssl-key-log-file=<path>  Save SSL keys for Wireshark\n"
+                 "--no-post-quantum          No post-quantum key agreement\n"
               << std::endl;
     exit(EXIT_SUCCESS);
   }
