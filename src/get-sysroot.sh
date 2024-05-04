@@ -24,7 +24,11 @@ if [ ! "$target_cpu" ]; then
   target_cpu="$host_cpu"
 fi
 
-PYTHON=$(which python3 2>/dev/null || which python 2>/dev/null)
+if which python3 2>/dev/null; then
+  PYTHON=python3
+else
+  PYTHON=python
+fi
 
 # sysroot
 case "$target_os" in
