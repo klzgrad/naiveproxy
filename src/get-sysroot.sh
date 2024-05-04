@@ -24,7 +24,7 @@ if [ ! "$target_cpu" ]; then
   target_cpu="$host_cpu"
 fi
 
-if which python3 2>/dev/null; then
+if which python3 >/dev/null 2>/dev/null; then
   PYTHON=python3
 else
   PYTHON=python
