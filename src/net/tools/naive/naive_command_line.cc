@@ -63,7 +63,11 @@ base::Value::Dict GetSwitchesAsValue(const base::CommandLine& cmdline) {
       }
       dict.Set(key, std::move(list));
     } else {
+#if BUILDFLAG(IS_WIN)
+      dict.Set(key, base::AsStringPiece16(value));
+#else
       dict.Set(key, value);
+#endif
     }
   }
   return dict;
