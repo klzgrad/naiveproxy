@@ -7,6 +7,11 @@
 #include <utility>
 
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
+
+#if BUILDFLAG(IS_WIN)
+#include "base/strings/string_util_win.h"
+#endif
 
 DuplicateSwitchCollector::DuplicateSwitchCollector() = default;
 DuplicateSwitchCollector::~DuplicateSwitchCollector() = default;
@@ -50,7 +55,11 @@ base::Value::Dict GetSwitchesAsValue(const base::CommandLine& cmdline) {
     if (values.size() > 1) {
       base::Value::List list;
       for (const base::CommandLine::StringType& v : values) {
+#if BUILDFLAG(IS_WIN)
+        list.Append(base::AsStringPiece16(v));
+#else
         list.Append(v);
+#endif
       }
       dict.Set(key, std::move(list));
     } else {
