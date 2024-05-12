@@ -17,7 +17,7 @@
 #include "net/cookies/site_for_cookies.h"
 #include "url/gurl.h"
 
-#if !BUILDFLAG(CRONET_BUILD)
+#if 0
 #include "mojo/public/cpp/bindings/default_construct_tag.h"
 #endif
 
@@ -57,7 +57,7 @@ class NET_EXPORT CookiePartitionKey {
   static AncestorChainBit BoolToAncestorChainBit(bool val);
 
   CookiePartitionKey() = delete;
-#if !BUILDFLAG(CRONET_BUILD)
+#if 0
   explicit CookiePartitionKey(mojo::DefaultConstruct::Tag);
 #endif
   CookiePartitionKey(const CookiePartitionKey& other);
