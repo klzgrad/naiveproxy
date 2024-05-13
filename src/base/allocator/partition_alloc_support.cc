@@ -1178,8 +1178,12 @@ void PartitionAllocSupport::ReconfigureAfterFeatureListInit(
   UmaHistogramCounts100("Memory.PartitionAlloc.PartitionRoot.ExtrasSize",
                         int(extras_size));
 
+#if !defined(__MUSL__)
+  // This call causes hanging in pthread_getattr_np() under qemu-user, see
+  // https://www.openwall.com/lists/musl/2017/06/15/9.
   partition_alloc::internal::StackTopRegistry::Get().NotifyThreadCreated(
       partition_alloc::internal::GetStackTop());
+#endif
 
   allocator_shim::internal::PartitionAllocMalloc::Allocator()
       ->EnableThreadCacheIfSupported();
