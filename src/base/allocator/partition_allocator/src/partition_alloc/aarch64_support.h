@@ -15,7 +15,9 @@
 #include "partition_alloc/build_config.h"
 #include "partition_alloc/buildflags.h"
 
-#if PA_BUILDFLAG(IS_ANDROID) || PA_BUILDFLAG(IS_LINUX)
+#if defined(__MUSL__)
+// Musl does not support ifunc.
+#elif PA_BUILDFLAG(IS_ANDROID) || PA_BUILDFLAG(IS_LINUX)
 #define HAS_HW_CAPS
 #endif
 
