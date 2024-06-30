@@ -35,6 +35,8 @@ class HttpProxyServerSocket : public StreamSocket {
  public:
   HttpProxyServerSocket(
       std::unique_ptr<StreamSocket> transport_socket,
+      const std::string& user,
+      const std::string& pass,
       ClientPaddingDetectorDelegate* padding_detector_delegate,
       const NetworkTrafficAnnotationTag& traffic_annotation,
       const std::vector<PaddingType>& supported_padding_types);
@@ -116,6 +118,8 @@ class HttpProxyServerSocket : public StreamSocket {
   bool completed_handshake_;
   bool was_ever_used_;
   int header_write_size_;
+
+  std::string basic_auth_;
 
   HostPortPair request_endpoint_;
 

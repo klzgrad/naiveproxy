@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/base64.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/logging.h"
@@ -40,6 +41,8 @@ constexpr int kMaxPaddingSize = kMinPaddingSize + 32;
 
 HttpProxyServerSocket::HttpProxyServerSocket(
     std::unique_ptr<StreamSocket> transport_socket,
+    const std::string& user,
+    const std::string& pass,
     ClientPaddingDetectorDelegate* padding_detector_delegate,
     const NetworkTrafficAnnotationTag& traffic_annotation,
     const std::vector<PaddingType>& supported_padding_types)
@@ -53,7 +56,12 @@ HttpProxyServerSocket::HttpProxyServerSocket(
       header_write_size_(-1),
       net_log_(transport_->NetLog()),
       traffic_annotation_(traffic_annotation),
-      supported_padding_types_(supported_padding_types) {}
+      supported_padding_types_(supported_padding_types) {
+  if (!user.empty() || !pass.empty()) {
+    basic_auth_ =
+        std::string("Basic ").append(base::Base64Encode(user + ":" + pass));
+  }
+}
 
 HttpProxyServerSocket::~HttpProxyServerSocket() {
   Disconnect();
@@ -345,6 +353,15 @@ int HttpProxyServerSocket::DoHeaderReadComplete(int result) {
   if (second_line < header_end) {
     headers_str = buffer_.substr(second_line, header_end - second_line);
     headers.AddHeadersFromString(headers_str);
+  }
+
+  if (!basic_auth_.empty()) {
+    std::string proxy_auth;
+    headers.GetHeader(HttpRequestHeaders::kProxyAuthorization, &proxy_auth);
+    if (proxy_auth != basic_auth_) {
+      LOG(WARNING) << "Invalid Proxy-Authorization: " << proxy_auth;
+      return ERR_INVALID_ARGUMENT;
+    }
   }
 
   if (is_http_1_0) {

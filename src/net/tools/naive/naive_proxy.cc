@@ -116,8 +116,9 @@ void NaiveProxy::DoConnect() {
                                                   traffic_annotation_);
   } else if (protocol_ == ClientProtocol::kHttp) {
     socket = std::make_unique<HttpProxyServerSocket>(
-        std::move(accepted_socket_), padding_detector_delegate.get(),
-        traffic_annotation_, supported_padding_types_);
+        std::move(accepted_socket_), listen_user_, listen_pass_,
+        padding_detector_delegate.get(), traffic_annotation_,
+        supported_padding_types_);
   } else if (protocol_ == ClientProtocol::kRedir) {
     socket = std::move(accepted_socket_);
   } else {
