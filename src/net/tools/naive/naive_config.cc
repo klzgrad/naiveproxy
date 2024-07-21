@@ -155,7 +155,7 @@ bool NaiveConfig::Parse(const base::Value::Dict& value) {
             return false;
           }
           origins_to_force_quic_on.insert(HostPortPair::FromURL(url));
-        } else if (last.is_https() || last.is_http()) {
+        } else if (last.is_https() || last.is_http() || last.is_socks()) {
           seen_tcp = true;
         } else {
           std::cerr << "Invalid proxy scheme" << std::endl;
