@@ -295,3 +295,16 @@ test_naive('HTTP-HTTP-HTTP', 'http://127.0.0.1:{PORT1}',
            '--log --listen=http://:{PORT1} --proxy=http://127.0.0.1:{PORT2}',
            '--log --listen=http://:{PORT2} --proxy=http://127.0.0.1:{PORT3}',
            '--log --listen=http://:{PORT3}')
+
+test_naive('HTTP-HTTP (with auth)', 'http://127.0.0.1:{PORT1}',
+           '--log --listen=http://:{PORT1} --proxy=http://hello:world@127.0.0.1:{PORT2}',
+           '--log --listen=http://hello:world@127.0.0.1:{PORT2}')
+
+test_naive('HTTPa-HTTPb,HTTPc (chaining with remote loop)', 'http://127.0.0.1:{PORT1}',
+           '--log --listen=http://:{PORT2}',
+           '--log --listen=http://:{PORT1} --proxy=http://127.0.0.1:{PORT2},http://127.0.0.1:{PORT2}')
+
+test_naive('HTTPa-HTTPb,HTTPc (chaining with multiple auth)', 'http://127.0.0.1:{PORT1}',
+           '--log --listen=http://hello:world2@127.0.0.1:{PORT2}',
+           '--log --listen=http://hello:world3@127.0.0.1:{PORT3}',
+           '--log --listen=http://127.0.0.1:{PORT1} --proxy=http://hello:world2@127.0.0.1:{PORT2},http://hello:world3@127.0.0.1:{PORT3}')
