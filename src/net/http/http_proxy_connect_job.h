@@ -102,6 +102,13 @@ class NET_EXPORT_PRIVATE HttpProxySocketParams
     return quic_ssl_config_;
   }
 
+  bool is_over_http() const {
+    return nested_params_ && nested_params_->is_http_proxy();
+  }
+  const scoped_refptr<HttpProxySocketParams>& http_params() const {
+    return nested_params_->http_proxy();
+  }
+
   const HostPortPair& endpoint() const { return endpoint_; }
   const ProxyChain& proxy_chain() const { return proxy_chain_; }
   const ProxyServer& proxy_server() const {

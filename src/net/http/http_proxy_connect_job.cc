@@ -504,9 +504,17 @@ int HttpProxyConnectJob::DoBeginConnect() {
 int HttpProxyConnectJob::DoTransportConnect() {
   ProxyServer::Scheme scheme = GetProxyServerScheme();
   if (scheme == ProxyServer::SCHEME_HTTP) {
-    nested_connect_job_ = std::make_unique<TransportConnectJob>(
-        priority(), socket_tag(), common_connect_job_params(),
-        params_->transport_params(), this, &net_log());
+    if (params_->is_over_transport()) {
+      nested_connect_job_ = std::make_unique<TransportConnectJob>(
+          priority(), socket_tag(), common_connect_job_params(),
+          params_->transport_params(), this, &net_log());
+    } else if (params_->is_over_http()) {
+      nested_connect_job_ = std::make_unique<HttpProxyConnectJob>(
+          priority(), socket_tag(), common_connect_job_params(),
+          params_->http_params(), this, &net_log());
+    } else {
+      CHECK(false) << "Invalid nested connect job";
+    }
   } else {
     DCHECK_EQ(scheme, ProxyServer::SCHEME_HTTPS);
     DCHECK(params_->is_over_ssl());
