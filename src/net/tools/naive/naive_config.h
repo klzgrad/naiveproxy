@@ -4,16 +4,22 @@
 #ifndef NET_TOOLS_NAIVE_NAIVE_CONFIG_H_
 #define NET_TOOLS_NAIVE_NAIVE_CONFIG_H_
 
+#include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/values.h"
+#include "net/base/auth.h"
+#include "net/base/host_port_pair.h"
 #include "net/base/ip_address.h"
+#include "net/base/proxy_chain.h"
 #include "net/http/http_request_headers.h"
 #include "net/tools/naive/naive_protocol.h"
+#include "url/scheme_host_port.h"
 
 namespace net {
 
@@ -37,10 +43,10 @@ struct NaiveConfig {
 
   HttpRequestHeaders extra_headers;
 
-  std::string proxy_url = "direct://";
-
-  std::u16string proxy_user;
-  std::u16string proxy_pass;
+  // The last server is assumed to be Naive.
+  ProxyChain proxy_chain = ProxyChain::Direct();
+  std::set<HostPortPair> origins_to_force_quic_on;
+  std::map<url::SchemeHostPort, AuthCredentials> auth_store;
 
   std::string host_resolver_rules;
 

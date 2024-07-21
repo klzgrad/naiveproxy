@@ -72,8 +72,13 @@ Error NaiveProxyDelegate::OnBeforeTunnelRequest(
   // protocols.
   if (proxy_chain.is_direct())
     return OK;
-  CHECK_EQ(proxy_chain.length(), 1u) << "Multi-hop proxy not supported";
-  if (proxy_chain.GetProxyServer(chain_index).is_socks())
+  const ProxyServer& proxy_server = proxy_chain.GetProxyServer(chain_index);
+  if (proxy_server.is_socks())
+    return OK;
+
+  // Only the last server is attempted for padding
+  // because proxy chaining will corrupt the padding.
+  if (chain_index != proxy_chain.length() - 1)
     return OK;
 
   // Sends client-side padding header regardless of server support
@@ -83,7 +88,7 @@ Error NaiveProxyDelegate::OnBeforeTunnelRequest(
 
   // Enables Fast Open in H2/H3 proxy client socket once the state of server
   // padding support is known.
-  if (padding_type_by_server_[proxy_chain].has_value()) {
+  if (padding_type_by_server_[proxy_server].has_value()) {
     extra_headers->SetHeader("fastopen", "1");
   }
   extra_headers->MergeFrom(extra_headers_);
@@ -123,8 +128,13 @@ Error NaiveProxyDelegate::OnTunnelHeadersReceived(
   // protocols.
   if (proxy_chain.is_direct())
     return OK;
-  CHECK_EQ(proxy_chain.length(), 1u) << "Multi-hop proxy not supported";
-  if (proxy_chain.GetProxyServer(chain_index).is_socks())
+  const ProxyServer& proxy_server = proxy_chain.GetProxyServer(chain_index);
+  if (proxy_server.is_socks())
+    return OK;
+
+  // Only the last server is attempted for padding
+  // because proxy chaining will corrupt the padding.
+  if (chain_index != proxy_chain.length() - 1)
     return OK;
 
   // Detects server padding support, even if it changes dynamically.
@@ -134,26 +144,23 @@ Error NaiveProxyDelegate::OnTunnelHeadersReceived(
     return ERR_INVALID_RESPONSE;
   }
   std::optional<PaddingType>& padding_type =
-      padding_type_by_server_[proxy_chain];
+      padding_type_by_server_[proxy_server];
   if (!padding_type.has_value() || padding_type != new_padding_type) {
-    LOG(INFO) << proxy_chain.ToDebugString() << " negotiated padding type: "
+    LOG(INFO) << ProxyServerToProxyUri(proxy_server)
+              << " negotiated padding type: "
               << ToReadableString(*new_padding_type);
     padding_type = new_padding_type;
   }
   return OK;
 }
 
-std::optional<PaddingType> NaiveProxyDelegate::GetProxyServerPaddingType(
+std::optional<PaddingType> NaiveProxyDelegate::GetProxyChainPaddingType(
     const ProxyChain& proxy_chain) {
   // Not possible to negotiate padding capability given the underlying
   // protocols.
   if (proxy_chain.is_direct())
     return PaddingType::kNone;
-  CHECK_EQ(proxy_chain.length(), 1u) << "Multi-hop proxy not supported";
-  if (proxy_chain.GetProxyServer(0).is_socks())
-    return PaddingType::kNone;
-
-  return padding_type_by_server_[proxy_chain];
+  return padding_type_by_server_[proxy_chain.Last()];
 }
 
 PaddingDetectorDelegate::PaddingDetectorDelegate(
@@ -186,7 +193,7 @@ std::optional<PaddingType> PaddingDetectorDelegate::GetServerPaddingType() {
   if (cached_server_padding_type_.has_value())
     return cached_server_padding_type_;
   cached_server_padding_type_ =
-      naive_proxy_delegate_->GetProxyServerPaddingType(proxy_chain_);
+      naive_proxy_delegate_->GetProxyChainPaddingType(proxy_chain_);
   return cached_server_padding_type_;
 }
 

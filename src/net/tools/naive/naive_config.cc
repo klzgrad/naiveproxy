@@ -3,14 +3,27 @@
 // found in the LICENSE file.
 #include "net/tools/naive/naive_config.h"
 
+#include <algorithm>
 #include <iostream>
 
 #include "base/strings/escape.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_tokenizer.h"
+#include "net/base/proxy_server.h"
+#include "net/base/proxy_string_util.h"
 #include "net/base/url_util.h"
 #include "url/gurl.h"
 
 namespace net {
+namespace {
+ProxyServer MyProxyUriToProxyServer(std::string_view uri) {
+  if (uri.compare(0, 7, "quic://") == 0) {
+    return ProxySchemeHostAndPortToProxyServer(ProxyServer::SCHEME_QUIC,
+                                               uri.substr(7));
+  }
+  return ProxyUriToProxyServer(uri, ProxyServer::SCHEME_INVALID);
+}
+}  // namespace
 
 NaiveListenConfig::NaiveListenConfig() = default;
 NaiveListenConfig::NaiveListenConfig(const NaiveListenConfig&) = default;
@@ -114,22 +127,79 @@ bool NaiveConfig::Parse(const base::Value::Dict& value) {
 
   if (const base::Value* v = value.Find("proxy")) {
     if (const std::string* str = v->GetIfString(); str && !str->empty()) {
-      GURL url(*str);
-      net::GetIdentityFromURL(url, &proxy_user, &proxy_pass);
+      base::StringTokenizer proxy_uri_list(*str, ",");
+      std::vector<ProxyServer> proxy_servers;
+      bool seen_tcp = false;
+      while (proxy_uri_list.GetNext()) {
+        std::string token(proxy_uri_list.token());
+        GURL url(token);
 
-      GURL::Replacements remove_auth;
-      remove_auth.ClearUsername();
-      remove_auth.ClearPassword();
-      GURL url_no_auth = url.ReplaceComponents(remove_auth);
-      proxy_url = url_no_auth.GetWithEmptyPath().spec();
-      if (proxy_url.empty()) {
-        std::cerr << "Invalid proxy" << std::endl;
+        std::u16string proxy_user;
+        std::u16string proxy_pass;
+        net::GetIdentityFromURL(url, &proxy_user, &proxy_pass);
+        GURL::Replacements remove_auth;
+        remove_auth.ClearUsername();
+        remove_auth.ClearPassword();
+        GURL url_no_auth = url.ReplaceComponents(remove_auth);
+        std::string proxy_uri = url_no_auth.GetWithEmptyPath().spec();
+        if (proxy_uri.back() == '/') {
+          proxy_uri.pop_back();
+        }
+
+        proxy_servers.emplace_back(MyProxyUriToProxyServer(proxy_uri));
+        const ProxyServer& last = proxy_servers.back();
+        if (last.is_quic()) {
+          if (seen_tcp) {
+            std::cerr << "QUIC proxy cannot follow TCP-based proxies"
+                      << std::endl;
+            return false;
+          }
+          origins_to_force_quic_on.insert(HostPortPair::FromURL(url));
+        } else if (last.is_https() || last.is_http()) {
+          seen_tcp = true;
+        } else {
+          std::cerr << "Invalid proxy scheme" << std::endl;
+          return false;
+        }
+
+        AuthCredentials auth(proxy_user, proxy_pass);
+        if (!auth.Empty()) {
+          if (last.is_socks()) {
+            std::cerr << "SOCKS proxy with auth is not supported" << std::endl;
+          } else {
+            std::string proxy_url(token);
+            if (proxy_url.compare(0, 7, "quic://") == 0) {
+              proxy_url.replace(0, 4, "https");
+            }
+            auth_store[url::SchemeHostPort{GURL{proxy_url}}] = auth;
+          }
+        }
+      }
+
+      if (proxy_servers.size() > 1 &&
+          std::any_of(proxy_servers.begin(), proxy_servers.end(),
+                      [](const ProxyServer& s) { return s.is_socks(); })) {
+        // See net/socket/connect_job_params_factory.cc
+        // DCHECK(proxy_server.is_socks());
+        // DCHECK_EQ(1u, proxy_chain.length());
+        std::cerr
+            << "Multi-proxy chain containing SOCKS proxies is not supported."
+            << std::endl;
         return false;
-      } else if (proxy_url.back() == '/') {
-        proxy_url.pop_back();
+      }
+      if (std::any_of(proxy_servers.begin(), proxy_servers.end(),
+                      [](const ProxyServer& s) { return s.is_quic(); })) {
+        proxy_chain = ProxyChain::ForIpProtection(proxy_servers);
+      } else {
+        proxy_chain = ProxyChain(proxy_servers);
+      }
+
+      if (!proxy_chain.IsValid()) {
+        std::cerr << "Invalid proxy chain" << std::endl;
+        return false;
       }
     } else {
-      std::cerr << "Invalid proxy" << std::endl;
+      std::cerr << "Invalid proxy argument" << std::endl;
       return false;
     }
   }

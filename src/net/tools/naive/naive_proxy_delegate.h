@@ -44,8 +44,8 @@ class NaiveProxyDelegate : public ProxyDelegate {
 
   // This only affects h2 proxy client socket.
   Error OnBeforeTunnelRequest(const ProxyChain& proxy_chain,
-                             size_t chain_index,
-                             HttpRequestHeaders* extra_headers) override;
+                              size_t chain_index,
+                              HttpRequestHeaders* extra_headers) override;
 
   Error OnTunnelHeadersReceived(
       const ProxyChain& proxy_chain,
@@ -56,7 +56,7 @@ class NaiveProxyDelegate : public ProxyDelegate {
       ProxyResolutionService* proxy_resolution_service) override {}
 
   // Returns empty if the padding type has not been negotiated.
-  std::optional<PaddingType> GetProxyServerPaddingType(
+  std::optional<PaddingType> GetProxyChainPaddingType(
       const ProxyChain& proxy_chain);
 
  private:
@@ -66,7 +66,7 @@ class NaiveProxyDelegate : public ProxyDelegate {
   HttpRequestHeaders extra_headers_;
 
   // Empty value means padding type has not been negotiated.
-  std::map<ProxyChain, std::optional<PaddingType>> padding_type_by_server_;
+  std::map<ProxyServer, std::optional<PaddingType>> padding_type_by_server_;
 };
 
 class ClientPaddingDetectorDelegate {

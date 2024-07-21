@@ -175,22 +175,11 @@ std::unique_ptr<URLRequestContext> BuildURLRequestContext(
   builder.DisableHttpCache();
   builder.set_net_log(net_log);
 
-  std::string proxy_url = config.proxy_url;
-  bool force_quic = false;
-  if (proxy_url.compare(0, 7, "quic://") == 0) {
-    proxy_url.replace(0, 4, "https");
-    force_quic = true;
-  }
-
   ProxyConfig proxy_config;
-  proxy_config.proxy_rules().ParseFromString(proxy_url);
-  if (force_quic) {
-    const ProxyServer& proxy_server =
-        proxy_config.proxy_rules().single_proxies.First().First();
-    proxy_config.proxy_rules().single_proxies.SetSingleProxyChain(
-        ProxyChain::ForIpProtection({ProxyServer(
-            ProxyServer::Scheme::SCHEME_QUIC, proxy_server.host_port_pair())}));
-  }
+  proxy_config.proxy_rules().type =
+      net::ProxyConfig::ProxyRules::Type::PROXY_LIST;
+  proxy_config.proxy_rules().single_proxies.SetSingleProxyChain(
+      config.proxy_chain);
   LOG(INFO) << "Proxying via "
             << proxy_config.proxy_rules().single_proxies.ToDebugString();
   auto proxy_service =
@@ -209,7 +198,7 @@ std::unique_ptr<URLRequestContext> BuildURLRequestContext(
       CertVerifier::CreateDefault(std::move(cert_net_fetcher)));
 
   builder.set_proxy_delegate(std::make_unique<NaiveProxyDelegate>(
-      config.extra_headers,
+      config.extra_headers, 
       std::vector<PaddingType>{PaddingType::kVariant1, PaddingType::kNone}));
 
   if (config.no_post_quantum == true) {
@@ -229,22 +218,20 @@ std::unique_ptr<URLRequestContext> BuildURLRequestContext(
 
   auto context = builder.Build();
 
-  if (!config.proxy_url.empty() && !config.proxy_user.empty() &&
-      !config.proxy_pass.empty()) {
+  if (!config.origins_to_force_quic_on.empty()) {
+    auto* quic = context->quic_context()->params();
+    quic->supported_versions = {quic::ParsedQuicVersion::RFCv1()};
+    quic->origins_to_force_quic_on.insert(
+        config.origins_to_force_quic_on.begin(),
+        config.origins_to_force_quic_on.end());
+  }
+
+  for (const auto& [k, v] : config.auth_store) {
     auto* session = context->http_transaction_factory()->GetSession();
     auto* auth_cache = session->http_auth_cache();
-    GURL proxy_gurl(proxy_url);
-    if (force_quic) {
-      auto* quic = context->quic_context()->params();
-      quic->supported_versions = {quic::ParsedQuicVersion::RFCv1()};
-      quic->origins_to_force_quic_on.insert(
-          net::HostPortPair::FromURL(proxy_gurl));
-    }
-    url::SchemeHostPort auth_origin(proxy_gurl);
-    AuthCredentials credentials(config.proxy_user, config.proxy_pass);
-    auth_cache->Add(auth_origin, HttpAuth::AUTH_PROXY,
+    auth_cache->Add(k, HttpAuth::AUTH_PROXY,
                     /*realm=*/{}, HttpAuth::AUTH_SCHEME_BASIC, {},
-                    /*challenge=*/"Basic", credentials, /*path=*/"/");
+                    /*challenge=*/"Basic", v, /*path=*/"/");
   }
 
   return context;
