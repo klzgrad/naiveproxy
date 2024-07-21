@@ -160,6 +160,8 @@ std::optional<PaddingType> NaiveProxyDelegate::GetProxyChainPaddingType(
   // protocols.
   if (proxy_chain.is_direct())
     return PaddingType::kNone;
+  if (proxy_chain.Last().is_socks())
+    return PaddingType::kNone;
   return padding_type_by_server_[proxy_chain.Last()];
 }
 
