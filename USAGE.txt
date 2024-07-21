@@ -14,8 +14,8 @@ Description:
       "proxy": "..."
     }
 
-  `--listen` can be specified multiple times on the command line,
-  and can be either a string or an array of strings in the JSON file.
+  Specifying a flag multiple times on the command line is equivalent to
+  having an array of multiple strings in the JSON file.
 
   Uses "config.json" by default if run without arguments.
 
@@ -29,18 +29,16 @@ Options:
 
     Prints version.
 
-  --listen=<proto>://[addr][:port]
-  --listen=socks://[[user]:[pass]@][addr][:port]
+  --listen=LISTEN-URI
 
-    Listens at addr:port with protocol <proto>.
+    LISTEN-URI = <LISTEN-PROTO>"://"[<USER>":"<PASS>"@"][<ADDR>][":"<PORT>]
+    LISTEN-PROTO = "socks" | "http" | "redir"
+
+    Listens at addr:port with protocol <LISTEN-PROTO>.
     Can be specified multiple times to listen on multiple ports.
-
-    Available proto: socks, http, redir.
     Default proto, addr, port: socks, 0.0.0.0, 1080.
 
-    * http: Supports only proxying https:// URLs, no http://.
-
-    * redir: Works with certain iptables setup.
+    Note: redir requires specific iptables rules and uses no authentication.
 
       (Redirecting locally originated traffic)
       iptables -t nat -A OUTPUT -d $proxy_server_ip -j RETURN
@@ -57,10 +55,21 @@ Options:
       The artificial results are not saved for privacy, so restarting the
       resolver may cause downstream to cache stale results.
 
-  --proxy=<proto>://<user>:<pass>@<hostname>[:<port>]
+  --proxy=PROXY
 
-    Routes traffic via the proxy server. Connects directly by default.
-    Available proto: https, quic. Infers port by default.
+    PROXY = PROXY-CHAIN | SOCKS-PROXY
+    PROXY-CHAIN = <PROXY-URI>[","<PROXY-CHAIN>] 
+    PROXY-URI = <PROXY-PROTO>"://"<USER>":"<PASS>"@"<HOSTNAME>[":"<PORT>]
+    PROXY-PROTO = "http" | "https" | "quic"
+    SOCKS-PROXY = "socks://"<HOSTNAME>[":"<PORT>]
+
+    Routes traffic via the proxy chain.
+    The default proxy is directly connection without proxying.
+    The last PROXY-URI is negotiated automatically for Naive padding.
+    Limitations:
+      * QUIC proxies cannot follow TCP-based proxies in a proxy chain.
+      * The user needs to ensure there is no loop in the proxy chain.
+      * SOCKS proxies do not support chaining, authentication, or Naive padding.
 
   --insecure-concurrency=<N>
 
