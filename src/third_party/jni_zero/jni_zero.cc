@@ -6,7 +6,6 @@
 
 #include <sys/prctl.h>
 
-#include "third_party/jni_zero/generate_jni/JniInit_jni.h"
 #include "third_party/jni_zero/jni_methods.h"
 #include "third_party/jni_zero/jni_zero_internal.h"
 #include "third_party/jni_zero/logging.h"
@@ -123,13 +122,6 @@ void InitVM(JavaVM* vm) {
   JNIEnv* env = AttachCurrentThread();
   g_object_class = GetSystemClassGlobalRef(env, "java/lang/Object");
   g_string_class = GetSystemClassGlobalRef(env, "java/lang/String");
-#if defined(JNI_ZERO_MULTIPLEXING_ENABLED)
-  Java_JniInit_crashIfMultiplexingMisaligned(env, kJniZeroHashWhole,
-                                             kJniZeroHashPriority);
-#else
-  // Mark as used when multiplexing not enabled.
-  (void)&Java_JniInit_crashIfMultiplexingMisaligned;
-#endif
   CheckException(env);
 }
 
