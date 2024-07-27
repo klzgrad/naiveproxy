@@ -4,30 +4,26 @@
 
 #include "third_party/jni_zero/common_apis.h"
 
-#include "third_party/jni_zero/generate_jni/JniUtil_jni.h"
-#include "third_party/jni_zero/system_jni/Arrays_jni.h"
-#include "third_party/jni_zero/system_jni/Collection_jni.h"
-
 namespace jni_zero {
 
 ScopedJavaLocalRef<jobjectArray> CollectionToArray(
     JNIEnv* env,
     const JavaRef<jobject>& collection) {
-  return JNI_Collection::Java_Collection_toArray(env, collection);
+  return nullptr;
 }
 
 ScopedJavaLocalRef<jobject> ArrayToList(JNIEnv* env,
                                         const JavaRef<jobjectArray>& array) {
-  return JNI_Arrays::Java_Arrays_asList(env, array);
+  return nullptr;
 }
 
 ScopedJavaLocalRef<jobjectArray> MapToArray(JNIEnv* env,
                                             const JavaRef<jobject>& map) {
-  return Java_JniUtil_mapToArray(env, map);
+  return nullptr;
 }
 ScopedJavaLocalRef<jobject> ArrayToMap(JNIEnv* env,
                                        const JavaRef<jobjectArray>& array) {
-  return Java_JniUtil_arrayToMap(env, array);
+  return nullptr;
 }
 
 }  // namespace jni_zero
