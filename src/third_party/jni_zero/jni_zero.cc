@@ -6,7 +6,6 @@
 
 #include <sys/prctl.h>
 
-#include "third_party/jni_zero/generate_jni/JniInit_jni.h"
 #include "third_party/jni_zero/jni_methods.h"
 #include "third_party/jni_zero/jni_zero_internal.h"
 #include "third_party/jni_zero/logging.h"
@@ -133,22 +132,7 @@ void InitVM(JavaVM* vm) {
   JNIEnv* env = AttachCurrentThread();
   g_object_class = GetSystemClassGlobalRef(env, "java/lang/Object");
   g_string_class = GetSystemClassGlobalRef(env, "java/lang/String");
-  g_empty_string.Reset(
-      env, ScopedJavaLocalRef<jstring>::Adopt(env, env->NewString(nullptr, 0)));
-#if defined(JNI_ZERO_MULTIPLEXING_ENABLED)
-  Java_JniInit_crashIfMultiplexingMisaligned(env, kJniZeroHashWhole,
-                                             kJniZeroHashPriority);
-#else
-  // Mark as used when multiplexing not enabled.
-  (void)&Java_JniInit_crashIfMultiplexingMisaligned;
-#endif
-  ScopedJavaLocalRef<jobjectArray> globals = Java_JniInit_init(env);
-  g_empty_list.Reset(env,
-                     ScopedJavaLocalRef<jobject>::Adopt(
-                         env, env->GetObjectArrayElement(globals.obj(), 0)));
-  g_empty_map.Reset(env,
-                    ScopedJavaLocalRef<jobject>::Adopt(
-                        env, env->GetObjectArrayElement(globals.obj(), 1)));
+  CheckException(env);
 }
 
 void DisableJvmForTesting() {
