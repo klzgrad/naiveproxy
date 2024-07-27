@@ -17,7 +17,7 @@
 #include "third_party/jni_zero/type_conversions.h"
 // IWYU pragma: end_exports
 
-#define DEFINE_JNI(className) DEFINE_JNI_FOR_##className()
+#define DEFINE_JNI(className)
 
 namespace jni_zero {
 
