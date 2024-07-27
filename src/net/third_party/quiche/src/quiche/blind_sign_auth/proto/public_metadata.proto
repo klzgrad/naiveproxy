@@ -1,0 +1,62 @@
+// Copyright 2023 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package privacy.ppn;
+
+import "anonymous_tokens/proto/anonymous_tokens.proto";
+
+option java_multiple_files = true;
+option java_package = "com.google.privacy.ppn.proto";
+
+// Contains fields which will be cryptographically linked to a blinded token and
+// visible to client, signer, and verifier. Clients should validate/set fields
+// contained within such that the values are reasonable for the security and
+// privacy constraints of the application.
+message PublicMetadata {
+  // Contains desired exit IP address's declared location.
+  message Location {
+    // TODO(b/268354975): fix copybara regex to strip this line automatically
+
+    // All caps ISO 3166-1 alpha-2.
+    string country = 1;
+
+    // City region geo id if requested by the client.
+    string city_geo_id = 2;
+  }
+  Location exit_location = 1;
+
+  // Indicates which service this token is associated with.
+  string service_type = 2;
+
+  // When the token and metadata expire.
+  anonymous_tokens.Timestamp expiration = 3;
+
+  // Indicates the debug context of this payload.
+  enum DebugMode {
+    UNSPECIFIED_DEBUG_MODE = 0;
+    DEBUG_ALL = 1;
+  }
+  DebugMode debug_mode = 4;
+}
+
+// Contains PublicMetadata and associated information. Only the public_metadata
+// is cryptographically associated with the token.
+message PublicMetadataInfo {
+  PublicMetadata public_metadata = 1;
+
+  // Earliest validation version that this public metadata conforms to.
+  int32 validation_version = 2;
+}
