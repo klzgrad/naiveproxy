@@ -303,9 +303,17 @@ def hacks_and_patches(install_root: str, script_dir: str, arch: str) -> None:
         os.remove(qtchooser_conf)
 
     # __GLIBC_MINOR__ is used as a feature test macro. Replace it with the
-    # earliest supported version of glibc (2.28).
+    # earliest supported version of glibc (2.26).
     features_h = os.path.join(install_root, "usr", "include", "features.h")
-    replace_in_file(features_h, r"(#define\s+__GLIBC_MINOR__)", r"\1 28 //")
+    replace_in_file(features_h, r"(#define\s+__GLIBC_MINOR__)", r"\1 26 //")
+		
+    # fcntl64() was introduced in glibc 2.28. Make sure to use fcntl() instead.
+    fcntl_h = os.path.join(install_root, "usr", "include", "fcntl.h")
+    replace_in_file(
+        fcntl_h,
+        r"#ifndef __USE_FILE_OFFSET64(\nextern int fcntl)",
+        r"#if 1\1",
+    )
 
     # Do not use pthread_cond_clockwait as it was introduced in glibc 2.30.
     cppconfig_h = os.path.join(
