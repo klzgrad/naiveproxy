@@ -354,16 +354,9 @@ constexpr char kStaticCertFileEnv[] = "SSL_CERT_FILE";
 // See https://www.openssl.org/docs/man1.0.2/man1/c_rehash.html.
 constexpr char kStaticCertDirsEnv[] = "SSL_CERT_DIR";
 
-class StaticUnixSystemCerts {
+class TrustStoreUnix : public PlatformTrustStore {
  public:
-  StaticUnixSystemCerts() : system_trust_store_(Create()) {}
-
-  bssl::TrustStoreInMemory* system_trust_store() {
-    return system_trust_store_.get();
-  }
-
-  static std::unique_ptr<bssl::TrustStoreInMemory> Create() {
-    auto ptr = std::make_unique<bssl::TrustStoreInMemory>();
+  TrustStoreUnix() {
     auto env = base::Environment::Create();
     std::string env_value;
 
@@ -378,7 +371,7 @@ class StaticUnixSystemCerts {
       std::string file;
       if (!base::ReadFileToString(base::FilePath(filename), &file))
         continue;
-      if (AddCertificatesFromBytes(file.data(), file.size(), ptr.get())) {
+      if (AddCertificatesFromBytes(file, trust_store_)) {
         cert_file_ok = true;
         break;
       }
@@ -400,7 +393,7 @@ class StaticUnixSystemCerts {
         if (!base::ReadFileToString(filename, &file)) {
           continue;
         }
-        if (AddCertificatesFromBytes(file.data(), file.size(), ptr.get())) {
+        if (AddCertificatesFromBytes(file, trust_store_)) {
           cert_dir_ok = true;
         }
       }
@@ -412,17 +405,34 @@ class StaticUnixSystemCerts {
       LOG(ERROR) << "No CA certificates were found. Try using environment "
                     "variable SSL_CERT_FILE or SSL_CERT_DIR";
     }
+  }
 
-    return ptr;
+  TrustStoreUnix(const TrustStoreUnix&) = delete;
+  TrustStoreUnix& operator=(const TrustStoreUnix&) = delete;
+
+  // bssl::CertIssuerSource implementation:
+  void SyncGetIssuersOf(const bssl::ParsedCertificate* cert,
+                        bssl::ParsedCertificateList* issuers) override {
+    trust_store_.SyncGetIssuersOf(cert, issuers);
+  }
+
+  // bssl::TrustStore implementation:
+  bssl::CertificateTrust GetTrust(
+      const bssl::ParsedCertificate* cert) override {
+    return trust_store_.GetTrust(cert);
+  }
+
+  // net::PlatformTrustStore implementation:
+  std::vector<net::PlatformTrustStore::CertWithTrust> GetAllUserAddedCerts()
+      override {
+    return {};
   }
 
  private:
-  static bool AddCertificatesFromBytes(const char* data,
-                                       size_t length,
-                                       bssl::TrustStoreInMemory* store) {
+  static bool AddCertificatesFromBytes(std::string_view data,
+                                       bssl::TrustStoreInMemory& store) {
     auto certs = X509Certificate::CreateCertificateListFromBytes(
-        {reinterpret_cast<const uint8_t*>(data), length},
-        X509Certificate::FORMAT_AUTO);
+        base::as_bytes(base::make_span(data)), X509Certificate::FORMAT_AUTO);
     bool certs_ok = false;
     for (const auto& cert : certs) {
       bssl::CertErrors errors;
@@ -430,8 +440,8 @@ class StaticUnixSystemCerts {
           bssl::UpRef(cert->cert_buffer()),
           x509_util::DefaultParseCertificateOptions(), &errors);
       if (parsed) {
-        if (!store->Contains(parsed.get())) {
-          store->AddTrustAnchor(parsed);
+        if (!store.Contains(parsed.get())) {
+          store.AddTrustAnchor(parsed);
         }
         certs_ok = true;
       } else {
@@ -441,66 +451,16 @@ class StaticUnixSystemCerts {
     return certs_ok;
   }
 
-  std::unique_ptr<bssl::TrustStoreInMemory> system_trust_store_;
+  bssl::TrustStoreInMemory trust_store_;
 };
-
-base::LazyInstance<StaticUnixSystemCerts>::Leaky g_root_certs_static_unix =
-    LAZY_INSTANCE_INITIALIZER;
 
 }  // namespace
-
-class SystemTrustStoreStaticUnix : public SystemTrustStore {
- public:
-  SystemTrustStoreStaticUnix() = default;
-
-  bssl::TrustStore* GetTrustStore() override {
-    return g_root_certs_static_unix.Get().system_trust_store();
-  }
-
-  bool IsKnownRoot(const bssl::ParsedCertificate* trust_anchor) const override {
-    return g_root_certs_static_unix.Get().system_trust_store()->Contains(
-        trust_anchor);
-  }
-
-#if BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
-  bool IsLocallyTrustedRoot(
-      const bssl::ParsedCertificate* trust_anchor) override {
-    return g_root_certs_static_unix.Get()
-        .system_trust_store()
-        ->GetTrust(trust_anchor)
-        .IsTrustAnchor();
-  }
-
-  int64_t chrome_root_store_version() const override {
-    return 0;
-  }
-
-  base::span<const ChromeRootCertConstraints> GetChromeRootConstraints(
-      const bssl::ParsedCertificate* /*cert*/) const override {
-    return {};
-  }
-#endif
-};
-
-std::unique_ptr<SystemTrustStore> CreateSslSystemTrustStore() {
-  return std::make_unique<SystemTrustStoreStaticUnix>();
-}
-
-#if BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
 
 std::unique_ptr<SystemTrustStore> CreateSslSystemTrustStoreChromeRoot(
     std::unique_ptr<TrustStoreChrome> chrome_root) {
   return std::make_unique<SystemTrustStoreChrome>(
-      std::move(chrome_root), StaticUnixSystemCerts::Create());
+      std::move(chrome_root), std::make_unique<TrustStoreUnix>());
 }
-
-#else
-
-std::unique_ptr<SystemTrustStore> CreateSslSystemTrustStoreChromeRoot() {
-  return std::make_unique<DummySystemTrustStore>();
-}
-
-#endif  // CHROME_ROOT_STORE_SUPPORTED
 
 #elif BUILDFLAG(IS_WIN)
 
