@@ -1,0 +1,51 @@
+// Copyright 2023 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package privacy.ppn;
+
+import "quiche/blind_sign_auth/proto/public_metadata.proto";
+import "anonymous_tokens/proto/anonymous_tokens.proto";
+
+message SpendTokenData {
+  // Public metadata associated with the token being spent.
+  // See go/ppn-token-spend and go/ppn-phosphor-at-service for details.
+  PublicMetadata public_metadata = 1;
+  // The unblinded token to be spent which was blind-signed by Phosphor.
+  bytes unblinded_token = 2;
+  // The signature for the token to be spent, obtained from Phosphor and
+  // unblinded.
+  bytes unblinded_token_signature = 3;
+  // The version number of the signing key that was used during blind-signing.
+  uint64 signing_key_version = 4;
+  // A use case identifying the caller. Should be a fixed, hardcoded value to
+  // prevent cross-spending tokens.
+  anonymous_tokens.AnonymousTokensUseCase use_case = 5;
+  // Nonce used to mask plaintext message before cryptographic verification.
+  bytes message_mask = 6;
+  // General public metadata. Use deserializer to inspect. Only set one of this
+  // or public_metadata.
+  bytes binary_public_metadata = 7;
+}
+
+message PrivacyPassTokenData {
+  // The base64 encoded Privacy Pass token.
+  string token = 1;
+  // The base64 encoded, Privacy Pass compliant binary public metadata.
+  string encoded_extensions = 2;
+  // Populate only for testing, this will affect which public key is used.
+  anonymous_tokens.AnonymousTokensUseCase use_case_override =
+      3;
+}

@@ -1,0 +1,154 @@
+# Copyright 2024 The Chromium Project. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# The set of path prefixes that should be checked for unsafe pointer usage (see
+# -Wunsafe-buffer-usage in Clang).
+#
+# ***
+# Paths should be written as relative to the root of the source tree with
+# unix-style path separators. Directory prefixes should end with `/`, such
+# as `base/`.
+# ***
+#
+# Lines that begin with `-` name path prefixes that will *not* be checked for
+# unsafe-buffer-usage. They are known to do unsafe things and should be
+# changed to use constructs like base::span or containers like base::HeapArray
+# and std::vector instead. See https://crbug.com/40285824
+#
+# Lines that begin with `+` name path prefixes that have no unsafe-buffer-usage
+# (or all such usage is annotated), and are protected against new unsafe pointer
+# behaviour by the compiler.
+#
+# By default, all files are checked for unsafe-buffer-usage unless they are
+# match a `-` path prefix line here. If a file matches both a `-` and `+` line,
+# the `+` line takes precedence and the file will be checked.
+#
+# To opt individual files out of checks, place `#pragma allow_unsafe_buffers`
+# anywhere in the (source or header) file, guarded by
+# `#ifdef UNSAFE_BUFFERS_BUILD`. These pragmas represent the technical debt and
+# security risk present in the file through unsafe pointer usage.
+#
+# ***
+# Recommended process for removing a `-dir/` line from this file:
+#
+# 1. Remove the `-dir/` line from this paths file.
+#    a. Possibly add some subdirectories if needed to reduce scope,
+#       like `-dir/sub_dir/`.
+# 2. Add `#pragma allow_unsafe_buffers` to every file in the directory that now
+#    has a compilation error, with a TODO to the tracking bug for the
+#    directory:
+#    ```
+#    #ifdef UNSAFE_BUFFERS_BUILD
+#    // TODO(crbug.com/ABC): Remove this and convert code to safer constructs.
+#    #pragma allow_unsafe_buffers
+#    #endif
+#    ```
+# 3. Work through the files in the directory, converting pointers to spans, or
+#    to owning containers like HeapArray and vector. Remove the pragmas from
+#    the files when there is no unsafe pointer usage left in each one.
+#
+# See `docs/unsafe_buffers.md`.
+
+-android_webview/
+-apps/
+-ash/
+-base/allocator
+-base/third_party
+-build/
+-build_overrides/
+-buildtools/
+-cc/
+-chrome/
++chrome/browser/apps/guest_view/
++chrome/browser/autofill/
++chrome/browser/extensions/api/web_view/
++chrome/browser/guest_view/
++chrome/browser/history_clusters/
++chrome/browser/history_embeddings/
++chrome/browser/manta/
++chrome/browser/model_execution/
++chrome/browser/navigation_predictor/
++chrome/browser/page_image_service/
++chrome/browser/performance_manager/
++chrome/browser/preloading/
++chrome/browser/ui/autofill/
++chrome/browser/ui/views/autofill/
++chrome/browser/ui/webui/history_clusters/
++chrome/browser/win/
+-chromecast/
+-chromeos/
+-clank/
+-codelabs/
+-components/
++components/autofill/
++components/compose/
++components/discardable_memory/
++components/guest_view/
++components/history_clusters/
++components/history_embeddings/
++components/manta/
++components/optimization_guide/content/
++components/optimization_guide/core/
++components/optimization_guide/internal/testdata/
++components/optimization_guide/internal/testing/
++components/optimization_guide/internal/tools/
++components/optimization_guide/optimization_guide_internals/
++components/optimization_guide/proto/
++components/optimization_guide/tools/
++components/page_image_service/
++components/password_manager/
++components/performance_manager/
++components/plus_addresses/
++components/prefs/
++components/sync/
++components/sync_bookmarks/
++components/sync_device_info/
++components/sync_preferences/
++components/sync_sessions/
++components/sync_user_events/
++components/variations/
+-courgette/
+-crypto/
+-data/
+-device/
+-docs/
+-fuchsia_web/
+-gin/
+-google_apis/
+-google_update/
+-gpu/
+-headless/
+-infra/
+-internal/
+-ios/
+-ios_internal/
+-ipc/
+-media/
+-native_client/
+-native_client_sdk/
+-net/third_party/
+-ppapi/
+-printing/
+-remoting/
+-sandbox/
+-services/accessibility
+-services/data_decoder
+-services/shape_detection
+-services/tracing/public/cpp/perfetto/
+-signing_keys/
+-skia/
+-sql/
+-storage/
+-testing/
+-third_party/
++third_party/blink/
+-tools/
+-ui/
++ui/views/
+-url/third_party
+-v8/
+
+# TODO(crbug.com/41497066#comment22) The Win SDK headers don't get categorized
+# as system headers when building with DEPOT_TOOLS_WIN_TOOLCHAIN=0 ?
+-Program Files (x86)/Windows Kits/
