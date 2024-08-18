@@ -173,6 +173,37 @@ std::unique_ptr<URLRequestContext> BuildURLRequestContext(
   URLRequestContextBuilder builder;
 
   builder.DisableHttpCache();
+
+  // Overrides HTTP/2 initial window size default values to accommodate
+  // high BDP links.
+  // See net/http/http_network_session.cc for the default values.
+  // Alternative implementations than fixed large windows:
+  // (1) Dynamic window scaling, see
+  //     https://github.com/dotnet/runtime/pull/54755
+  //     and https://grpc.io/blog/grpc-go-perf-improvements/
+  //     This approach estimates throughput and RTT in userspace
+  //     and incurs big architectural complexity.
+  // (2) Obtains TCP receive windows from Linux-specific TCP_INFO.
+  //     This approach is not portable.
+  // Security impact:
+  // This use of non-default settings creates a fingerprinting feature
+  // that is visible to proxy servers, though this is only exploitable
+  // if the proxy servers can be MITM'd.
+
+  constexpr int kMaxBandwidthMBps = 125;
+  constexpr double kTypicalRttSecond = 0.256;
+  constexpr int kMaxBdpMB = kMaxBandwidthMBps * kTypicalRttSecond;
+
+  // The windows size should be twice the BDP because WINDOW_UPDATEs
+  // are sent after half the window is unacknowledged.
+  constexpr int kTypicalWindow = kMaxBdpMB * 2 * 1024 * 1024;
+  HttpNetworkSessionParams http_network_session_params;
+  http_network_session_params.spdy_session_max_recv_window_size =
+      kTypicalWindow * 2;
+  http_network_session_params
+      .http2_settings[spdy::SETTINGS_INITIAL_WINDOW_SIZE] = kTypicalWindow;
+  builder.set_http_network_session_params(http_network_session_params);
+
   builder.set_net_log(net_log);
 
   ProxyConfig proxy_config;
@@ -198,7 +229,7 @@ std::unique_ptr<URLRequestContext> BuildURLRequestContext(
       CertVerifier::CreateDefault(std::move(cert_net_fetcher)));
 
   builder.set_proxy_delegate(std::make_unique<NaiveProxyDelegate>(
-      config.extra_headers, 
+      config.extra_headers,
       std::vector<PaddingType>{PaddingType::kVariant1, PaddingType::kNone}));
 
   if (config.no_post_quantum == true) {
