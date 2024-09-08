@@ -62,6 +62,8 @@ struct NaiveConfig {
 
   std::optional<bool> no_post_quantum;
 
+  std::optional<int> http2_recv_window;
+
   NaiveConfig();
   NaiveConfig(const NaiveConfig&);
   ~NaiveConfig();

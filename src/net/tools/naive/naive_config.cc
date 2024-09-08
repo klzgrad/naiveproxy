@@ -266,6 +266,26 @@ bool NaiveConfig::Parse(const base::Value::Dict& value) {
     no_post_quantum = true;
   }
 
+  if (const base::Value* v = value.Find("http2-recv-window")) {
+    if (std::optional<int> i = v->GetIfInt()) {
+      http2_recv_window = *i;
+    } else if (const std::string* str = v->GetIfString()) {
+      int http2_recv_window_int;
+      if (!base::StringToInt(*str, &http2_recv_window_int)) {
+        std::cerr << "Invalid http2-recv-window" << std::endl;
+        return false;
+      }
+      http2_recv_window = http2_recv_window_int;
+    } else {
+      std::cerr << "Invalid http2-recv-window" << std::endl;
+      return false;
+    }
+    if (http2_recv_window.has_value() && *http2_recv_window <= 0) {
+      std::cerr << "Invalid http2-recv-window" << std::endl;
+      return false;
+    }
+  }
+
   return true;
 }
 
