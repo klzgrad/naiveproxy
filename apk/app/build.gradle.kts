@@ -10,8 +10,8 @@ android {
         create("release") {
             storeFile = rootProject.file("release.keystore")
             storePassword = System.getenv("KEYSTORE_PASS")
-            keyAlias = System.getenv("ALIAS_NAME")
-            keyPassword = System.getenv("ALIAS_PASS")
+            keyAlias = "release"
+            keyPassword = System.getenv("KEYSTORE_PASS")
         }
     }
 
