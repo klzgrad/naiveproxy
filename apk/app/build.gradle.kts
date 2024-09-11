@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "moe.matsuri.exe.naive"
+    namespace = "io.nekohasekai.sagernet.plugin.naive"
 
     signingConfigs {
         create("release") {
@@ -17,22 +17,20 @@ android {
 
     buildTypes {
         getByName("release") {
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                file("proguard-rules.pro")
-            )
             isMinifyEnabled = true
             signingConfig = signingConfigs.getByName("release")
         }
     }
 
-    compileSdk = 33
+    buildToolsVersion = "35.0.0"
+
+    compileSdk = 35
 
     defaultConfig {
-        minSdk = 21
-        targetSdk = 33
+        minSdk = 24
+        targetSdk = 35
 
-        applicationId = "moe.matsuri.exe.naive"
+        applicationId = "io.nekohasekai.sagernet.plugin.naive"
         versionCode = System.getenv("APK_VERSION_NAME").removePrefix("v").split(".")[0].toInt()
         versionName = System.getenv("APK_VERSION_NAME").removePrefix("v")
         splits.abi {
@@ -44,12 +42,8 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
-    }
-
-    kotlinOptions {
-        jvmTarget = "1.8"
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     lint {
@@ -57,6 +51,10 @@ android {
         checkAllWarnings = true
         checkReleaseBuilds = false
         warningsAsErrors = true
+    }
+
+    packaging {
+        jniLibs.useLegacyPackaging = true
     }
 
     applicationVariants.all {

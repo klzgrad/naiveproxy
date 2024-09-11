@@ -17,7 +17,7 @@
  *                                                                            *
  ******************************************************************************/
 
-package moe.matsuri.exe.naive
+package io.nekohasekai.sagernet.plugin.naive
 
 import android.net.Uri
 import android.os.ParcelFileDescriptor
