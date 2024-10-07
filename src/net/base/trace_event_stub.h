@@ -12,9 +12,9 @@
 #ifndef NET_BASE_TRACE_EVENT_STUB_H_
 #define NET_BASE_TRACE_EVENT_STUB_H_
 
-#import "base/base_export.h"
-#import "base/memory/weak_ptr.h"
-#import "base/trace_event/trace_event_stub.h"
+#include "base/base_export.h"
+#include "base/memory/weak_ptr.h"
+#include "base/trace_event/trace_event_stub.h"
 
 namespace base::trace_event {
 

@@ -13,7 +13,7 @@
 #include <dpapi.h>
 
 #include "base/process/memory.h"
-#include "base/trace_event/trace_event.h"
+#include "base/trace_event/trace_event_stub.h"
 #else
 #include "third_party/boringssl/src/include/openssl/mem.h"
 #endif  // BUILDFLAG(IS_WIN)
