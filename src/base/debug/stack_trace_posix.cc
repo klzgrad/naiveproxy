@@ -1079,6 +1079,10 @@ void StackTrace::OutputToStreamWithPrefixImpl(
   StreamBacktraceOutputHandler handler(os);
   ProcessBacktrace(addresses(), prefix_string, &handler);
 }
+#else
+void StackTrace::OutputToStreamWithPrefixImpl(
+    std::ostream*, cstring_view) const {
+}
 #endif
 
 namespace internal {
