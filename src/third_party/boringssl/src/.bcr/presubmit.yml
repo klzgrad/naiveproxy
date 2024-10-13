@@ -1,0 +1,33 @@
+build_targets: &build_targets
+  - "@boringssl//:crypto"
+  - "@boringssl//:ssl"
+
+matrix:
+  platform:
+    - centos7_java11_devtoolset10
+    - debian11
+    - ubuntu2204
+    - windows
+  bazel: [6.x, 7.x]
+tasks:
+  verify_targets:
+    name: Verify build targets
+    platform: ${{ platform }}
+    bazel: ${{ bazel }}
+    build_targets: *build_targets
+  # Work around https://github.com/bazelbuild/bazel/issues/10472
+  verify_targets_on_macos:
+    name: Verify build targets on macOS
+    platform: macos
+    bazel: ${{ bazel }}
+    build_targets: *build_targets
+    build_flags:
+      - '--cxxopt=-std=c++14'
+      - '--sandbox_block_path=/usr/local'
+  run_test_module:
+    name: Run test module
+    platform: ${{ platform }}
+    bazel: ${{ bazel }}
+    module_path: util/bazel-example
+    build_targets:
+      - //...
