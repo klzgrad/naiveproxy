@@ -142,7 +142,7 @@ bool NaiveConfig::Parse(const base::Value::Dict& value) {
         remove_auth.ClearPassword();
         GURL url_no_auth = url.ReplaceComponents(remove_auth);
         std::string proxy_uri = url_no_auth.GetWithEmptyPath().spec();
-        if (proxy_uri.back() == '/') {
+        if (!proxy_uri.empty() && proxy_uri.back() == '/') {
           proxy_uri.pop_back();
         }
 
