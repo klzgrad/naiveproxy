@@ -420,8 +420,9 @@ void DiscardSystemPagesInternal(uintptr_t address, size_t length) {
   }
   PA_PCHECK(ret == 0);
 #elif defined(NO_MADVISE_SYSCALL)
-  static_cast<void>(ptr);
-  static_cast<void>(length);
+  // The kernel may be missing madvise support, but
+  // if the kernel does support it, should call it to avoid memory leaking.
+  static_cast<void>(madvise(ptr, length, MADV_DONTNEED));
 #else   // PA_BUILDFLAG(IS_APPLE)
   // We have experimented with other flags, but with suboptimal results.
   //
