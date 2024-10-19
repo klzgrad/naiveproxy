@@ -15,16 +15,29 @@ arm_*) abi=musl_eabi;;
 *) abi=musl;;
 esac
 
+major=${release%%.*}
+if [ "$major" -ge 22 ]; then
+  path_suffix=toolchain
+else
+  path_suffix=sdk
+fi
+
 if [ "$subtarget" ]; then
-  SDK_PATH=openwrt-toolchain-$release-$target-${subtarget}_gcc-${gcc_ver}_${abi}.Linux-x86_64
+  SDK_PATH=openwrt-$path_suffix-$release-$target-${subtarget}_gcc-${gcc_ver}_${abi}.Linux-x86_64
 else
   subtarget='generic'
-  SDK_PATH=openwrt-toolchain-$release-${target}_gcc-${gcc_ver}_${abi}.Linux-x86_64
+  SDK_PATH=openwrt-$path_suffix-$release-${target}_gcc-${gcc_ver}_${abi}.Linux-x86_64
 fi
 SDK_URL=https://downloads.openwrt.org/releases/$release/targets/$target/$subtarget/$SDK_PATH.tar.xz
 rm -rf $SDK_PATH
 curl $SDK_URL | tar xJf -
+
+if [ "$major" -ge 22 ]; then
 cd $SDK_PATH
+else
+cd $SDK_PATH/staging_dir
+fi
+
 full_root=toolchain-*_gcc-${gcc_ver}_${abi}
 cat >include.txt <<EOF
 ./include
