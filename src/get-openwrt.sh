@@ -22,10 +22,13 @@ else
   path_suffix=sdk
 fi
 
-if [ "$subtarget" ]; then
+if [ ! "$subtarget" ]; then
+  subtarget=generic
+fi
+
+if [ "$subtarget" != generic -o "$major" -ge 22 ]; then
   SDK_PATH=openwrt-$path_suffix-$release-$target-${subtarget}_gcc-${gcc_ver}_${abi}.Linux-x86_64
 else
-  subtarget='generic'
   SDK_PATH=openwrt-$path_suffix-$release-${target}_gcc-${gcc_ver}_${abi}.Linux-x86_64
 fi
 SDK_URL=https://downloads.openwrt.org/releases/$release/targets/$target/$subtarget/$SDK_PATH.tar.xz
