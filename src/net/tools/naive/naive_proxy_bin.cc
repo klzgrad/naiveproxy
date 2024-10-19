@@ -10,9 +10,6 @@
 #include <optional>
 #include <string>
 
-#include "base/allocator/allocator_check.h"
-#include "base/allocator/partition_alloc_support.h"
-#include "base/allocator/partition_allocator/src/partition_alloc/shim/allocator_shim.h"
 #include "base/at_exit.h"
 #include "base/check.h"
 #include "base/command_line.h"
@@ -80,6 +77,12 @@
 #if BUILDFLAG(IS_APPLE)
 #include "base/allocator/early_zone_registration_apple.h"
 #include "base/apple/scoped_nsautorelease_pool.h"
+#endif
+
+#if PA_BUILDFLAG(USE_PARTITION_ALLOC)
+#include "base/allocator/allocator_check.h"
+#include "base/allocator/partition_alloc_support.h"
+#include "base/allocator/partition_allocator/src/partition_alloc/shim/allocator_shim.h"
 #endif
 
 namespace {
@@ -305,9 +308,12 @@ int main(int argc, char* argv[]) {
   // content/app/content_main.cc: RunContentProcess()
   //   content/app/content_main_runner_impl.cc: Initialize()
   base::AtExitManager exit_manager;
+
+#if PA_BUILDFLAG(USE_PARTITION_ALLOC)
   std::string process_type = "";
   base::allocator::PartitionAllocSupport::Get()->ReconfigureEarlyish(
       process_type);
+#endif
 
   // content/app/content_main.cc: RunContentProcess()
   //   content/app/content_main_runner_impl.cc: Initialize()
@@ -315,21 +321,27 @@ int main(int argc, char* argv[]) {
   // with PartitionAlloc on most platforms) smoke-tests that the overriding
   // logic is working correctly. If not causes a hard crash, as its unexpected
   // absence has security implications.
+#if PA_BUILDFLAG(USE_PARTITION_ALLOC)
   CHECK(base::allocator::IsAllocatorInitialized());
+#endif
 
   // content/app/content_main.cc: RunContentProcess()
   //   content/app/content_main_runner_impl.cc: Run()
   base::FeatureList::InitInstance("PartitionConnectionsByNetworkIsolationKey",
                                   std::string());
 
+#if PA_BUILDFLAG(USE_PARTITION_ALLOC)
   base::allocator::PartitionAllocSupport::Get()
       ->ReconfigureAfterFeatureListInit(/*process_type=*/"");
+#endif
 
   base::SingleThreadTaskExecutor io_task_executor(base::MessagePumpType::IO);
   base::ThreadPoolInstance::CreateAndStartWithDefaultParams("naive");
 
+#if PA_BUILDFLAG(USE_PARTITION_ALLOC)
   base::allocator::PartitionAllocSupport::Get()->ReconfigureAfterTaskRunnerInit(
       process_type);
+#endif
 
   url::AddStandardScheme("quic",
                          url::SCHEME_WITH_HOST_PORT_AND_USER_INFORMATION);
