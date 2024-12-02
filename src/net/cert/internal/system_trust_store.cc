@@ -325,23 +325,27 @@ std::unique_ptr<SystemTrustStore> CreateSslSystemTrustStore() {
 
 namespace {
 
-// Copied from https://golang.org/src/crypto/x509/root_linux.go
+// Copied from https://go.dev/src/crypto/x509/root_linux.go
 // Possible certificate files; stop after finding one.
-constexpr std::array<const char*, 6> kStaticRootCertFiles = {
-    "/etc/ssl/certs/ca-certificates.crt",  // Debian/Ubuntu/Gentoo etc.
-    "/etc/pki/tls/certs/ca-bundle.crt",    // Fedora/RHEL 6
-    "/etc/ssl/ca-bundle.pem",              // OpenSUSE
-    "/etc/pki/tls/cacert.pem",             // OpenELEC
+constexpr const char* kStaticRootCertFiles[] = {
+    "/etc/ssl/certs/ca-certificates.crt",                 // Debian/Ubuntu/Gentoo etc.
+    "/etc/pki/tls/certs/ca-bundle.crt",                   // Fedora/RHEL
+    "/etc/ssl/ca-bundle.pem",                             // OpenSUSE
+    "/etc/pki/tls/cacert.pem",                            // OpenELEC
     "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",  // CentOS/RHEL 7
     "/etc/ssl/cert.pem",                                  // Alpine Linux
 };
 
 // Possible directories with certificate files; stop after successfully
 // reading at least one file from a directory.
-constexpr std::array<const char*, 3> kStaticRootCertDirs = {
-    "/etc/ssl/certs",      // SLES10/SLES11, https://golang.org/issue/12139
-    "/etc/pki/tls/certs",  // Fedora/RHEL
-    "/system/etc/security/cacerts",  // Android
+constexpr const char* kStaticRootCertDirs[] = {
+    "/etc/ssl/certs",                                  // SLES10/SLES11, https://golang.org/issue/12139
+    "/etc/pki/tls/certs",                              // Fedora/RHEL
+    "/etc/pki/ca-trust/extracted/pem/directory-hash",  // Fedora/RHEL 9.5/10
+#if BUILDFLAG(IS_ANDROID)
+    "/system/etc/security/cacerts",                    // Android system roots
+    "/data/misc/keychain/certs-added",                 // User trusted CA folder
+#endif
 };
 
 // The environment variable which identifies where to locate the SSL
@@ -360,8 +364,8 @@ class TrustStoreUnix : public PlatformTrustStore {
     auto env = base::Environment::Create();
     std::string env_value;
 
-    std::vector<std::string> cert_filenames(kStaticRootCertFiles.begin(),
-                                            kStaticRootCertFiles.end());
+    std::vector<std::string> cert_filenames(std::begin(kStaticRootCertFiles),
+                                            std::end(kStaticRootCertFiles));
     if (env->GetVar(kStaticCertFileEnv, &env_value) && !env_value.empty()) {
       cert_filenames = {env_value};
     }
@@ -377,8 +381,8 @@ class TrustStoreUnix : public PlatformTrustStore {
       }
     }
 
-    std::vector<std::string> cert_dirnames(kStaticRootCertDirs.begin(),
-                                           kStaticRootCertDirs.end());
+    std::vector<std::string> cert_dirnames(std::begin(kStaticRootCertDirs),
+                                           std::end(kStaticRootCertDirs));
     if (env->GetVar(kStaticCertDirsEnv, &env_value) && !env_value.empty()) {
       cert_dirnames = base::SplitString(env_value, ":", base::TRIM_WHITESPACE,
                                         base::SPLIT_WANT_NONEMPTY);
