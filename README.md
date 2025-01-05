@@ -82,7 +82,6 @@ Or `quic://user:pass@example.com`, if it works better. See also [parameter usage
 * [v2rayN](https://github.com/2dust/v2rayN), GUI client, Windows
 * [NekoBox for Android](https://github.com/MatsuriDayo/NekoBoxForAndroid), Proxy toolchain, Android
 * [NekoRay / NekoBox For PC](https://github.com/MatsuriDayo/nekoray), Qt based GUI, Windows, Linux
-* [Yet Another Shadow Socket](https://github.com/Chilledheart/yass), NaïveProxy-compatible forward proxy, Android, iOS, Windows, macOS, Linux, FreeBSD
 
 ## Notes for downstream
 
