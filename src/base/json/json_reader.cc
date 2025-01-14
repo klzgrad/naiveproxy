@@ -13,7 +13,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "build/build_config.h"
 
-#if !BUILDFLAG(IS_NACL)
+#if 0  // Disables Rust
 #include "base/strings/string_view_rust.h"
 #include "third_party/rust/serde_json_lenient/v0_2/wrapper/functions.h"
 #include "third_party/rust/serde_json_lenient/v0_2/wrapper/lib.rs.h"
@@ -23,7 +23,7 @@ namespace base {
 
 // TODO(crbug.com/40811643): Move the C++ parser into components/nacl to just
 // run in-process there. Don't compile base::JSONReader on NaCL at all.
-#if !BUILDFLAG(IS_NACL)
+#if 0  // Disables Rust
 
 namespace {
 using serde_json_lenient::ContextPointer;
@@ -135,7 +135,7 @@ JSONReader::Result DecodeJSONInRust(std::string_view json,
 std::optional<Value> JSONReader::Read(std::string_view json,
                                       int options,
                                       size_t max_depth) {
-#if BUILDFLAG(IS_NACL)
+#if 1  // Disables Rust
   internal::JSONParser parser(options, max_depth);
   return parser.Parse(json);
 #else   // BUILDFLAG(IS_NACL)
@@ -179,7 +179,7 @@ std::optional<Value::List> JSONReader::ReadList(std::string_view json,
 JSONReader::Result JSONReader::ReadAndReturnValueWithError(
     std::string_view json,
     int options) {
-#if BUILDFLAG(IS_NACL)
+#if 1  // Disables Rust
   internal::JSONParser parser(options);
   auto value = parser.Parse(json);
   if (!value) {
@@ -219,7 +219,7 @@ bool JSONReader::UsingRust() {
   if (!base::FeatureList::GetInstance()) {
     return false;
   }
-#if BUILDFLAG(IS_NACL)
+#if 1  // Disables Rust
   return false;
 #else
   return base::FeatureList::IsEnabled(base::features::kUseRustJsonParser);
