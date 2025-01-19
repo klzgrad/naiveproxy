@@ -19,10 +19,6 @@ SECTION_PATTERN = re.compile(r"^ *\[ *[0-9]+\] +(\S+) +\S+ + ([0-9a-f]+) .*$")
 # Some otherwise disallowed symbols are referenced in the linux-chromeos build.
 # To continue supporting it, allow these symbols to remain enabled.
 SYMBOL_ALLOWLIST = {
-    "fts64_close",
-    "fts64_open",
-    "fts64_read",
-    "memfd_create",
 }
 
 

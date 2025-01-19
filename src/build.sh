@@ -77,6 +77,7 @@ flags="$flags"'
 
   enable_backup_ref_ptr_support=false
   enable_dangling_raw_ptr_checks=false
+  enable_shadow_metadata=false
 '
 
 if [ "$WITH_SYSROOT" ]; then
