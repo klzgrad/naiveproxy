@@ -155,10 +155,11 @@
 // RISC-V 64-bit
 #define SIMDUTF_IS_RISCV64 1
 
-#if __clang_major__ >= 19
-// Does the compiler support target regions for RISC-V
-#define SIMDUTF_HAS_RVV_TARGET_REGION 1
-#endif
+  //#if __riscv_v_intrinsic >= 1000000
+  //  #define SIMDUTF_HAS_RVV_INTRINSICS 1
+  //  #define SIMDUTF_HAS_RVV_TARGET_REGION 1
+  //#elif ...
+  // Check for special compiler versions that implement pre v1.0 intrinsics
 
 #if __riscv_v_intrinsic >= 11000
 #define SIMDUTF_HAS_RVV_INTRINSICS 1
