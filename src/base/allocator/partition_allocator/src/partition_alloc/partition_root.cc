@@ -55,6 +55,10 @@
 #include <pthread.h>
 #endif  // PA_BUILDFLAG(IS_LINUX) || PA_BUILDFLAG(IS_CHROMEOS)
 
+#if defined(__MUSL__)
+#include "partition_alloc/shim/allocator_shim.h"
+#endif
+
 namespace partition_alloc::internal {
 
 #if PA_BUILDFLAG(RECORD_ALLOC_INFO)
@@ -322,9 +326,25 @@ void PartitionAllocMallocInitOnce() {
   // However, no perfect solution really exists to make threads + fork()
   // cooperate, but deadlocks are real (and fork() is used in DEATH_TEST()s),
   // and other malloc() implementations use the same techniques.
+
+#if defined(__MUSL__)
+    allocator_shim::AllocatorDispatch d =
+        *allocator_shim::GetAllocatorDispatchChainHeadForTesting();
+    d.alloc_function = +[](size_t size, void*) -> void* {
+      // The size of the scratch fits struct atfork_funcs in Musl pthread_atfork.c.
+      static char scratch[5 * sizeof(void*)];
+      return size != sizeof(scratch) ? nullptr : scratch;
+    };
+    allocator_shim::InsertAllocatorDispatch(&d);
+#endif
+
   int err =
       pthread_atfork(BeforeForkInParent, AfterForkInParent, AfterForkInChild);
   PA_CHECK(err == 0);
+
+#if defined(__MUSL__)
+    allocator_shim::RemoveAllocatorDispatchForTesting(&d);
+#endif
 #endif  // PA_BUILDFLAG(IS_LINUX) || PA_BUILDFLAG(IS_CHROMEOS)
 }
 
