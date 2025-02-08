@@ -52,6 +52,10 @@
 #include <pthread.h>
 #endif  // PA_BUILDFLAG(IS_LINUX) || PA_BUILDFLAG(IS_CHROMEOS)
 
+#if defined(__MUSL__)
+#include "partition_alloc/shim/allocator_shim.h"
+#endif
+
 namespace partition_alloc::internal {
 
 #if PA_BUILDFLAG(RECORD_ALLOC_INFO)
@@ -64,7 +68,6 @@ void RecordAllocOrFree(uintptr_t addr, size_t size) {
                   kAllocInfoSize] = {addr, size};
 }
 #endif  // PA_BUILDFLAG(RECORD_ALLOC_INFO)
-
 
 }  // namespace partition_alloc::internal
 
@@ -277,9 +280,27 @@ void PartitionAllocMallocInitOnce() {
   // However, no perfect solution really exists to make threads + fork()
   // cooperate, but deadlocks are real (and fork() is used in DEATH_TEST()s),
   // and other malloc() implementations use the same techniques.
+
+#if defined(__MUSL__)
+  allocator_shim::AllocatorDispatch d =
+      *allocator_shim::GetAllocatorDispatchChainHeadForTesting();
+  d.alloc_function =
+      +[](size_t size, allocator_shim::AllocToken, void*) -> void* {
+    // The size of the scratch fits struct atfork_funcs in Musl
+    // pthread_atfork.c.
+    static char scratch[5 * sizeof(void*)];
+    return size != sizeof(scratch) ? nullptr : scratch;
+  };
+  allocator_shim::InsertAllocatorDispatch(&d);
+#endif
+
   int err =
       pthread_atfork(BeforeForkInParent, AfterForkInParent, AfterForkInChild);
   PA_CHECK(err == 0);
+
+#if defined(__MUSL__)
+  allocator_shim::RemoveAllocatorDispatchForTesting(&d);
+#endif
 #endif  // PA_BUILDFLAG(IS_LINUX) || PA_BUILDFLAG(IS_CHROMEOS)
 }
 
@@ -1366,8 +1387,8 @@ bool PartitionRoot::TryReallocInPlaceForNormalBuckets(
     }
 #endif  // PA_BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT) &&
         // PA_BUILDFLAG(DCHECKS_ARE_ON)
-    // Write a new trailing cookie only when it is possible to keep track
-    // raw size (otherwise we wouldn't know where to look for it later).
+        // Write a new trailing cookie only when it is possible to keep track
+        // raw size (otherwise we wouldn't know where to look for it later).
 #if PA_BUILDFLAG(USE_PARTITION_COOKIE)
     if (settings_.use_cookie) {
       internal::PartitionCookieWriteValue(PA_UNSAFE_TODO(
