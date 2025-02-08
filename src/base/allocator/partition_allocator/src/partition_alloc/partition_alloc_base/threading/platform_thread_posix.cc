@@ -27,6 +27,10 @@
 #include <zircon/process.h>
 #endif
 
+#if defined(__MUSL__)
+#include "partition_alloc/shim/allocator_shim.h"
+#endif
+
 namespace partition_alloc::internal::base {
 
 #if PA_BUILDFLAG(IS_LINUX) || PA_BUILDFLAG(IS_CHROMEOS)
@@ -58,7 +62,22 @@ thread_local bool g_is_main_thread = true;
 class InitAtFork {
  public:
   InitAtFork() {
+#if defined(__MUSL__)
+    allocator_shim::AllocatorDispatch d =
+        *allocator_shim::GetAllocatorDispatchChainHeadForTesting();
+    d.alloc_function = +[](size_t size, void*) -> void* {
+      // The size of the scratch fits struct atfork_funcs in Musl pthread_atfork.c.
+      static char scratch[5 * sizeof(void*)];
+      return size != sizeof(scratch) ? nullptr : scratch;
+    };
+    allocator_shim::InsertAllocatorDispatch(&d);
+#endif
+
     pthread_atfork(nullptr, nullptr, internal::InvalidateTidCache);
+
+#if defined(__MUSL__)
+    allocator_shim::RemoveAllocatorDispatchForTesting(&d);
+#endif
   }
 };
 
