@@ -59,7 +59,9 @@ thread_local bool g_is_main_thread = true;
 class InitAtFork {
  public:
   InitAtFork() {
+#if !defined(__MUSL__)
     pthread_atfork(nullptr, nullptr, internal::InvalidateTidCache);
+#endif
   }
 };
 
