@@ -458,11 +458,17 @@ static int parse_eops(extop **result, bool critical, int elem)
                 /* Subexpression is empty */
                 eop->type = EOT_NOTHING;
             } else if (!subexpr->next) {
-                /* Subexpression is a single element, flatten */
-                eop->val   = subexpr->val;
-                eop->type  = subexpr->type;
-                eop->dup  *= subexpr->dup;
-                nasm_free(subexpr);
+                /*
+                 * Subexpression is a single element, flatten.
+                 * Note that if subexpr has an allocated buffer associated
+                 * with it, freeing it would free the buffer, too, so
+                 * we need to move subexpr up, not eop down.
+                 */
+                if (!subexpr->elem)
+                    subexpr->elem = eop->elem;
+                subexpr->dup *= eop->dup;
+                nasm_free(eop);
+                eop = subexpr;
             } else {
                 eop->type = EOT_EXTOP;
             }
