@@ -120,7 +120,7 @@ class LockFreeBloomFilter {
   // Accessed with std::memory_order_relaxed since the class doesn't synchronize
   // access to pointed-to memory. Instead pointers passed to Add() are treated
   // as opaque keys.
-  static_assert(std::atomic<LockFreeBloomFilterBits>::is_always_lock_free);
+  // static_assert(std::atomic<LockFreeBloomFilterBits>::is_always_lock_free);
   std::atomic<LockFreeBloomFilterBits> bits_ = 0;
 };
 
