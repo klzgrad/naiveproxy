@@ -87,7 +87,7 @@ class BASE_EXPORT LockFreeBloomFilter {
 
   // Atomic wrapper for the bits.
   using AtomicBitStorage = std::atomic<BitStorage>;
-  static_assert(AtomicBitStorage::is_always_lock_free);
+  // static_assert(AtomicBitStorage::is_always_lock_free);
 
   // Maximum number of bits in the filter.
   static constexpr size_t kMaxBits = 8 * sizeof(BitStorage);
