@@ -13,6 +13,7 @@
 #include "base/metrics/field_trial_params.h"
 #include "build/build_config.h"
 #include "net/base/load_flags.h"
+#include "net/base/net_export.h"
 #include "net/base/proxy_chain.h"
 #include "net/base/proxy_server.h"
 #include "net/dns/public/secure_dns_policy.h"
@@ -207,7 +208,7 @@ base::TimeDelta ClientSocketPoolManager::unused_idle_socket_timeout(
   return base::Seconds(kPreconnectIntervalSec);
 }
 
-int InitSocketHandleForHttpRequest(
+int NET_EXPORT InitSocketHandleForHttpRequest(
     url::SchemeHostPort endpoint,
     int request_load_flags,
     RequestPriority request_priority,
