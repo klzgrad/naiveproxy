@@ -8,6 +8,7 @@ mkdir -p "$TMPDIR"
 if [ "$1" = debug ]; then
   out=out/Debug
   flags="
+    chrome_pgo_phase=0
     is_debug=true
     is_component_build=true"
 else
@@ -16,6 +17,7 @@ else
     is_official_build=true
     exclude_unwind_tables=true
     enable_resource_allowlist_generation=false
+    chrome_pgo_phase=2
     symbol_level=0"
 fi
 
@@ -51,7 +53,6 @@ flags="$flags"'
   treat_warnings_as_errors=false
 
   is_cronet_build=true
-  chrome_pgo_phase=2
 
   enable_base_tracing=false
   use_udev=false

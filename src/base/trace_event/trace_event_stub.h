@@ -390,19 +390,19 @@ class TracedArray;
 class TracedDictionary;
 class EventContext;
 
-class StaticString {
+class BASE_EXPORT StaticString {
  public:
   template <typename T>
   StaticString(T) {}
 };
 
-class DynamicString {
+class BASE_EXPORT DynamicString {
  public:
   template <typename T>
   explicit DynamicString(T) {}
 };
 
-class TracedValue {
+class BASE_EXPORT TracedValue {
  public:
   void WriteInt64(int64_t) && {}
   void WriteUInt64(uint64_t) && {}
@@ -417,7 +417,7 @@ class TracedValue {
   TracedArray WriteArray() &&;
 };
 
-class TracedDictionary {
+class BASE_EXPORT TracedDictionary {
  public:
   TracedValue AddItem(StaticString) { return TracedValue(); }
   TracedValue AddItem(DynamicString) { return TracedValue(); }
@@ -433,7 +433,7 @@ class TracedDictionary {
   TracedArray AddArray(DynamicString);
 };
 
-class TracedArray {
+class BASE_EXPORT TracedArray {
  public:
   TracedValue AppendItem() { return TracedValue(); }
 
@@ -447,16 +447,16 @@ class TracedArray {
 template <class T>
 void WriteIntoTracedValue(TracedValue, T&&) {}
 
-struct Track {
+struct BASE_EXPORT Track {
   explicit Track(uint64_t id) {}
 };
 
-struct NamedTrack {
+struct BASE_EXPORT NamedTrack {
   template <class T>
   explicit NamedTrack(T name, uint64_t id = 0, Track parent = Track{0}) {}
 };
 
-struct Flow {
+struct BASE_EXPORT Flow {
   static inline Flow ProcessScoped(uint64_t flow_id) { return Flow(); }
   static inline Flow FromPointer(void* ptr) { return Flow(); }
   static inline Flow Global(uint64_t flow_id) { return Flow(); }
