@@ -1,0 +1,1008 @@
+\C{lang} The NASM Language
+
+\H{syntax} Layout of a NASM Source Line
+
+Like most assemblers, each NASM source line contains (unless it
+is a macro, a preprocessor directive or an assembler directive: see
+\k{preproc} and \k{directive}) some combination of the four fields
+
+\c label:    instruction operands        ; comment
+
+As usual, most of these fields are optional; the presence or absence
+of any combination of a label, an instruction and a \i{comment} is
+allowed.  Of course, the operand field is either required or forbidden
+by the presence and nature of the instruction field.
+
+NASM uses backslash (\\) as the line continuation character; if a line
+ends with backslash, the next line is considered to be a part of the
+backslash-ended line.
+
+NASM places no restrictions on white space within a line: labels may
+have white space before them, or instructions may have no space
+before them, or anything. The \i{colon} after a label is also
+optional. (Note that this means that if you intend to code \c{lodsb}
+alone on a line, and type \c{lodab} by accident, then that's still a
+valid source line which does nothing but define a label. Running
+NASM with the command-line option
+\I{label-orphan}\c{-w+orphan-labels} will cause it to warn you if
+you define a label alone on a line without a \i{trailing colon}.)
+
+\i{Valid characters} in labels are letters, numbers, \c{_}, \c{$},
+\c{#}, \c{@}, \c{~}, \c{.}, and \c{?}. The only characters which may
+be used as the \e{first} character of an identifier are letters,
+\c{.} (with special meaning: see \k{locallab}), \c{_} and \c{?}.
+An identifier may also be prefixed with a \I{$, prefix}\c{$} to
+indicate that it is intended to be read as an identifier and not a
+reserved word; thus, if some other module you are linking with
+defines a symbol called \c{eax}, you can refer to \c{$eax} in NASM
+code to distinguish the symbol from the register. Maximum length of
+an identifier is 4095 characters.
+
+The instruction field may contain any machine instruction: Pentium and
+P6 instructions, FPU instructions, MMX instructions and even
+undocumented instructions are all supported. The instruction may be
+prefixed by \c{LOCK}, \c{REP}, \c{REPE}/\c{REPZ}, \c{REPNE}/\c{REPNZ},
+\c{XACQUIRE}/\c{XRELEASE} or \c{BND}/\c{NOBND}, in the usual
+way. Explicit \I{address-size prefixes}address-size and
+\i{operand-size prefixes} \i\c{A16}, \i\c{A32}, \i\c{A64}, \i\c{O16}
+and \i\c{O32}, \i\c{O64} are provided - one example of their use is
+given in \k{mixsize}. You can also use the name of a \I{segment
+override}segment register as an instruction prefix: coding \c{es mov
+[bx],ax} is equivalent to coding \c{mov [es:bx],ax}. We recommend the
+latter syntax, since it is consistent with other syntactic features of
+the language, but for instructions such as \c{LODSB}, which has no
+operands and yet can require a segment override, there is no clean
+syntactic way to proceed apart from \c{es lodsb}.
+
+An instruction is not required to use a prefix: prefixes such as
+\c{CS}, \c{A32}, \c{LOCK} or \c{REPE} can appear on a line by
+themselves, and NASM will just generate the prefix bytes.
+
+In addition to actual machine instructions, NASM also supports a
+number of pseudo-instructions, described in \k{pseudop}.
+
+Instruction \i{operands} may take a number of forms: they can be
+registers, described simply by the register name (e.g. \c{ax},
+\c{bp}, \c{ebx}, \c{cr0}: NASM does not use the \c{gas}-style
+syntax in which register names must be prefixed by a \c{%} sign), or
+they can be \i{effective addresses} (see \k{effaddr}), constants
+(\k{const}) or expressions (\k{expr}).
+
+For x87 \i{floating-point} instructions, NASM accepts a wide range of
+syntaxes: you can use two-operand forms like MASM supports, or you
+can use NASM's native single-operand forms in most cases.
+\# Details of
+\# all forms of each supported instruction are given in
+\# \k{iref}.
+For example, you can code:
+
+\c         fadd    st1             ; this sets st0 := st0 + st1
+\c         fadd    st0,st1         ; so does this
+\c
+\c         fadd    st1,st0         ; this sets st1 := st1 + st0
+\c         fadd    to st1          ; so does this
+
+Almost any x87 floating-point instruction that references memory must
+use one of the prefixes \i\c{DWORD}, \i\c{QWORD} or \i\c{TWORD} to
+indicate what size of \i{memory operand} it refers to.
+
+
+\H{pseudop} \i{Pseudo-Instructions}
+
+Pseudo-instructions are things which, though not real x86 machine
+instructions, are used in the instruction field anyway because that's
+the most convenient place to put them. The current pseudo-instructions
+are \i\c{DB}, \i\c{DW}, \i\c{DD}, \i\c{DQ}, \i\c{DT}, \i\c{DO},
+\i\c{DY} and \i\c\{DZ}; their \I{storage,
+uninitialized}\i{uninitialized} counterparts \i\c{RESB}, \i\c{RESW},
+\i\c{RESD}, \i\c{RESQ}, \i\c{REST}, \i\c{RESO}, \i\c{RESY} and
+\i\c\{RESZ}; the \i\c{INCBIN} command, the \i\c{EQU} command, and the
+\i\c{TIMES} prefix.
+
+In this documentation, the notation "\c{D}\e{x}" and "\c{RES}\e{x}" is
+used to indicate all the \c{DB} and \c{RESB} type directives,
+respectively.
+
+
+\S{db} \c{D}\e{x}: Declaring Initialized Data
+
+\i\c{DB}, \i\c{DW}, \i\c{DD}, \i\c{DQ}, \i\c{DT}, \i\c{DO}, \i\c{DY}
+and \i\c{DZ} (collectively "\c{D}\e{x}" in this documentation) are used,
+much as in MASM, to declare initialized data in the output file. They
+can be invoked in a wide range of ways:
+\I{floating-point}\I{character constant}\I{string constant}
+
+\c       db    0x55                ; just the byte 0x55
+\c       db    0x55,0x56,0x57      ; three bytes in succession
+\c       db    'a',0x55            ; character constants are OK
+\c       db    'hello',13,10,'$'   ; so are string constants
+\c       dw    0x1234              ; 0x34 0x12
+\c       dw    'a'                 ; 0x61 0x00 (it's just a number)
+\c       dw    'ab'                ; 0x61 0x62 (character constant)
+\c       dw    'abc'               ; 0x61 0x62 0x63 0x00 (string)
+\c       dd    0x12345678          ; 0x78 0x56 0x34 0x12
+\c       dd    1.234567e20         ; floating-point constant
+\c       dq    0x123456789abcdef0  ; eight byte constant
+\c       dq    1.234567e20         ; double-precision float
+\c       dt    1.234567e20         ; extended-precision float
+
+\c{DT}, \c{DO}, \c{DY} and \c{DZ} do not accept integer
+\i{numeric constants} as operands.
+
+\I{masmdb} Starting in NASM 2.15, a the following \i{MASM}-like features
+have been implemented:
+
+\b A \I{?db}\c{?} argument to declare \i{uninitialized storage}:
+
+\c       db    ?                   ; uninitialized
+
+\b A superset of the \i\c{DUP} syntax. The NASM version of this has
+the following syntax specification; capital letters indicate literal
+keywords:
+
+\c      dx      := DB | DW | DD | DQ | DT | DO | DY | DZ
+\c      type    := BYTE | WORD | DWORD | QWORD | TWORD | OWORD | YWORD | ZWORD
+\c      atom    := expression | string | float | '?'
+\c      parlist := '(' value [',' value ...] ')'
+\c      duplist := expression DUP [type] ['%'] parlist
+\c      list    := duplist | '%' parlist | type ['%'] parlist
+\c      value   := [type] atom | list
+\c
+\c      stmt    := dx value [',' value ...]
+
+\> Note that a \e{list} needs to be prefixed with a \I{%db}\c{%} sign unless
+prefixed by either \c{DUP} or a \e{type} in order to avoid confusing it with
+a parenthesis starting an expression. The following expressions are all
+valid:
+
+\c        db 33
+\c        db (44)		; Integer expression
+\c      ; db (44,55)		; Invalid - error
+\c        db %(44,55)
+\c        db %('XX','YY')
+\c        db ('AA')		; Integer expression - outputs single byte
+\c        db %('BB')		; List, containing a string
+\c        db ?
+\c        db 6 dup (33)
+\c        db 6 dup (33, 34)
+\c        db 6 dup (33, 34), 35
+\c        db 7 dup (99)
+\c        db 7 dup dword (?, word ?, ?)
+\c        dw byte (?,44)
+\c        dw 3 dup (0xcc, 4 dup byte ('PQR'), ?), 0xabcd
+\c        dd 16 dup (0xaaaa, ?, 0xbbbbbb)
+\c        dd 64 dup (?)
+
+\I{baddb} The use of \c{$} (current address) in a \c{D}\e{x} statement is
+undefined in the current version of NASM, \e{except in the following
+cases}:
+
+\b For the first expression in the statement, either a \c{DUP} or a data
+item.
+
+\b An expression of the form "\e{value}\c{ - $}", which is converted
+to a self-relative relocation.
+
+Future versions of NASM is likely to produce a different result or
+issue an error this case.
+
+There is no such restriction on using \c{$$} or section-relative
+symbols.
+
+\S{resb} \c{RESB} and Friends: Declaring \i{Uninitialized} Data
+
+\i\c{RESB}, \i\c{RESW}, \i\c{RESD}, \i\c{RESQ}, \i\c{REST},
+\i\c{RESO}, \i\c{RESY} and \i\c\{RESZ} are designed to be used in the
+BSS section of a module: they declare \e{uninitialized} storage
+space. Each takes a single operand, which is the number of bytes,
+words, doublewords or whatever to reserve. The operand to a
+\c{RESB}-type pseudo-instruction \e{would} be a \i\e{critical
+expression} (see \k{crit}), except that for legacy compatibility
+reasons forward references are permitted, however \e{the code will be
+extremely fragile and this should be considered a severe programming
+error.} A warning will be issued; code generating this warning should
+be remedied as quickly as possible (see the \c{forward} class in
+\k{warnings}.)
+
+For example:
+
+\c buffer:         resb    64              ; reserve 64 bytes
+\c wordvar:        resw    1               ; reserve a word
+\c realarray       resq    10              ; array of ten reals
+\c ymmval:         resy    1               ; one YMM register
+\c zmmvals:        resz    32              ; 32 ZMM registers
+
+\I{masmdb} Since NASM 2.15, the MASM syntax of using \I{?db}\c{?}
+and \i\c{DUP} in the \c{D}\e{x} directives is also supported. Thus,
+the above example could also be written:
+
+\c buffer:         db      64 dup (?)      ; reserve 64 bytes
+\c wordvar:        dw      ?               ; reserve a word
+\c realarray       dq      10 dup (?)      ; array of ten reals
+\c ymmval:         dy      ?               ; one YMM register
+\c zmmvals:        dz      32 dup (?)      ; 32 ZMM registers
+
+
+\S{incbin} \i\c{INCBIN}: Including External \i{Binary Files}
+
+\c{INCBIN} includes binary file data verbatim into the output
+file. This can be handy for (for example) including \i{graphics} and
+\i{sound} data directly into a game executable file. It can be called
+in one of these three ways:
+
+\c     incbin  "file.dat"             ; include the whole file
+\c     incbin  "file.dat",1024        ; skip the first 1024 bytes
+\c     incbin  "file.dat",1024,512    ; skip the first 1024, and
+\c                                    ; actually include at most 512
+
+\c{INCBIN} is both a directive and a standard macro; the standard
+macro version searches for the file in the include file search path
+and adds the file to the dependency lists.  This macro can be
+overridden if desired.
+
+
+\S{equ} \i\c{EQU}: Defining Constants
+
+\c{EQU} defines a symbol to a given constant value: when \c{EQU} is
+used, the source line must contain a label. The action of \c{EQU} is
+to define the given label name to the value of its (only) operand.
+This definition is absolute, and cannot change later. So, for
+example,
+
+\c message         db      'hello, world'
+\c msglen          equ     $-message
+
+defines \c{msglen} to be the constant 12. \c{msglen} may not then be
+redefined later. This is not a \i{preprocessor} definition either:
+the value of \c{msglen} is evaluated \e{once}, using the value of
+\c{$} (see \k{expr} for an explanation of \c{$}) at the point of
+definition, rather than being evaluated wherever it is referenced
+and using the value of \c{$} at the point of reference.
+
+
+\S{times} \i\c{TIMES}: \i{Repeating} Instructions or Data
+
+The \c{TIMES} prefix causes the instruction to be assembled multiple
+times. This is partly present as NASM's equivalent of the \i\c{DUP}
+syntax supported by \i{MASM}-compatible assemblers, in that you can
+code
+
+\c zerobuf:        times 64 db 0
+
+or similar things; but \c{TIMES} is more versatile than that. The
+argument to \c{TIMES} is not just a numeric constant, but a numeric
+\e{expression}, so you can do things like
+
+\c buffer: db      'hello, world'
+\c         times 64-$+buffer db ' '
+
+which will store exactly enough spaces to make the total length of
+\c{buffer} up to 64. Finally, \c{TIMES} can be applied to ordinary
+instructions, so you can code trivial \i{unrolled loops} in it:
+
+\c         times 100 movsb
+
+Note that there is no effective difference between \c{times 100 resb
+1} and \c{resb 100}, except that the latter will be assembled about
+100 times faster due to the internal structure of the assembler.
+
+The operand to \c{TIMES} is a critical expression (\k{crit}).
+
+Note also that \c{TIMES} can't be applied to \i{macros}: the reason
+for this is that \c{TIMES} is processed after the macro phase, which
+allows the argument to \c{TIMES} to contain expressions such as
+\c{64-$+buffer} as above. To repeat more than one line of code, or a
+complex macro, use the preprocessor \i\c{%rep} directive.
+
+
+\H{effaddr} Effective Addresses
+
+An \i{effective address} is any operand to an instruction which
+\I{memory reference}references memory. Effective addresses, in NASM,
+have a very simple syntax: they consist of an expression evaluating
+to the desired address, enclosed in \i{square brackets}. For
+example:
+
+\c wordvar dw      123
+\c         mov     ax,[wordvar]
+\c         mov     ax,[wordvar+1]
+\c         mov     ax,[es:wordvar+bx]
+
+Anything not conforming to this simple system is not a valid memory
+reference in NASM, for example \c{es:wordvar[bx]}.
+
+More complicated effective addresses, such as those involving more
+than one register, work in exactly the same way:
+
+\c         mov     eax,[ebx*2+ecx+offset]
+\c         mov     ax,[bp+di+8]
+
+NASM is capable of doing \i{algebra} on these effective addresses,
+so that things which don't necessarily \e{look} legal are perfectly
+all right:
+
+\c     mov     eax,[ebx*5]             ; assembles as [ebx*4+ebx]
+\c     mov     eax,[label1*2-label2]   ; ie [label1+(label1-label2)]
+
+Some forms of effective address have more than one assembled form;
+in most such cases NASM will generate the smallest form it can. For
+example, there are distinct assembled forms for the 32-bit effective
+addresses \c{[eax*2+0]} and \c{[eax+eax]}, and NASM will generally
+generate the latter on the grounds that the former requires four
+bytes to store a zero offset.
+
+NASM has a hinting mechanism which will cause \c{[eax+ebx]} and
+\c{[ebx+eax]} to generate different opcodes; this is occasionally
+useful because \c{[esi+ebp]} and \c{[ebp+esi]} have different
+default segment registers.
+
+However, you can force NASM to generate an effective address in a
+particular form by the use of the keywords \c{BYTE}, \c{WORD},
+\c{DWORD} and \c{NOSPLIT}. If you need \c{[eax+3]} to be assembled
+using a double-word offset field instead of the one byte NASM will
+normally generate, you can code \c{[dword eax+3]}. Similarly, you
+can force NASM to use a byte offset for a small value which it
+hasn't seen on the first pass (see \k{crit} for an example of such a
+code fragment) by using \c{[byte eax+offset]}. As special cases,
+\c{[byte eax]} will code \c{[eax+0]} with a byte offset of zero, and
+\c{[dword eax]} will code it with a double-word offset of zero. The
+normal form, \c{[eax]}, will be coded with no offset field.
+
+The form described in the previous paragraph is also useful if you
+are trying to access data in a 32-bit segment from within 16 bit code.
+For more information on this see the section on mixed-size addressing
+(\k{mixaddr}). In particular, if you need to access data with a known
+offset that is larger than will fit in a 16-bit value, if you don't
+specify that it is a dword offset, nasm will cause the high word of
+the offset to be lost.
+
+Similarly, NASM will split \c{[eax*2]} into \c{[eax+eax]} because
+that allows the offset field to be absent and space to be saved; in
+fact, it will also split \c{[eax*2+offset]} into
+\c{[eax+eax+offset]}. You can combat this behaviour by the use of
+the \c{NOSPLIT} keyword: \c{[nosplit eax*2]} will force
+\c{[eax*2+0]} to be generated literally. \c{[nosplit eax*1]} also has the
+same effect. In another way, a split EA form \c{[0, eax*2]} can be used, too.
+However, \c{NOSPLIT} in \c{[nosplit eax+eax]} will be ignored because user's
+intention here is considered as \c{[eax+eax]}.
+
+In 64-bit mode, NASM will by default generate absolute addresses.  The
+\i\c{REL} keyword makes it produce \c{RIP}-relative addresses. Since
+this is frequently the normally desired behaviour, see the \c{DEFAULT}
+directive (\k{default}). The keyword \i\c{ABS} overrides \i\c{REL}.
+
+A new form of split effective address syntax is also supported. This is
+mainly intended for mib operands as used by MPX instructions, but can
+be used for any memory reference. The basic concept of this form is
+splitting base and index.
+
+\c      mov eax,[ebx+8,ecx*4]   ; ebx=base, ecx=index, 4=scale, 8=disp
+
+For mib operands, there are several ways of writing effective address depending
+on the tools. NASM supports all currently possible ways of mib syntax:
+
+\c      ; bndstx
+\c      ; next 5 lines are parsed same
+\c      ; base=rax, index=rbx, scale=1, displacement=3
+\c      bndstx [rax+0x3,rbx], bnd0      ; NASM - split EA
+\c      bndstx [rbx*1+rax+0x3], bnd0    ; GAS - '*1' indecates an index reg
+\c      bndstx [rax+rbx+3], bnd0        ; GAS - without hints
+\c      bndstx [rax+0x3], bnd0, rbx     ; ICC-1
+\c      bndstx [rax+0x3], rbx, bnd0     ; ICC-2
+
+When broadcasting decorator is used, the opsize keyword should match
+the size of each element.
+
+\c      VDIVPS zmm4, zmm5, dword [rbx]{1to16}   ; single-precision float
+\c      VDIVPS zmm4, zmm5, zword [rbx]          ; packed 512 bit memory
+
+
+\H{const} \i{Constants}
+
+NASM understands four different types of constant: numeric,
+character, string and floating-point.
+
+
+\S{numconst} \i{Numeric Constants}
+
+A numeric constant is simply a number. NASM allows you to specify
+numbers in a variety of number bases, in a variety of ways: you can
+suffix \c{H} or \c{X}, \c{D} or \c{T}, \c{Q} or \c{O}, and \c{B} or
+\c{Y} for \i{hexadecimal}, \i{decimal}, \i{octal} and \i{binary}
+respectively, or you can prefix \c{0x}, for hexadecimal in the style
+of C, or you can prefix \c{$} for hexadecimal in the style of Borland
+Pascal or Motorola Assemblers. Note, though, that the \I{$,
+prefix}\c{$} prefix does double duty as a prefix on identifiers (see
+\k{syntax}), so a hex number prefixed with a \c{$} sign must have a
+digit after the \c{$} rather than a letter.  In addition, current
+versions of NASM accept the prefix \c{0h} for hexadecimal, \c{0d} or
+\c{0t} for decimal, \c{0o} or \c{0q} for octal, and \c{0b} or \c{0y}
+for binary.  Please note that unlike C, a \c{0} prefix by itself does
+\e{not} imply an octal constant!
+
+Numeric constants can have underscores (\c{_}) interspersed to break
+up long strings.
+
+Some examples (all producing exactly the same code):
+
+\c         mov     ax,200          ; decimal
+\c         mov     ax,0200         ; still decimal
+\c         mov     ax,0200d        ; explicitly decimal
+\c         mov     ax,0d200        ; also decimal
+\c         mov     ax,0c8h         ; hex
+\c         mov     ax,$0c8         ; hex again: the 0 is required
+\c         mov     ax,0xc8         ; hex yet again
+\c         mov     ax,0hc8         ; still hex
+\c         mov     ax,310q         ; octal
+\c         mov     ax,310o         ; octal again
+\c         mov     ax,0o310        ; octal yet again
+\c         mov     ax,0q310        ; octal yet again
+\c         mov     ax,11001000b    ; binary
+\c         mov     ax,1100_1000b   ; same binary constant
+\c         mov     ax,1100_1000y   ; same binary constant once more
+\c         mov     ax,0b1100_1000  ; same binary constant yet again
+\c         mov     ax,0y1100_1000  ; same binary constant yet again
+
+\S{strings} \I{string}\I{string constants}\i{Character Strings}
+
+A character string consists of up to eight characters enclosed in
+either single quotes (\c{'...'}), double quotes (\c{"..."}) or
+backquotes (\c{`...`}).  Single or double quotes are equivalent to
+NASM (except of course that surrounding the constant with single
+quotes allows double quotes to appear within it and vice versa); the
+contents of those are represented verbatim.  Strings enclosed in
+backquotes support C-style \c{\\}-escapes for special characters.
+
+
+The following \i{escape sequences} are recognized by backquoted strings:
+
+\c       \'          single quote (')
+\c       \"          double quote (")
+\c       \`          backquote (`)
+\c       \\\          backslash (\)
+\c       \?          question mark (?)
+\c       \a          BEL (ASCII 7)
+\c       \b          BS  (ASCII 8)
+\c       \t          TAB (ASCII 9)
+\c       \n          LF  (ASCII 10)
+\c       \v          VT  (ASCII 11)
+\c       \f          FF  (ASCII 12)
+\c       \r          CR  (ASCII 13)
+\c       \e          ESC (ASCII 27)
+\c       \377        Up to 3 octal digits - literal byte
+\c       \xFF        Up to 2 hexadecimal digits - literal byte
+\c       \u1234      4 hexadecimal digits - Unicode character
+\c       \U12345678  8 hexadecimal digits - Unicode character
+
+All other escape sequences are reserved.  Note that \c{\\0}, meaning a
+\c{NUL} character (ASCII 0), is a special case of the octal escape
+sequence.
+
+\i{Unicode} characters specified with \c{\\u} or \c{\\U} are converted to
+\i{UTF-8}.  For example, the following lines are all equivalent:
+
+\c       db `\u263a`            ; UTF-8 smiley face
+\c       db `\xe2\x98\xba`      ; UTF-8 smiley face
+\c       db 0E2h, 098h, 0BAh    ; UTF-8 smiley face
+
+
+\S{chrconst} \i{Character Constants}
+
+A character constant consists of a string up to eight bytes long, used
+in an expression context.  It is treated as if it was an integer.
+
+A character constant with more than one byte will be arranged
+with \i{little-endian} order in mind: if you code
+
+\c           mov eax,'abcd'
+
+then the constant generated is not \c{0x61626364}, but
+\c{0x64636261}, so that if you were then to store the value into
+memory, it would read \c{abcd} rather than \c{dcba}. This is also
+the sense of character constants understood by the Pentium's
+\i\c{CPUID} instruction.
+
+
+\S{strconst} \i{String Constants}
+
+String constants are character strings used in the context of some
+pseudo-instructions, namely the
+\I\c{DW}\I\c{DD}\I\c{DQ}\I\c{DT}\I\c{DO}\I\c{DY}\i\c{DB} family and
+\i\c{INCBIN} (where it represents a filename.)  They are also used in
+certain preprocessor directives.
+
+A string constant looks like a character constant, only longer. It
+is treated as a concatenation of maximum-size character constants
+for the conditions. So the following are equivalent:
+
+\c       db    'hello'               ; string constant
+\c       db    'h','e','l','l','o'   ; equivalent character constants
+
+And the following are also equivalent:
+
+\c       dd    'ninechars'           ; doubleword string constant
+\c       dd    'nine','char','s'     ; becomes three doublewords
+\c       db    'ninechars',0,0,0     ; and really looks like this
+
+Note that when used in a string-supporting context, quoted strings are
+treated as a string constants even if they are short enough to be a
+character constant, because otherwise \c{db 'ab'} would have the same
+effect as \c{db 'a'}, which would be silly. Similarly, three-character
+or four-character constants are treated as strings when they are
+operands to \c{DW}, and so forth.
+
+\S{unicode} \I{UTF-16}\I{UTF-32}\i{Unicode} Strings
+
+The special operators \i\c{__?utf16?__}, \i\c{__?utf16le?__},
+\i\c{__?utf16be?__}, \i\c{__?utf32?__}, \i\c{__?utf32le?__} and
+\i\c{__?utf32be?__} allows definition of Unicode strings.  They take a
+string in UTF-8 format and converts it to UTF-16 or UTF-32,
+respectively.  Unless the \c{be} forms are specified, the output is
+littleendian.
+
+For example:
+
+\c %define u(x) __?utf16?__(x)
+\c %define w(x) __?utf32?__(x)
+\c
+\c       dw u('C:\WINDOWS'), 0       ; Pathname in UTF-16
+\c       dd w(`A + B = \u206a`), 0   ; String in UTF-32
+
+The UTF operators can be applied either to strings passed to the
+\c{DB} family instructions, or to character constants in an expression
+context.
+
+\S{fltconst} \I{floating-point, constants}Floating-Point Constants
+
+\i{Floating-point} constants are acceptable only as arguments to
+\i\c{DB}, \i\c{DW}, \i\c{DD}, \i\c{DQ}, \i\c{DT}, and \i\c{DO}, or as
+arguments to the special operators \i\c{__?float8?__},
+\i\c{__?float16?__}, \i\c{__?bfloat16?__}, \i\c{__?float32?__},
+\i\c{__?float64?__}, \i\c{__?float80m?__}, \i\c{__?float80e?__},
+\i\c{__?float128l?__}, and \i\c{__?float128h?__}. See also \k{pkg_fp}.
+
+Floating-point constants are expressed in the traditional form:
+digits, then a period, then optionally more digits, then optionally an
+\c{E} followed by an exponent. The period is mandatory, so that NASM
+can distinguish between \c{dd 1}, which declares an integer constant,
+and \c{dd 1.0} which declares a floating-point constant.
+
+NASM also support C99-style hexadecimal floating-point: \c{0x},
+hexadecimal digits, period, optionally more hexadeximal digits, then
+optionally a \c{P} followed by a \e{binary} (not hexadecimal) exponent
+in decimal notation.  As an extension, NASM additionally supports the
+\c{0h} and \c{$} prefixes for hexadecimal, as well binary and octal
+floating-point, using the \c{0b} or \c{0y} and \c{0o} or \c{0q}
+prefixes, respectively.
+
+Underscores to break up groups of digits are permitted in
+floating-point constants as well.
+
+Some examples:
+
+\c       db    -0.2                    ; "Quarter precision"
+\c       dw    -0.5                    ; IEEE 754r/SSE5 half precision
+\c       dd    1.2                     ; an easy one
+\c       dd    1.222_222_222           ; underscores are permitted
+\c       dd    0x1p+2                  ; 1.0x2^2 = 4.0
+\c       dq    0x1p+32                 ; 1.0x2^32 = 4 294 967 296.0
+\c       dq    1.e10                   ; 10 000 000 000.0
+\c       dq    1.e+10                  ; synonymous with 1.e10
+\c       dq    1.e-10                  ; 0.000 000 000 1
+\c       dt    3.141592653589793238462 ; pi
+\c       do    1.e+4000                ; IEEE 754r quad precision
+
+The 8-bit "quarter-precision" floating-point format is
+sign:exponent:mantissa = 1:4:3 with an exponent bias of 7.  This
+appears to be the most frequently used 8-bit floating-point format,
+although it is not covered by any formal standard.  This is sometimes
+called a "\i{minifloat}."
+
+The \i\c{bfloat16} format is effectively a compressed version of the
+32-bit single precision format, with a reduced mantissa. It is
+effectively the same as truncating the 32-bit format to the upper 16
+bits, except for rounding. There is no \c{D}\e{x} directive that
+corresponds to \c{bfloat16} as it obviously has the same size as the
+IEEE standard 16-bit half precision format, see however \k{pkg_fp}.
+
+The special operators are used to produce floating-point numbers in
+other contexts.  They produce the binary representation of a specific
+floating-point number as an integer, and can use anywhere integer
+constants are used in an expression.  \c{__?float80m?__} and
+\c{__?float80e?__} produce the 64-bit mantissa and 16-bit exponent of an
+80-bit floating-point number, and \c{__?float128l?__} and
+\c{__?float128h?__} produce the lower and upper 64-bit halves of a 128-bit
+floating-point number, respectively.
+
+For example:
+
+\c       mov    rax,__?float64?__(3.141592653589793238462)
+
+... would assign the binary representation of pi as a 64-bit floating
+point number into \c{RAX}.  This is exactly equivalent to:
+
+\c       mov    rax,0x400921fb54442d18
+
+NASM cannot do compile-time arithmetic on floating-point constants.
+This is because NASM is designed to be portable - although it always
+generates code to run on x86 processors, the assembler itself can
+run on any system with an ANSI C compiler. Therefore, the assembler
+cannot guarantee the presence of a floating-point unit capable of
+handling the \i{Intel number formats}, and so for NASM to be able to
+do floating arithmetic it would have to include its own complete set
+of floating-point routines, which would significantly increase the
+size of the assembler for very little benefit.
+
+The special tokens \i\c{__?Infinity?__}, \i\c{__?QNaN?__} (or
+\i\c{__?NaN?__}) and \i\c{__?SNaN?__} can be used to generate
+\I{infinity}infinities, quiet \i{NaN}s, and signalling NaNs,
+respectively.  These are normally used as macros:
+
+\c %define Inf __?Infinity?__
+\c %define NaN __?QNaN?__
+\c
+\c       dq    +1.5, -Inf, NaN         ; Double-precision constants
+
+The \c{%use fp} standard macro package contains a set of convenience
+macros.  See \k{pkg_fp}.
+
+\S{bcdconst} \I{floating-point, packed BCD constants}Packed BCD Constants
+
+x87-style packed BCD constants can be used in the same contexts as
+80-bit floating-point numbers.  They are suffixed with \c{p} or
+prefixed with \c{0p}, and can include up to 18 decimal digits.
+
+As with other numeric constants, underscores can be used to separate
+digits.
+
+For example:
+
+\c       dt 12_345_678_901_245_678p
+\c       dt -12_345_678_901_245_678p
+\c       dt +0p33
+\c       dt 33p
+
+
+\H{expr} \i{Expressions}
+
+Expressions in NASM are similar in syntax to those in C.  Expressions
+are evaluated as 64-bit integers which are then adjusted to the
+appropriate size.
+
+NASM supports two special tokens in expressions, allowing
+calculations to involve the current assembly position: the
+\I{$, here}\c{$} and \i\c{$$} tokens. \c{$} evaluates to the assembly
+position at the beginning of the line containing the expression; so
+you can code an \i{infinite loop} using \c{JMP $}. \c{$$} evaluates
+to the beginning of the current section; so you can tell how far
+into the section you are by using \c{($-$$)}.
+
+The arithmetic \i{operators} provided by NASM are listed here, in
+increasing order of \i{precedence}.
+
+A \e{boolean} value is true if nonzero and false if zero. The
+operators which return a boolean value always return 1 for true and 0
+for false.
+
+
+\S{exptri} \I{?op}\c{?} ... \c{:}: Conditional Operator
+
+The syntax of this operator, similar to the C conditional operator, is:
+
+\e{boolean} \c{?} \e{trueval} \c{:} \e{falseval}
+
+This operator evaluates to \e{trueval} if \e{boolean} is true,
+otherwise to \e{falseval}.
+
+Note that NASM allows \c{?} characters in symbol names. Therefore, it
+is highly advisable to always put spaces around the \c{?} and \c{:}
+characters.
+
+
+\S{expbor}: \i\c{||}: \i{Boolean OR} Operator
+
+The \c{||} operator gives a boolean OR: it evaluates to 1 if both sides of
+the expression are nonzero, otherwise 0.
+
+
+\S{expbxor}: \i\c{^^}: \i{Boolean XOR} Operator
+
+The \c{^^} operator gives a boolean XOR: it evaluates to 1 if any one side of
+the expression is nonzero, otherwise 0.
+
+
+\S{expband}: \i\c{&&}: \i{Boolean AND} Operator
+
+The \c{&&} operator gives a boolean AND: it evaluates to 1 if both sides of
+the expression is nonzero, otherwise 0.
+
+
+\S{exprel}: \i{Comparison Operators}
+
+NASM supports the following comparison operators:
+
+\b \i\c{=} or \i\c{==} compare for equality.
+
+\b \i\c{!=} or \i\c{<>} compare for inequality.
+
+\b \i\c{<} compares signed less than.
+
+\b \i\c{<=} compares signed less than or equal.
+
+\b \i\c{>} compares signed greater than.
+
+\b \i\c{>=} compares signed greater than or equal.
+
+These operators evaluate to 0 for false or 1 for true.
+
+\b \i{<=>} does a signed comparison, and evaluates to -1 for less
+than, 0 for equal, and 1 for greater than.
+
+At this time, NASM does not provide unsigned comparison operators.
+
+
+\S{expor} \i\c{|}: \i{Bitwise OR} Operator
+
+The \c{|} operator gives a bitwise OR, exactly as performed by the
+\c{OR} machine instruction.
+
+
+\S{expxor} \i\c{^}: \i{Bitwise XOR} Operator
+
+\c{^} provides the bitwise XOR operation.
+
+
+\S{expand} \i\c{&}: \i{Bitwise AND} Operator
+
+\c{&} provides the bitwise AND operation.
+
+
+\S{expshift} \i{Bit Shift} Operators
+
+\i\c{<<} gives a bit-shift to the left, just as it does in C. So
+\c{5<<3} evaluates to 5 times 8, or 40. \i\c{>>} gives an \I{unsigned,
+bit shift}\e{unsigned} (logical) bit-shift to the right; the bits
+shifted in from the left are set to zero.
+
+\i\c{<<<} gives a bit-shift to the left, exactly equivalent to the
+\c{<<} operator; it is included for completeness. \i\c{>>>} gives an
+\I{signed, bit shift}\e{signed} (arithmetic) bit-shift to the right;
+the bits shifted in from the left are filled with copies of the most
+significant (sign) bit.
+
+
+\S{expplmi} \I{+ opaddition}\c{+} and \I{- opsubtraction}\c{-}:
+\i{Addition} and \i{Subtraction} Operators
+
+The \c{+} and \c{-} operators do perfectly ordinary addition and
+subtraction.
+
+
+\S{expmul} \i{Multiplication}, \i{Division} and \i{Modulo}
+
+\i\c{*} is the multiplication operator.
+
+\i\c{/} and \i\c{//} are both division operators: \c{/} is
+\I{division, unsigned}\I{unsigned, division}unsigned division and \c{//} is
+\I{division, signed}\I{signed, division}signed division.
+
+Similarly, \i\c{%} and \i\c{%%} provide \I{modulo,
+unsigned}\I{unsigned, modulo}unsigned and \I{modulo, signed}\I{signed,
+modulo}signed modulo operators respectively.
+
+Since the \c{%} character is used extensively by the macro
+\i{preprocessor}, you should ensure that both the signed and unsigned
+modulo operators are followed by white space wherever they appear.
+
+NASM, like ANSI C, provides no guarantees about the sensible
+operation of the signed modulo operator. On most systems it will match
+the signed division operator, such that:
+
+\c      b * (a // b) + (a %% b) = a       (b != 0)
+
+
+\S{expmul} \I{operators, unary}\i{Unary Operators}
+
+The highest-priority operators in NASM's expression grammar are those
+which only apply to one argument.  These are:
+
+\b \I{- opunary}\c{-} \I{arithmetic negation}negates (\i{2's complement}) its
+operand.
+
+\b \I{+ opunary}\c{+} does nothing; it's provided for symmetry with \c{-}.
+
+\b \I{~ opunary}\c{~} computes the \I{negation, bitwise}\i{bitwise
+negation} (\i{1's complement}) of its operand.
+
+\b \I{! opunary}\c{!} is the \I{negation, boolean}\i{boolean negation}
+operator. It evaluates to 1 if the argument is 0, otherwise 0.
+
+\b \c{SEG} provides the \i{segment address} of its operand (explained in
+more detail in \k{segwrt}).
+
+\b A set of additional operators with leading and trailing double
+underscores are used to implement the \c{integer functions} of the
+\c{ifunc} macro package, see \k{pkg_ifunc}.
+
+
+\H{segwrt} \i\c{SEG} and \i\c{WRT}
+
+When writing large 16-bit programs, which must be split into
+multiple \i{segments}, it is often necessary to be able to refer to
+the \I{segment address}segment part of the address of a symbol. NASM
+supports the \c{SEG} operator to perform this function.
+
+The \c{SEG} operator evaluates to the \i\e{preferred} segment base of a
+symbol, defined as the segment base relative to which the offset of
+the symbol makes sense. So the code
+
+\c         mov     ax,seg symbol
+\c         mov     es,ax
+\c         mov     bx,symbol
+
+will load \c{ES:BX} with a valid pointer to the symbol \c{symbol}.
+
+Things can be more complex than this: since 16-bit segments and
+\i{groups} may \I{overlapping segments}overlap, you might occasionally
+want to refer to some symbol using a different segment base from the
+preferred one. NASM lets you do this, by the use of the \c{WRT}
+(With Reference To) keyword. So you can do things like
+
+\c         mov     ax,weird_seg        ; weird_seg is a segment base
+\c         mov     es,ax
+\c         mov     bx,symbol wrt weird_seg
+
+to load \c{ES:BX} with a different, but functionally equivalent,
+pointer to the symbol \c{symbol}.
+
+NASM supports far (inter-segment) calls and jumps by means of the
+syntax \c{call segment:offset}, where \c{segment} and \c{offset}
+both represent immediate values. So to call a far procedure, you
+could code either of
+
+\c         call    (seg procedure):procedure
+\c         call    weird_seg:(procedure wrt weird_seg)
+
+(The parentheses are included for clarity, to show the intended
+parsing of the above instructions. They are not necessary in
+practice.)
+
+NASM supports the syntax \I\c{CALL FAR}\c{call far procedure} as a
+synonym for the first of the above usages. \c{JMP} works identically
+to \c{CALL} in these examples.
+
+To declare a \i{far pointer} to a data item in a data segment, you
+must code
+
+\c         dw      symbol, seg symbol
+
+NASM supports no convenient synonym for this, though you can always
+invent one using the macro processor.
+
+
+\H{strict} \i\c{STRICT}: Inhibiting Optimization
+
+When assembling with the optimizer set to level 2 or higher (see
+\k{opt-O}), NASM will use size specifiers (\c{BYTE}, \c{WORD},
+\c{DWORD}, \c{QWORD}, \c{TWORD}, \c{OWORD}, \c{YWORD} or \c{ZWORD}),
+but will give them the smallest possible size. The keyword \c{STRICT}
+can be used to inhibit optimization and force a particular operand to
+be emitted in the specified size. For example, with the optimizer on,
+and in \c{BITS 16} mode,
+
+\c         push dword 33
+
+is encoded in three bytes \c{66 6A 21}, whereas
+
+\c         push strict dword 33
+
+is encoded in six bytes, with a full dword immediate operand \c{66 68
+21 00 00 00}.
+
+With the optimizer off, the same code (six bytes) is generated whether
+the \c{STRICT} keyword was used or not.
+
+
+\H{crit} \i{Critical Expressions}
+
+Although NASM has an optional multi-pass optimizer, there are some
+expressions which must be resolvable on the first pass. These are
+called \e{Critical Expressions}.
+
+The first pass is used to determine the size of all the assembled
+code and data, so that the second pass, when generating all the
+code, knows all the symbol addresses the code refers to. So one
+thing NASM can't handle is code whose size depends on the value of a
+symbol declared after the code in question. For example,
+
+\c         times (label-$) db 0
+\c label:  db      'Where am I?'
+
+The argument to \i\c{TIMES} in this case could equally legally
+evaluate to anything at all; NASM will reject this example because
+it cannot tell the size of the \c{TIMES} line when it first sees it.
+It will just as firmly reject the slightly \I{paradox}paradoxical
+code
+
+\c         times (label-$+1) db 0
+\c label:  db      'NOW where am I?'
+
+in which \e{any} value for the \c{TIMES} argument is by definition
+wrong!
+
+NASM rejects these examples by means of a concept called a
+\e{critical expression}, which is defined to be an expression whose
+value is required to be computable in the first pass, and which must
+therefore depend only on symbols defined before it. The argument to
+the \c{TIMES} prefix is a critical expression.
+
+\H{locallab} \i{Local Labels}
+
+NASM gives special treatment to symbols beginning with a \i{period}.
+A label beginning with a single period is treated as a \e{local}
+label, which means that it is associated with the previous non-local
+label. So, for example:
+
+\c label1  ; some code
+\c
+\c .loop
+\c         ; some more code
+\c
+\c         jne     .loop
+\c         ret
+\c
+\c label2  ; some code
+\c
+\c .loop
+\c         ; some more code
+\c
+\c         jne     .loop
+\c         ret
+
+In the above code fragment, each \c{JNE} instruction jumps to the
+line immediately before it, because the two definitions of \c{.loop}
+are kept separate by virtue of each being associated with the
+previous non-local label.
+
+This form of local label handling is borrowed from the old Amiga
+assembler \i{DevPac}; however, NASM goes one step further, in
+allowing access to local labels from other parts of the code. This
+is achieved by means of \e{defining} a local label in terms of the
+previous non-local label: the first definition of \c{.loop} above is
+really defining a symbol called \c{label1.loop}, and the second
+defines a symbol called \c{label2.loop}. So, if you really needed
+to, you could write
+
+\c label3  ; some more code
+\c         ; and some more
+\c
+\c         jmp label1.loop
+
+Sometimes it is useful - in a macro, for instance - to be able to
+define a label which can be referenced from anywhere but which
+doesn't interfere with the normal local-label mechanism. Such a
+label can't be non-local because it would interfere with subsequent
+definitions of, and references to, local labels; and it can't be
+local because the macro that defined it wouldn't know the label's
+full name. NASM therefore introduces a third type of label, which is
+probably only useful in macro definitions: if a label begins with
+the \I{label prefix}special prefix \i\c{..@}, then it does nothing
+to the local label mechanism. So you could code
+
+\c label1:                         ; a non-local label
+\c .local:                         ; this is really label1.local
+\c ..@foo:                         ; this is a special symbol
+\c label2:                         ; another non-local label
+\c .local:                         ; this is really label2.local
+\c
+\c         jmp     ..@foo          ; this will jump three lines up
+
+NASM has the capacity to define other special symbols beginning with
+a double period: for example, \c{..start} is used to specify the
+entry point in the \c{obj} output format (see \k{dotdotstart}),
+\c{..imagebase} is used to find out the offset from a base address
+of the current image in the \c{win64} output format (see \k{win64pic}).
+So just keep in mind that symbols beginning with a double period are
+special.
+
+
