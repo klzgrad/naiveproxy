@@ -1,0 +1,416 @@
+\C{stdmac} \i{Standard Macros}
+
+NASM defines a set of standard macros, which are already defined when
+it starts to process any source file. If you really need a program to
+be assembled with no pre-defined macros, you can use the \i\c{%clear}
+directive to empty the preprocessor of everything but context-local
+preprocessor variables and single-line macros, see \k{clear}.
+
+Most \i{user-level directives} (see \k{directive}) are implemented as
+macros which invoke primitive directives; these are described in
+\k{directive}. The rest of the standard macro set is described here.
+
+For compatibility with NASM versions before NASM 2.15, most standard
+macros of the form \c{__?foo?__} have aliases of form \c{__foo__} (see
+\k{defalias}). These can be removed with the directive \c{%clear
+defalias}.
+
+
+\H{stdmacver} \i{NASM Version Macros}
+
+The single-line macros \i\c{__?NASM_MAJOR?__}, \i\c{__?NASM_MINOR?__},
+\i\c{__?NASM_SUBMINOR?__} and \i\c{__?NASM_PATCHLEVEL?__} expand to the
+major, minor, subminor and patch level parts of the \i{version
+number of NASM} being used. So, under NASM 0.98.32p1 for
+example, \c{__?NASM_MAJOR?__} would be defined to be 0, \c{__?NASM_MINOR?__}
+would be defined as 98, \c{__?NASM_SUBMINOR?__} would be defined to 32,
+and \c{__?NASM_PATCHLEVEL?__} would be defined as 1.
+
+Additionally, the macro \i\c{__?NASM_SNAPSHOT?__} is defined for
+automatically generated snapshot releases \e{only}.
+
+
+\S{stdmacverid} \i\c{__?NASM_VERSION_ID?__}: \i{NASM Version ID}
+
+The single-line macro \c{__?NASM_VERSION_ID?__} expands to a dword integer
+representing the full version number of the version of nasm being used.
+The value is the equivalent to \c{__?NASM_MAJOR?__}, \c{__?NASM_MINOR?__},
+\c{__?NASM_SUBMINOR?__} and \c{__?NASM_PATCHLEVEL?__} concatenated to
+produce a single doubleword. Hence, for 0.98.32p1, the returned number
+would be equivalent to:
+
+\c         dd      0x00622001
+
+or
+
+\c         db      1,32,98,0
+
+Note that the above lines are generate exactly the same code, the second
+line is used just to give an indication of the order that the separate
+values will be present in memory.
+
+
+\S{stdmacverstr} \i\c{__?NASM_VER?__}: \i{NASM Version String}
+
+The single-line macro \c{__?NASM_VER?__} expands to a string which defines
+the version number of nasm being used. So, under NASM 0.98.32 for example,
+
+\c         db      __?NASM_VER?__
+
+would expand to
+
+\c         db      "0.98.32"
+
+
+\H{fileline} \i\c{__?FILE?__} and \i\c{__?LINE?__}: File Name and Line Number
+
+Like the C preprocessor, NASM allows the user to find out the file
+name and line number containing the current instruction. The macro
+\c{__?FILE?__} expands to a string constant giving the name of the
+current input file (which may change through the course of assembly
+if \c{%include} directives are used), and \c{__?LINE?__} expands to a
+numeric constant giving the current line number in the input file.
+
+These macros could be used, for example, to communicate debugging
+information to a macro, since invoking \c{__?LINE?__} inside a macro
+definition (either single-line or multi-line) will return the line
+number of the macro \e{call}, rather than \e{definition}. So to
+determine where in a piece of code a crash is occurring, for
+example, one could write a routine \c{stillhere}, which is passed a
+line number in \c{EAX} and outputs something like \c{line 155: still
+here}. You could then write a macro:
+
+\c %macro  notdeadyet 0
+\c
+\c         push    eax
+\c         mov     eax,__?LINE?__
+\c         call    stillhere
+\c         pop     eax
+\c
+\c %endmacro
+
+and then pepper your code with calls to \c{notdeadyet} until you
+find the crash point.
+
+
+\H{bitsm} \i\c{__?BITS?__}: Current Code Generation Mode
+
+The \c{__?BITS?__} standard macro is updated every time that the BITS mode is
+set using the \c{BITS XX} or \c{[BITS XX]} directive, where XX is a valid mode
+number of 16, 32 or 64. \c{__?BITS?__} receives the specified mode number and
+makes it globally available. This can be very useful for those who utilize
+mode-dependent macros.
+
+\H{ofmtm} \i\c{__?OUTPUT_FORMAT?__}: Current Output Format
+
+The \c{__?OUTPUT_FORMAT?__} standard macro holds the current output
+format name, as given by the \c{-f} option or NASM's default. Type
+\c{nasm -h} for a list.
+
+\c %ifidn __?OUTPUT_FORMAT?__, win32
+\c  %define NEWLINE 13, 10
+\c %elifidn __?OUTPUT_FORMAT?__, elf32
+\c  %define NEWLINE 10
+\c %endif
+
+\H{dfmtm} \i\c{__?DEBUG_FORMAT?__}: Current Debug Format
+
+If debugging information generation is enabled, The
+\c{__?DEBUG_FORMAT?__} standard macro holds the current debug format
+name as specified by the \c{-F} or \c{-g} option or the output format
+default. Type \c{nasm -f} \e{output} \c{y} for a list.
+
+\c{__?DEBUG_FORMAT?__} is not defined if debugging is not enabled, or if
+the debug format specified is \c{null}.
+
+\H{datetime} Assembly Date and Time Macros
+
+NASM provides a variety of macros that represent the timestamp of the
+assembly session.
+
+\b The \i\c{__?DATE?__} and \i\c{__?TIME?__} macros give the assembly date and
+time as strings, in ISO 8601 format (\c{"YYYY-MM-DD"} and \c{"HH:MM:SS"},
+respectively.)
+
+\b The \i\c{__?DATE_NUM?__} and \i\c{__?TIME_NUM?__} macros give the assembly
+date and time in numeric form; in the format \c{YYYYMMDD} and
+\c{HHMMSS} respectively.
+
+\b The \i\c{__?UTC_DATE?__} and \i\c{__?UTC_TIME?__} macros give the assembly
+date and time in universal time (UTC) as strings, in ISO 8601 format
+(\c{"YYYY-MM-DD"} and \c{"HH:MM:SS"}, respectively.)  If the host
+platform doesn't provide UTC time, these macros are undefined.
+
+\b The \i\c{__?UTC_DATE_NUM?__} and \i\c{__?UTC_TIME_NUM?__} macros give the
+assembly date and time universal time (UTC) in numeric form; in the
+format \c{YYYYMMDD} and \c{HHMMSS} respectively.  If the
+host platform doesn't provide UTC time, these macros are
+undefined.
+
+\b The \c{__?POSIX_TIME?__} macro is defined as a number containing the
+number of seconds since the POSIX epoch, 1 January 1970 00:00:00 UTC;
+excluding any leap seconds.  This is computed using UTC time if
+available on the host platform, otherwise it is computed using the
+local time as if it was UTC.
+
+All instances of time and date macros in the same assembly session
+produce consistent output.  For example, in an assembly session
+started at 42 seconds after midnight on January 1, 2010 in Moscow
+(timezone UTC+3) these macros would have the following values,
+assuming, of course, a properly configured environment with a correct
+clock:
+
+\c       __?DATE?__             "2010-01-01"
+\c       __?TIME?__             "00:00:42"
+\c       __?DATE_NUM?__         20100101
+\c       __?TIME_NUM?__         000042
+\c       __?UTC_DATE?__         "2009-12-31"
+\c       __?UTC_TIME?__         "21:00:42"
+\c       __?UTC_DATE_NUM?__     20091231
+\c       __?UTC_TIME_NUM?__     210042
+\c       __?POSIX_TIME?__       1262293242
+
+
+\H{use_def} \I\c{__?USE_*?__}\c{__?USE_}\e{package}\c{?__}: Package
+Include Test
+
+When a standard macro package (see \k{macropkg}) is included with the
+\c{%use} directive (see \k{use}), a single-line macro of the form
+\c{__?USE_}\e{package}\c{?__} is automatically defined.  This allows
+testing if a particular package is invoked or not.
+
+For example, if the \c{altreg} package is included (see
+\k{pkg_altreg}), then the macro \c{__?USE_ALTREG?__} is defined.
+
+
+\H{pass_macro} \i\c{__?PASS?__}: Assembly Pass
+
+The macro \c{__?PASS?__} is defined to be \c{1} on preparatory passes,
+and \c{2} on the final pass.  In preprocess-only mode, it is set to
+\c{3}, and when running only to generate dependencies (due to the
+\c{-M} or \c{-MG} option, see \k{opt-M}) it is set to \c{0}.
+
+\e{Avoid using this macro if at all possible.  It is tremendously easy
+to generate very strange errors by misusing it, and the semantics may
+change in future versions of NASM.}
+
+
+\H{strucs} \i{Structure Data Types}
+
+\S{struc} \i\c{STRUC} and \i\c{ENDSTRUC}: \i{Declaring Structure} Data Types
+
+The core of NASM contains no intrinsic means of defining data
+structures; instead, the preprocessor is sufficiently powerful that
+data structures can be implemented as a set of macros. The macros
+\c{STRUC} and \c{ENDSTRUC} are used to define a structure data type.
+
+\c{STRUC} takes one or two parameters. The first parameter is the name
+of the data type. The second, optional parameter is the base offset of
+the structure. The name of the data type is defined as a symbol with
+the value of the base offset, and the name of the data type with the
+suffix \c{_size} appended to it is defined as an \c{EQU} giving the
+size of the structure. Once \c{STRUC} has been issued, you are
+defining the structure, and should define fields using the \c{RESB}
+family of pseudo-instructions, and then invoke \c{ENDSTRUC} to finish
+the definition.
+
+For example, to define a structure called \c{mytype} containing a
+longword, a word, a byte and a string of bytes, you might code
+
+\c struc   mytype
+\c
+\c   mt_long:      resd    1
+\c   mt_word:      resw    1
+\c   mt_byte:      resb    1
+\c   mt_str:       resb    32
+\c
+\c endstruc
+
+The above code defines six symbols: \c{mt_long} as 0 (the offset
+from the beginning of a \c{mytype} structure to the longword field),
+\c{mt_word} as 4, \c{mt_byte} as 6, \c{mt_str} as 7, \c{mytype_size}
+as 39, and \c{mytype} itself as zero.
+
+The reason why the structure type name is defined at zero by default
+is a side effect of allowing structures to work with the local label
+mechanism: if your structure members tend to have the same names in
+more than one structure, you can define the above structure like this:
+
+\c struc mytype
+\c
+\c   .long:        resd    1
+\c   .word:        resw    1
+\c   .byte:        resb    1
+\c   .str:         resb    32
+\c
+\c endstruc
+
+This defines the offsets to the structure fields as \c{mytype.long},
+\c{mytype.word}, \c{mytype.byte} and \c{mytype.str}.
+
+NASM, since it has no \e{intrinsic} structure support, does not
+support any form of period notation to refer to the elements of a
+structure once you have one (except the above local-label notation),
+so code such as \c{mov ax,[mystruc.mt_word]} is not valid.
+\c{mt_word} is a constant just like any other constant, so the
+correct syntax is \c{mov ax,[mystruc+mt_word]} or \c{mov
+ax,[mystruc+mytype.word]}.
+
+Sometimes you only have the address of the structure displaced by an
+offset. For example, consider this standard stack frame setup:
+
+\c push ebp
+\c mov ebp, esp
+\c sub esp, 40
+
+In this case, you could access an element by subtracting the offset:
+
+\c mov [ebp - 40 + mytype.word], ax
+
+However, if you do not want to repeat this offset, you can use -40 as
+a base offset:
+
+\c struc mytype, -40
+
+And access an element this way:
+
+\c mov [ebp + mytype.word], ax
+
+
+\S{istruc} \i\c{ISTRUC}, \i\c{AT} and \i\c{IEND}: Declaring
+\i{Instances of Structures}
+
+Having defined a structure type, the next thing you typically want
+to do is to declare instances of that structure in your data
+segment. NASM provides an easy way to do this in the \c{ISTRUC}
+mechanism. To declare a structure of type \c{mytype} in a program,
+you code something like this:
+
+\c mystruc:
+\c     istruc mytype
+\c
+\c         at mt_long, dd      123456
+\c         at mt_word, dw      1024
+\c         at mt_byte, db      'x'
+\c         at mt_str,  db      'hello, world', 13, 10, 0
+\c
+\c     iend
+
+The function of the \c{AT} macro is to make use of the \c{TIMES}
+prefix to advance the assembly position to the correct point for the
+specified structure field, and then to declare the specified data.
+Therefore the structure fields must be declared in the same order as
+they were specified in the structure definition.
+
+If the data to go in a structure field requires more than one source
+line to specify, the remaining source lines can easily come after
+the \c{AT} line. For example:
+
+\c         at mt_str,  db      123,134,145,156,167,178,189
+\c                     db      190,100,0
+
+Depending on personal taste, you can also omit the code part of the
+\c{AT} line completely, and start the structure field on the next
+line:
+
+\c         at mt_str
+\c                 db      'hello, world'
+\c                 db      13,10,0
+
+\H{alignment} \i{Alignment} Control
+
+\S{align} \i\c{ALIGN} and \i\c{ALIGNB}: Code and Data Alignment
+
+The \c{ALIGN} and \c{ALIGNB} macros provides a convenient way to
+align code or data on a word, longword, paragraph or other boundary.
+(Some assemblers call this directive \i\c{EVEN}.) The syntax of the
+\c{ALIGN} and \c{ALIGNB} macros is
+
+\c         align   4               ; align on 4-byte boundary
+\c         align   16              ; align on 16-byte boundary
+\c         align   8,db 0          ; pad with 0s rather than NOPs
+\c         align   4,resb 1        ; align to 4 in the BSS
+\c         alignb  4               ; equivalent to previous line
+
+Both macros require their first argument to be a power of two; they
+both compute the number of additional bytes required to bring the
+length of the current section up to a multiple of that power of two,
+and then apply the \c{TIMES} prefix to their second argument to
+perform the alignment.
+
+If the second argument is not specified, the default for \c{ALIGN}
+is \c{NOP}, and the default for \c{ALIGNB} is \c{RESB 1}. So if the
+second argument is specified, the two macros are equivalent.
+Normally, you can just use \c{ALIGN} in code and data sections and
+\c{ALIGNB} in BSS sections, and never need the second argument
+except for special purposes.
+
+\c{ALIGN} and \c{ALIGNB}, being simple macros, perform no error
+checking: they cannot warn you if their first argument fails to be a
+power of two, or if their second argument generates more than one
+byte of code. In each of these cases they will silently do the wrong
+thing.
+
+\c{ALIGNB} (or \c{ALIGN} with a second argument of \c{RESB 1}) can
+be used within structure definitions:
+
+\c struc mytype2
+\c
+\c   mt_byte:
+\c         resb 1
+\c         alignb 2
+\c   mt_word:
+\c         resw 1
+\c         alignb 4
+\c   mt_long:
+\c         resd 1
+\c   mt_str:
+\c         resb 32
+\c
+\c endstruc
+
+This will ensure that the structure members are sensibly aligned
+relative to the base of the structure.
+
+A final caveat: \c{ALIGN} and \c{ALIGNB} work relative to the
+beginning of the \e{section}, not the beginning of the address space
+in the final executable. Aligning to a 16-byte boundary when the
+section you're in is only guaranteed to be aligned to a 4-byte
+boundary, for example, is a waste of effort. Again, NASM does not
+check that the section's alignment characteristics are sensible for
+the use of \c{ALIGN} or \c{ALIGNB}.
+
+Both \c{ALIGN} and \c{ALIGNB} do call \c{SECTALIGN} macro implicitly.
+See \k{sectalign} for details.
+
+See also the \c{smartalign} standard macro package, \k{pkg_smartalign}.
+
+
+\S{sectalign} \i\c{SECTALIGN}: Section Alignment
+
+The \c{SECTALIGN} macros provides a way to modify alignment attribute
+of output file section. Unlike the \c{align=} attribute (which is allowed
+at section definition only) the \c{SECTALIGN} macro may be used at any time.
+
+For example the directive
+
+\c SECTALIGN 16
+
+sets the section alignment requirements to 16 bytes. Once increased it can
+not be decreased, the magnitude may grow only.
+
+Note that \c{ALIGN} (see \k{align}) calls the \c{SECTALIGN} macro implicitly
+so the active section alignment requirements may be updated. This is by default
+behaviour, if for some reason you want the \c{ALIGN} do not call \c{SECTALIGN}
+at all use the directive
+
+\c SECTALIGN OFF
+
+It is still possible to turn in on again by
+
+\c SECTALIGN ON
+
+Note that \c{SECTALIGN <ON|OFF>} affects only the \c{ALIGN}/\c{ALIGNB} directives,
+not an explicit \c{SECTALIGN} directive.
+
+
