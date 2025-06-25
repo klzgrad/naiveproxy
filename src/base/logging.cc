@@ -33,7 +33,6 @@
 #include "base/debug/task_trace.h"
 #include "base/functional/callback.h"
 #include "base/immediate_crash.h"
-#include "base/logging/rust_logger.rs.h"
 #include "base/no_destructor.h"
 #include "base/path_service.h"
 #include "base/pending_task.h"
@@ -504,9 +503,6 @@ bool BaseInitLoggingImpl(const LoggingSettings& settings) {
     GetScopedFxLogger() = base::ScopedFxLogger::CreateForProcess();
   }
 #endif
-
-  // Connects Rust logging with the //base logging functionality.
-  internal::init_rust_log_crate();
 
   // Ignore file options unless logging to file is set.
   if ((g_logging_destination & LOG_TO_FILE) == 0) {
