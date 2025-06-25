@@ -22,13 +22,13 @@ android {
         }
     }
 
-    buildToolsVersion = "35.0.0"
+    buildToolsVersion = "36.0.0"
 
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         minSdk = 24
-        targetSdk = 35
+        targetSdk = 36
 
         applicationId = "io.nekohasekai.sagernet.plugin.naive"
         versionCode = System.getenv("APK_VERSION_NAME").removePrefix("v").split(".")[0].toInt() * 10 + System.getenv("APK_VERSION_NAME").removePrefix("v").split("-")[1].toInt()
@@ -42,8 +42,8 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
     }
 
     lint {
