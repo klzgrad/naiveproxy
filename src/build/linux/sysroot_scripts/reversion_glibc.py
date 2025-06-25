@@ -12,18 +12,15 @@ import subprocess
 MAX_ALLOWED_GLIBC_VERSION = [2, 26]
 MAX_ALLOWED_GLIBC_VERSION_ARCH = {
     "riscv64": [2, 33],
+    "loong64": [2, 99],
 }
 
-VERSION_PATTERN = re.compile("GLIBC_([0-9\.]+)")
+VERSION_PATTERN = re.compile(r"GLIBC_([0-9\.]+)")
 SECTION_PATTERN = re.compile(r"^ *\[ *[0-9]+\] +(\S+) +\S+ + ([0-9a-f]+) .*$")
 
 # Some otherwise disallowed symbols are referenced in the linux-chromeos build.
 # To continue supporting it, allow these symbols to remain enabled.
 SYMBOL_ALLOWLIST = {
-    "fts64_close",
-    "fts64_open",
-    "fts64_read",
-    "memfd_create",
 }
 
 IS_LITTLE_ENDIAN = {
@@ -36,6 +33,7 @@ IS_LITTLE_ENDIAN = {
     "ppc64el": True,
     "riscv64": True,
     "s390x": False,
+    "loong64": True,
 }
 
 
@@ -57,7 +55,7 @@ def reversion_glibc(bin_file: str, arch: str) -> None:
         ["readelf", "--dyn-syms", "--wide", bin_file]
     )
     for line in stdout.decode("utf-8").split("\n"):
-        cols = re.split("\s+", line)
+        cols = re.split(r"\s+", line)
         # Remove localentry and next element which appears only in ppc64le
         # readelf output. Keeping them causes incorrect symbol parsing
         # leading to improper GLIBC version restrictions.
