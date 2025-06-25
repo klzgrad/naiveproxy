@@ -30,11 +30,13 @@ RELEASES = {
     "mips64el": "bullseye",
     "ppc64el": "bullseye",
     "riscv64": "trixie",
+    "loong64": "sid",
 }
 
 GCC_VERSIONS = {
     "bullseye": 10,
     "trixie": 12,
+    "sid": 13,
 }
 
 
@@ -54,10 +56,6 @@ ARCHIVE_TIMESTAMP = "20250129T203412Z"
 
 ARCHIVE_URL = f"https://snapshot.debian.org/archive/debian/{ARCHIVE_TIMESTAMP}/"
 APT_SOURCES_LIST = [
-    # Debian 12 (Bookworm) is needed for GTK4.  It should be kept before
-    # bullseye so that bullseye takes precedence.
-    ("bookworm", ["main"]),
-    ("bookworm-updates", ["main"]),
     # This mimics a sources.list from bullseye.
     ("bullseye", ["main", "contrib", "non-free"]),
     ("bullseye-updates", ["main", "contrib", "non-free"]),
@@ -73,6 +71,7 @@ APT_SOURCES_LISTS = {
     "mips64el": APT_SOURCES_LIST,
     "ppc64el": APT_SOURCES_LIST,
     "riscv64": APT_SOURCES_LIST_RISCV,
+    "loong64": [("sid", ["main"])],
 }
 
 TRIPLES = {
@@ -84,6 +83,7 @@ TRIPLES = {
     "mips64el": "mips64el-linux-gnuabi64",
     "ppc64el": "powerpc64le-linux-gnu",
     "riscv64": "riscv64-linux-gnu",
+    "loong64": "loongarch64-linux-gnu",
 }
 
 LIB_DIRS = {
@@ -107,68 +107,7 @@ RELEASE_FILE_GPG = "Release.gpg"
 
 # List of development packages. Dependencies are automatically included.
 DEBIAN_PACKAGES = [
-    "libasound2-dev",
-    "libavformat-dev",
-    "libbluetooth-dev",
     "libc6-dev",
-    "libcap-dev",
-    "libcolord-dev",
-    "libcups2-dev",
-    "libcupsimage2-dev",
-    "libcurl4-gnutls-dev",
-    "libdbusmenu-glib-dev",
-    "libdeflate-dev",
-    "libelf-dev",
-    "libflac-dev",
-    "libgbm-dev",
-    "libgcrypt20-dev",
-    "libgnutls28-dev",
-    "libgtk-3-dev",
-    "libgtk-4-dev",
-    "libinput-dev",
-    "libjbig-dev",
-    "libjpeg-dev",
-    "libjsoncpp-dev",
-    "libkrb5-dev",
-    "liblcms2-dev",
-    "liblzma-dev",
-    "libminizip-dev",
-    "libmtdev-dev",
-    "libncurses-dev",
-    "libnss3-dev",
-    "libopus-dev",
-    "libpam0g-dev",
-    "libpci-dev",
-    "libpipewire-0.3-dev",
-    "libpulse-dev",
-    "libre2-dev",
-    "libsnappy-dev",
-    "libspeechd-dev",
-    "libssl-dev",
-    "libsystemd-dev",
-    "libtiff-dev",
-    "libutempter-dev",
-    "libva-dev",
-    "libvpx-dev",
-    "libwayland-egl-backend-dev",
-    "libwebp-dev",
-    "libx11-xcb-dev",
-    "libxcb-dri2-0-dev",
-    "libxcb-dri3-dev",
-    "libxcb-glx0-dev",
-    "libxcb-image0-dev",
-    "libxcb-present-dev",
-    "libxcb-render-util0-dev",
-    "libxcb-util-dev",
-    "libxshmfence-dev",
-    "libxslt1-dev",
-    "libxss-dev",
-    "libxt-dev",
-    "libxxf86vm-dev",
-    "mesa-common-dev",
-    "qt6-base-dev",
-    "qtbase5-dev",
-    "valgrind-if-available",
 ]
 
 
@@ -319,11 +258,13 @@ def generate_package_list_dist_repo(arch: str, dist: str, repo_name: str,
     download_or_copy_non_unique_filename(package_list_arch, package_list)
     verify_package_listing(package_file_arch, package_list, dist, build_dir)
 
+    # `not line.endswith(":")` is added here to handle the case of
+    # "X-Cargo-Built-Using:\n rust-adler (= 1.0.2-2), ..."
     with lzma.open(package_list, "rt") as src:
         return [
             dict(
                 line.split(": ", 1) for line in package_meta.splitlines()
-                if not line.startswith(" "))
+                if not line.startswith(" ") and not line.endswith(":"))
             for package_meta in src.read().split("\n\n") if package_meta
         ]
 
@@ -399,13 +340,6 @@ def hacks_and_patches(install_root: str, script_dir: str, arch: str) -> None:
     if os.path.exists(qtchooser_conf):
         os.remove(qtchooser_conf)
 
-    # libxcomposite1 is missing a symbols file.
-    atomic_copyfile(
-        os.path.join(script_dir, "libxcomposite1-symbols"),
-        os.path.join(install_root, "debian", "libxcomposite1", "DEBIAN",
-                     "symbols"),
-    )
-
     # __GLIBC_MINOR__ is used as a feature test macro. Replace it with the
     # earliest supported version of glibc (2.26).
     features_h = os.path.join(install_root, "usr", "include", "features.h")
@@ -459,21 +393,17 @@ def hacks_and_patches(install_root: str, script_dir: str, arch: str) -> None:
             shutil.move(os.path.join(triple_pkgconfig_dir, file),
                         pkgconfig_dir)
 
+    if not os.path.exists(os.path.join(install_root, "lib")):
+        os.symlink(os.path.join("usr", "lib"), os.path.join(install_root, "lib"))
+
+    if (os.path.exists(os.path.join(install_root, "usr", "lib64")) and
+        not os.path.exists(os.path.join(install_root, "lib64"))):
+        os.symlink(os.path.join("usr", "lib64"), os.path.join(install_root, "lib64"))
+
     # Avoid requiring unsupported glibc versions.
     for lib in ["libc.so.6", "libm.so.6", "libcrypt.so.1"]:
         lib_path = os.path.join(install_root, "lib", TRIPLES[arch], lib)
         reversion_glibc.reversion_glibc(lib_path, arch)
-
-    # GTK4 is provided by bookworm (12), but pango is provided by bullseye
-    # (11).  Fix the GTK4 pkgconfig file to relax the pango version
-    # requirement.
-    gtk4_pc = os.path.join(pkgconfig_dir, "gtk4.pc")
-    replace_in_file(gtk4_pc, r"pango [>=0-9. ]*", "pango")
-    replace_in_file(gtk4_pc, r"pangocairo [>=0-9. ]*", "pangocairo")
-
-    # Remove a cyclic symlink: /usr/bin/X11 -> /usr/bin
-    os.remove(os.path.join(install_root, "usr/bin/X11"))
-
 
 def create_extra_symlinks(install_root: str, arch: str):
     if RELEASES[arch] != "bullseye":
@@ -612,10 +542,13 @@ def removing_unnecessary_files(install_root, arch):
     gcc_triple = "i686-linux-gnu" if arch == "i386" else TRIPLES[arch]
     gcc_version = GCC_VERSIONS[RELEASES[arch]]
     ALLOWLIST = {
-        "usr/bin/cups-config",
         f"usr/lib/gcc/{gcc_triple}/{gcc_version}/libgcc.a",
         f"usr/lib/{TRIPLES[arch]}/libc_nonshared.a",
-        f"usr/lib/{TRIPLES[arch]}/libffi_pic.a",
+
+        # https://developers.redhat.com/articles/2021/12/17/why-glibc-234-removed-libpthread
+        f"usr/lib/{TRIPLES[arch]}/libdl.a",
+        f"usr/lib/{TRIPLES[arch]}/libpthread.a",
+        f"usr/lib/{TRIPLES[arch]}/librt.a",
     }
 
     for file in ALLOWLIST:
@@ -759,9 +692,9 @@ def build_sysroot(arch: str) -> None:
     create_extra_symlinks(install_root, arch)
     cleanup_jail_symlinks(install_root)
     removing_unnecessary_files(install_root, arch)
-    strip_sections(install_root, arch)
+    # Skips stripping so the sysroot can be used for testing
+    # strip_sections(install_root, arch)
     restore_metadata(install_root, old_metadata)
-    create_tarball(install_root, arch, build_dir)
 
 
 def upload_sysroot(arch: str) -> str:
@@ -827,6 +760,10 @@ def main():
     parser.add_argument("architecture", choices=list(TRIPLES))
     args = parser.parse_args()
     sanity_check(get_build_dir(args.architecture))
+
+    global ARCHIVE_URL
+    if args.architecture == "loong64":
+        ARCHIVE_URL = "https://snapshot.debian.org/archive/debian-ports/20250625T074124Z/"
 
     if args.command == "build":
         build_sysroot(args.architecture)
