@@ -381,6 +381,8 @@ component("base") {
     "hash/legacy_hash.cc",
     "hash/legacy_hash.h",
     "json/json_common.h",
+    "json/json_parser.cc",
+    "json/json_parser.h",
     "json/json_reader.cc",
     "json/json_reader.h",
     "json/json_string_value_serializer.cc",
@@ -1126,11 +1128,6 @@ component("base") {
   # Used by metrics/crc32
   deps += [ "//third_party/zlib" ]
 
-  deps += [
-    "logging/rust_logger",
-    "//third_party/rust/serde_json_lenient/v0_2/wrapper",
-  ]
-
   # `raw_ptr` cannot be made a component due to CRT symbol issues.
   # Its gateway to being a component is through `//base`, so we have
   # to provide the appropriate `#define` here.
@@ -1165,15 +1162,6 @@ component("base") {
     "//build:robolectric_buildflags",
     "//third_party/abseil-cpp:absl",
   ]
-
-  sources += [
-    "containers/span_rust.h",
-    "strings/string_view_rust.h",
-  ]
-
-  # Base provides conversions between CXX types and base types (e.g.
-  # std::string_view).
-  public_deps += [ "//build/rust:cxx_cppdeps" ]
 
   # Needed for <atomic> if using newer C++ library than sysroot, except if
   # building inside the cros_sdk environment - use host_toolchain as a
@@ -1620,8 +1608,6 @@ component("base") {
     "files/scoped_temp_file.h",
     "json/json_file_value_serializer.cc",
     "json/json_file_value_serializer.h",
-    "logging/rust_logger/print_rust_log_ffi.cc",
-    "logging/rust_logger/print_rust_log_ffi.h",
     "memory/discardable_memory.cc",
     "memory/discardable_memory.h",
     "memory/discardable_memory_allocator.cc",
@@ -2628,110 +2614,6 @@ if (is_android) {
     sources = [ "android/jni_onload.cc" ]
     deps = [ ":base" ]
   }
-}
-
-rust_static_library("scoped_refptr") {
-  sources = [ "memory/scoped_refptr.rs" ]
-  crate_root = "memory/scoped_refptr.rs"
-  allow_unsafe = true
-
-  # This file uses cxx APIs but doesn't have its own bindings
-  deps = [ "//third_party/rust/cxx/v1:lib" ]
-}
-
-rust_static_library("callback") {
-  sources = [ "functional/callback.rs" ]
-  crate_root = "functional/callback.rs"
-  cxx_bindings = [ "functional/callback.rs" ]
-  allow_unsafe = true
-  deps = [ ":scoped_refptr" ]
-}
-
-rust_static_library("run_loop") {
-  sources = [ "run_loop.rs" ]
-  crate_root = "run_loop.rs"
-  cxx_bindings = [ "run_loop.rs" ]
-  allow_unsafe = true
-  deps = [
-    ":run_loop_shim",
-    "//base",
-  ]
-}
-
-rust_static_library("sequenced_task_runner") {
-  sources = [ "task/sequenced_task_runner.rs" ]
-  crate_root = "task/sequenced_task_runner.rs"
-  cxx_bindings = [ "task/sequenced_task_runner.rs" ]
-  allow_unsafe = true
-  deps = [
-    ":callback",
-    ":run_loop",
-    ":scoped_refptr",
-    ":sequenced_task_runner_shim",
-    "//base",
-  ]
-}
-
-rust_static_library("sequenced_task_runner_test_bridge") {
-  testonly = true
-  sources = [ "task/sequenced_task_runner_test_bridge.rs" ]
-  crate_root = "task/sequenced_task_runner_test_bridge.rs"
-  cxx_bindings = [ "task/sequenced_task_runner_test_bridge.rs" ]
-  allow_unsafe = true
-  deps = [
-    ":base_rust",
-    ":scoped_refptr",
-    ":sequenced_task_runner_test_util",
-    "//base",
-  ]
-}
-
-source_set("sequenced_task_runner_test_util") {
-  testonly = true
-  sources = [
-    "task/sequenced_task_runner_test_util.cc",
-    "task/sequenced_task_runner_test_util.h",
-  ]
-  deps = [
-    "test:test_support",
-    "//base",
-  ]
-}
-
-source_set("run_loop_shim") {
-  sources = [
-    "run_loop_rust_shim.cc",
-    "run_loop_rust_shim.h",
-  ]
-
-  deps = [ "//base" ]
-}
-
-source_set("sequenced_task_runner_shim") {
-  sources = [
-    "task/sequenced_task_runner_rust_shim.cc",
-    "task/sequenced_task_runner_rust_shim.h",
-  ]
-
-  deps = [
-    ":callback",
-    "//base",
-  ]
-}
-
-rust_static_library("rust_sequences_unittests") {
-  testonly = true
-  is_gtest_unittests = true
-  allow_unsafe = true
-  sources = [ "task/sequenced_task_runner_unittest.rs" ]
-  crate_root = "task/sequenced_task_runner_unittest.rs"
-  deps = [
-    ":scoped_refptr",
-    ":sequenced_task_runner",
-    ":sequenced_task_runner_test_bridge",
-    "//base/test:task_environment",
-    "//testing/rust_gtest_interop",
-  ]
 }
 
 if (is_linux || is_chromeos) {
