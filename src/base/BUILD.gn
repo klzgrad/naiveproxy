@@ -322,6 +322,8 @@ component("base") {
     "hash/legacy_hash.cc",
     "hash/legacy_hash.h",
     "json/json_common.h",
+    "json/json_parser.cc",
+    "json/json_parser.h",
     "json/json_reader.cc",
     "json/json_reader.h",
     "json/json_string_value_serializer.cc",
@@ -1056,11 +1058,6 @@ component("base") {
   # Used by metrics/crc32
   deps += [ "//third_party/zlib" ]
 
-  deps += [
-    ":rust_logger",
-    "//third_party/rust/serde_json_lenient/v0_2/wrapper",
-  ]
-
   # `raw_ptr` cannot be made a component due to CRT symbol issues.
   # Its gateway to being a component is through `//base`, so we have
   # to provide the appropriate `#define` here.
@@ -1093,15 +1090,6 @@ component("base") {
     "//build:chromecast_buildflags",
     "//third_party/abseil-cpp:absl",
   ]
-
-  sources += [
-    "containers/span_rust.h",
-    "strings/string_view_rust.h",
-  ]
-
-  # Base provides conversions between CXX types and base types (e.g.
-  # std::string_view).
-  public_deps += [ "//build/rust:cxx_cppdeps" ]
 
   # Needed for <atomic> if using newer C++ library than sysroot, except if
   # building inside the cros_sdk environment - use host_toolchain as a
@@ -1545,8 +1533,6 @@ component("base") {
     "files/scoped_temp_file.h",
     "json/json_file_value_serializer.cc",
     "json/json_file_value_serializer.h",
-    "logging/rust_log_integration.cc",
-    "logging/rust_log_integration.h",
     "memory/discardable_memory.cc",
     "memory/discardable_memory.h",
     "memory/discardable_memory_allocator.cc",
@@ -2494,75 +2480,6 @@ component("base") {
     configs -= [ "//build/config/compiler:default_optimization" ]
     configs += [ "//build/config/compiler:optimize_max" ]
   }
-}
-
-if (is_android) {
-  # This source_set must end up in the root component of a shared library, and
-  # the NativeInitializationHook definition must also be in the root component.
-  source_set("jni_onload") {
-    sources = [
-      "android/jni_onload.cc",
-      "android/jni_onload.h",
-    ]
-    deps = [ ":base" ]
-  }
-}
-
-rust_bindgen("logging_log_severity_bindgen") {
-  # TODO(danakj): Maybe combine all base bindgen targets, or all base/logging
-  # ones even) into a single GN target? But the GN rule needs to handle multiple
-  # headers then.
-  header = "logging/log_severity.h"
-  cpp = true
-  visibility = [ ":*" ]
-
-  # Transitive generated header dependency.
-  deps = [ ":debugging_buildflags" ]
-}
-
-rust_static_library("rust_logger") {
-  allow_unsafe = true  # Unsafe needed for FFI.
-  deps = [
-    ":logging_log_severity_bindgen",
-    ":tracing_buildflags",
-    "//build:chromeos_buildflags",
-    "//third_party/rust/log/v0_4:lib",
-
-    # Needed because of circular dependency: base depends on this target and by
-    # extension the cxx-generated C++ code, but the cxx-generated code includes
-    # base headers and calls base code. This seems to generally not cause
-    # issues, except for partition_alloc which applies configs when depended on.
-    #
-    # This allows the generated C++ code to transitively include partition alloc
-    # headers without issue.
-    #
-    # TODO(collinbaker): determine how to handle these cxx bindings-induced
-    # circular dependencies more robustly.
-    "//base/allocator/partition_allocator:raw_ptr",
-
-    # Needed because logging/rust_logger.rs contains:
-    #   include!("base/logging/rust_log_integration.h");
-    # rust_log_integration.h ends up transitively #including
-    # debug/debugging_buildflags.h, which is a generated header that needs to
-    # be written first.
-    #
-    # Technically it would be more correct to depend on :base, which is the
-    # target for rust_log_integration.h, but that's not possible due to circular
-    # dependencies.
-    #
-    # Note if this is removed the build may still work by accident because
-    # debug/debugging_buildflags.h still ends up being generated through a
-    # dependency chain via :logging_log_severity_bindgen. But we should not
-    # rely on that.
-    #
-    # See also https://crbug.com/406267472.
-    ":debugging_buildflags",
-  ]
-  visibility = [ ":base" ]
-  sources = [ "logging/rust_logger.rs" ]
-  crate_root = "logging/rust_logger.rs"
-
-  cxx_bindings = [ "logging/rust_logger.rs" ]
 }
 
 if (is_linux || is_chromeos) {
