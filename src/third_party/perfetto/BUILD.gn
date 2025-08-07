@@ -305,7 +305,7 @@ if (!build_with_chromium) {
 # "libperfetto_client_experimental" targets defined within this BUILD.gn file.
 # Rationalize them with eseckler@. For now seems this one is only used from
 # chromium and the other one only from the Android tree.
-if (build_with_chromium) {
+if (true) {
   component("libperfetto") {
     public_configs = [ "gn:public_config" ]
     deps = [
@@ -347,31 +347,4 @@ if (build_with_chromium) {
     }
   }
 
-  # TODO(altimin): this is a temp workaround around very strange link failures
-  # on win-dbg-ng buildbot.
-  if (!is_win) {
-    libtrace_processor_target_type = "source_set"
-  } else {
-    libtrace_processor_target_type = "component"
-  }
-
-  # In Chromium, we want to ensure that we don't link dynamically against sqlite
-  # (as Chromium also uses a more restricted version of sqlite which is actually
-  # shipped to the users).
-  # source_set helps us to achieve that.
-  target(libtrace_processor_target_type, "libtrace_processor") {
-    public_configs = [ "gn:public_config" ]
-    deps = [ "src/trace_processor:lib" ]
-    configs -= [ "//build/config/compiler:chromium_code" ]  # nogncheck
-    configs += [ "//build/config/compiler:no_chromium_code" ]  # nogncheck
-    public_deps = [ "include/perfetto/trace_processor" ]
-  }
-  component("perfetto_test_support") {
-    testonly = true
-    public_configs = [ "gn:public_config" ]
-    configs -= [ "//build/config/compiler:chromium_code" ]  # nogncheck
-    configs += [ "//build/config/compiler:no_chromium_code" ]  # nogncheck
-    public_deps = [ "include/perfetto/test:test_support" ]
-    deps = [ "src/tracing/test:test_support" ]
-  }
 }
