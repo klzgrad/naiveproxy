@@ -1,0 +1,82 @@
+/*
+ * Copyright (C) 2023 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+package perfetto.protos;
+
+// Data source that controls the system properties used to guard initialization
+// of track_event producers (i.e. Skia) in apps using HWUI, and certain
+// processes like SurfaceFlinger.
+//
+// This data source only tells Skia to initialized the Perfetto SDK and start
+// routing data to the Track Event system instead of ATrace. For those events
+// to actually show up in a trace, the track_event data source must be used as
+// well. The Perfetto SDK cannot be de-initialized, so some long-lived apps and
+// processes may need to be restarted for Skia to revert to using ATrace if
+// Track Events are no longer desired.
+//
+// In addition to switching Skia to use Perfetto's track_event data source,
+// this "guard" also controls Skia's "broad tracing", which removes Skia's
+// internal tracing constraints and allows the track_event config to specify
+// which categories should be traced. Filtering to the "skia.always" category
+// *tag* in a track_event config can be used to re-enable the standard
+// constraints typically used with ATrace.
+//
+// Data source name: android.sdk_sysprop_guard
+// Introduced in Android 14 (U) QPR1.
+// Next id: 4
+message AndroidSdkSyspropGuardConfig {
+  // If true, configures SurfaceFlinger to initialize Skia's Perfetto
+  // integration with the track_event data source in RenderEngine.
+  // If false or omitted, the simpler ATrace fallback is used.
+  //
+  // NOTE: once enabled, Skia will only revert to ATrace if SurfaceFlinger is
+  // restarted.
+  //
+  // Specifically this sets the following system properties:
+  //   - debug.tracing.ctl.renderengine.skia_tracing_enabled
+  //   - debug.tracing.ctl.renderengine.skia_use_perfetto_track_events
+  //
+  // Does not affect actual track_event data *collection*, which must be
+  // configured separately.
+  optional bool surfaceflinger_skia_track_events = 1;
+
+  // If true, configures HWUI apps to initialize Skia's Perfetto integration
+  // with the track_event data source. hwui_package_name_filter
+  // can be used to control which apps are affected.
+  // If false or omitted, the simpler ATrace fallback is used.
+  //
+  // NOTE: once enabled, Skia will only revert to ATrace if the app is
+  // restarted.
+  //
+  // ATTENTION: affects ALL HWUI APPS if hwui_package_name_filter is not set!
+  // If filtering is NOT set, this controls these GLOBAL system properties:
+  //   - debug.tracing.ctl.hwui.skia_tracing_enabled
+  //   - debug.tracing.ctl.hwui.skia_use_perfetto_track_events
+  // If filtering IS set, this controls these APP-SPECIFIC system properties,
+  // for each package listed in the filter:
+  //   - debug.tracing.ctl.hwui.skia_tracing_enabled.<package.name>
+  //   - debug.tracing.ctl.hwui.skia_use_perfetto_track_events.<package.name>
+  //
+  // Does not affect actual track_event data *collection*, which must be
+  // configured separately.
+  optional bool hwui_skia_track_events = 2;
+
+  // If non-empty, hwui_skia_track_events applies to only the packages listed.
+  // Otherwise, hwui_skia_track_events applies globally to all HWUI apps.
+  repeated string hwui_package_name_filter = 3;
+}

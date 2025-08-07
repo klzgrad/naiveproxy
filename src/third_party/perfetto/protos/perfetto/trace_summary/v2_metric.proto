@@ -1,0 +1,430 @@
+/*
+ * Copyright (C) 2025 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+package perfetto.protos;
+
+import "protos/perfetto/perfetto_sql/structured_query.proto";
+
+// The spec for a v2 trace-based metric.
+//
+// Conceptually, a v2 trace-based metric is very similar to metrics in other
+// analytics system: it corresponds to a "value", some numerical property of
+// the trace which can be measured and a set of "dimensions" which correspond to
+// extra context about that value. Metrics also have an "id" which uniquely
+// identifies them within a single trace summary.
+//
+// Finally, the `query` field specified how trace processor should compute the
+// metric from the trace. We use the standard `PerfettoSqlStructuredQuery` proto
+// for this: please see the documentation there for more details on writing it.
+//
+// For a simple example: suppose you wanted to average memory usage broken down
+// by process name. Since the PerfettoSQL Standard Library already has
+// primitives for this, this is easily accomplished with the following spec:
+//
+// ```
+// id: "memory_per_process"
+// dimensions: "process_name"
+// value: "avg_rss_and_swap"
+// query: {
+//   table: {
+//     table_name: "memory_rss_and_swap_per_process"
+//     module_name: "linux.memory.process"
+//   }
+//   group_by: {
+//     column_names: "process_name"
+//     aggregates: {
+//       column_name: "rss_and_swap"
+//       op: DURATION_WEIGHTED_MEAN
+//       result_column_name: "avg_rss_and_swap"
+//     }
+//   }
+// }
+// ```
+//
+// A common usecase is to restrict the period of interest to only certain time
+// periods of interest, for example, only the time spaned by a test run or a
+// Critical User Journey (CUJ). We can use the `interval_intersect` operation
+// for this.
+//
+// Suppose the CUJ of interest was represented by a slice matched by the glob
+// `<J>Cuj*`. The spec would look like:
+//
+// ```
+// id: "memory_per_process_and_cuj"
+// dimensions: "process_name"
+// dimensions: "cuj_name"
+// value: "avg_rss_and_swap"
+// query: {
+//   interval_intersect: {
+//      base: {
+//        table: {
+//          table_name: "memory_rss_and_swap_per_process"
+//          module_name: "linux.memory.process"
+//        }
+//      }
+//      interval_intersect: {
+//        simple_slices: {
+//          slice_name_glob: "<J>Cuj*"
+//        }
+//        select_columns: {
+//          column_name: "slice_name"
+//          alias: "cuj_name"
+//        }
+//      }
+//   }
+//   group_by: {
+//     column_names: "process_name"
+//     column_names: "cuj_name"
+//     aggregates: {
+//       column_name: "rss_and_swap"
+//       op: DURATION_WEIGHTED_MEAN
+//       result_column_name: "avg_rss_and_swap"
+//     }
+//   }
+// }
+// ```
+//
+// A more complex example might: suppose you wanted to find the total CPU time
+// of the `foo` slice in the `bar` thread while the `baz` CUJ (represented by
+// a slice in `system_server`) was happening. You can accomplish that with the
+// spec:
+// ```
+// id: "sum_foo_cpu_time_during_baz"
+// value: "sum_cpu_time"
+// query: {
+//   interval_intersect: {
+//      base: {
+//        table: {
+//          table_name: "thread_slice_cpu_time"
+//          module_name: "linux.memory.process"
+//        }
+//        filters: {
+//          column_name: "thread_name"
+//          op: EQUAL
+//          string_rhs: "bar"
+//        }
+//      }
+//      interval_intersect: {
+//        simple_slices: {
+//          slice_name_glob: "baz"
+//          process_name_glob: "system_server"
+//        }
+//      }
+//   }
+//   group_by: {
+//     aggregates: {
+//       column_name: "cpu_time"
+//       op: SUM
+//       result_column_name: "sum_cpu_time"
+//     }
+//   }
+// }
+// ```
+//
+//
+// Note: if you are familiar with v1 trace-based metrics, there is a pretty big
+// difference between the two: while v1 metrics were very flexible with respect
+// to their output schema, v2 metrics give up that flexibility in exchange for
+// being able to build general pupose systems which consume the result of
+// metrics. This makes it possible e.g. to have an automatic metric viewer in
+// the Perfetto UI visualizing the results of running a metric.
+//
+// Next id: 8
+message TraceMetricV2Spec {
+  // The id of the metric. Required.
+  //
+  // An opaque field but the convention is to use lowecase + underscores (i.e.
+  // foo_bar). Note that this is not enforced.
+  optional string id = 1;
+
+  // The columns from `query` which will act as the "dimensions" for the metric.
+  // Optional.
+  //
+  // Either `dimensions` or `dimensions_specs`` should be defined, but not both.
+  //
+  // If `dimensions` is defined, the type of the dimension is inferred from the
+  // sql column type. If `dimensions_specs` is defined, the type must be
+  // specified and must match the type of the sql column.
+  enum DimensionType {
+    DIMENSION_TYPE_UNSPECIFIED = 0;
+    STRING = 1;
+    INT64 = 2;
+    DOUBLE = 3;
+  }
+  message DimensionSpec {
+    optional string name = 1;
+    optional DimensionType type = 2;
+  }
+  repeated DimensionSpec dimensions_specs = 5;
+  repeated string dimensions = 2;
+
+  // The column from `query` which will act as the "value" for the metric.
+  // Required.
+  //
+  // This must be a column containing only integers/doubles/nulls. Strings are
+  // *not* supported: prefer making the string a dimension and then *counting*
+  // the number of strings as the value.
+  optional string value = 3;
+
+  // The structured query which will be used to compute the metric. Required.
+  //
+  // See the documentation of `PerfettoSqlStructuredQuery` for more information.
+  optional PerfettoSqlStructuredQuery query = 4;
+
+  // Whether or not the dimensions in the metric are unique. Optional.
+  //
+  // Rephrasing the above, this option specifies, whether for a given set of
+  // dimensions, there is at most one `value` corresponding to that set of
+  // dimensions. If `UNIQUE` is chosen, trace processor will validate that
+  // the metric adheres to this constraint and will fail if it does not.
+  //
+  // `NOT_UNIQUE` is useful in situations whether the consumer of the metric
+  // wants to aggregate *across traces* (e.g. compute a median or mean across
+  // all rows in all traces). `UNIQUE` is instead useful when you want to get
+  // a "single value" out of each trace with a different layer of aggregation
+  // across traces (e.g. compute a SUM for a trace and then an average across
+  // traces).
+  //
+  // If not specified, the default is `NOT_UNIQUE`.
+  enum DimensionUniqueness {
+    DIMENSION_UNIQUENESS_UNSPECIFIED = 0;
+    // The dimensions are not unique, i.e. the same dimension can appear in
+    // multiple rows.
+    NOT_UNIQUE = 1;
+    // The dimensions are unique, i.e. each row corresponds to a unique set of
+    // dimensions.
+    UNIQUE = 2;
+  }
+  optional DimensionUniqueness dimension_uniqueness = 6;
+
+  // =============================================
+  // Advanced features: HERE BE DRAGONS
+  // =============================================
+
+  // Sets the id of the bundle this metric will be a part of in the output.
+  //
+  // It's *strongly* recommended to use the automatic bundling of metrics
+  // generated by `TraceMetricV2TemplateSpec` instead of setting this field
+  // manually.
+  //
+  // This is because using template automatically causes all the preconditions
+  // of bundling to be satisfied, i.e. all metrics generated by the template
+  // will have the same `query`, `dimensions` and `dimension_uniqueness`. If you
+  // set this field manually, you must ensure that all the metrics in the bundle
+  // have the same `query`, `dimensions` and `dimension_uniqueness` as well.
+  //
+  // This field exists as an escape hatch for cases where templates for some
+  // reason do not work for you.
+  optional string bundle_id = 7;
+}
+
+// A template for generating multiple v2 trace-based metrics.
+//
+// Often when people start writing more complex metrics, they find that
+// they are repeating themselves a lot (i.e. specifying the same query and set
+// of dimensions in multiple queries). This proto is intended to help with that:
+// it allows you to specify a set of metrics which share a common id prefix,
+// common set of dimensions and SQL. The template will then generate a set of
+// metrics each with different values.
+//
+// Note that using a template automatically causes the metrics to be "bundled"
+// together in the output, i.e. all metrics will for a given template will be
+// emitted in a single `TraceMetricV2Bundle` proto. This can be disabled by
+// setting `disable_auto_bundling` to true.
+//
+// Next id: 8
+message TraceMetricV2TemplateSpec {
+  // The prefix for all metric ids generated by this template. The actual id
+  // for each metric will be `<id_prefix>_<values>`.
+  //
+  // See `TraceMetricV2Spec.id` for more information.
+  optional string id_prefix = 1;
+
+  // The shared set of dimensions for all metrics generated by this template.
+  // See `TraceMetricV2Spec.dimension_specs` and `TraceMetricV2Spec.dimensions`
+  // for more details.
+  repeated TraceMetricV2Spec.DimensionSpec dimensions_specs = 5;
+  repeated string dimensions = 2;
+
+  // A list of columns from `query` which each of which will generate a unique
+  // metric. The id of each metric will be `<id_prefix>_<value_column>`.
+  //
+  // See `TraceMetricV2Spec.value` for more information.
+  repeated string value_columns = 3;
+
+  // The structured query which will be used to compute all the metrics.
+  //
+  // See `TraceMetricV2Spec.query` for more information.
+  optional PerfettoSqlStructuredQuery query = 4;
+
+  // Whether or not the dimensions in the metrics are unique.
+  // See `TraceMetricV2Spec.dimension_uniqueness` for more information.
+  optional TraceMetricV2Spec.DimensionUniqueness dimension_uniqueness = 6;
+
+  // If true, the metrics generated by this template will not be bundled
+  // together in the output. Instead, each metric will be emitted in its own
+  // `TraceMetricV2Bundle` proto.
+  //
+  // Under the hood, this is equivalent to setting the `bundle_id` field
+  // in each `TraceMetricV2Spec` generated by this template to a unique value
+  // (i.e. the id of the metric itself). This is useful if you want to
+  // generate a set of metrics which are computed togther out of convenience
+  // but you want to consume them separately in the output.
+  optional bool disable_auto_bundling = 7;
+}
+
+// The output containing all the values for a one or more v2 trace-based metric
+// which are bundled together.
+//
+// Note: see `TraceMetricV2Spec` for commentary on what a trace-based metric
+// is.
+//
+// For the `memory_per_process` example above, the output proto might look
+// something like:
+// ```
+// row: {
+//   values: {
+//     double_value: 123456
+//   }
+//   dimensions: {
+//     string_value: "my_special_process"
+//   }
+// }
+// row: {
+//   values: {
+//     double_value: 9876
+//   }
+//   dimensions: {
+//     string_value: "/bin/init"
+//   }
+// }
+// specs {
+//   id: "memory_per_process"
+//   dimensions: "process_name"
+//   value: "rss_and_swap"
+//   query: {
+//     table: {
+//       table_name: "memory_rss_and_swap_per_process"
+//       module_name: "linux.memory.process"
+//     }
+//   }
+// }
+// ```
+//
+// And for the `memory_per_process_and_cuj` example:
+// ```
+// row: {
+//   values: {
+//     value: 123456
+//   }
+//   dimensions: {
+//     string_value: "<J>CujFoo"
+//     string_value: "my_special_process"
+//   }
+// }
+// row: {
+//   values: {
+//     value: 9876
+//   }
+//   dimensions: {
+//     string_value: "<J>CujBar"
+//     string_value: "/bin/init"
+//   }
+// }
+// specs {
+//   ...(contents of spec)
+// }
+// ```
+message TraceMetricV2Bundle {
+  // The id of the bundle.
+  //
+  // Useful for debugging purposes only, it's rare this is meaningful to anyone.
+  optional string bundle_id = 1;
+
+  // A row corresponding to n values associated with a set of dimensions.
+  //
+  // Depending on `dimension_uniqueness` in the spec, this might be the only row
+  // for this set of dimensions or there might be other rows as well.
+  message Row {
+    // The value of all metrics in the bundle associated with the `dimensions`.
+    //
+    // The order of values matches precisely the order of metrics given by
+    // the `specs`.
+    //
+    // Note: if *all* values in the row are null, the row will *not* be emitted
+    // in the output. That is, you can always count on at least one of the
+    // `values` being non-null.
+    message Value {
+      message Null {}
+      oneof value_oneof {
+        Null null_value = 1;
+        double double_value = 2;
+      }
+    }
+    repeated Value values = 1;
+
+    // The dimensions that `value` should be associated with. The order of
+    // dimensions matches precisely the order of dimension names given by the
+    // `spec`.
+    //
+    // The type of the dimension is either inferred from the SQL column type
+    // or specified in the `spec.dimensions_specs`. In case `dimensions_specs`
+    // is specified, the SQL column type must match the type specified
+    // in the spec.
+    message Dimension {
+      message Null {}
+      oneof value_oneof {
+        string string_value = 1;
+        int64 int64_value = 2;
+        double double_value = 3;
+        Null null_value = 4;
+      }
+    }
+    repeated Dimension dimension = 2;
+  }
+  repeated Row row = 2;
+
+  // The spec for the metric.
+  //
+  // If the spec was directly specified when computing the metric, it is simply
+  // an echo of that spec. However, if the metric spec was generated from a
+  // template, it will be the "expanded" version of the spec
+  //
+  // Useful for knowing what the dimension names/value names are.
+  repeated TraceMetricV2Spec specs = 3;
+}
+
+// Will shortly be removed in favor of `TraceMetricV2Bundle`.
+message TraceMetricV2 {
+  message MetricRow {
+    optional double value = 1;
+
+    message Dimension {
+      message Null {}
+      oneof value_oneof {
+        string string_value = 1;
+        int64 int64_value = 2;
+        double double_value = 3;
+        Null null_value = 4;
+      }
+    }
+    repeated Dimension dimension = 2;
+  }
+  repeated MetricRow row = 1;
+  optional TraceMetricV2Spec spec = 2;
+}

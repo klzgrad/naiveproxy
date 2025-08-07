@@ -1,0 +1,74 @@
+# Copyright (C) 2019 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../../gn/perfetto.gni")
+import("../../../gn/test.gni")
+
+source_set("symbolizer") {
+  public_deps = [ "../../../include/perfetto/ext/base" ]
+  deps = [ "../../../gn:default_deps" ]
+  sources = [
+    "breakpad_parser.cc",
+    "breakpad_parser.h",
+    "breakpad_symbolizer.cc",
+    "breakpad_symbolizer.h",
+    "elf.h",
+    "filesystem.h",
+    "filesystem_posix.cc",
+    "filesystem_windows.cc",
+    "local_symbolizer.cc",
+    "local_symbolizer.h",
+    "subprocess.h",
+    "subprocess_posix.cc",
+    "subprocess_windows.cc",
+    "symbolizer.cc",
+    "symbolizer.h",
+  ]
+}
+
+if (enable_perfetto_trace_processor) {
+  source_set("symbolize_database") {
+    public_deps = [
+      ":symbolizer",
+      "../../../include/perfetto/ext/base",
+    ]
+    deps = [
+      "../../../gn:default_deps",
+      "../../../include/perfetto/protozero",
+      "../../../include/perfetto/trace_processor:trace_processor",
+      "../../../protos/perfetto/trace:zero",
+      "../../../protos/perfetto/trace/profiling:zero",
+      "../../trace_processor/util:build_id",
+    ]
+    sources = [
+      "symbolize_database.cc",
+      "symbolize_database.h",
+    ]
+  }
+}
+
+perfetto_unittest_source_set("unittests") {
+  testonly = true
+  deps = [
+    ":symbolizer",
+    "../../../gn:default_deps",
+    "../../../gn:gtest_and_gmock",
+    "../../base:test_support",
+  ]
+  sources = [
+    "breakpad_parser_unittest.cc",
+    "breakpad_symbolizer_unittest.cc",
+    "local_symbolizer_unittest.cc",
+  ]
+}

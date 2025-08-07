@@ -1,0 +1,56 @@
+/*
+ * Copyright (C) 2023 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+import "protos/perfetto/common/protolog_common.proto";
+
+package perfetto.protos;
+
+// Custom configuration for the "android.protolog" data source.
+// ProtoLog is a logging mechanism that is intented to be more efficient than
+// logcat. This configures what logs to capture in the tracing instance.
+message ProtoLogConfig {
+  enum TracingMode {
+    // When using the DEFAULT tracing mode, only log groups and levels specified
+    // in the group_overrides are traced.
+    DEFAULT = 0;
+    // When using the ENABLE_ALL tracing mode, all log groups and levels are
+    // traced, unless specified in the group_overrides.
+    ENABLE_ALL = 1;
+  }
+
+  // Specified the configurations for each of the logging groups. If none is
+  // specified for a group the defaults will be used.
+  repeated ProtoLogGroup group_overrides = 1;
+  // Specified what tracing mode to use for the tracing instance.
+  optional TracingMode tracing_mode = 2;
+  // If set, any message with log level higher than this level (inclusive) will
+  // be traced. Group overrides take precedence over this value.
+  optional ProtoLogLevel default_log_from_level = 3;
+}
+
+message ProtoLogGroup {
+  // The ProtoLog group name this configuration entry applies to.
+  optional string group_name = 1;
+  // Specify the level from which to start capturing protologs.
+  // e.g. if ProtoLogLevel.WARN is specified only warning, errors and fatal log
+  // message will be traced.
+  optional ProtoLogLevel log_from = 2;
+  // When set to true we will collect the stacktrace for each protolog message
+  // in this group that we are tracing.
+  optional bool collect_stacktrace = 3;
+}

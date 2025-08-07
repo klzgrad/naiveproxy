@@ -1,0 +1,119 @@
+/*
+ * Copyright (C) 2023 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+package perfetto.protos;
+
+// This metric computes how much time processes spend in UNINTERRUPTIBLE_SLEEP
+// state
+message ProcessStateDurations {
+  optional int64 total_dur = 2;
+  optional int64 uninterruptible_sleep_dur = 3;
+}
+
+message AndroidBootMetric {
+  optional ProcessStateDurations system_server_durations = 1;
+  optional ProcessStateDurations systemui_durations = 2;
+  optional ProcessStateDurations launcher_durations = 3;
+  optional ProcessStateDurations gms_durations = 4;
+  // Launcher related boot metrics
+  message LauncherBreakdown {
+    //  reports cold start time of NexusLauncher
+    optional int64 cold_start_dur = 1;
+  }
+  optional LauncherBreakdown launcher_breakdown = 5;
+
+  message ProcessStartAggregation {
+    optional int64 total_start_sum = 1;
+    optional int64 num_of_processes = 2;
+    optional double average_start_time = 3;
+  }
+  message GarbageCollectionAggregation {
+    optional int64 total_gc_count = 1;
+    optional int64 num_of_processes_with_gc = 2;
+    optional int64 num_of_threads_with_gc = 3;
+    optional double avg_gc_duration = 4;
+    optional double avg_running_gc_duration = 5;
+    optional int64 full_gc_count = 6;
+    optional int64 collector_transition_gc_count = 7;
+    optional int64 young_gc_count = 8;
+    optional int64 native_alloc_gc_count = 9;
+    optional int64 explicit_gc_count = 10;
+    optional int64 alloc_gc_count = 11;
+    optional double mb_per_ms_of_gc = 12;
+  }
+  message OomAdjusterTransitionCounts {
+    // name of the item aggregated by. example: process_name,
+    // oom_adjuster_reason.
+    optional string name = 1;
+    // name of previous oom bucket.
+    optional string src_bucket = 2;
+    // name of oom bucket.
+    optional string dest_bucket = 3;
+    // count of transitions
+    optional int64 count = 4;
+  }
+  message OomAdjBucketDurationAggregation {
+    // name of the item aggregated by. example: process_name,
+    // oom_adjuster_reason
+    optional string name = 1;
+    // name of oom bucket.
+    optional string bucket = 2;
+    // Duration of the time in the bucket
+    optional int64 total_dur = 3;
+  }
+  message OomAdjDurationAggregation {
+    optional int64 min_oom_adj_dur = 1;
+    optional int64 max_oom_adj_dur = 2;
+    optional double avg_oom_adj_dur = 3;
+    optional int64 oom_adj_event_count = 4;
+    optional string oom_adj_reason = 5;
+  }
+  message BroadcastCountAggregation {
+    optional string name = 1;
+    optional int64 count = 2;
+  }
+  // Stats for Broadcasts aggregated with duration.
+  message BroadcastDurationAggregation {
+    optional string name = 1;
+    optional double avg_duration = 2;
+    optional int64 max_duration = 3;
+    optional int64 sum_duration = 4;
+  }
+  optional ProcessStartAggregation full_trace_process_start_aggregation = 6;
+  optional ProcessStartAggregation post_boot_process_start_aggregation = 7;
+  optional GarbageCollectionAggregation full_trace_gc_aggregation = 8;
+  optional GarbageCollectionAggregation post_boot_gc_aggregation = 9;
+  repeated OomAdjusterTransitionCounts
+      post_boot_oom_adjuster_transition_counts_global = 10;
+  repeated OomAdjusterTransitionCounts
+      post_boot_oom_adjuster_transition_counts_by_process = 11;
+  repeated OomAdjusterTransitionCounts
+      post_boot_oom_adjuster_transition_counts_by_oom_adj_reason = 12;
+  repeated OomAdjBucketDurationAggregation
+      post_boot_oom_adj_bucket_duration_agg_global = 13;
+  repeated OomAdjBucketDurationAggregation
+      post_boot_oom_adj_bucket_duration_agg_by_process = 14;
+  repeated OomAdjDurationAggregation post_boot_oom_adj_duration_agg = 15;
+  repeated BroadcastCountAggregation
+      post_boot_broadcast_process_count_by_intent = 16;
+  repeated BroadcastCountAggregation post_boot_broadcast_count_by_process = 17;
+  repeated BroadcastDurationAggregation
+      post_boot_brodcast_duration_agg_by_intent = 18;
+  repeated BroadcastDurationAggregation
+      post_boot_brodcast_duration_agg_by_process = 19;
+}

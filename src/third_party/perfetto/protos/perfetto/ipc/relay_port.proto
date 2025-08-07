@@ -1,0 +1,75 @@
+/*
+ * Copyright (C) 2024 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+import "protos/perfetto/common/system_info.proto";
+
+package perfetto.protos;
+
+// IPC interface definition for serving the requests from the relay service.
+service RelayPort {
+  // Sends SystemInfo packet to the host tracing service. This is used in
+  // multi-machine tracing to provide remote machines' sys information in
+  // the final trace.
+  rpc InitRelay(InitRelayRequest) returns (InitRelayResponse) {}
+
+  // Synchronize the clocks with a guest. This is used for multi-machine tracing
+  // with a VM guest or a remote machine. The client may make consecutive calls
+  // of this method to get better results.
+  rpc SyncClock(SyncClockRequest) returns (SyncClockResponse) {}
+}
+
+// Arguments for rpc SyncClock
+
+message InitRelayRequest {
+  optional SystemInfo system_info = 1;
+}
+
+message InitRelayResponse {}
+
+// Arguments for rpc SyncClock
+
+// For the client to send its clock readings to the host.
+message SyncClockRequest {
+  // Relay service synchronizes its clocks with the host using round-trip
+  // messages of clock snapshots on both sides for an estimation of clock
+  // offsets of the built-in clocks.
+  enum Phase {
+    // Clock synchronization starts with the client (relay service) sends its
+    // clock snapshots in the PING phase. The host also snapshots its clocks on
+    // receiving the request and acks the client.
+    PING = 1;
+    // Clock synchronization completes with the client sending the second clock
+    // snapshot request after the round-trip of the PING request. The host
+    // estimates the clock offsets using 2 consecutive clock snapshots on both
+    // sides.
+    UPDATE = 2;
+  };
+
+  message Clock {
+    // The clock ID enumerated in builtin_clocks.proto.
+    optional uint32 clock_id = 1;
+    // The clock reading value (e.g. in nanoseconds for BUILTIN_CLOCK_BOOTTIME).
+    optional uint64 timestamp = 2;
+  }
+
+  optional Phase phase = 1;
+  repeated Clock clocks = 2;
+}
+
+// The host doesn't send any information back to the client.
+message SyncClockResponse {}

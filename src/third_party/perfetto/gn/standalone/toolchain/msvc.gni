@@ -1,0 +1,63 @@
+# Copyright (C) 2020 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# We should never get in here by accident from the Chromium tree.
+assert(!defined(build_with_chromium) || !build_with_chromium)
+
+if (is_win_host) {
+  _find_msvc_out = exec_script("win_find_msvc.py", [], "list lines")
+
+  # The output looks like this (without the line number "N:" part):
+  # 1: C:\Program Files (x86)\Windows Kits\10
+  # 2: 10.0.19041.0
+  # 3: C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Tools\MSVC\14.28.29333
+  _win_sdk_base = _find_msvc_out[0]
+  _win_sdk_ver = _find_msvc_out[1]
+  _win_msvc_base = _find_msvc_out[2]
+
+  # TODO(primiano): look into how to integrate this with the toolchain pulled by
+  # depot tools. Also improve error reporting telling the user what to do.
+  # For now this requires both:
+  # 1. Build Tools for Visual Studio 2019
+  #    https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2019
+  # 2. Windows 10 SDK:
+  #    https://developer.microsoft.com/en-us/windows/downloads/windows-10-sdk/
+
+  # These variables are required both for clang-cl.exe and MSVC (cl.exe).
+  win_sdk_lib_dir = _win_sdk_base + "\\Lib\\" + _win_sdk_ver
+  win_msvc_lib_dir = _win_msvc_base + "\\lib\\${target_cpu}"
+
+  # These variables are only required when building with MSVC.
+  # Clang is clever enough to figure out the right include path by querying the
+  # registry and detect the Windows SDK path (it still needs the /LIBPATH
+  # though, hence the _lib_dir above).
+  win_msvc_bin_dir = _win_msvc_base + "\\bin\\Host${host_cpu}\\${target_cpu}"
+  win_msvc_inc_dirs = [
+    _win_msvc_base + "\\include",
+    _win_sdk_base + "\\Include\\" + _win_sdk_ver + "\\ucrt",
+    _win_sdk_base + "\\Include\\" + _win_sdk_ver + "\\um",
+    _win_sdk_base + "\\Include\\" + _win_sdk_ver + "\\shared",
+  ]
+  win_msvc_sys_lib_flags = [
+    "/LIBPATH:\"${win_sdk_lib_dir}\\ucrt\\${target_cpu}\"",
+    "/LIBPATH:\"${win_sdk_lib_dir}\\um\\${target_cpu}\"",
+    "/LIBPATH:\"${win_msvc_lib_dir}\"",
+  ]
+} else {
+  win_sdk_lib_dir = ""
+  win_msvc_lib_dir = ""
+  win_msvc_bin_dir = ""
+  win_msvc_inc_dirs = []
+  win_msvc_sys_lib_flags = []
+}

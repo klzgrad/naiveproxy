@@ -1,0 +1,143 @@
+# Copyright (C) 2019 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../../gn/fuzzer.gni")
+import("../../../gn/perfetto.gni")
+import("../../../gn/test.gni")
+
+perfetto_unittest_source_set("test_support") {
+  testonly = true
+  public_deps = [
+    "../../../include/perfetto/test:test_support",
+    "../core:test_support",
+  ]
+  deps = [
+    "../../../gn:default_deps",
+    "../../../gn:gtest_and_gmock",
+    "../../../protos/perfetto/trace:cpp",
+    "../../../protos/perfetto/trace:lite",
+    "../../../protos/perfetto/trace:zero",
+    "../../../protos/perfetto/trace/ftrace:cpp",
+    "../../../protos/perfetto/trace/track_event:lite",
+    "../../base",
+    "../../base:test_support",
+    "../core",
+    "../core:test_support",
+    "../service",
+  ]
+  sources = [
+    "aligned_buffer_test.cc",
+    "aligned_buffer_test.h",
+    "fake_packet.cc",
+    "fake_packet.h",
+    "test_shared_memory.cc",
+    "test_shared_memory.h",
+    "traced_value_test_support.cc",
+  ]
+
+  # These tests rely on test_task_runner.h which
+  # has no implementation for Windows or NaCL.
+  if (!is_win && !is_nacl) {
+    sources += [
+      "mock_consumer.cc",
+      "mock_consumer.h",
+      "mock_producer.cc",
+      "mock_producer.h",
+      "mock_producer_endpoint.h",
+      "proxy_producer_endpoint.cc",
+      "proxy_producer_endpoint.h",
+    ]
+  }
+}
+
+if (enable_perfetto_ipc && enable_perfetto_system_consumer) {
+  perfetto_unittest_source_set("tracing_integration_test") {
+    testonly = true
+    deps = [
+      ":test_support",
+      "..:client_api_without_backends",
+      "../../../gn:default_deps",
+      "../../../gn:gtest_and_gmock",
+      "../../base",
+      "../../base:test_support",
+      "../ipc/consumer",
+      "../ipc/producer",
+      "../ipc/service",
+      "../service",
+    ]
+    sources = [ "tracing_integration_test.cc" ]
+
+    # TODO(lalitm): this tests appear to be failing on Chromium for unknown
+    # reasons. Figure out why and reenable them.
+    if (!build_with_chromium) {
+      sources += [ "platform_unittest.cc" ]
+    }
+  }
+}
+
+if (enable_perfetto_integration_tests) {
+  source_set("client_api_integrationtests") {
+    testonly = true
+    deps = [
+      ":api_test_support",
+      "../:client_api",
+      "../../../:libperfetto_client_experimental",
+      "../../../gn:default_deps",
+      "../../../gn:gtest_and_gmock",
+      "../../../include/perfetto/tracing/core",
+      "../../../protos/perfetto/common:cpp",
+      "../../../protos/perfetto/common:zero",
+      "../../../protos/perfetto/config/track_event:cpp",
+      "../../../protos/perfetto/trace:cpp",
+      "../../../protos/perfetto/trace:zero",
+      "../../../protos/perfetto/trace/gpu:cpp",
+      "../../../protos/perfetto/trace/gpu:zero",
+      "../../../protos/perfetto/trace/interned_data:cpp",
+      "../../../protos/perfetto/trace/interned_data:zero",
+      "../../../protos/perfetto/trace/profiling:cpp",
+      "../../../protos/perfetto/trace/track_event:cpp",
+      "../../../test:integrationtest_initializer",
+      "../../base",
+    ]
+    sources = [
+      "api_integrationtest.cc",
+      "tracing_module.cc",
+      "tracing_module.h",
+      "tracing_module2.cc",
+      "tracing_module3.cc",
+      "tracing_module_categories.h",
+    ]
+  }
+
+  # api_test_support needs to be self-contained and not leak any other perfetto
+  # deps. See comment in api_test_support.h
+  source_set("api_test_support") {
+    testonly = true
+    deps = [
+      "../../..:libperfetto_client_experimental",
+      "../../../gn:default_deps",
+      "../../base",
+      "../../tracing:client_api_without_backends",
+    ]
+
+    # The system tracing backend requires IPC support.
+    if (enable_perfetto_ipc) {
+      deps += [ "../../../test:test_helper" ]
+    }
+    sources = [
+      "api_test_support.cc",
+      "api_test_support.h",
+    ]
+  }
+}

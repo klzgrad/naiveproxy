@@ -1,0 +1,44 @@
+/*
+ * Copyright (C) 2024 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto3";
+
+package perfetto.protos;
+
+import "protos/perfetto/trace_processor/trace_processor.proto";
+
+// gRPC Interface for a Bigtrace Worker
+//
+// Workers are owned by an "Orchestrator" which forward traces from requests by
+// end users. Workers are responsible for loading the traces with
+// TraceProcessor and executing the requests.
+service BigtraceWorker {
+  // Executes a SQL query on the specified trace and returns a stream of
+  // execution responses. Note that this method returns a stream because each
+  // trace can return >1 result due to chunking of protos at the
+  // TraceProcessor::QueryResult level.
+  rpc QueryTrace(BigtraceQueryTraceArgs) returns (BigtraceQueryTraceResponse);
+}
+
+// Request/Response for QueryTrace.
+message BigtraceQueryTraceArgs {
+  optional string trace = 1;
+  optional string sql_query = 2;
+}
+message BigtraceQueryTraceResponse {
+  optional string trace = 1;
+  repeated QueryResult result = 2;
+}

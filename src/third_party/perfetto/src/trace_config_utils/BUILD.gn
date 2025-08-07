@@ -1,0 +1,101 @@
+# Copyright (C) 2024 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../gn/perfetto.gni")
+import("../../gn/perfetto_cc_proto_descriptor.gni")
+import("../../gn/test.gni")
+import("../../gn/wasm.gni")
+
+source_set("txt_to_pb") {
+  deps = [
+    ":gen_cc_config_descriptor",
+    "../../gn:default_deps",
+    "../base",
+    "../protozero",
+    "../protozero/text_to_proto",
+  ]
+  sources = [
+    "txt_to_pb.cc",
+    "txt_to_pb.h",
+  ]
+}
+
+source_set("pb_to_txt") {
+  deps = [
+    ":gen_cc_config_descriptor",
+    "../../gn:default_deps",
+    "../base",
+    "../protozero",
+    "../trace_processor/util:descriptors",
+    "../trace_processor/util:protozero_to_text",
+  ]
+  sources = [
+    "pb_to_txt.cc",
+    "pb_to_txt.h",
+  ]
+}
+
+source_set("main") {
+  deps = [
+    ":pb_to_txt",
+    ":txt_to_pb",
+    "../../gn:default_deps",
+    "../../include/perfetto/ext/base:base",
+  ]
+  sources = [ "main.cc" ]
+}
+
+perfetto_cc_proto_descriptor("gen_cc_config_descriptor") {
+  descriptor_name = "config.descriptor"
+  descriptor_target = "../../protos/perfetto/config:descriptor"
+}
+
+executable("trace_config_utils") {
+  testonly = true
+  deps = [
+    ":main",
+    "../../gn:default_deps",
+  ]
+}
+
+if (enable_perfetto_ui) {
+  wasm_lib("trace_config_utils_wasm") {
+    name = "trace_config_utils"
+    sources = [ "wasm.cc" ]
+    deps = [
+      ":pb_to_txt",
+      ":txt_to_pb",
+      "../../gn:default_deps",
+      "../../include/perfetto/ext/base:base",
+    ]
+  }
+}
+
+perfetto_unittest_source_set("unittests") {
+  testonly = true
+  deps = [
+    ":pb_to_txt",
+    ":txt_to_pb",
+    "../../gn:default_deps",
+    "../../gn:gtest_and_gmock",
+    "../../protos/perfetto/config:cpp",
+    "../../protos/perfetto/config/ftrace:cpp",
+    "../../protos/perfetto/trace:cpp",
+    "../base",
+  ]
+  sources = [
+    "pb_to_txt_unittest.cc",
+    "txt_to_pb_unittest.cc",
+  ]
+}

@@ -1,0 +1,67 @@
+# Copyright (C) 2021 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("perfetto.gni")
+
+template("perfetto_cc_proto_descriptor") {
+  is_target = defined(invoker.descriptor_target)
+  is_path = defined(invoker.descriptor_path)
+
+  # You must define exactly one of:
+  # descriptor_target
+  # descriptor_path
+  assert((is_target || is_path) && !(is_target && is_path))
+
+  config("${target_name}_config") {
+    include_dirs = [ "${root_gen_dir}/${perfetto_root_path}" ]
+  }
+
+  action(target_name) {
+    generated_header = "${target_gen_dir}/${invoker.descriptor_name}.h"
+    if (is_target) {
+      descriptor_file_path =
+          get_label_info(invoker.descriptor_target, "target_gen_dir") +
+          "/${invoker.descriptor_name}"
+      if (build_with_chromium) {
+        deps = [ "${invoker.descriptor_target}_gen" ]
+      } else {
+        deps = [ invoker.descriptor_target ]
+      }
+    } else {
+      descriptor_file_path = invoker.descriptor_path
+      deps = []
+    }
+
+    script = "$perfetto_root_path/tools/gen_cc_proto_descriptor.py"
+    args = [
+      "--gen_dir",
+      rebase_path(root_gen_dir, root_build_dir),
+      "--cpp_out",
+      rebase_path(generated_header, root_build_dir),
+    ]
+    if (defined(invoker.namespace)) {
+      args += [
+        "--namespace",
+        invoker.namespace,
+      ]
+    }
+    args += [ rebase_path(descriptor_file_path, root_build_dir) ]
+    inputs = [ descriptor_file_path ]
+    outputs = [ generated_header ]
+    public_configs = [ ":${target_name}_config" ]
+    metadata = {
+      perfetto_action_type_for_generator = [ "cc_proto_descriptor" ]
+    }
+  }
+}

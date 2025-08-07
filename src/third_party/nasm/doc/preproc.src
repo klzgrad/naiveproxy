@@ -1,0 +1,2468 @@
+\C{preproc} The NASM \i{Preprocessor}
+
+NASM contains a powerful \i{macro processor}, which supports
+conditional assembly, multi-level file inclusion, two forms of macro
+(single-line and multi-line), and a `context stack' mechanism for
+extra macro power. Preprocessor directives all begin with a \c{%}
+sign. As a result, some care needs to be taken when using the \c{%}
+arithmetic operator to avoid it being confused with a preprocessor
+directive; it is recommended that it always be surrounded by
+whitespace.
+
+The NASM preprocessor borrows concepts from both the C preprocessor
+and the macro facilities of many other assemblers.
+
+\H{pcsteps} \i{Preprocessor Expansions}
+
+The input to the preprocessor is expanded in the following ways in the
+order specified here.
+
+\S{pcbackslash} \i{Continuation Line} Collapsing
+
+The preprocessor first collapses all lines which end with a backslash
+(\c{\\}) character into a single line.  Thus:
+
+\c %define THIS_VERY_LONG_MACRO_NAME_IS_DEFINED_TO \\
+\c         THIS_VALUE
+
+will work like a single-line macro without the backslash-newline
+sequence.
+
+\IR{comment removal} comment, removal
+\IR{comment removal} preprocessor, comment removal
+
+\S{pccomment} \i{Comment Removal}
+
+After concatenation, comments are removed.
+\I{comment, syntax}\i{Comments}
+begin with the character \c{;} unless contained
+inside a quoted string or a handful of other special contexts.
+
+\I{ccomment}Note that this is applied \e{after} \i{continuation lines}
+are collapsed. This means that
+
+\c       add al,'\\'	 ; Add the ASCII code for \\
+\c	 mov [ecx],al	; Save the character
+
+will probably not do what you expect, as the second line will be
+considered part of the preceeding comment. Although this behavior is
+sometimes confusing, it is both the behavior of NASM since the very
+first version as well as the behavior of the C preprocessor.
+
+
+\S{pcline}\i\c{%line} directives
+
+In this step, \i\c{%line} directives are processed. See \k{line}.
+
+
+\S{pccond}\I{preprocessor conditionals}\I{preprocessor loops}
+Conditionals, Loops and \i{Multi-Line Macro} Definitions
+
+In this step, the following \i{preprocessor directives} are processed:
+
+\b \i{Multi-line macro} definitions, specified by the \i\c{%macro} and
+\i\c{%imacro} directives. The body of a multi-line macro is stored and
+is not further expanded at this time. See \k{mlmacro}.
+
+\b \i{Conditional assembly}, specified by the \i\c{%if} family of preprocessor
+directives. Disabled part of the source code are discarded and are not
+futher expanded. See \k{condasm}.
+
+\b \i{Preprocessor loops}, specified by the \i\c{%rep} preprocessor
+directive. A preprocessor loop is very similar to a multi-line macro
+and as such the body is stored and is not futher expanded at this
+time. See \k{rep}.
+
+These constructs are required to be balanced, so that the ending of a
+block can be detected, but no further processing is done at this time;
+stored blocks will be inserted at this step when they are expanded
+(see below.)
+
+It is specific to each directive to what extent \i{inline expansions}
+and \i{detokenization} are performed for the arguments of the
+directives.
+
+
+\S{pcdirect} \i{Directives} processing
+
+Remaining preprocessor \i{directives} are processed. It is specific
+to each directive to what extend the above expansions or the ones
+specified in \k{pcfinal} are performed on their arguments.
+
+It is specific to each directive to what extent \i{inline expansions}
+and \i{detokenization} are performed for the arguments of the
+directives.
+
+
+\S{pcsmacro} \i{Inline expansions} and other \I{preprocessor directives}directives
+
+In this step, the following expansions are performed on each line:
+
+\b \i{Single-line macros} are expanded. See \k{slmacro}.
+
+\b \i{Preprocessor functions} are expanded. See \k{ppfunc}.
+
+\b If this line is the result of \i{multi-line macro} expansions (see
+below), the parameters to that macro are expanded at this time. See
+\k{mlmacro}.
+
+\b \i{Macro indirection}, using the \i\c{%[]} construct, is expanded. See
+\k{indmacro}.
+
+\b Token \i{concatenation} using either the \i\c{%+} operator (see
+\k{concat%+}) or implicitly (see \k{indmacro} and \k{concat}.)
+
+\b \i{Macro-local labels} are converted into unique strings, see
+\k{maclocal}.
+
+
+\S{pcmmacro} \i{Multi-Line Macro Expansion}
+
+In this step, \i{multi-line macros} are expanded into new lines of
+source, like the typical macro feature of many other assemblers. See
+\k{mlmacro}.
+
+After expansion, the newly injected lines of source are processed
+starting with the step defined in \k{pccond}.
+
+
+\S{pcfinal} \i{Detokenization}
+
+In this step, the final line of source code is produced. It performs
+the following operations:
+
+\b Environment variables specified using the \i\c{%!} construct are
+expanded. See \k{ctxlocal}.
+
+\b \i{Context-local labels} are expanded into unique strings. See
+\k{ctxlocal}.
+
+\b All tokens are converted to their text representation. Unlike the C
+preprocessor, the NASM preprocessor does not insert whitespace between
+adjacent tokens unless present in the source code. See \k{concat}.
+
+The resulting line of text either is sent to the assembler, or, if
+running in preprocessor-only mode, to the output file (see \k{opt-E});
+if necessary prefixed by a newly inserted \i\c{%line} directive.
+
+
+\H{slmacro} \i{Single-Line Macros}
+
+Single-line macros are expanded inline, much like macros in the C
+preprocessor.
+
+\S{define} The Normal Way: \I\c{%idefine}\i\c{%define}
+
+Single-line macros are defined using the \c{%define} preprocessor
+directive. The definitions work in a similar way to C; so you can do
+things like
+
+\c %define ctrl    0x1F &
+\c %define param(a,b) ((a)+(a)*(b))
+\c
+\c         mov     byte [param(2,ebx)], ctrl 'D'
+
+which will expand to
+
+\c         mov     byte [(2)+(2)*(ebx)], 0x1F & 'D'
+
+When the expansion of a single-line macro contains tokens which
+invoke another macro, the expansion is performed at invocation time,
+not at definition time. Thus the code
+
+\c %define a(x)    1+b(x)
+\c %define b(x)    2*x
+\c
+\c         mov     ax,a(8)
+
+will evaluate in the expected way to \c{mov ax,1+2*8}, even though
+the macro \c{b} wasn't defined at the time of definition of \c{a}.
+
+Note that single-line macro argument list cannot be preceded by whitespace.
+Otherwise it will be treated as an expansion. For example:
+
+\c    %define foo (a,b)               ; no arguments, (a,b) is the expansion
+\c    %define bar(a,b)                ; two arguments, empty expansion
+
+
+Macros defined with \c{%define} are \i{case sensitive}: after
+\c{%define foo bar}, only \c{foo} will expand to \c{bar}: \c{Foo} or
+\c{FOO} will not. By using \c{%idefine} instead of \c{%define} (the
+`i' stands for `insensitive') you can define all the case variants
+of a macro at once, so that \c{%idefine foo bar} would cause
+\c{foo}, \c{Foo}, \c{FOO}, \c{fOO} and so on all to expand to
+\c{bar}.
+
+There is a mechanism which detects when a macro call has occurred as
+a result of a previous expansion of the same macro, to guard against
+\i{circular references} and infinite loops. If this happens, the
+preprocessor will only expand the first occurrence of the macro.
+Hence, if you code
+
+\c %define a(x)    1+a(x)
+\c
+\c         mov     ax,a(3)
+
+the macro \c{a(3)} will expand once, becoming \c{1+a(3)}, and will
+then expand no further. This behaviour can be useful: see \k{32c}
+for an example of its use.
+
+You can \I{overloading, single-line macros}overload single-line
+macros: if you write
+
+\c %define foo(x)   1+x
+\c %define foo(x,y) 1+x*y
+
+the preprocessor will be able to handle both types of macro call,
+by counting the parameters you pass; so \c{foo(3)} will become
+\c{1+3} whereas \c{foo(ebx,2)} will become \c{1+ebx*2}. However, if
+you define
+
+\c %define foo bar
+
+then no other definition of \c{foo} will be accepted: a macro with
+no parameters prohibits the definition of the same name as a macro
+\e{with} parameters, and vice versa.
+
+This doesn't prevent single-line macros being \e{redefined}: you can
+perfectly well define a macro with
+
+\c %define foo bar
+
+and then re-define it later in the same source file with
+
+\c %define foo baz
+
+Then everywhere the macro \c{foo} is invoked, it will be expanded
+according to the most recent definition. This is particularly useful
+when defining single-line macros with \c{%assign} (see \k{assign}).
+
+The following additional features were added in NASM 2.15:
+
+It is possible to define an empty string instead of an argument name
+if the argument is never used. For example:
+
+\c    %define ereg(foo,) e %+ foo
+\c      mov eax,ereg(dx,cx)
+
+A single pair of parentheses is a subcase of a single, unused argument:
+
+\c    %define myreg() eax
+\c	mov edx,myreg()
+
+This is similar to the behavior of the C preprocessor.
+
+\b If declared with an \c{=}, NASM will expand the argument and then
+evaluate it as a numeric expression. The name of the argument may
+optionally be followed by \c{/} followed by a numeric radix character
+(\c{b}, \c{y}, \c{o}, \c{q}, \c{d}, \c{t}, \c{h} or \c{x}) and/or the
+letters \c{u} (unsigned) or \c{s} (signed), in which the number is
+formatted accordingly, with a radix prefix if a radix letter is
+specified. For the case of hexadecimal, if the radix letter is in
+upper case, alphabetic hex digits will be in upper case.
+
+\b If declared with an \c{&}, NASM will expand the argument and then
+turn into a quoted string; if the argument already \e{is} a quoted
+string, it will be quoted again.
+
+\b If declared with \c{&&}, NASM will expand the argument and then
+turn it into a quoted string, but if the argument already is a quoted
+string, it will \e{not} be re-quoted.
+
+\b If declared with a \c{+}, it is a greedy or variadic parameter; it
+will include any subsequent commas and parameters.
+
+\b If declared with an \c{!}, NASM will not strip whitespace and
+braces (potentially useful in conjunction with \c{&} or \c{&&}.)
+
+For example:
+
+\c     %define xyzzy(=expr,&val,=hex/x) expr, str, hex
+\c     %define plugh(x) xyzzy(x,x,x)
+\c     db plugh(13+5), `\0` ; Expands to: db 18, "13+5", 0x12, `\0`
+
+You can \i{pre-define} single-line macros using the `-d' option on
+the NASM command line: see \k{opt-d}.
+
+
+\S{xdefine} Resolving \c{%define}: \I\c{%ixdefine}\i\c{%xdefine}
+
+To have a reference to an embedded single-line macro resolved at the
+time that the embedding macro is \e{defined}, as opposed to when the
+embedding macro is \e{expanded}, you need a different mechanism to the
+one offered by \c{%define}. The solution is to use \c{%xdefine}, or
+it's \I{case sensitive}case-insensitive counterpart \c{%ixdefine}.
+
+Suppose you have the following code:
+
+\c %define  isTrue  1
+\c %define  isFalse isTrue
+\c %define  isTrue  0
+\c
+\c val1:    db      isFalse
+\c
+\c %define  isTrue  1
+\c
+\c val2:    db      isFalse
+
+In this case, \c{val1} is equal to 0, and \c{val2} is equal to 1.
+This is because, when a single-line macro is defined using
+\c{%define}, it is expanded only when it is called. As \c{isFalse}
+expands to \c{isTrue}, the expansion will be the current value of
+\c{isTrue}. The first time it is called that is 0, and the second
+time it is 1.
+
+If you wanted \c{isFalse} to expand to the value assigned to the
+embedded macro \c{isTrue} at the time that \c{isFalse} was defined,
+you need to change the above code to use \c{%xdefine}.
+
+\c %xdefine isTrue  1
+\c %xdefine isFalse isTrue
+\c %xdefine isTrue  0
+\c
+\c val1:    db      isFalse
+\c
+\c %xdefine isTrue  1
+\c
+\c val2:    db      isFalse
+
+Now, each time that \c{isFalse} is called, it expands to 1,
+as that is what the embedded macro \c{isTrue} expanded to at
+the time that \c{isFalse} was defined.
+
+\c{%xdefine} and \c{%ixdefine} supports argument expansion exactly the
+same way that \c{%define} and \c{%idefine} does.
+
+
+\S{indmacro} \i{Macro Indirection}: \I\c{%[}\c{%[...]}
+
+The \c{%[...]} construct can be used to expand macros in contexts
+where macro expansion would otherwise not occur, including in the
+names other macros.  For example, if you have a set of macros named
+\c{Foo16}, \c{Foo32} and \c{Foo64}, you could write:
+
+\c	mov ax,Foo%[__?BITS?__]	; The Foo value
+
+to use the builtin macro \c{__?BITS?__} (see \k{bitsm}) to automatically
+select between them.  Similarly, the two statements:
+
+\c %xdefine Bar		Quux	; Expands due to %xdefine
+\c %define  Bar		%[Quux]	; Expands due to %[...]
+
+have, in fact, exactly the same effect.
+
+\c{%[...]} concatenates to adjacent tokens in the same way that
+multi-line macro parameters do, see \k{concat} for details.
+
+
+\S{concat%+} Concatenating Single Line Macro Tokens: \i\c{%+}
+
+Individual tokens in single line macros can be concatenated, to produce
+longer tokens for later processing. This can be useful if there are
+several similar macros that perform similar functions.
+
+Please note that a space is required after \c{%+}, in order to
+disambiguate it from the syntax \c{%+1} used in multiline macros.
+
+As an example, consider the following:
+
+\c %define BDASTART 400h                ; Start of BIOS data area
+
+\c struc   tBIOSDA                      ; its structure
+\c         .COM1addr       RESW    1
+\c         .COM2addr       RESW    1
+\c         ; ..and so on
+\c endstruc
+
+Now, if we need to access the elements of tBIOSDA in different places,
+we can end up with:
+
+\c         mov     ax,BDASTART + tBIOSDA.COM1addr
+\c         mov     bx,BDASTART + tBIOSDA.COM2addr
+
+This will become pretty ugly (and tedious) if used in many places, and
+can be reduced in size significantly by using the following macro:
+
+\c ; Macro to access BIOS variables by their names (from tBDA):
+
+\c %define BDA(x)  BDASTART + tBIOSDA. %+ x
+
+Now the above code can be written as:
+
+\c         mov     ax,BDA(COM1addr)
+\c         mov     bx,BDA(COM2addr)
+
+Using this feature, we can simplify references to a lot of macros (and,
+in turn, reduce typing errors).
+
+
+\S{selfref%?} The Macro Name Itself: \i\c{%?} and \i\c{%??}
+
+The special symbols \c{%?} and \c{%??} can be used to reference the
+macro name itself inside a macro expansion, this is supported for both
+single-and multi-line macros.  \c{%?} refers to the macro name as
+\e{invoked}, whereas \c{%??} refers to the macro name as
+\e{declared}.  The two are always the same for case-sensitive
+macros, but for case-insensitive macros, they can differ.
+
+For example:
+
+\c %imacro Foo 0
+\c         mov %?,%??
+\c %endmacro
+\c
+\c         foo
+\c         FOO
+
+will expand to:
+
+\c         mov foo,Foo
+\c         mov FOO,Foo
+
+These tokens can be used for single-line macros \e{if defined outside
+any multi-line macros.} See below.
+
+\S{selfref%*?} The Single-Line Macro Name: \i\c{%*?} and \i\c{%*??}
+
+If the tokens \c{%?} and \c{%??} are used inside a multi-line macro,
+they are expanded before any directives are processed. As a result,
+
+\c %imacro Foo 0
+\c       %idefine Bar _%?
+\c       mov BAR,bAr
+\c %endmacro
+\c
+\c       foo
+\c       mov eax,bar
+
+will expand to:
+
+\c       mov _foo,_foo
+\c       mov eax,_foo
+
+which may or may not be what you expected. The tokens \c{%*?} and
+\c{%*??} behave like \c{%?} and \c{%??} but are only expanded inside
+single-line macros. Thus:
+
+\c %imacro Foo 0
+\c       %idefine Bar _%*?
+\c       mov BAR,bAr
+\c %endmacro
+\c
+\c       foo
+\c       mov eax,bar
+
+will expand to:
+
+\c       mov _BAR,_bAr
+\c       mov eax,_bar
+
+The \c{%*?} can be used to make a keyword "disappear", for example in
+case a new instruction has been used as a label in older code.  For
+example:
+
+\c %idefine pause $%*?                 ; Hide the PAUSE instruction
+
+\c{%*?} and \c{%*??} were introduced in NASM 2.15.04.
+
+\S{undef} Undefining Single-Line Macros: \i\c{%undef}
+
+Single-line macros can be removed with the \c{%undef} directive.  For
+example, the following sequence:
+
+\c %define foo bar
+\c %undef  foo
+\c
+\c         mov     eax, foo
+
+will expand to the instruction \c{mov eax, foo}, since after
+\c{%undef} the macro \c{foo} is no longer defined.
+
+Macros that would otherwise be pre-defined can be undefined on the
+command-line using the `-u' option on the NASM command line: see
+\k{opt-u}.
+
+
+\S{assign} \i{Preprocessor Variables}: \i\c{%assign}
+
+An alternative way to define single-line macros is by means of the
+\c{%assign} command (and its \I{case sensitive}case-insensitive
+counterpart \i\c{%iassign}, which differs from \c{%assign} in
+exactly the same way that \c{%idefine} differs from \c{%define}).
+
+\c{%assign} is used to define single-line macros which take no
+parameters and have a numeric value. This value can be specified in
+the form of an expression, and it will be evaluated once, when the
+\c{%assign} directive is processed.
+
+Like \c{%define}, macros defined using \c{%assign} can be re-defined
+later, so you can do things like
+
+\c %assign i i+1
+
+to increment the numeric value of a macro.
+
+\c{%assign} is useful for controlling the termination of \c{%rep}
+preprocessor loops: see \k{rep} for an example of this. Another
+use for \c{%assign} is given in \k{16c} and \k{32c}.
+
+The expression passed to \c{%assign} is a \i{critical expression}
+(see \k{crit}), and must also evaluate to a pure number (rather than
+a relocatable reference such as a code or data address, or anything
+involving a register).
+
+See also the \i\c{%eval()} preprocessor function, \k{f_eval}.
+
+
+\S{defstr} Defining Strings: \I\c{%idefstr}\i\c{%defstr}
+
+\c{%defstr}, and its case-insensitive counterpart \c{%idefstr}, define
+or redefine a single-line macro without parameters but converts the
+entire right-hand side, after macro expansion, to a quoted string
+before definition.
+
+For example:
+
+\c %defstr test TEST
+
+is equivalent to
+
+\c %define test 'TEST'
+
+This can be used, for example, with the \c{%!} construct (see
+\k{getenv}):
+
+\c %defstr PATH %!PATH          ; The operating system PATH variable
+
+See also the \i\c{%str()} preprocessor function, \k{f_str}.
+
+
+\S{deftok} Defining Tokens: \I\c{%ideftok}\i\c{%deftok}
+
+\c{%deftok}, and its case-insensitive counterpart \c{%ideftok}, define
+or redefine a single-line macro without parameters but converts the
+second parameter, after string conversion, to a sequence of tokens.
+
+For example:
+
+\c %deftok test 'TEST'
+
+is equivalent to
+
+\c %define test TEST
+
+See also the \i\c{%tok()} preprocessor function, \k{f_tok}.
+
+
+\S{defalias} Defining Aliases: \I\c{%idefalias}\i\c{%defalias}
+
+\c{%defalias}, and its case-insensitive counterpart \c{%idefalias}, define an
+alias to a macro, i.e. equivalent of a symbolic link.
+
+When used with various macro defining and undefining directives, it
+affects the aliased macro. This functionality is intended for being
+able to rename macros while retaining the legacy names.
+
+When an alias is defined, but the aliased macro is then undefined, the
+aliases can legitimately point to nonexistent macros.
+
+The alias can be undefined using the \c{%undefalias} directive.  \e{All}
+aliases can be undefined using the \c{%clear defalias} directive. This
+includes backwards compatibility aliases defined by NASM itself.
+
+To disable aliases without undefining them, use the \c{%aliases off}
+directive.
+
+To check whether an alias is defined, regardless of the existence of
+the aliased macro, use \c{%ifdefalias}.
+
+For example:
+
+\c %defalias OLD NEW
+\c    ; OLD and NEW both undefined
+\c %define NEW 123
+\c    ; OLD and NEW both 123
+\c %undef OLD
+\c    ; OLD and NEW both undefined
+\c %define OLD 456
+\c    ; OLD and NEW both 456
+\c %undefalias OLD
+\c    ; OLD undefined, NEW defined to 456
+
+\S{cond-comma} \i{Conditional Comma Operator}: \i\c{%,}
+
+As of version 2.15, NASM has a conditional comma operator \c{%,} that
+expands to a comma \e{unless} followed by a null expansion, which
+allows suppressing the comma before an empty argument. This is
+especially useful with greedy single-line macros.
+
+For example, all the expressions below are valid:
+
+\c %define greedy(a,b,c+) a + 66 %, b * 3 %, c
+\c
+\c        db greedy(1,2)          ; db 1 + 66, 2 * 3
+\c        db greedy(1,2,3)        ; db 1 + 66, 2 * 3, 3
+\c        db greedy(1,2,3,4)      ; db 1 + 66, 2 * 3, 3, 4
+\c        db greedy(1,2,3,4,5)    ; db 1 + 66, 2 * 3, 3, 4, 5
+
+
+\H{strlen} \i{String Manipulation in Macros}
+
+It's often useful to be able to handle strings in macros. NASM
+supports a few simple string handling macro operators from which
+more complex operations can be constructed.
+
+All the string operators define or redefine a value (either a string
+or a numeric value) to a single-line macro.  When producing a string
+value, it may change the style of quoting of the input string or
+strings, and possibly use \c{\\}-escapes inside \c{`}-quoted strings.
+
+These directives are also available as \i{preprocessor functions}, see
+\k{ppfunc}.
+
+\S{strcat} \i{Concatenating Strings}: \i\c{%strcat}
+
+The \c{%strcat} operator concatenates quoted strings and assign them to
+a single-line macro.
+
+For example:
+
+\c %strcat alpha "Alpha: ", '12" screen'
+
+... would assign the value \c{'Alpha: 12" screen'} to \c{alpha}.
+Similarly:
+
+\c %strcat beta '"foo"\', "'bar'"
+
+... would assign the value \c{`"foo"\\\\'bar'`} to \c{beta}.
+
+The use of commas to separate strings is permitted but optional.
+
+The corresponding preprocessor function is \c{%strcat()}, see
+\k{f_strcat}.
+
+
+\S{strlen} \i{String Length}: \i\c{%strlen}
+
+The \c{%strlen} operator assigns the length of a string to a macro.
+For example:
+
+\c %strlen charcnt 'my string'
+
+In this example, \c{charcnt} would receive the value 9, just as
+if an \c{%assign} had been used. In this example, \c{'my string'}
+was a literal string but it could also have been a single-line
+macro that expands to a string, as in the following example:
+
+\c %define sometext 'my string'
+\c %strlen charcnt sometext
+
+As in the first case, this would result in \c{charcnt} being
+assigned the value of 9.
+
+The corresponding preprocessor function is \c{%strlen()}, see
+\k{f_strlen}.
+
+
+\S{substr} \i{Extracting Substrings}: \i\c{%substr}
+
+Individual letters or substrings in strings can be extracted using the
+\c{%substr} operator.  An example of its use is probably more useful
+than the description:
+
+\c %substr mychar 'xyzw' 1       ; equivalent to %define mychar 'x'
+\c %substr mychar 'xyzw' 2       ; equivalent to %define mychar 'y'
+\c %substr mychar 'xyzw' 3       ; equivalent to %define mychar 'z'
+\c %substr mychar 'xyzw' 2,2     ; equivalent to %define mychar 'yz'
+\c %substr mychar 'xyzw' 2,-1    ; equivalent to %define mychar 'yzw'
+\c %substr mychar 'xyzw' 2,-2    ; equivalent to %define mychar 'yz'
+
+As with \c{%strlen} (see \k{strlen}), the first parameter is the
+single-line macro to be created and the second is the string. The
+third parameter specifies the first character to be selected, and the
+optional fourth parameter preceded by comma) is the length.  Note
+that the first index is 1, not 0 and the last index is equal to the
+value that \c{%strlen} would assign given the same string. Index
+values out of range result in an empty string.  A negative length
+means "until N-1 characters before the end of string", i.e. \c{-1}
+means until end of string, \c{-2} until one character before, etc.
+
+The corresponding preprocessor function is \c{%substr()}, see
+\k{f_substr}, however please note that the default value for the
+length parameter, if omitted, is \c{-1} rather than \c{1} for
+\c{%substr()}.
+
+
+\H{ppfunc} \i{Preprocessor Functions}
+
+Preprocessor functions are, fundamentally, a kind of built-in
+single-line macros. They expand to a string depending on its
+arguments, and can be used in any context where single-line macro
+expansion would be performed. Preprocessor functions were introduced
+in NASM 2.16.
+
+\S{f_abs} \i\c{%abs()} Function
+
+The \c{%abs()} function evaluates its first argument as an expression,
+and then emits the absolute value. This will always be emitted as a
+single token containing a decimal number; no minus sign will be
+emitted even if the input value is the maximum negative number.
+
+\S{f_cond} \i\c{%cond()} Function
+
+The \c{%cond()} function evaluates its first argument as an
+expression, then expands to its second argument if true (nonzero), and
+the third, if present, if false (zero). This is in effect a specialized
+version of the \i\c{%sel()} function; \c{%cond(x,y,z)} is equivalent
+to \c{%sel(1+!(x),y,z)}.
+
+\c %define a 1
+\c %xdefine astr %cond(a,"true","false") ; %define astr "true"
+
+The argument not selected is never expanded.
+
+
+\S{f_count} \i\c{%count()} Function
+
+The \c{%count()} function expands to the number of argments passed to
+the macro. Note that just as for single-line macros, \c{%count()}
+treats an empty argument list as a single empty argument.
+
+\c %xdefine empty %count()        ; %define empty 1
+\c %xdefine one   %count(1)	  ; %define one 1
+\c %xdefine two   %count(5,q)	  ; %define two 2
+\c %define  list  a,b,46
+\c %xdefine lc1   %count(list)	  ; %define lc 1 (just one argument)
+\c %xdefine lc2   %count(%[list]) ; %define lc 3 (indirection expands)
+
+
+\S{f_eval} \i\c{%eval()} Function
+
+The \c{%eval()} function evaluates its argument as a numeric
+expression and expands to the result as an integer constant in much
+the same way the \i\c{%assign} directive would, see \k{assign}. Unlike
+\c{%assign}, \c{%eval()} supports more than one argument; if more than
+one argument is specified, it is expanded to a comma-separated list of
+values.
+
+\c %assign a    2
+\c %assign b    3
+\c %defstr what %eval(a+b,a*b)	; equivalent to %define what "5,6"
+
+The expressions passed to \c{%eval()} are \i{critical expressions},
+see \k{crit}.
+
+
+\S{f_hex} \i\c{%hex()} Function
+
+Equivalent to \i\c\{%eval()}, except that the results generated are
+given as unsigned hexadecimal, with a \c{0x} prefix.
+
+
+\S{f_is} \i\c{%is()} Family Functions
+
+Each \i\c{%if} family directive (see \k{condasm}) has an equivalent
+\c{%is()} family function, that expands to \c{1} if the equivalent
+\c{%if} directive would process as true, and \c{0} if the equivalent
+\c{%if} directive would process as false.
+
+\c ; Instead of !%isidn() could have used %isnidn()
+\c %if %isdef(foo) && !%isidn(foo,bar)
+\c       db "foo is defined, but not as 'bar'"
+\c %endif
+
+Note that, being functions, the arguments (before expansion) will
+always need to have balanced parentheses so that the end of the
+argument list can be defined. This means that the syntax of
+e.g. \c{%istoken()} and \c{%isidn()} is somewhat stricter than their
+corresponding \c{%if} directives; it may be necessary to escape the
+argument to the conditional using \c{\{\}}:
+
+\c ; Instead of !%isidn() could have used %isnidn()
+\c %if %isdef(foo) && !%isidn({foo,)})
+\c       db "foo is defined, but not as ')'"
+\c %endif
+
+
+\S{f_map} \i\c{%map()} Function
+
+The \c{%map()} function takes as its first parameter the name of a
+single-line macro, followed by up to two optional colon-separated
+subparameters:
+
+\b The first subparameter, if present, should be a list of macro
+parameters enclosed in parentheses. Note that \c{()} represents a
+one-argument list containing an empty parameter; omit the parentheses
+to specify no parameters.
+
+\b The second subparameter, if present, represent the number of
+group size for additional parameters to the macro (default 1).
+
+Further parameters, if any, are then passed as additional parameters to the
+given macro for expansion, in sets given by the specified group size,
+and the results turned into a comma-separated list. If no additional
+parameters are given, \c{%map()} expands to nothing.
+
+For example:
+
+\c %define alpha(&x)     x
+\c %define alpha(&x,y)	 y dup (x)
+\c %define alpha(s,&x,y) y dup (x,s)
+\c ; 0 fixed + 1 grouped parameters per call, calls alpha(&x)
+\c       db %map(alpha,foo,bar,baz,quux)
+\c ; 0 fixed + 2 grouped parameters per call, calls alpha(&x,y)
+\c	 db %map(alpha::2,foo,bar,baz,quux)
+\c ; 1 fixed + 2 grouped parameters per call, calls alpha(s,&x,y)
+\c       db %map(alpha:("!"):2,foo,bar,baz,quux)
+
+... expands to:
+
+\c       db 'foo','bar','baz','quux'
+\c       db bar dup ('foo'),quux dup ('baz')
+\c       db bar dup ('foo',"!"),quux dup ('baz',"!")
+
+As a more complex example, a macro that joins quoted strings together
+with a user-specified delimiter string:
+
+\c %define join(sep)        ''      ; handle the case of zero strings
+\c %define _join(sep,str)   sep,str ; helper macro
+\c %define join(sep,s1,sn+) %strcat(s1, %map(_join:(sep) %, sn))
+\c
+\c       db join(':')
+\c       db join(':','a')
+\c       db join(':','a','b')
+\c       db join(':','a','b','c')
+\c       db join(':','a','b','c','d')
+
+... expands to:
+
+\c       db ''
+\c       db 'a'
+\c       db 'a:b'
+\c       db 'a:b:c'
+\c       db 'a:b:c:d'
+
+
+\S{f_num} \i\c{%num()} Function
+
+The \c{%num()} function evaluates its arguments as expressions, and
+then produces a quoted string encoding the first argument as an
+\e{unsigned} 64-bit integer.
+
+The second argument is the desired number of digits (max 255, default
+-1).
+
+The third argument is the encoding base (from 2 to 64, default 10); if
+the base is given as -2, -8, -10, or -16, then \c{0b}, \c{0q}, \c{0d}
+or \c{0x} is prepended, respectively; all other negative values are
+disallowed.
+
+Only the first argument is required.
+
+If the number of digits is negative, NASM will add additional digits
+if needed; if positive the string is truncated to the number of digits
+specified. 0 is treated as -1, except that the input number 0
+always generates an empty string (thus, the first digit will never be
+zero), even if the base given is negative.
+
+The full 64-symbol set used is, in order:
+
+\c 0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ@_
+
+If a \e{signed} number needs to be converted to a string, use
+\c{%abs()}, \c{%cond()}, and \c{%strcat()} to format the signed number
+string to your specific output requirements.
+
+\S{f_sel} \i\c{%sel()} Function
+
+The \c{%sel()} function evaluates its first argument as an
+expression, then expands to its second argument if 1, the third
+argument if 2, and so on. If the value is less than 1 or larger than
+the number of arguments minus one, then the \c{%sel()} function
+expands to nothing.
+
+\c %define b 2
+\c %xdefine bstr %sel(b,"one","two","three") ; %define bstr "two"
+
+The arguments not selected are never expanded.
+
+
+\S{f_str} \i\c\{%str()} Function
+
+The \c{%str()} function converts its argument, including any commas,
+to a quoted string, similar to the way the \i\c{%defstr} directive
+would, see \k{defstr}.
+
+Being a function, the argument will need to have balanced parentheses
+or be escaped using \c{\{\}}.
+
+\c ; The following lines are all equivalent
+\c %define  test 'TEST'
+\c %defstr  test TEST
+\c %xdefine test %str(TEST)
+
+
+\S{f_strcat} \i\c\{%strcat()} Function
+
+The \c{%strcat()} function concatenates a list of quoted strings, in
+the same way the \i\c{%strcat} directive would, see \k{strcat}.
+
+\c ; The following lines are all equivalent
+\c %define  alpha 'Alpha: 12" screen'
+\c %strcat  alpha "Alpha: ", '12" screen'
+\c %xdefine alpha %strcat("Alpha: ", '12" screen')
+
+
+\S{f_strlen} \i\c{%strlen()} Function
+
+The \c{%strlen()} function expands to the length of a quoted string,
+in the same way the \i\c{%strlen} directive would, see \k{strlen}.
+
+\c ; The following lines are all equivalent
+\c %define  charcnt 9
+\c %strlen  charcnt 'my string'
+\c %xdefine charcnt %strlen('my string')
+
+
+\S{f_substr} \i\c\{%substr()} Function
+
+The \c{%substr()} function extracts a substring of a quoted string, in
+the same way the \i\c{%substr} directive would, see \k{substr}. Note
+that unlike the \c{%substr} directive, commas are required between all
+parameters, is required after the string argument, and that the
+default for the length argument, if omitted, is \c{-1} (i.e. the
+remainder of the string) rather than \c{1}.
+
+\c ; The following lines are all equivalent
+\c %define  mychar 'yzw'
+\c %substr  mychar 'xyzw' 2,-1
+\c %xdefine mychar %substr('xyzw',2,3)
+\c %xdefine mychar %substr('xyzw',2,-1)
+\c %xdefine mychar %substr('xyzw',2)
+
+
+\S{f_tok} \i\c{%tok()} function
+
+The \c{%tok()} function converts a quoted string into a sequence of
+tokens, in the same way the \i\c{%deftok} directive would, see
+\k{deftok}.
+
+\c ; The following lines are all equivalent
+\c %define test TEST
+\c %deftok test 'TEST'
+\c %define test %tok('TEST')
+
+
+\H{mlmacro} \i{Multi-Line Macros}: \I\c{%imacro}\i\c{%macro}
+
+Multi-line macros much like the type of macro seen in MASM
+and TASM, and expand to a new set of lines of source code.
+A multi-line macro definition in NASM looks something like
+this.
+
+\c %macro  prologue 1
+\c
+\c         push    ebp
+\c         mov     ebp,esp
+\c         sub     esp,%1
+\c
+\c %endmacro
+
+This defines a C-like function prologue as a macro: so you would
+invoke the macro with a call such as:
+
+\c myfunc:   prologue 12
+
+which would expand to the three lines of code
+
+\c myfunc: push    ebp
+\c         mov     ebp,esp
+\c         sub     esp,12
+
+The number \c{1} after the macro name in the \c{%macro} line defines
+the number of parameters the macro \c{prologue} expects to receive.
+The use of \c{%1} inside the macro definition refers to the first
+parameter to the macro call. With a macro taking more than one
+parameter, subsequent parameters would be referred to as \c{%2},
+\c{%3} and so on.
+
+Multi-line macros, like single-line macros, are \i{case-sensitive},
+unless you define them using the alternative directive \c{%imacro}.
+
+If you need to pass a comma as \e{part} of a parameter to a
+multi-line macro, you can do that by enclosing the entire parameter
+in \I{braces, around macro parameters}braces. So you could code
+things like:
+
+\c %macro  silly 2
+\c
+\c     %2: db      %1
+\c
+\c %endmacro
+\c
+\c         silly 'a', letter_a             ; letter_a:  db 'a'
+\c         silly 'ab', string_ab           ; string_ab: db 'ab'
+\c         silly {13,10}, crlf             ; crlf:      db 13,10
+
+The behavior with regards to empty arguments at the end of multi-line
+macros before NASM 2.15 was often very strange. For backwards
+compatibility, NASM attempts to recognize cases where the legacy
+behavior would give unexpected results, and issues a warning, but
+largely tries to match the legacy behavior. This can be disabled with
+the \c{%pragma} (see \k{pragma-preproc}):
+
+\c %pragma preproc sane_empty_expansion
+
+
+\S{mlmacover} Overloading Multi-Line Macros\I{overloading, multi-line macros}
+
+As with single-line macros, multi-line macros can be overloaded by
+defining the same macro name several times with different numbers of
+parameters. This time, no exception is made for macros with no
+parameters at all. So you could define
+
+\c %macro  prologue 0
+\c
+\c         push    ebp
+\c         mov     ebp,esp
+\c
+\c %endmacro
+
+to define an alternative form of the function prologue which
+allocates no local stack space.
+
+Sometimes, however, you might want to `overload' a machine
+instruction; for example, you might want to define
+
+\c %macro  push 2
+\c
+\c         push    %1
+\c         push    %2
+\c
+\c %endmacro
+
+so that you could code
+
+\c         push    ebx             ; this line is not a macro call
+\c         push    eax,ecx         ; but this one is
+
+Ordinarily, NASM will give a warning for the first of the above two
+lines, since \c{push} is now defined to be a macro, and is being
+invoked with a number of parameters for which no definition has been
+given. The correct code will still be generated, but the assembler
+will give a warning. This warning can be disabled by the use of the
+\c{-w-macro-params} command-line option (see \k{opt-w}).
+
+
+\S{maclocal} \i{Macro-Local Labels}
+
+NASM allows you to define labels within a multi-line macro
+definition in such a way as to make them local to the macro call: so
+calling the same macro multiple times will use a different label
+each time. You do this by prefixing \i\c{%%} to the label name. So
+you can invent an instruction which executes a \c{RET} if the \c{Z}
+flag is set by doing this:
+
+\c %macro  retz 0
+\c
+\c         jnz     %%skip
+\c         ret
+\c     %%skip:
+\c
+\c %endmacro
+
+You can call this macro as many times as you want, and every time
+you call it NASM will make up a different `real' name to substitute
+for the label \c{%%skip}. The names NASM invents are of the form
+\c{..@2345.skip}, where the number 2345 changes with every macro
+call. The \i\c{..@} prefix prevents macro-local labels from
+interfering with the local label mechanism, as described in
+\k{locallab}. You should avoid defining your own labels in this form
+(the \c{..@} prefix, then a number, then another period) in case
+they interfere with macro-local labels.
+
+These labels are really macro-local \e{tokens}, and can be used for
+other purposes where a token unique to each macro invocation is
+desired, e.g. to name single-line macros without using the context
+feature (\k{ctxlocal}).
+
+
+\S{mlmacgre} \i{Greedy Macro Parameters}
+
+Occasionally it is useful to define a macro which lumps its entire
+command line into one parameter definition, possibly after
+extracting one or two smaller parameters from the front. An example
+might be a macro to write a text string to a file in MS-DOS, where
+you might want to be able to write
+
+\c         writefile [filehandle],"hello, world",13,10
+
+NASM allows you to define the last parameter of a macro to be
+\e{greedy}, meaning that if you invoke the macro with more
+parameters than it expects, all the spare parameters get lumped into
+the last defined one along with the separating commas. So if you
+code:
+
+\c %macro  writefile 2+
+\c
+\c         jmp     %%endstr
+\c   %%str:        db      %2
+\c   %%endstr:
+\c         mov     dx,%%str
+\c         mov     cx,%%endstr-%%str
+\c         mov     bx,%1
+\c         mov     ah,0x40
+\c         int     0x21
+\c
+\c %endmacro
+
+then the example call to \c{writefile} above will work as expected:
+the text before the first comma, \c{[filehandle]}, is used as the
+first macro parameter and expanded when \c{%1} is referred to, and
+all the subsequent text is lumped into \c{%2} and placed after the
+\c{db}.
+
+The greedy nature of the macro is indicated to NASM by the use of
+the \I{+ modifier}\c{+} sign after the parameter count on the
+\c{%macro} line.
+
+If you define a greedy macro, you are effectively telling NASM how
+it should expand the macro given \e{any} number of parameters from
+the actual number specified up to infinity; in this case, for
+example, NASM now knows what to do when it sees a call to
+\c{writefile} with 2, 3, 4 or more parameters. NASM will take this
+into account when overloading macros, and will not allow you to
+define another form of \c{writefile} taking 4 parameters (for
+example).
+
+Of course, the above macro could have been implemented as a
+non-greedy macro, in which case the call to it would have had to
+look like
+
+\c           writefile [filehandle], {"hello, world",13,10}
+
+NASM provides both mechanisms for putting \i{commas in macro
+parameters}, and you choose which one you prefer for each macro
+definition.
+
+See \k{sectmac} for a better way to write the above macro.
+
+\S{mlmacrange} \i{Macro Parameters Range}
+
+NASM allows you to expand parameters via special construction \c{%\{x:y\}}
+where \c{x} is the first parameter index and \c{y} is the last. Any index can
+be either negative or positive but must never be zero.
+
+For example
+
+\c %macro mpar 1-*
+\c      db %{3:5}
+\c %endmacro
+\c
+\c mpar 1,2,3,4,5,6
+
+expands to \c{3,4,5} range.
+
+Even more, the parameters can be reversed so that
+
+\c %macro mpar 1-*
+\c      db %{5:3}
+\c %endmacro
+\c
+\c mpar 1,2,3,4,5,6
+
+expands to \c{5,4,3} range.
+
+But even this is not the last. The parameters can be addressed via negative
+indices so NASM will count them reversed. The ones who know Python may see
+the analogue here.
+
+\c %macro mpar 1-*
+\c      db %{-1:-3}
+\c %endmacro
+\c
+\c mpar 1,2,3,4,5,6
+
+expands to \c{6,5,4} range.
+
+Note that NASM uses \i{comma} to separate parameters being expanded.
+
+By the way, here is a trick - you might use the index \c{%{-1:-1}}
+which gives you the \i{last} argument passed to a macro.
+
+\S{mlmacdef} \i{Default Macro Parameters}
+
+NASM also allows you to define a multi-line macro with a \e{range}
+of allowable parameter counts. If you do this, you can specify
+defaults for \i{omitted parameters}. So, for example:
+
+\c %macro  die 0-1 "Painful program death has occurred."
+\c
+\c         writefile 2,%1
+\c         mov     ax,0x4c01
+\c         int     0x21
+\c
+\c %endmacro
+
+This macro (which makes use of the \c{writefile} macro defined in
+\k{mlmacgre}) can be called with an explicit error message, which it
+will display on the error output stream before exiting, or it can be
+called with no parameters, in which case it will use the default
+error message supplied in the macro definition.
+
+In general, you supply a minimum and maximum number of parameters
+for a macro of this type; the minimum number of parameters are then
+required in the macro call, and then you provide defaults for the
+optional ones. So if a macro definition began with the line
+
+\c %macro foobar 1-3 eax,[ebx+2]
+
+then it could be called with between one and three parameters, and
+\c{%1} would always be taken from the macro call. \c{%2}, if not
+specified by the macro call, would default to \c{eax}, and \c{%3} if
+not specified would default to \c{[ebx+2]}.
+
+You can provide extra information to a macro by providing
+too many default parameters:
+
+\c %macro quux 1 something
+
+This will trigger a warning by default; see \k{opt-w} for
+more information.
+When \c{quux} is invoked, it receives not one but two parameters.
+\c{something} can be referred to as \c{%2}. The difference
+between passing \c{something} this way and writing \c{something}
+in the macro body is that with this way \c{something} is evaluated
+when the macro is defined, not when it is expanded.
+
+You may omit parameter defaults from the macro definition, in which
+case the parameter default is taken to be blank. This can be useful
+for macros which can take a variable number of parameters, since the
+\i\c{%0} token (see \k{percent0}) allows you to determine how many
+parameters were really passed to the macro call.
+
+This defaulting mechanism can be combined with the greedy-parameter
+mechanism; so the \c{die} macro above could be made more powerful,
+and more useful, by changing the first line of the definition to
+
+\c %macro die 0-1+ "Painful program death has occurred.",13,10
+
+The maximum parameter count can be infinite, denoted by \c{*}. In
+this case, of course, it is impossible to provide a \e{full} set of
+default parameters. Examples of this usage are shown in \k{rotate}.
+
+
+\S{percent0} \i\c{%0}: \I{counting macro parameters}Macro Parameter Counter
+
+The parameter reference \c{%0} will return a numeric constant giving the
+number of parameters received, that is, if \c{%0} is n then \c{%}n is the
+last parameter. \c{%0} is mostly useful for macros that can take a variable
+number of parameters. It can be used as an argument to \c{%rep}
+(see \k{rep}) in order to iterate through all the parameters of a macro.
+Examples are given in \k{rotate}.
+
+
+\S{percent00} \i\c{%00}: \I{label preceding macro}Label Preceding Macro
+
+\c{%00} will return the label preceding the macro invocation, if any. The
+label must be on the same line as the macro invocation, may be a local label
+(see \k{locallab}), and need not end in a colon.
+
+If \c{%00} is present anywhere in the macro body, the label itself
+will not be emitted by NASM. You can, of course, put \c{%00:}
+explicitly at the beginning of your macro.
+
+
+\S{rotate} \i\c{%rotate}: \i{Rotating Macro Parameters}
+
+Unix shell programmers will be familiar with the \I{shift
+command}\c{shift} shell command, which allows the arguments passed
+to a shell script (referenced as \c{$1}, \c{$2} and so on) to be
+moved left by one place, so that the argument previously referenced
+as \c{$2} becomes available as \c{$1}, and the argument previously
+referenced as \c{$1} is no longer available at all.
+
+NASM provides a similar mechanism, in the form of \c{%rotate}. As
+its name suggests, it differs from the Unix \c{shift} in that no
+parameters are lost: parameters rotated off the left end of the
+argument list reappear on the right, and vice versa.
+
+\c{%rotate} is invoked with a single numeric argument (which may be
+an expression). The macro parameters are rotated to the left by that
+many places. If the argument to \c{%rotate} is negative, the macro
+parameters are rotated to the right.
+
+\I{iterating over macro parameters}So a pair of macros to save and
+restore a set of registers might work as follows:
+
+\c %macro  multipush 1-*
+\c
+\c   %rep  %0
+\c         push    %1
+\c   %rotate 1
+\c   %endrep
+\c
+\c %endmacro
+
+This macro invokes the \c{PUSH} instruction on each of its arguments
+in turn, from left to right. It begins by pushing its first
+argument, \c{%1}, then invokes \c{%rotate} to move all the arguments
+one place to the left, so that the original second argument is now
+available as \c{%1}. Repeating this procedure as many times as there
+were arguments (achieved by supplying \c{%0} as the argument to
+\c{%rep}) causes each argument in turn to be pushed.
+
+Note also the use of \c{*} as the maximum parameter count,
+indicating that there is no upper limit on the number of parameters
+you may supply to the \i\c{multipush} macro.
+
+It would be convenient, when using this macro, to have a \c{POP}
+equivalent, which \e{didn't} require the arguments to be given in
+reverse order. Ideally, you would write the \c{multipush} macro
+call, then cut-and-paste the line to where the pop needed to be
+done, and change the name of the called macro to \c{multipop}, and
+the macro would take care of popping the registers in the opposite
+order from the one in which they were pushed.
+
+This can be done by the following definition:
+
+\c %macro  multipop 1-*
+\c
+\c   %rep %0
+\c   %rotate -1
+\c         pop     %1
+\c   %endrep
+\c
+\c %endmacro
+
+This macro begins by rotating its arguments one place to the
+\e{right}, so that the original \e{last} argument appears as \c{%1}.
+This is then popped, and the arguments are rotated right again, so
+the second-to-last argument becomes \c{%1}. Thus the arguments are
+iterated through in reverse order.
+
+
+\S{concat} \i{Concatenating Macro Parameters}
+
+NASM can concatenate macro parameters and macro indirection constructs
+on to other text surrounding them. This allows you to declare a family
+of symbols, for example, in a macro definition. If, for example, you
+wanted to generate a table of key codes along with offsets into the
+table, you could code something like
+
+\c %macro keytab_entry 2
+\c
+\c     keypos%1    equ     $-keytab
+\c                 db      %2
+\c
+\c %endmacro
+\c
+\c keytab:
+\c           keytab_entry F1,128+1
+\c           keytab_entry F2,128+2
+\c           keytab_entry Return,13
+
+which would expand to
+
+\c keytab:
+\c keyposF1        equ     $-keytab
+\c                 db     128+1
+\c keyposF2        equ     $-keytab
+\c                 db      128+2
+\c keyposReturn    equ     $-keytab
+\c                 db      13
+
+You can just as easily concatenate text on to the other end of a
+macro parameter, by writing \c{%1foo}.
+
+If you need to append a \e{digit} to a macro parameter, for example
+defining labels \c{foo1} and \c{foo2} when passed the parameter
+\c{foo}, you can't code \c{%11} because that would be taken as the
+eleventh macro parameter. Instead, you must code
+\I{braces, after % sign}\c{%\{1\}1}, which will separate the first
+\c{1} (giving the number of the macro parameter) from the second
+(literal text to be concatenated to the parameter).
+
+This concatenation can also be applied to other preprocessor in-line
+objects, such as macro-local labels (\k{maclocal}) and context-local
+labels (\k{ctxlocal}). In all cases, ambiguities in syntax can be
+resolved by enclosing everything after the \c{%} sign and before the
+literal text in braces: so \c{%\{%foo\}bar} concatenates the text
+\c{bar} to the end of the real name of the macro-local label
+\c{%%foo}. (This is unnecessary, since the form NASM uses for the
+real names of macro-local labels means that the two usages
+\c{%\{%foo\}bar} and \c{%%foobar} would both expand to the same
+thing anyway; nevertheless, the capability is there.)
+
+The single-line macro indirection construct, \c{%[...]}
+(\k{indmacro}), behaves the same way as macro parameters for the
+purpose of concatenation.
+
+See also the \c{%+} operator, \k{concat%+}.
+
+
+\S{mlmaccc} \i{Condition Codes as Macro Parameters}
+
+NASM can give special treatment to a macro parameter which contains
+a condition code. For a start, you can refer to the macro parameter
+\c{%1} by means of the alternative syntax \i\c{%+1}, which informs
+NASM that this macro parameter is supposed to contain a condition
+code, and will cause the preprocessor to report an error message if
+the macro is called with a parameter which is \e{not} a valid
+condition code.
+
+Far more usefully, though, you can refer to the macro parameter by
+means of \i\c{%-1}, which NASM will expand as the \e{inverse}
+condition code. So the \c{retz} macro defined in \k{maclocal} can be
+replaced by a general \i{conditional-return macro} like this:
+
+\c %macro  retc 1
+\c
+\c         j%-1    %%skip
+\c         ret
+\c   %%skip:
+\c
+\c %endmacro
+
+This macro can now be invoked using calls like \c{retc ne}, which
+will cause the conditional-jump instruction in the macro expansion
+to come out as \c{JE}, or \c{retc po} which will make the jump a
+\c{JPE}.
+
+The \c{%+1} macro-parameter reference is quite happy to interpret
+the arguments \c{CXZ} and \c{ECXZ} as valid condition codes;
+however, \c{%-1} will report an error if passed either of these,
+because no inverse condition code exists.
+
+
+\S{nolist} \i{Disabling Listing Expansion}\I\c{.nolist}
+
+When NASM is generating a listing file from your program, it will
+generally expand multi-line macros by means of writing the macro
+call and then listing each line of the expansion. This allows you to
+see which instructions in the macro expansion are generating what
+code; however, for some macros this clutters the listing up
+unnecessarily.
+
+NASM therefore provides the \c{.nolist} qualifier, which you can
+include in a macro definition to inhibit the expansion of the macro
+in the listing file. The \c{.nolist} qualifier comes directly after
+the number of parameters, like this:
+
+\c %macro foo 1.nolist
+
+Or like this:
+
+\c %macro bar 1-5+.nolist a,b,c,d,e,f,g,h
+
+\S{unmacro} Undefining Multi-Line Macros: \I\c{%unimacro}\i\c{%unmacro}
+
+Multi-line macros can be removed with the \c{%unmacro} directive.
+Unlike the \c{%undef} directive, however, \c{%unmacro} takes an
+argument specification, and will only remove \i{exact matches} with
+that argument specification.
+
+For example:
+
+\c %macro foo 1-3
+\c         ; Do something
+\c %endmacro
+\c %unmacro foo 1-3
+
+removes the previously defined macro \c{foo}, but
+
+\c %macro bar 1-3
+\c         ; Do something
+\c %endmacro
+\c %unmacro bar 1
+
+does \e{not} remove the macro \c{bar}, since the argument
+specification does not match exactly.
+
+A case-insensitive macro needs to be removed with the \c{%unimacro}
+directive.
+
+\H{condasm} \i{Conditional Assembly}\I\c{%if}
+
+Similarly to the C preprocessor, NASM allows sections of a source
+file to be assembled only if certain conditions are met. The general
+syntax of this feature looks like this:
+
+\c %if<condition>
+\c     ; some code which only appears if <condition> is met
+\c %elif<condition2>
+\c     ; only appears if <condition> is not met but <condition2> is
+\c %else
+\c     ; this appears if neither <condition> nor <condition2> was met
+\c %endif
+
+The inverse forms \i\c{%ifn} and \i\c{%elifn} are also supported.
+
+The \i\c{%else} clause is optional, as is the \i\c{%elif} clause.
+You can have more than one \c{%elif} clause as well.
+
+There are a number of variants of the \c{%if} directive.  Each has its
+corresponding \c{%elif}, \c{%ifn}, and \c{%elifn} directives; for
+example, the equivalents to the \c{%ifdef} directive are \c{%elifdef},
+\c{%ifndef}, and \c{%elifndef}.
+
+\S{ifdef} \i\c{%ifdef}: Testing Single-Line Macro Existence\I{testing,
+single-line macro existence}
+
+Beginning a conditional-assembly block with the line \c{%ifdef
+MACRO} will assemble the subsequent code if, and only if, a
+single-line macro called \c{MACRO} is defined. If not, then the
+\c{%elif} and \c{%else} blocks (if any) will be processed instead.
+
+For example, when debugging a program, you might want to write code
+such as
+
+\c           ; perform some function
+\c %ifdef DEBUG
+\c           writefile 2,"Function performed successfully",13,10
+\c %endif
+\c           ; go and do something else
+
+Then you could use the command-line option \c{-dDEBUG} to create a
+version of the program which produced debugging messages, and remove
+the option to generate the final release version of the program.
+
+You can test for a macro \e{not} being defined by using
+\i\c{%ifndef} instead of \c{%ifdef}. You can also test for macro
+definitions in \c{%elif} blocks by using \i\c{%elifdef} and
+\i\c{%elifndef}.
+
+
+\S{ifmacro} \i\c{%ifmacro}: Testing Multi-Line Macro
+Existence\I{testing, multi-line macro existence}
+
+The \c{%ifmacro} directive operates in the same way as the \c{%ifdef}
+directive, except that it checks for the existence of a multi-line macro.
+
+For example, you may be working with a large project and not have control
+over the macros in a library. You may want to create a macro with one
+name if it doesn't already exist, and another name if one with that name
+does exist.
+
+The \c{%ifmacro} is considered true if defining a macro with the given name
+and number of arguments would cause a definitions conflict. For example:
+
+\c %ifmacro MyMacro 1-3
+\c
+\c      %error "MyMacro 1-3" causes a conflict with an existing macro.
+\c
+\c %else
+\c
+\c      %macro MyMacro 1-3
+\c
+\c              ; insert code to define the macro
+\c
+\c      %endmacro
+\c
+\c %endif
+
+This will create the macro "MyMacro 1-3" if no macro already exists which
+would conflict with it, and emits a warning if there would be a definition
+conflict.
+
+You can test for the macro not existing by using the \i\c{%ifnmacro} instead
+of \c{%ifmacro}. Additional tests can be performed in \c{%elif} blocks by using
+\i\c{%elifmacro} and \i\c{%elifnmacro}.
+
+
+\S{ifctx} \i\c{%ifctx}: Testing the Context Stack\I{testing, context
+stack}
+
+The conditional-assembly construct \c{%ifctx} will cause the
+subsequent code to be assembled if and only if the top context on
+the preprocessor's context stack has the same name as one of the arguments.
+As with \c{%ifdef}, the inverse and \c{%elif} forms \i\c{%ifnctx},
+\i\c{%elifctx} and \i\c{%elifnctx} are also supported.
+
+For more details of the context stack, see \k{ctxstack}. For a
+sample use of \c{%ifctx}, see \k{blockif}.
+
+
+\S{if} \i\c{%if}: Testing Arbitrary Numeric Expressions\I{testing,
+arbitrary numeric expressions}
+
+The conditional-assembly construct \c{%if expr} will cause the
+subsequent code to be assembled if and only if the value of the
+numeric expression \c{expr} is non-zero. An example of the use of
+this feature is in deciding when to break out of a \c{%rep}
+preprocessor loop: see \k{rep} for a detailed example.
+
+The expression given to \c{%if}, and its counterpart \i\c{%elif}, is
+a critical expression (see \k{crit}).
+
+
+Like other \c{%if} constructs, \c{%if} has a counterpart
+\i\c{%elif}, and negative forms \i\c{%ifn} and \i\c{%elifn}.
+
+\S{ifidn} \i\c{%ifidn} and \i\c{%ifidni}: Testing Exact Text
+Identity\I{testing, exact text identity}
+
+The construct \c{%ifidn text1,text2} will cause the subsequent code
+to be assembled if and only if \c{text1} and \c{text2}, after
+expanding single-line macros, are identical pieces of text.
+Differences in white space are not counted.
+
+\c{%ifidni} is similar to \c{%ifidn}, but is \i{case-insensitive}.
+
+For example, the following macro pushes a register or number on the
+stack, and allows you to treat \c{IP} as a real register:
+
+\c %macro  pushparam 1
+\c
+\c   %ifidni %1,ip
+\c         call    %%label
+\c   %%label:
+\c   %else
+\c         push    %1
+\c   %endif
+\c
+\c %endmacro
+
+Like other \c{%if} constructs, \c{%ifidn} has a counterpart
+\i\c{%elifidn}, and negative forms \i\c{%ifnidn} and \i\c{%elifnidn}.
+Similarly, \c{%ifidni} has counterparts \i\c{%elifidni},
+\i\c{%ifnidni} and \i\c{%elifnidni}.
+
+\S{iftyp} \i\c{%ifid}, \i\c{%ifnum}, \i\c{%ifstr}: Testing Token
+Types\I{testing, token types}
+
+Some macros will want to perform different tasks depending on
+whether they are passed a number, a string, or an identifier. For
+example, a string output macro might want to be able to cope with
+being passed either a string constant or a pointer to an existing
+string.
+
+The conditional assembly construct \c{%ifid}, taking one parameter
+(which may be blank), assembles the subsequent code if and only if
+\e{the first token} in the parameter exists and is an
+identifier. \c{$} and \c{$$} are \e{not} considered identifiers by
+\c{%ifid}.
+
+\c{%ifnum} works similarly, but tests for the token being an integer
+numeric constant (not an expression!) possibly preceded by \c{+} or
+\c{-}; \c{%ifstr} tests for it being a quoted string.
+
+For example, the \c{writefile} macro defined in \k{mlmacgre} can be
+extended to take advantage of \c{%ifstr} in the following fashion:
+
+\c %macro writefile 2-3+
+\c
+\c   %ifstr %2
+\c         jmp     %%endstr
+\c     %if %0 = 3
+\c       %%str:    db      %2,%3
+\c     %else
+\c       %%str:    db      %2
+\c     %endif
+\c       %%endstr: mov     dx,%%str
+\c                 mov     cx,%%endstr-%%str
+\c   %else
+\c                 mov     dx,%2
+\c                 mov     cx,%3
+\c   %endif
+\c                 mov     bx,%1
+\c                 mov     ah,0x40
+\c                 int     0x21
+\c
+\c %endmacro
+
+Then the \c{writefile} macro can cope with being called in either of
+the following two ways:
+
+\c         writefile [file], strpointer, length
+\c         writefile [file], "hello", 13, 10
+
+In the first, \c{strpointer} is used as the address of an
+already-declared string, and \c{length} is used as its length; in
+the second, a string is given to the macro, which therefore declares
+it itself and works out the address and length for itself.
+
+Note the use of \c{%if} inside the \c{%ifstr}: this is to detect
+whether the macro was passed two arguments (so the string would be a
+single string constant, and \c{db %2} would be adequate) or more (in
+which case, all but the first two would be lumped together into
+\c{%3}, and \c{db %2,%3} would be required).
+
+The usual \I\c{%elifid}\I\c{%elifnum}\I\c{%elifstr}\c{%elif}...,
+\I\c{%ifnid}\I\c{%ifnnum}\I\c{%ifnstr}\c{%ifn}..., and
+\I\c{%elifnid}\I\c{%elifnnum}\I\c{%elifnstr}\c{%elifn}... versions
+exist for each of \c{%ifid}, \c{%ifnum} and \c{%ifstr}.
+
+\S{iftoken} \i\c{%iftoken}: Test for a Single Token
+
+Some macros will want to do different things depending on if it is
+passed a single token (e.g. paste it to something else using \c{%+})
+versus a multi-token sequence.
+
+The conditional assembly construct \c{%iftoken} assembles the
+subsequent code if and only if the expanded parameters consist of
+exactly one token, possibly surrounded by whitespace.
+
+For example:
+
+\c %iftoken 1
+
+will assemble the subsequent code, but
+
+\c %iftoken -1
+
+will not, since \c{-1} contains two tokens: the unary minus operator
+\c{-}, and the number \c{1}.
+
+The usual \i\c{%eliftoken}, \i\c\{%ifntoken}, and \i\c{%elifntoken}
+variants are also provided.
+
+\S{ifempty} \i\c{%ifempty}: Test for Empty Expansion
+
+The conditional assembly construct \c{%ifempty} assembles the
+subsequent code if and only if the expanded parameters do not contain
+any tokens at all, whitespace excepted.
+
+The usual \i\c{%elifempty}, \i\c\{%ifnempty}, and \i\c{%elifnempty}
+variants are also provided.
+
+\S{ifenv} \i\c{%ifenv}: Test If Environment Variable Exists
+
+The conditional assembly construct \c{%ifenv} assembles the
+subsequent code if and only if the environment variable referenced by
+the \c{%!}\e{variable} directive exists.
+
+The usual \i\c{%elifenv}, \i\c\{%ifnenv}, and \i\c{%elifnenv}
+variants are also provided.
+
+Just as for \c{%!}\e{variable} the argument should be written as a
+string if it contains characters that would not be legal in an
+identifier.  See \k{getenv}.
+
+\H{rep} \i{Preprocessor Loops}\I{repeating code}: \i\c{%rep}
+
+NASM's \c{TIMES} prefix, though useful, cannot be used to invoke a
+multi-line macro multiple times, because it is processed by NASM
+after macros have already been expanded. Therefore NASM provides
+another form of loop, this time at the preprocessor level: \c{%rep}.
+
+The directives \c{%rep} and \i\c{%endrep} (\c{%rep} takes a numeric
+argument, which can be an expression; \c{%endrep} takes no
+arguments) can be used to enclose a chunk of code, which is then
+replicated as many times as specified by the preprocessor:
+
+\c %assign i 0
+\c %rep    64
+\c         inc     word [table+2*i]
+\c %assign i i+1
+\c %endrep
+
+This will generate a sequence of 64 \c{INC} instructions,
+incrementing every word of memory from \c{[table]} to
+\c{[table+126]}.
+
+For more complex termination conditions, or to break out of a repeat
+loop part way along, you can use the \i\c{%exitrep} directive to
+terminate the loop, like this:
+
+\c fibonacci:
+\c %assign i 0
+\c %assign j 1
+\c %rep 100
+\c %if j > 65535
+\c     %exitrep
+\c %endif
+\c         dw j
+\c %assign k j+i
+\c %assign i j
+\c %assign j k
+\c %endrep
+\c
+\c fib_number equ ($-fibonacci)/2
+
+This produces a list of all the Fibonacci numbers that will fit in
+16 bits. Note that a maximum repeat count must still be given to
+\c{%rep}. This is to prevent the possibility of NASM getting into an
+infinite loop in the preprocessor, which (on multitasking or
+multi-user systems) would typically cause all the system memory to
+be gradually used up and other applications to start crashing.
+
+Note the maximum repeat count is limited to the value specified by the
+\c{--limit-rep} option or \c{%pragma limit rep}, see \k{opt-limit}.
+
+
+\H{files} Source Files and Dependencies
+
+These commands allow you to split your sources into multiple files.
+
+\S{include} \i\c{%include}: \i{Including Other Files}
+
+Using, once again, a very similar syntax to the C preprocessor,
+NASM's preprocessor lets you include other source files into your
+code. This is done by the use of the \i\c{%include} directive:
+
+\c %include "macros.mac"
+
+will include the contents of the file \c{macros.mac} into the source
+file containing the \c{%include} directive.
+
+Include files are \I{searching for include files}searched for in the
+current directory (the directory you're in when you run NASM, as
+opposed to the location of the NASM executable or the location of
+the source file), plus any directories specified on the NASM command
+line using the \c{-i} option.
+
+The standard C idiom for preventing a file being included more than
+once is just as applicable in NASM: if the file \c{macros.mac} has
+the form
+
+\c %ifndef MACROS_MAC
+\c     %define MACROS_MAC
+\c     ; now define some macros
+\c %endif
+
+then including the file more than once will not cause errors,
+because the second time the file is included nothing will happen
+because the macro \c{MACROS_MAC} will already be defined.
+
+You can force a file to be included even if there is no \c{%include}
+directive that explicitly includes it, by using the \i\c{-p} option
+on the NASM command line (see \k{opt-p}).
+
+
+\S{pathsearch} \i\c{%pathsearch}: Search the Include Path
+
+The \c{%pathsearch} directive takes a single-line macro name and a
+filename, and declare or redefines the specified single-line macro to
+be the include-path-resolved version of the filename, if the file
+exists (otherwise, it is passed unchanged.)
+
+For example,
+
+\c %pathsearch MyFoo "foo.bin"
+
+... with \c{-Ibins/} in the include path may end up defining the macro
+\c{MyFoo} to be \c{"bins/foo.bin"}.
+
+
+\S{depend} \i\c{%depend}: Add Dependent Files
+
+The \c{%depend} directive takes a filename and adds it to the list of
+files to be emitted as dependency generation when the \c{-M} options
+and its relatives (see \k{opt-M}) are used.  It produces no output.
+
+This is generally used in conjunction with \c{%pathsearch}.  For
+example, a simplified version of the standard macro wrapper for the
+\c{INCBIN} directive looks like:
+
+\c %imacro incbin 1-2+ 0
+\c %pathsearch dep %1
+\c %depend dep
+\c         incbin dep,%2
+\c %endmacro
+
+This first resolves the location of the file into the macro \c{dep},
+then adds it to the dependency lists, and finally issues the
+assembler-level \c{INCBIN} directive.
+
+
+\S{use} \i\c{%use}: Include Standard Macro Package
+
+The \c{%use} directive is similar to \c{%include}, but rather than
+including the contents of a file, it includes a named standard macro
+package.  The standard macro packages are part of NASM, and are
+described in \k{macropkg}.
+
+Unlike the \c{%include} directive, package names for the \c{%use}
+directive do not require quotes, but quotes are permitted.  In NASM
+2.04 and 2.05 the unquoted form would be macro-expanded; this is no
+longer true.  Thus, the following lines are equivalent:
+
+\c %use altreg
+\c %use 'altreg'
+
+Standard macro packages are protected from multiple inclusion.  When a
+standard macro package is used, a testable single-line macro of the
+form \c{__?USE_}\e{package}\c{?__} is also defined, see \k{use_def}.
+
+\H{ctxstack} The \i{Context Stack}
+
+Having labels that are local to a macro definition is sometimes not
+quite powerful enough: sometimes you want to be able to share labels
+between several macro calls. An example might be a \c{REPEAT} ...
+\c{UNTIL} loop, in which the expansion of the \c{REPEAT} macro
+would need to be able to refer to a label which the \c{UNTIL} macro
+had defined. However, for such a macro you would also want to be
+able to nest these loops.
+
+NASM provides this level of power by means of a \e{context stack}.
+The preprocessor maintains a stack of \e{contexts}, each of which is
+characterized by a name. You add a new context to the stack using
+the \i\c{%push} directive, and remove one using \i\c{%pop}. You can
+define labels that are local to a particular context on the stack.
+
+
+\S{pushpop} \i\c{%push} and \i\c{%pop}: \I{creating
+contexts}\I{removing contexts}Creating and Removing Contexts
+
+The \c{%push} directive is used to create a new context and place it
+on the top of the context stack. \c{%push} takes an optional argument,
+which is the name of the context. For example:
+
+\c %push    foobar
+
+This pushes a new context called \c{foobar} on the stack. You can have
+several contexts on the stack with the same name: they can still be
+distinguished.  If no name is given, the context is unnamed (this is
+normally used when both the \c{%push} and the \c{%pop} are inside a
+single macro definition.)
+
+The directive \c{%pop}, taking one optional argument, removes the top
+context from the context stack and destroys it, along with any
+labels associated with it.  If an argument is given, it must match the
+name of the current context, otherwise it will issue an error.
+
+
+\S{ctxlocal} \i{Context-Local Labels}
+
+Just as the usage \c{%%foo} defines a label which is local to the
+particular macro call in which it is used, the usage \I{%$}\c{%$foo}
+is used to define a label which is local to the context on the top
+of the context stack. So the \c{REPEAT} and \c{UNTIL} example given
+above could be implemented by means of:
+
+\c %macro repeat 0
+\c
+\c     %push   repeat
+\c     %$begin:
+\c
+\c %endmacro
+\c
+\c %macro until 1
+\c
+\c         j%-1    %$begin
+\c     %pop
+\c
+\c %endmacro
+
+and invoked by means of, for example,
+
+\c         mov     cx,string
+\c         repeat
+\c         add     cx,3
+\c         scasb
+\c         until   e
+
+which would scan every fourth byte of a string in search of the byte
+in \c{AL}.
+
+If you need to define, or access, labels local to the context
+\e{below} the top one on the stack, you can use \I{%$$}\c{%$$foo}, or
+\c{%$$$foo} for the context below that, and so on.
+
+
+\S{ctxdefine} \i{Context-Local Single-Line Macros}
+
+NASM also allows you to define single-line macros which are local to
+a particular context, in just the same way:
+
+\c %define %$localmac 3
+
+will define the single-line macro \c{%$localmac} to be local to the
+top context on the stack. Of course, after a subsequent \c{%push},
+it can then still be accessed by the name \c{%$$localmac}.
+
+
+\S{ctxfallthrough} \i{Context Fall-Through Lookup} \e{(deprecated)}
+
+Context fall-through lookup (automatic searching of outer contexts)
+is a feature that was added in NASM version 0.98.03. Unfortunately,
+this feature is unintuitive and can result in buggy code that would
+have otherwise been prevented by NASM's error reporting. As a result,
+this feature has been \e{deprecated}. NASM version 2.09 will issue a
+warning when usage of this \e{deprecated} feature is detected. Starting
+with NASM version 2.10, usage of this \e{deprecated} feature will simply
+result in an \e{expression syntax error}.
+
+An example usage of this \e{deprecated} feature follows:
+
+\c %macro ctxthru 0
+\c %push ctx1
+\c     %assign %$external 1
+\c         %push ctx2
+\c             %assign %$internal 1
+\c             mov eax, %$external
+\c             mov eax, %$internal
+\c         %pop
+\c %pop
+\c %endmacro
+
+As demonstrated, \c{%$external} is being defined in the \c{ctx1}
+context and referenced within the \c{ctx2} context. With context
+fall-through lookup, referencing an undefined context-local macro
+like this implicitly searches through all outer contexts until a match
+is made or isn't found in any context. As a result, \c{%$external}
+referenced within the \c{ctx2} context would implicitly use \c{%$external}
+as defined in \c{ctx1}. Most people would expect NASM to issue an error in
+this situation because \c{%$external} was never defined within \c{ctx2} and also
+isn't qualified with the proper context depth, \c{%$$external}.
+
+Here is a revision of the above example with proper context depth:
+
+\c %macro ctxthru 0
+\c %push ctx1
+\c     %assign %$external 1
+\c         %push ctx2
+\c             %assign %$internal 1
+\c             mov eax, %$$external
+\c             mov eax, %$internal
+\c         %pop
+\c %pop
+\c %endmacro
+
+As demonstrated, \c{%$external} is still being defined in the \c{ctx1}
+context and referenced within the \c{ctx2} context. However, the
+reference to \c{%$external} within \c{ctx2} has been fully qualified with
+the proper context depth, \c{%$$external}, and thus is no longer ambiguous,
+unintuitive or erroneous.
+
+
+\S{ctxrepl} \i\c{%repl}: \I{renaming contexts}Renaming a Context
+
+If you need to change the name of the top context on the stack (in
+order, for example, to have it respond differently to \c{%ifctx}),
+you can execute a \c{%pop} followed by a \c{%push}; but this will
+have the side effect of destroying all context-local labels and
+macros associated with the context that was just popped.
+
+NASM provides the directive \c{%repl}, which \e{replaces} a context
+with a different name, without touching the associated macros and
+labels. So you could replace the destructive code
+
+\c %pop
+\c %push   newname
+
+with the non-destructive version \c{%repl newname}.
+
+
+\S{blockif} Example Use of the \i{Context Stack}: \i{Block IFs}
+
+This example makes use of almost all the context-stack features,
+including the conditional-assembly construct \i\c{%ifctx}, to
+implement a block IF statement as a set of macros.
+
+\c %macro if 1
+\c
+\c     %push if
+\c     j%-1  %$ifnot
+\c
+\c %endmacro
+\c
+\c %macro else 0
+\c
+\c   %ifctx if
+\c         %repl   else
+\c         jmp     %$ifend
+\c         %$ifnot:
+\c   %else
+\c         %error  "expected `if' before `else'"
+\c   %endif
+\c
+\c %endmacro
+\c
+\c %macro endif 0
+\c
+\c   %ifctx if
+\c         %$ifnot:
+\c         %pop
+\c   %elifctx      else
+\c         %$ifend:
+\c         %pop
+\c   %else
+\c         %error  "expected `if' or `else' before `endif'"
+\c   %endif
+\c
+\c %endmacro
+
+This code is more robust than the \c{REPEAT} and \c{UNTIL} macros
+given in \k{ctxlocal}, because it uses conditional assembly to check
+that the macros are issued in the right order (for example, not
+calling \c{endif} before \c{if}) and issues a \c{%error} if they're
+not.
+
+In addition, the \c{endif} macro has to be able to cope with the two
+distinct cases of either directly following an \c{if}, or following
+an \c{else}. It achieves this, again, by using conditional assembly
+to do different things depending on whether the context on top of
+the stack is \c{if} or \c{else}.
+
+The \c{else} macro has to preserve the context on the stack, in
+order to have the \c{%$ifnot} referred to by the \c{if} macro be the
+same as the one defined by the \c{endif} macro, but has to change
+the context's name so that \c{endif} will know there was an
+intervening \c{else}. It does this by the use of \c{%repl}.
+
+A sample usage of these macros might look like:
+
+\c         cmp     ax,bx
+\c
+\c         if ae
+\c                cmp     bx,cx
+\c
+\c                if ae
+\c                        mov     ax,cx
+\c                else
+\c                        mov     ax,bx
+\c                endif
+\c
+\c         else
+\c                cmp     ax,cx
+\c
+\c                if ae
+\c                        mov     ax,cx
+\c                endif
+\c
+\c         endif
+
+The block-\c{IF} macros handle nesting quite happily, by means of
+pushing another context, describing the inner \c{if}, on top of the
+one describing the outer \c{if}; thus \c{else} and \c{endif} always
+refer to the last unmatched \c{if} or \c{else}.
+
+
+\H{stackrel} \i{Stack Relative Preprocessor Directives}
+
+The following preprocessor directives provide a way to use
+labels to refer to local variables allocated on the stack.
+
+\b\c{%arg}  (see \k{arg})
+
+\b\c{%stacksize}  (see \k{stacksize})
+
+\b\c{%local}  (see \k{local})
+
+
+\S{arg} \i\c{%arg} Directive
+
+The \c{%arg} directive is used to simplify the handling of
+parameters passed on the stack. Stack based parameter passing
+is used by many high level languages, including C, C++ and Pascal.
+
+While NASM has macros which attempt to duplicate this
+functionality (see \k{16cmacro}), the syntax is not particularly
+convenient to use and is not TASM compatible. Here is an example
+which shows the use of \c{%arg} without any external macros:
+
+\c some_function:
+\c
+\c     %push     mycontext        ; save the current context
+\c     %stacksize large           ; tell NASM to use bp
+\c     %arg      i:word, j_ptr:word
+\c
+\c         mov     ax,[i]
+\c         mov     bx,[j_ptr]
+\c         add     ax,[bx]
+\c         ret
+\c
+\c     %pop                       ; restore original context
+
+This is similar to the procedure defined in \k{16cmacro} and adds
+the value in i to the value pointed to by j_ptr and returns the
+sum in the ax register. See \k{pushpop} for an explanation of
+\c{push} and \c{pop} and the use of context stacks.
+
+
+\S{stacksize} \i\c{%stacksize} Directive
+
+The \c{%stacksize} directive is used in conjunction with the
+\c{%arg} (see \k{arg}) and the \c{%local} (see \k{local}) directives.
+It tells NASM the default size to use for subsequent \c{%arg} and
+\c{%local} directives. The \c{%stacksize} directive takes one
+required argument which is one of \c{flat}, \c{flat64}, \c{large} or \c{small}.
+
+\c %stacksize flat
+
+This form causes NASM to use stack-based parameter addressing
+relative to \c{ebp} and it assumes that a near form of call was used
+to get to this label (i.e. that \c{eip} is on the stack).
+
+\c %stacksize flat64
+
+This form causes NASM to use stack-based parameter addressing
+relative to \c{rbp} and it assumes that a near form of call was used
+to get to this label (i.e. that \c{rip} is on the stack).
+
+\c %stacksize large
+
+This form uses \c{bp} to do stack-based parameter addressing and
+assumes that a far form of call was used to get to this address
+(i.e. that \c{ip} and \c{cs} are on the stack).
+
+\c %stacksize small
+
+This form also uses \c{bp} to address stack parameters, but it is
+different from \c{large} because it also assumes that the old value
+of bp is pushed onto the stack (i.e. it expects an \c{ENTER}
+instruction). In other words, it expects that \c{bp}, \c{ip} and
+\c{cs} are on the top of the stack, underneath any local space which
+may have been allocated by \c{ENTER}. This form is probably most
+useful when used in combination with the \c{%local} directive
+(see \k{local}).
+
+
+\S{local} \i\c{%local} Directive
+
+The \c{%local} directive is used to simplify the use of local
+temporary stack variables allocated in a stack frame. Automatic
+local variables in C are an example of this kind of variable. The
+\c{%local} directive is most useful when used with the \c{%stacksize}
+(see \k{stacksize} and is also compatible with the \c{%arg} directive
+(see \k{arg}). It allows simplified reference to variables on the
+stack which have been allocated typically by using the \c{ENTER}
+instruction.
+\# (see \k{insENTER} for a description of that instruction).
+An example of its use is the following:
+
+\c silly_swap:
+\c
+\c     %push mycontext             ; save the current context
+\c     %stacksize small            ; tell NASM to use bp
+\c     %assign %$localsize 0       ; see text for explanation
+\c     %local old_ax:word, old_dx:word
+\c
+\c         enter   %$localsize,0   ; see text for explanation
+\c         mov     [old_ax],ax     ; swap ax & bx
+\c         mov     [old_dx],dx     ; and swap dx & cx
+\c         mov     ax,bx
+\c         mov     dx,cx
+\c         mov     bx,[old_ax]
+\c         mov     cx,[old_dx]
+\c         leave                   ; restore old bp
+\c         ret                     ;
+\c
+\c     %pop                        ; restore original context
+
+The \c{%$localsize} variable is used internally by the
+\c{%local} directive and \e{must} be defined within the
+current context before the \c{%local} directive may be used.
+Failure to do so will result in one expression syntax error for
+each \c{%local} variable declared. It then may be used in
+the construction of an appropriately sized ENTER instruction
+as shown in the example.
+
+
+\H{pperror} Reporting \i{User-generated Diagnostics}: \i\c{%error},
+\i\c{%warning}, \i\c{%fatal}, \i\c{%note}
+
+The preprocessor directive \c{%error} will cause NASM to report an
+error if it occurs in assembled code. So if other users are going to
+try to assemble your source files, you can ensure that they define the
+right macros by means of code like this:
+
+\c %ifdef F1
+\c     ; do some setup
+\c %elifdef F2
+\c     ; do some different setup
+\c %else
+\c     %error "Neither F1 nor F2 was defined."
+\c %endif
+
+Then any user who fails to understand the way your code is supposed
+to be assembled will be quickly warned of their mistake, rather than
+having to wait until the program crashes on being run and then not
+knowing what went wrong.
+
+Similarly, \c{%warning} issues a warning, but allows assembly to continue:
+
+\c %ifdef F1
+\c     ; do some setup
+\c %elifdef F2
+\c     ; do some different setup
+\c %else
+\c     %warning "Neither F1 nor F2 was defined, assuming F1."
+\c     %define F1
+\c %endif
+
+User-defined error messages can be suppressed with the \c{-w-user}
+option, and promoted to errors with \c{-w+error=user}.
+
+\c{%error} and \c{%warning} are issued only on the final assembly
+pass.  This makes them safe to use in conjunction with tests that
+depend on symbol values.
+
+\c{%fatal} terminates assembly immediately, regardless of pass.  This
+is useful when there is no point in continuing the assembly further,
+and doing so is likely just going to cause a spew of confusing error
+messages.
+
+\c{%note} adds an output line to the list file; it does not output
+anything on the console or error file.
+
+It is optional for the message string after \c{%error}, \c{%warning},
+\c{%fatal}, or \c{%note} to be quoted.  If it is \e{not}, then
+single-line macros are expanded in it, which can be used to display
+more information to the user.  For example:
+
+\c %if foo > 64
+\c     %assign foo_over foo-64
+\c     %error foo is foo_over bytes too large
+\c %endif
+
+
+\H{pragma} \i\c{%pragma}: Setting Options
+
+The \c{%pragma} directive controls a number of options in
+NASM. Pragmas are intended to remain backwards compatible, and
+therefore an unknown \c{%pragma} directive is not an error.
+
+The various pragmas are documented with the options they affect.
+
+The general structure of a NASM pragma is:
+
+\c{%pragma} \e{namespace} \e{directive} [\e{arguments...}]
+
+Currently defined namespaces are:
+
+\b \c{ignore}: this \c{%pragma} is unconditionally ignored.
+
+\b \c{preproc}: preprocessor, see \k{pragma-preproc}.
+
+\b \c{limit}: resource limits, see \k{opt-limit}.
+
+\b \c{asm}: the parser and assembler proper. Currently no such pragmas
+are defined.
+
+\b \c{list}: listing options, see \k{opt-L}.
+
+\b \c{file}: general file handling options. Currently no such pragmas
+are defined.
+
+\b \c{input}: input file handling options. Currently no such pragmas
+are defined.
+
+\b \c{output}: output format options.
+
+\b \c{debug}: debug format options.
+
+In addition, the name of any output or debug format, and sometimes
+groups thereof, also constitute \c{%pragma} namespaces. The namespaces
+\c{output} and \c{debug} simply refer to \e{any} output or debug
+format, respectively.
+
+For example, to prepend an underscore to global symbols regardless of
+the output format (see \k{mangling}):
+
+\c %pragma output gprefix _
+
+... whereas to prepend an underscore to global symbols only when the
+output is either \c{win32} or \c{win64}:
+
+\c %pragma win gprefix _
+
+
+\S{pragma-preproc} Preprocessor Pragmas
+
+The only preprocessor \c{%pragma} defined in NASM 2.15 is:
+
+\b \c{%pragma preproc sane_empty_expansion}: disables legacy
+compatibility handling of braceless empty arguments to multi-line
+macros. See \k{mlmacro} and \k{opt-w}.
+
+
+\H{otherpreproc} \i{Other Preprocessor Directives}
+
+\S{line} \i\c{%line} Directive
+
+The \c{%line} directive is used to notify NASM that the input line
+corresponds to a specific line number in another file.  Typically
+this other file would be an original source file, with the current
+NASM input being the output of a pre-processor.  The \c{%line}
+directive allows NASM to output messages which indicate the line
+number of the original source file, instead of the file that is being
+read by NASM.
+
+This preprocessor directive is not generally used directly by
+programmers, but may be of interest to preprocessor authors.  The
+usage of the \c{%line} preprocessor directive is as follows:
+
+\c %line nnn[+mmm] [filename]
+
+In this directive, \c{nnn} identifies the line of the original source
+file which this line corresponds to.  \c{mmm} is an optional parameter
+which specifies a line increment value; each line of the input file
+read in is considered to correspond to \c{mmm} lines of the original
+source file.  Finally, \c{filename} is an optional parameter which
+specifies the file name of the original source file. It may be a
+quoted string, in which case any additional argument after the quoted
+string will be ignored.
+
+After reading a \c{%line} preprocessor directive, NASM will report
+all file name and line numbers relative to the values specified
+therein.
+
+If the command line option \i\c{--no-line} is given, all \c{%line}
+directives are ignored. This may be useful for debugging preprocessed
+code. See \k{opt-no-line}.
+
+Starting in NASM 2.15, \c{%line} directives are processed before any
+other processing takes place.
+
+For compatibility with the output from some other preprocessors,
+including many C preprocessors, a \c{#} character followed by
+whitespace \e{at the very beginning of a line} is also treated as a
+\c{%line} directive, except that double quotes surrounding the
+filename are treated like NASM backquotes, with \c{\\}-escaped
+sequences decoded.
+
+\# This isn't a directive, it should be moved elsewhere...
+\S{getenv} \i\c{%!}\e{variable}: Read an Environment Variable.
+
+The \c{%!}\e{variable} directive makes it possible to read the value of an
+environment variable at assembly time. This could, for example, be used
+to store the contents of an environment variable into a string, which
+could be used at some other point in your code.
+
+For example, suppose that you have an environment variable \c{FOO},
+and you want the contents of \c{FOO} to be embedded in your program as
+a quoted string. You could do that as follows:
+
+\c %defstr FOO          %!FOO
+
+See \k{defstr} for notes on the \c{%defstr} directive.
+
+If the name of the environment variable contains non-identifier
+characters, you can use string quotes to surround the name of the
+variable, for example:
+
+\c %defstr C_colon      %!'C:'
+
+
+\S{clear} \i\c\{%clear}: Clear All Macro Definitions
+
+The directive \c{%clear} clears all definitions of a certain type,
+\e{including the ones defined by NASM itself.} This can be useful when
+preprocessing non-NASM code, or to drop backwards compatibility
+aliases.
+
+The syntax is:
+
+\c    %clear [global|context] type...
+
+... where \c{context} indicates that this applies to context-local
+macros only; the default is \c{global}.
+
+\c{type} can be one or more of:
+
+\b \c{define}   single-line macros
+
+\b \c{defalias} single-line macro aliases (useful to remove backwards
+compatibility aliases)
+
+\b \c{alldefine} same as \c{define defalias}
+
+\b \c{macro}     multi-line macros
+
+\b \c{all}       same as \c{alldefine macro} (default)
+
+In NASM 2.14 and earlier, only the single syntax \c{%clear} was
+supported, which is equivalent to \c{%clear global all}.

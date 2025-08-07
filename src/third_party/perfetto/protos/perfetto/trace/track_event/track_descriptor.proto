@@ -1,0 +1,154 @@
+/*
+ * Copyright (C) 2019 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+import "protos/perfetto/trace/track_event/chrome_process_descriptor.proto";
+import "protos/perfetto/trace/track_event/chrome_thread_descriptor.proto";
+import "protos/perfetto/trace/track_event/process_descriptor.proto";
+import "protos/perfetto/trace/track_event/thread_descriptor.proto";
+import "protos/perfetto/trace/track_event/counter_descriptor.proto";
+
+package perfetto.protos;
+
+// Defines a track for TrackEvents. Slices and instant events on the same track
+// will be nested based on their timestamps, see TrackEvent::Type.
+//
+// A TrackDescriptor only needs to be emitted by one trace writer / producer and
+// is valid for the entirety of the trace. To ensure the descriptor isn't lost
+// when the ring buffer wraps, it should be reemitted whenever incremental state
+// is cleared.
+//
+// As a fallback, TrackEvents emitted without an explicit track association will
+// be associated with an implicit trace-global track (uuid = 0), see also
+// |TrackEvent::track_uuid|. It is possible but not necessary to emit a
+// TrackDescriptor for this implicit track.
+//
+// Next id: 14.
+message TrackDescriptor {
+  // Unique ID that identifies this track. This ID is global to the whole trace.
+  // Producers should ensure that it is unlikely to clash with IDs emitted by
+  // other producers. A value of 0 denotes the implicit trace-global track.
+  //
+  // For example, legacy TRACE_EVENT macros may use a hash involving the async
+  // event id + id_scope, pid, and/or tid to compute this ID.
+  optional uint64 uuid = 1;
+
+  // A parent track reference can be used to describe relationships between
+  // tracks. For example, to define an asynchronous track which is scoped to a
+  // specific process, specify the uuid for that process's process track here.
+  // Similarly, to associate a COUNTER_THREAD_TIME_NS counter track with a
+  // thread, specify the uuid for that thread's thread track here. In general,
+  // setting a parent will *nest* that track under the parent in the UI and in
+  // the trace processor data model (with the important exception noted below).
+  //
+  // If not specified, the track will be a root track, i.e. not nested under any
+  // other track.
+  //
+  // Note: if the `thread` or `process` fields are set, this value will be
+  // *ignored* as priority is given to those fields.
+  //
+  // Note: if the parent is set to a track with `thread` or `process` fields
+  // set, the track will *not* be nested under the parent in the UI and in the
+  // trace processor data model. Instead, the track will inherit the parent'
+  // thread/process association and will appear as a *sibling* of the parent.
+  // This semantic exists for back-compat reasons as the UI used to work this
+  // way for years and changing this leads to a lot of traces subtly breaking.
+  // If you want to force nesting, create *another* intermediate track to act as
+  // the parent.
+  optional uint64 parent_uuid = 5;
+
+  // Name of the track. Optional - if unspecified, it may be derived from the
+  // process/thread name (process/thread tracks), the first event's name (async
+  // tracks), or counter name (counter tracks).
+  oneof static_or_dynamic_name {
+    string name = 2;
+    // This field is only set by the SDK when perfetto::StaticString is
+    // provided.
+    string static_name = 10;
+    // Equivalent to name, used just to mark that the data is coming from
+    // android.os.Trace.
+    string atrace_name = 13;
+  }
+
+  // Associate the track with a process, making it the process-global track.
+  // There should only be one such track per process (usually for instant
+  // events; trace processor uses this fact to detect pid reuse). If you need
+  // more (e.g. for asynchronous events), create child tracks using parent_uuid.
+  //
+  // Trace processor will merge events on a process track with slice-type events
+  // from other sources (e.g. ftrace) for the same process into a single
+  // timeline view.
+  optional ProcessDescriptor process = 3;
+  optional ChromeProcessDescriptor chrome_process = 6;
+
+  // Associate the track with a thread, indicating that the track's events
+  // describe synchronous code execution on the thread. There should only be one
+  // such track per thread (trace processor uses this fact to detect tid reuse).
+  //
+  // Trace processor will merge events on a thread track with slice-type events
+  // from other sources (e.g. ftrace) for the same thread into a single timeline
+  // view.
+  optional ThreadDescriptor thread = 4;
+  optional ChromeThreadDescriptor chrome_thread = 7;
+
+  // Descriptor for a counter track. If set, the track will only support
+  // TYPE_COUNTER TrackEvents (and values provided via TrackEvent's
+  // |extra_counter_values|).
+  optional CounterDescriptor counter = 8;
+
+  // If true, forces Trace Processor to use separate tracks for track events
+  // and system events for the same thread.
+  // Track events timestamps in Chrome have microsecond resolution, while
+  // system events use nanoseconds. It results in broken event nesting when
+  // track events and system events share a track.
+  optional bool disallow_merging_with_system_tracks = 9;
+
+  // Specifies how the UI should display child tracks of this track (i.e. tracks
+  // where `parent_uuid` is specified to this track `uuid`). Note that this
+  // value is simply a *hint* to the UI: the UI is not guarnateed to respect
+  // this if it has a good reason not to do so.
+  //
+  // Note: for tracks where `thread` or `process` are set, this option is
+  // *ignored*. See `parent_uuid` for details.
+  enum ChildTracksOrdering {
+    // The default ordering, with no bearing on how the UI will visualise the
+    // tracks.
+    UNKNOWN = 0;
+
+    // Order tracks by `name` or `static_name` depending on which one has been
+    // specified.
+    LEXICOGRAPHIC = 1;
+
+    // Order tracks by the first `ts` event in a track.
+    CHRONOLOGICAL = 2;
+
+    // Order tracks by `sibling_order_rank` of child tracks. Child tracks with
+    // the lower values will be shown before tracks with higher values. Tracks
+    // with no value will be treated as having 0 rank.
+    EXPLICIT = 3;
+  }
+  optional ChildTracksOrdering child_ordering = 11;
+
+  // An opaque value which allows specifying how two sibling tracks should be
+  // ordered relative to each other: tracks with lower ranks will appear before
+  // tracks with higher ranks. An unspecified rank will be treated as a rank of
+  // 0.
+  //
+  // Note: for tracks where the parent has `thread` or `process` are set, this
+  // option is *ignored*. See `parent_uuid` for details.
+  optional int32 sibling_order_rank = 12;
+}

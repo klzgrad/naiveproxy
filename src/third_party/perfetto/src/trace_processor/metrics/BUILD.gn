@@ -1,0 +1,79 @@
+# Copyright (C) 2018 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../../gn/perfetto.gni")
+import("../../../gn/perfetto_cc_proto_descriptor.gni")
+import("../../../gn/test.gni")
+
+assert(enable_perfetto_trace_processor_sqlite)
+
+perfetto_cc_proto_descriptor("gen_cc_metrics_descriptor") {
+  descriptor_name = "metrics.descriptor"
+  descriptor_target = "../../../protos/perfetto/metrics:descriptor"
+}
+
+perfetto_cc_proto_descriptor("gen_cc_all_chrome_metrics_descriptor") {
+  descriptor_name = "all_chrome_metrics.descriptor"
+  descriptor_target = "../../../protos/perfetto/metrics/chrome:descriptor"
+}
+
+perfetto_cc_proto_descriptor("gen_cc_all_webview_metrics_descriptor") {
+  descriptor_name = "all_webview_metrics.descriptor"
+  descriptor_target = "../../../protos/perfetto/metrics/webview:descriptor"
+}
+
+source_set("metrics") {
+  sources = [
+    "metrics.cc",
+    "metrics.h",
+  ]
+  deps = [
+    "..:metatrace",
+    "../../../gn:default_deps",
+    "../../../gn:sqlite",
+    "../../../include/perfetto/trace_processor",
+    "../../../protos/perfetto/common:zero",
+    "../../../protos/perfetto/trace_processor:metrics_impl_zero",
+    "../../../protos/perfetto/trace_processor:zero",
+    "../../base",
+    "../../protozero:protozero",
+    "../perfetto_sql/engine",
+    "../perfetto_sql/intrinsics/functions",
+    "../sqlite",
+  ]
+  public_deps = [
+    ":gen_cc_all_chrome_metrics_descriptor",
+    ":gen_cc_all_webview_metrics_descriptor",
+    ":gen_cc_metrics_descriptor",
+    "../util:descriptors",
+    "sql:gen_amalgamated_sql_metrics",
+  ]
+}
+
+perfetto_unittest_source_set("unittests") {
+  testonly = true
+  sources = [ "metrics_unittest.cc" ]
+  deps = [
+    ":metrics",
+    "..:lib",
+    "../../../gn:default_deps",
+    "../../../gn:gtest_and_gmock",
+    "../../../gn:sqlite",
+    "../../../protos/perfetto/common:zero",
+    "../../../protos/perfetto/trace_processor:metrics_impl_zero",
+    "../../../protos/perfetto/trace_processor:zero",
+    "../../base:test_support",
+    "../../protozero",
+  ]
+}

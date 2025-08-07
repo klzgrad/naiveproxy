@@ -1,0 +1,134 @@
+/*
+ * Copyright 2024 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+package perfetto.protos;
+
+// Custom configuration for the "android.input.inputevent" data source.
+//
+// NOTE: Input traces can only be taken on debuggable (userdebug/eng) builds!
+//
+// Next ID: 5
+message AndroidInputEventConfig {
+  // Trace modes are tracing presets that are included in the system.
+  enum TraceMode {
+    // Preset mode for maximal tracing.
+    // WARNING: This will bypass all privacy measures on debuggable builds, and
+    // will record all
+    //          input events processed by the system, regardless of the context
+    //          in which they were processed. It should only be used for tracing
+    //          on a local device or for tests. It should NEVER be used for
+    //          field tracing.
+    TRACE_MODE_TRACE_ALL = 0;
+    // Use the tracing rules defined in this config to specify what events to
+    // trace.
+    TRACE_MODE_USE_RULES = 1;
+  }
+
+  // The tracing mode to use. If unspecified, it will default to
+  // TRACE_MODE_USE_RULES.
+  optional TraceMode mode = 1;
+
+  // The level of tracing that should be applied to an event.
+  enum TraceLevel {
+    // Do not trace the input event.
+    TRACE_LEVEL_NONE = 0;
+    // Trace the event as a redacted event, where certain sensitive fields are
+    // omitted from the trace, including the coordinates of pointer events and
+    // the key/scan codes of key events.
+    TRACE_LEVEL_REDACTED = 1;
+    // Trace the complete event.
+    TRACE_LEVEL_COMPLETE = 2;
+  }
+
+  // A rule that specifies the TraceLevel for an event based on matching
+  // conditions. All matchers in the rule are optional. To trigger this rule, an
+  // event must match all of its specified matchers (i.e. the matchers function
+  // like a series of conditions connected by a logical 'AND' operator). A rule
+  // with no specified matchers will match all events. Next ID: 6
+  message TraceRule {
+    // The trace level to be used for events that trigger this rule.
+    // If unspecified, TRACE_LEVEL_NONE will be used by default.
+    optional TraceLevel trace_level = 1;
+
+    // --- Optional Matchers ---
+
+    // Package matchers
+    //
+    // Respectively matches if all or any of the target apps for this event are
+    // contained in the specified list of package names.
+    //
+    // Intended usage:
+    //   - Use match_all_packages to selectively allow tracing for the listed
+    //   packages.
+    //   - Use match_any_packages to selectively deny tracing for certain
+    //   packages.
+    //
+    // WARNING: Great care must be taken when designing rules for field tracing!
+    //          This is because each event is almost always sent to more than
+    //          one app.
+    //              For example, when allowing tracing for a package that has a
+    //              spy window
+    //          over the display (e.g. SystemUI) using match_any_packages,
+    //          essentially all input will be recorded on that display. This is
+    //          because the events will be sent to the spy as well as the
+    //          foreground app, and regardless of what the foreground app is,
+    //          the event will end up being traced.
+    //              Alternatively, when attempting to block tracing for specific
+    //              packages using
+    //          match_all_packages, no events will likely be blocked. This is
+    //          because the event will also be sent to other apps (such as, but
+    //          not limited to, ones with spy windows), so the matcher will not
+    //          match unless all other targets are also listed under the
+    //          match_all_packages list.
+    repeated string match_all_packages = 2;
+    repeated string match_any_packages = 3;
+
+    // Matches if the event is secure, which means that at least one of the
+    // targets of this event is using the window flag FLAG_SECURE.
+    optional bool match_secure = 4;
+
+    // Matches if there was an active IME connection while this event was being
+    // processed.
+    optional bool match_ime_connection_active = 5;
+  }
+
+  // The list of rules to use to determine the trace level of events.
+  // Each event will be traced using the TraceLevel of the first rule that it
+  // triggers from this list. The rules are evaluated in the order in which they
+  // are specified. If an event does not match any of the rules,
+  // TRACE_LEVEL_NONE will be used by default.
+  repeated TraceRule rules = 2;
+
+  // --- Control flags ---
+
+  // Trace input events processed by the system as they are being dispatched
+  // to application windows. All trace rules will apply.
+  //   - If this flag is used without enabling trace_dispatcher_window_dispatch,
+  //   it will
+  //     trace InputDispatcher's inbound events (which does not include events
+  //     synthesized within InputDispatcher) that match the rules.
+  //   - If used with trace_dispatcher_window_dispatch, all inbound and outbound
+  //   events
+  //     matching the rules, including all events synthesized within
+  //     InputDispatcher, will be traced.
+  optional bool trace_dispatcher_input_events = 3;
+
+  // Trace details about which windows the system is sending each input event
+  // to. All trace rules will apply.
+  optional bool trace_dispatcher_window_dispatch = 4;
+}

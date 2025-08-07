@@ -1,0 +1,81 @@
+# Copyright (C) 2023 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../gn/perfetto.gni")
+import("../../gn/perfetto_component.gni")
+import("../../gn/test.gni")
+
+executable("traced_relay") {
+  deps = [
+    ":lib",
+    "../../gn:default_deps",
+    "../../include/perfetto/ext/traced",
+    "../base",
+    "../base:clock_snapshots",
+    "../base:unix_socket",
+    "../base:version",
+    "../ipc:perfetto_ipc",
+    "../tracing/ipc:default_socket",
+  ]
+  sources = [ "relay_service_main.cc" ]
+}
+
+source_set("lib") {
+  public_deps = [ "../../include/perfetto/ext/tracing/ipc" ]
+  sources = [
+    "relay_service.cc",
+    "relay_service.h",
+    "socket_relay_handler.cc",
+    "socket_relay_handler.h",
+  ]
+  deps = [
+    "../../gn:default_deps",
+    "../../protos/perfetto/ipc",
+    "../../protos/perfetto/ipc:wire_protocol_cpp",
+    "../base",
+    "../base:version",
+    "../ipc:perfetto_ipc",
+    "../tracing/ipc/producer:relay",  # For relay_ipc_client.h
+  ]
+}
+
+perfetto_unittest_source_set("unittests") {
+  testonly = true
+  deps = [
+    ":lib",
+    "../../gn:default_deps",
+    "../../gn:gtest_and_gmock",
+    "../base",
+    "../base:test_support",
+    "../base/threading",
+    "../ipc:perfetto_ipc",
+  ]
+  sources = [
+    "relay_service_unittest.cc",
+    "socket_relay_handler_unittest.cc",
+  ]
+}
+
+source_set("integrationtests") {
+  testonly = true
+  deps = [
+    ":lib",
+    "../../gn:default_deps",
+    "../../gn:gtest_and_gmock",
+    "../../test:test_helper",
+    "../base",
+    "../base:test_support",
+  ]
+  sources = [ "relay_service_integrationtest.cc" ]
+}
