@@ -105,12 +105,6 @@ def _get_profile_path(args):
   """
   if args.override_filename:
     profile_path = os.path.join(_PGO_PROFILE_DIR, args.override_filename)
-  elif args.target == 'android-arm64':
-    # By default on android for arm64 we use the PGO profile that is generated
-    # at the same commit as the orderfile. See https://crbug.com/372686816 for
-    # more context on why this is necessary.
-    profile_path = os.path.join(_ANDROID_ARM64_PROFILE_DIR,
-                                'pgo_profile.arm64.profdata')
   else:
     profile_path = os.path.join(_PGO_PROFILE_DIR,
                                 _read_profile_name(args.target))
