@@ -1,0 +1,41 @@
+/*
+ * Copyright (C) 2025 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+package perfetto.protos;
+
+message CpuPerUidData {
+  // Number of clusters in the device. This will only be filled in the first
+  // packet in a sequence.
+  optional uint32 cluster_count = 1;
+
+  // The UIDs for which we have data in this packet.
+  repeated uint32 uid = 2 [packed = true];
+
+  // List of times for {UID, cluster} tuples. This will be cluster_count
+  // times as long as the UID list.
+  //
+  // Ordered like:
+  // [{UID 0, cluster 0}, {UID 0, cluster 1}, {UID 0, cluster 2},
+  //  {UID 1, cluster 0}, {UID 1, cluster 1}, {UID 1, cluster 2}, ...]
+  //
+  // Each value is an absolute count for the first packet in a sequence, and a
+  // delta thereafter. UIDs for which all clusters have a zero delta are
+  // omitted; a single non-zero value for any cluster for a UID will cause
+  // values for all clusters to be recorded.
+  repeated uint64 total_time_ms = 3 [packed = true];
+}

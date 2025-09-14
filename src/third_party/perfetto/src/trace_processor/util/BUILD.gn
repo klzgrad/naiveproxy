@@ -1,0 +1,363 @@
+# Copyright (C) 2020 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../../gn/perfetto.gni")
+import("../../../gn/perfetto_cc_proto_descriptor.gni")
+
+# Track event args parsing logic here is tentatitively planned to eventually
+# move to src/util and will be used to implement writing typed args in console
+# interceptor.
+# Do not add new dependencies to trace_processor code outside of this directory.
+#
+# TODO(altimin): Move it to src/util and use it in console interceptor.
+
+source_set("stdlib") {
+  sources = [ "sql_modules.h" ]
+}
+
+source_set("bump_allocator") {
+  sources = [
+    "bump_allocator.cc",
+    "bump_allocator.h",
+  ]
+  deps = [
+    "../../../gn:default_deps",
+    "../../base",
+  ]
+}
+
+source_set("gzip") {
+  sources = [
+    "gzip_utils.cc",
+    "gzip_utils.h",
+  ]
+  deps = [
+    "../../../gn:default_deps",
+    "../../../include/perfetto/base",
+  ]
+
+  # gzip_utils optionally depends on zlib.
+  if (enable_perfetto_zlib) {
+    deps += [ "../../../gn:zlib" ]
+  }
+}
+
+source_set("build_id") {
+  sources = [
+    "build_id.cc",
+    "build_id.h",
+  ]
+  deps = [
+    "../../../gn:default_deps",
+    "../../../include/perfetto/ext/base:base",
+  ]
+}
+
+source_set("profiler_util") {
+  sources = [
+    "profiler_util.cc",
+    "profiler_util.h",
+  ]
+  deps = [
+    "../../../gn:default_deps",
+    "../../../include/perfetto/ext/base:base",
+    "../../../protos/perfetto/trace/profiling:zero",
+    "../storage:storage",
+  ]
+}
+
+source_set("protozero_to_text") {
+  sources = [
+    "protozero_to_text.cc",
+    "protozero_to_text.h",
+  ]
+  deps = [
+    ":descriptors",
+    "../../../gn:default_deps",
+    "../../../protos/perfetto/common:zero",
+    "../../../protos/perfetto/trace/track_event:zero",
+    "../../base",
+    "../../protozero",
+  ]
+}
+
+source_set("protozero_to_json") {
+  sources = [
+    "protozero_to_json.cc",
+    "protozero_to_json.h",
+  ]
+  deps = [
+    ":descriptors",
+    "../../../gn:default_deps",
+    "../../../protos/perfetto/common:zero",
+    "../../../protos/perfetto/trace/track_event:zero",
+    "../../base",
+    "../../protozero",
+    "../importers/proto:gen_cc_track_event_descriptor",
+  ]
+}
+
+source_set("interned_message_view") {
+  sources = [ "interned_message_view.h" ]
+  public_deps = [ "../../../include/perfetto/trace_processor" ]
+  deps = [
+    "../../../gn:default_deps",
+    "../../base",
+  ]
+}
+
+source_set("descriptors") {
+  sources = [
+    "descriptors.cc",
+    "descriptors.h",
+  ]
+  deps = [
+    "../../../gn:default_deps",
+    "../../../protos/perfetto/common:zero",
+    "../../../protos/perfetto/trace_processor:zero",
+    "../../base",
+    "../../protozero",
+    "../importers/proto:gen_cc_track_event_descriptor",
+  ]
+}
+
+source_set("proto_to_args_parser") {
+  sources = [
+    "debug_annotation_parser.cc",
+    "debug_annotation_parser.h",
+    "proto_to_args_parser.cc",
+    "proto_to_args_parser.h",
+  ]
+  deps = [
+    "../../../gn:default_deps",
+    "../../../protos/perfetto/common:zero",
+    "../../../protos/perfetto/trace/interned_data:zero",
+    "../../../protos/perfetto/trace/profiling:zero",
+    "../../../protos/perfetto/trace/track_event:zero",
+    "../../../protos/perfetto/trace_processor:zero",
+    "../../protozero",
+    "../importers/proto:gen_cc_track_event_descriptor",
+  ]
+
+  public_deps = [
+    ":descriptors",
+    ":interned_message_view",
+    "../../base",
+  ]
+}
+
+source_set("zip_reader") {
+  sources = [
+    "streaming_line_reader.cc",
+    "streaming_line_reader.h",
+    "zip_reader.cc",
+    "zip_reader.h",
+  ]
+  deps = [
+    ":gzip",
+    ":trace_blob_view_reader",
+    "../../../gn:default_deps",
+    "../../../include/perfetto/trace_processor:storage",
+    "../../base",
+  ]
+  if (enable_perfetto_zlib) {
+    deps += [ "../../../gn:zlib" ]
+  }
+}
+
+source_set("glob") {
+  sources = [
+    "glob.cc",
+    "glob.h",
+  ]
+  deps = [
+    "../../../gn:default_deps",
+    "../../base",
+  ]
+}
+
+source_set("regex") {
+  sources = [ "regex.h" ]
+  deps = [
+    "../../../gn:default_deps",
+    "../../base",
+  ]
+}
+
+source_set("sql_argument") {
+  sources = [
+    "sql_argument.cc",
+    "sql_argument.h",
+  ]
+  deps = [
+    "../../../gn:default_deps",
+    "../../../include/perfetto/base",
+    "../../../include/perfetto/ext/base",
+    "../../../include/perfetto/trace_processor",
+    "../containers",
+  ]
+}
+
+source_set("proto_profiler") {
+  sources = [
+    "proto_profiler.cc",
+    "proto_profiler.h",
+  ]
+  deps = [
+    ":descriptors",
+    "../../../gn:default_deps",
+    "../../../protos/perfetto/common:zero",
+    "../../../protos/third_party/pprof:zero",
+    "../../base",
+    "../../protozero",
+  ]
+}
+
+source_set("profile_builder") {
+  sources = [
+    "annotated_callsites.cc",
+    "annotated_callsites.h",
+    "profile_builder.cc",
+    "profile_builder.h",
+  ]
+  deps = [
+    "../../../gn:default_deps",
+    "../../../include/perfetto/ext/trace_processor:demangle",
+    "../../../include/perfetto/protozero:protozero",
+    "../../../protos/perfetto/trace_processor:zero",
+    "../../../protos/third_party/pprof:zero",
+    "../../base",
+    "../containers",
+    "../dataframe",
+    "../dataframe",
+    "../storage",
+    "../tables",
+    "../types",
+  ]
+}
+
+source_set("trace_blob_view_reader") {
+  sources = [
+    "trace_blob_view_reader.cc",
+    "trace_blob_view_reader.h",
+  ]
+  deps = [
+    "../../../gn:default_deps",
+    "../../../include/perfetto/ext/base",
+    "../../../include/perfetto/trace_processor:storage",
+  ]
+}
+
+source_set("trace_type") {
+  sources = [
+    "trace_type.cc",
+    "trace_type.h",
+  ]
+  deps = [
+    "../../../gn:default_deps",
+    "../../../include/perfetto/ext/base",
+    "../../../protos/perfetto/trace:non_minimal_zero",
+    "../../protozero",
+    "../importers/android_bugreport:android_dumpstate_event",
+    "../importers/android_bugreport:android_log_event",
+    "../importers/perf_text:perf_text_sample_line_parser",
+  ]
+}
+
+source_set("winscope_proto_mapping") {
+  sources = [ "winscope_proto_mapping.h" ]
+  deps = [
+    "../../../gn:default_deps",
+    "../../../include/perfetto/ext/base:base",
+    "../dataframe",
+    "../storage:storage",
+    "../tables",
+  ]
+}
+
+source_set("unittests") {
+  sources = [
+    "bump_allocator_unittest.cc",
+    "debug_annotation_parser_unittest.cc",
+    "glob_unittest.cc",
+    "proto_profiler_unittest.cc",
+    "proto_to_args_parser_unittest.cc",
+    "protozero_to_json_unittests.cc",
+    "protozero_to_text_unittests.cc",
+    "sql_argument_unittest.cc",
+    "streaming_line_reader_unittest.cc",
+    "trace_blob_view_reader_unittest.cc",
+    "zip_reader_unittest.cc",
+  ]
+
+  if (!is_win) {
+    sources += [ "regex_unittest.cc" ]
+  }
+
+  testonly = true
+  deps = [
+    ":bump_allocator",
+    ":descriptors",
+    ":glob",
+    ":gzip",
+    ":proto_profiler",
+    ":proto_to_args_parser",
+    ":protozero_to_json",
+    ":protozero_to_text",
+    ":regex",
+    ":sql_argument",
+    ":trace_blob_view_reader",
+    ":zip_reader",
+    "..:gen_cc_test_messages_descriptor",
+    "../../../gn:default_deps",
+    "../../../gn:gtest_and_gmock",
+    "../../../protos/perfetto/common:zero",
+    "../../../protos/perfetto/trace:non_minimal_zero",
+    "../../../protos/perfetto/trace/interned_data:zero",
+    "../../../protos/perfetto/trace/profiling:zero",
+    "../../../protos/perfetto/trace/track_event:zero",
+    "../../base:test_support",
+    "../../protozero",
+    "../../protozero:testing_messages_zero",
+    "../importers/proto:gen_cc_track_event_descriptor",
+    "../importers/proto:minimal",
+    "../importers/proto:packet_sequence_state_generation_hdr",
+    "../storage",
+    "../types",
+  ]
+  if (perfetto_build_standalone) {
+    deps += [
+      "../../../protos/perfetto/metrics/chrome:lite",
+      "../metrics:gen_cc_all_chrome_metrics_descriptor",
+    ]
+  }
+  if (enable_perfetto_zlib) {
+    sources += [ "gzip_utils_unittest.cc" ]
+    deps += [ "../../../gn:zlib" ]
+  }
+}
+
+if (enable_perfetto_benchmarks) {
+  source_set("benchmarks") {
+    testonly = true
+    deps = [
+      ":glob",
+      "../../../gn:benchmark",
+      "../../../gn:default_deps",
+      "../../../gn:sqlite",
+      "../../base",
+    ]
+    sources = [ "glob_benchmark.cc" ]
+  }
+}

@@ -1,0 +1,563 @@
+\C{directive} \i{Assembler Directives}
+
+NASM, though it attempts to avoid the bureaucracy of assemblers like
+MASM and TASM, is nevertheless forced to support a \e{few}
+directives. These are described in this chapter.
+
+NASM's directives come in two types: \I{user-level
+directives}\e{user-level} directives and \I{primitive
+directives}\e{primitive} directives. Typically, each directive has a
+user-level form and a primitive form. In almost all cases, we
+recommend that users use the user-level forms of the directives,
+which are implemented as macros which call the primitive forms.
+
+Primitive directives are enclosed in square brackets; user-level
+directives are not.
+
+In addition to the universal directives described in this chapter,
+each object file format can optionally supply extra directives in
+order to control particular features of that file format. These
+\I{format-specific directives}\e{format-specific} directives are
+documented along with the formats that implement them, in \k{outfmt}.
+
+
+\H{bits} \i\c{BITS}: Target \i{Processor Mode}
+
+The \c{BITS} directive specifies whether NASM should generate code
+\I{16-bit mode, versus 32-bit mode}designed to run on a processor
+operating in 16-bit mode, 32-bit mode or 64-bit mode. The syntax is
+\c{BITS XX}, where XX is 16, 32 or 64.
+
+In most cases, you should not need to use \c{BITS} explicitly. The
+\c{aout}, \c{coff}, \c{elf*}, \c{macho}, \c{win32} and \c{win64}
+object formats, which are designed for use in 32-bit or 64-bit
+operating systems, all cause NASM to select 32-bit or 64-bit mode,
+respectively, by default. The \c{obj} object format allows you
+to specify each segment you define as either \c{USE16} or \c{USE32},
+and NASM will set its operating mode accordingly, so the use of the
+\c{BITS} directive is once again unnecessary.
+
+The most likely reason for using the \c{BITS} directive is to write
+32-bit or 64-bit code in a flat binary file; this is because the \c{bin}
+output format defaults to 16-bit mode in anticipation of it being
+used most frequently to write DOS \c{.COM} programs, DOS \c{.SYS}
+device drivers and boot loader software.
+
+The \c{BITS} directive can also be used to generate code for a
+different mode than the standard one for the output format.
+
+You do \e{not} need to specify \c{BITS 32} merely in order to use
+32-bit instructions in a 16-bit DOS program; if you do, the
+assembler will generate incorrect code because it will be writing
+code targeted at a 32-bit platform, to be run on a 16-bit one.
+
+When NASM is in \c{BITS 16} mode, instructions which use 32-bit
+data are prefixed with an 0x66 byte, and those referring to 32-bit
+addresses have an 0x67 prefix. In \c{BITS 32} mode, the reverse is
+true: 32-bit instructions require no prefixes, whereas instructions
+using 16-bit data need an 0x66 and those working on 16-bit addresses
+need an 0x67.
+
+When NASM is in \c{BITS 64} mode, most instructions operate the same
+as they do for \c{BITS 32} mode. However, there are 8 more general and
+SSE registers, and 16-bit addressing is no longer supported.
+
+The default address size is 64 bits; 32-bit addressing can be selected
+with the 0x67 prefix.  The default operand size is still 32 bits,
+however, and the 0x66 prefix selects 16-bit operand size.  The \c{REX}
+prefix is used both to select 64-bit operand size, and to access the
+new registers. NASM automatically inserts REX prefixes when
+necessary.
+
+When the \c{REX} prefix is used, the processor does not know how to
+address the AH, BH, CH or DH (high 8-bit legacy) registers. Instead,
+it is possible to access the the low 8-bits of the SP, BP SI and DI
+registers as SPL, BPL, SIL and DIL, respectively; but only when the
+REX prefix is used.
+
+The \c{BITS} directive has an exactly equivalent primitive form,
+\c{[BITS 16]}, \c{[BITS 32]} and \c{[BITS 64]}. The user-level form is
+a macro which has no function other than to call the primitive form.
+
+Note that the space is necessary, e.g. \c{BITS32} will \e{not} work!
+
+\S{USE16 & USE32} \i\c{USE16} & \i\c{USE32}: Aliases for BITS
+
+The `\c{USE16}' and `\c{USE32}' directives can be used in place of
+`\c{BITS 16}' and `\c{BITS 32}', for compatibility with other assemblers.
+
+
+\H{default} \i\c{DEFAULT}: Change the assembler defaults
+
+The \c{DEFAULT} directive changes the assembler defaults.  Normally,
+NASM defaults to a mode where the programmer is expected to explicitly
+specify most features directly.  However, this is occasionally
+obnoxious, as the explicit form is pretty much the only one one wishes
+to use.
+
+Currently, \c{DEFAULT} can set \c{REL} & \c{ABS} and \c{BND} & \c{NOBND}.
+
+\S{REL & ABS} \i\c{REL} & \i\c{ABS}: RIP-relative addressing
+
+This sets whether registerless instructions in 64-bit mode are \c{RIP}-relative
+or not. By default, they are absolute unless overridden with the \i\c{REL}
+specifier (see \k{effaddr}).  However, if \c{DEFAULT REL} is
+specified, \c{REL} is default, unless overridden with the \c{ABS}
+specifier, \e{except when used with an FS or GS segment override}.
+
+The special handling of \c{FS} and \c{GS} overrides are due to the
+fact that these registers are generally used as thread pointers or
+other special functions in 64-bit mode, and generating
+\c{RIP}-relative addresses would be extremely confusing.
+
+\c{DEFAULT REL} is disabled with \c{DEFAULT ABS}.
+
+\S{BND & NOBND} \i\c{BND} & \i\c{NOBND}: \c{BND} prefix
+
+If \c{DEFAULT BND} is set, all bnd-prefix available instructions following
+this directive are prefixed with bnd. To override it, \c{NOBND} prefix can
+be used.
+
+\c  DEFAULT BND
+\c      call foo            ; BND will be prefixed
+\c      nobnd call foo      ; BND will NOT be prefixed
+
+\c{DEFAULT NOBND} can disable \c{DEFAULT BND} and then \c{BND} prefix will be
+added only when explicitly specified in code.
+
+\c{DEFAULT BND} is expected to be the normal configuration for writing
+MPX-enabled code.
+
+\H{section} \i\c{SECTION} or \i\c{SEGMENT}: Changing and \i{Defining
+Sections}
+
+\I{changing sections}\I{switching between sections}The \c{SECTION}
+directive (\c{SEGMENT} is an exactly equivalent synonym) changes
+which section of the output file the code you write will be
+assembled into. In some object file formats, the number and names of
+sections are fixed; in others, the user may make up as many as they
+wish. Hence \c{SECTION} may sometimes give an error message, or may
+define a new section, if you try to switch to a section that does
+not (yet) exist.
+
+The Unix object formats, and the \c{bin} object format (but see
+\k{multisec}), all support
+the \i{standardized section names} \c{.text}, \c{.data} and \c{.bss}
+for the code, data and uninitialized-data sections. The \c{obj}
+format, by contrast, does not recognize these section names as being
+special, and indeed will strip off the leading period of any section
+name that has one.
+
+
+\S{sectmac} The \i\c{__?SECT?__} Macro
+
+The \c{SECTION} directive is unusual in that its user-level form
+functions differently from its primitive form. The primitive form,
+\c{[SECTION xyz]}, simply switches the current target section to the
+one given. The user-level form, \c{SECTION xyz}, however, first
+defines the single-line macro \c{__?SECT?__} to be the primitive
+\c{[SECTION]} directive which it is about to issue, and then issues
+it. So the user-level directive
+
+\c         SECTION .text
+
+expands to the two lines
+
+\c %define __?SECT?__        [SECTION .text]
+\c         [SECTION .text]
+
+Users may find it useful to make use of this in their own macros.
+For example, the \c{writefile} macro defined in \k{mlmacgre} can be
+usefully rewritten in the following more sophisticated form:
+
+\c %macro  writefile 2+
+\c
+\c         [section .data]
+\c
+\c   %%str:        db      %2
+\c   %%endstr:
+\c
+\c         __?SECT?__
+\c
+\c         mov     dx,%%str
+\c         mov     cx,%%endstr-%%str
+\c         mov     bx,%1
+\c         mov     ah,0x40
+\c         int     0x21
+\c
+\c %endmacro
+
+This form of the macro, once passed a string to output, first
+switches temporarily to the data section of the file, using the
+primitive form of the \c{SECTION} directive so as not to modify
+\c{__?SECT?__}. It then declares its string in the data section, and
+then invokes \c{__?SECT?__} to switch back to \e{whichever} section
+the user was previously working in. It thus avoids the need, in the
+previous version of the macro, to include a \c{JMP} instruction to
+jump over the data, and also does not fail if, in a complicated
+\c{OBJ} format module, the user could potentially be assembling the
+code in any of several separate code sections.
+
+
+\H{absolute} \i\c{ABSOLUTE}: Defining Absolute Labels
+
+The \c{ABSOLUTE} directive can be thought of as an alternative form
+of \c{SECTION}: it causes the subsequent code to be directed at no
+physical section, but at the hypothetical section starting at the
+given absolute address. The only instructions you can use in this
+mode are the \c{RESB} family.
+
+\c{ABSOLUTE} is used as follows:
+
+\c absolute 0x1A
+\c
+\c     kbuf_chr    resw    1
+\c     kbuf_free   resw    1
+\c     kbuf        resw    16
+
+This example describes a section of the PC BIOS data area, at
+segment address 0x40: the above code defines \c{kbuf_chr} to be
+0x1A, \c{kbuf_free} to be 0x1C, and \c{kbuf} to be 0x1E.
+
+The user-level form of \c{ABSOLUTE}, like that of \c{SECTION},
+redefines the \i\c{__?SECT?__} macro when it is invoked.
+
+\i\c{STRUC} and \i\c{ENDSTRUC} are defined as macros which use
+\c{ABSOLUTE} (and also \c{__?SECT?__}).
+
+\c{ABSOLUTE} doesn't have to take an absolute constant as an
+argument: it can take an expression (actually, a \i{critical
+expression}: see \k{crit}) and it can be a value in a segment. For
+example, a TSR can re-use its setup code as run-time BSS like this:
+
+\c         org     100h               ; it's a .COM program
+\c
+\c         jmp     setup              ; setup code comes last
+\c
+\c         ; the resident part of the TSR goes here
+\c setup:
+\c         ; now write the code that installs the TSR here
+\c
+\c absolute setup
+\c
+\c runtimevar1     resw    1
+\c runtimevar2     resd    20
+\c
+\c tsr_end:
+
+This defines some variables `on top of' the setup code, so that
+after the setup has finished running, the space it took up can be
+re-used as data storage for the running TSR. The symbol `tsr_end'
+can be used to calculate the total size of the part of the TSR that
+needs to be made resident.
+
+
+\H{extern} \i\c{EXTERN}: \i{Importing Symbols} from Other Modules
+
+\c{EXTERN} is similar to the MASM directive \c{EXTRN} and the C
+keyword \c{extern}: it is used to declare a symbol which is not
+defined anywhere in the module being assembled, but is assumed to be
+defined in some other module and needs to be referred to by this
+one. Not every object-file format can support external variables:
+the \c{bin} format cannot.
+
+The \c{EXTERN} directive takes as many arguments as you like. Each
+argument is the name of a symbol:
+
+\c extern  _printf
+\c extern  _sscanf,_fscanf
+
+Some object-file formats provide extra features to the \c{EXTERN}
+directive. In all cases, the extra features are used by suffixing a
+colon to the symbol name followed by object-format specific text.
+For example, the \c{obj} format allows you to declare that the
+default segment base of an external should be the group \c{dgroup}
+by means of the directive
+
+\c extern  _variable:wrt dgroup
+
+The primitive form of \c{EXTERN} differs from the user-level form
+only in that it can take only one argument at a time: the support
+for multiple arguments is implemented at the preprocessor level.
+
+You can declare the same variable as \c{EXTERN} more than once: NASM
+will quietly ignore the second and later redeclarations.
+
+If a variable is declared both \c{GLOBAL} and \c{EXTERN}, or if it is
+declared as \c{EXTERN} and then defined, it will be treated as
+\c{GLOBAL}. If a variable is declared both as \c{COMMON} and
+\c{EXTERN}, it will be treated as \c{COMMON}.
+
+
+\H{required} \i\c{REQUIRED}: \i{Unconditionally Importing Symbols} from Other Modules
+
+The \c{REQUIRED} keyword is similar to \c{EXTERN} one. The difference
+is that the \c{EXTERN} keyword as of version 2.15 does not generate
+unknown symbols as that prevents using common header files, as it
+might cause the linker to pull in a bunch of unnecessary modules.
+
+If the old behavior is required, use \c{REQUIRED} keyword instead.
+
+
+\H{global} \i\c{GLOBAL}: \i{Exporting Symbols} to Other Modules
+
+\c{GLOBAL} is the other end of \c{EXTERN}: if one module declares a
+symbol as \c{EXTERN} and refers to it, then in order to prevent
+linker errors, some other module must actually \e{define} the
+symbol and declare it as \c{GLOBAL}. Some assemblers use the name
+\i\c{PUBLIC} for this purpose.
+
+\c{GLOBAL} uses the same syntax as \c{EXTERN}, except that it must
+refer to symbols which \e{are} defined in the same module as the
+\c{GLOBAL} directive. For example:
+
+\c global _main
+\c _main:
+\c         ; some code
+
+\c{GLOBAL}, like \c{EXTERN}, allows object formats to define private
+extensions by means of a colon. The ELF object format, for example,
+lets you specify whether global data items are functions or data:
+
+\c global  hashlookup:function, hashtable:data
+
+Like \c{EXTERN}, the primitive form of \c{GLOBAL} differs from the
+user-level form only in that it can take only one argument at a
+time.
+
+
+\H{common} \i\c{COMMON}: Defining Common Data Areas
+
+The \c{COMMON} directive is used to declare \i\e{common variables}.
+A common variable is much like a global variable declared in the
+uninitialized data section, so that
+
+\c common  intvar  4
+
+is similar in function to
+
+\c global  intvar
+\c section .bss
+\c
+\c intvar  resd    1
+
+The difference is that if more than one module defines the same
+common variable, then at link time those variables will be
+\e{merged}, and references to \c{intvar} in all modules will point
+at the same piece of memory.
+
+Like \c{GLOBAL} and \c{EXTERN}, \c{COMMON} supports object-format
+specific extensions. For example, the \c{obj} format allows common
+variables to be NEAR or FAR, and the ELF format allows you to specify
+the alignment requirements of a common variable:
+
+\c common  commvar  4:near  ; works in OBJ
+\c common  intarray 100:4   ; works in ELF: 4 byte aligned
+
+Once again, like \c{EXTERN} and \c{GLOBAL}, the primitive form of
+\c{COMMON} differs from the user-level form only in that it can take
+only one argument at a time.
+
+\H{static} \i\c{STATIC}: Local Symbols within Modules
+
+Opposite to \c{EXTERN} and \c{GLOBAL}, \c{STATIC} is local symbol, but
+should be named according to the global mangling rules (named by
+analogy with the C keyword \c{static} as applied to functions or
+global variables).
+
+\c static foo
+\c foo:
+\c          ; codes
+
+Unlike \c{GLOBAL}, \c{STATIC} does not allow object formats to accept
+private extensions mentioned in \k{global}.
+
+\H{mangling} \i\c{(G|L)PREFIX}, \i\c{(G|L)POSTFIX}: Mangling Symbols
+
+\c{PREFIX}, \c{GPREFIX}, \c{LPREFIX}, \c{POSTFIX}, \c{GPOSTFIX}, and
+\c{LPOSTFIX} directives can prepend or append a string to a certain
+type of symbols, normally to fit specific ABI conventions
+
+\b\c{PREFIX}|\c{GPREFIX}: Prepend the argument to all \c{EXTERN},
+\c{COMMON}, \c{STATIC}, and \c{GLOBAL} symbols.
+
+\b\c{LPREFIX}: Prepend the argument to all other symbols
+such as local labels and backend defined symbols.
+
+\b\c{POSTFIX}|\c{GPOSTFIX}: Append the argument to all \c{EXTERN},
+\c{COMMON}, \c{STATIC}, and \c{GLOBAL} symbols.
+
+\b\c{LPOSTFIX}: Append the argument to all other symbols
+such as local labels and backend defined symbols.
+
+These are macros implemented as pragmas, and using \c{%pragma} syntax
+can be restricted to specific backends (see \k{pragma}):
+
+\c %pragma macho lprefix L_
+
+Command line options are also available. See also \k{opt-pfix}.
+
+One example which supports many ABIs:
+
+\c ; The most common conventions
+\c %pragma output gprefix _
+\c %pragma output lprefix L_
+\c ; ELF uses a different convention
+\c %pragma elf    gprefix			; empty
+\c %pragma elf    lprefix .L
+
+Some toolchains is aware of a particular prefix for its own
+optimization options, such as dead code elimination. For instance, the
+Mach-O binary format has a linker convention that uses a simplistic
+naming scheme to chunk up sections into smaller subsections, each of
+which may be eliminated. When the \c{subsections_via_symbols}
+directive (\k{macho-ssvs}) is declared, each symbol is the start of a
+separate block. The subsection is, then, defined to include sections
+before the one that starts with a 'L'. \c{LPREFIX} is useful here to
+mark all local symbols with the 'L' prefix to be excluded to the meta
+section.  It converts local symbols compatible with the particular
+toolchain.  Note that local symbols declared with \c{STATIC}
+(\k{static}) are excluded from the symbol mangling and also not marked
+as global.
+
+
+\H{CPU} \i\c{CPU}: Defining CPU Dependencies
+
+The \i\c{CPU} directive restricts assembly to those instructions which
+are available on the specified CPU. At the moment, it is primarily
+used to enforce unavailable \e{encodings} of instructions, such as
+5-byte jumps on the 8080.
+
+(If someone would volunteer to work through the database and add
+proper annotations to each instruction, this could be greatly
+improved. Please contact the developers to volunteer, see \k{contact}.)
+
+Current CPU keywords are:
+
+\b\c{CPU 8086}        - Assemble only 8086 instruction set
+
+\b\c{CPU 186}         - Assemble instructions up to the 80186 instruction set
+
+\b\c{CPU 286}         - Assemble instructions up to the 286 instruction set
+
+\b\c{CPU 386}         - Assemble instructions up to the 386 instruction set
+
+\b\c{CPU 486}         - 486 instruction set
+
+\b\c{CPU 586}         - Pentium instruction set
+
+\b\c{CPU PENTIUM}     - Same as 586
+
+\b\c{CPU 686}         - P6 instruction set
+
+\b\c{CPU PPRO}        - Same as 686
+
+\b\c{CPU P2}          - Same as 686
+
+\b\c{CPU P3}          - Pentium III (Katmai) instruction sets
+
+\b\c{CPU KATMAI}      - Same as P3
+
+\b\c{CPU P4}          - Pentium 4 (Willamette) instruction set
+
+\b\c{CPU WILLAMETTE}  - Same as P4
+
+\b\c{CPU PRESCOTT}    - Prescott instruction set
+
+\b\c{CPU X64}         - x86-64 (x64/AMD64/Intel 64) instruction set
+
+\b\c{CPU IA64}        - IA64 CPU (in x86 mode) instruction set
+
+\b\c{CPU DEFAULT}     - All available instructions
+
+\b\c{CPU ALL}	      - All available instructions \e{and flags}
+
+All options are case insensitive.
+
+In addition, optional flags can be specified to modify the instruction
+selections. These can be combined with a CPU declaration or specified
+alone. They can be prefixed by \c{+} (add flag, default), \c{-}
+(remove flag) or \c{*} (set flag to default); these prefixes are
+"sticky", so:
+
+\c      cpu -foo,bar
+
+means remove both the \c{foo} and \c{bar} options.
+
+If prefixed with \c{no}, it inverts the meaning of the flag, but this
+is not sticky, so:
+
+\c      cpu nofoo,bar
+
+means remove the \c{foo} flag but add the \c{bar} flag.
+
+Currently available flags are:
+
+\b\c{EVEX} - Enable generation of EVEX (AVX-512) encoded instructions
+without an explicit \c{\{evex\}} prefix. Default on.
+
+\b\c\{VEX} - Enable generation of VEX (AVX) or XOP encoded
+instructions without an explict \c{\{vex\}} prefix. Default on.
+
+\b\c{LATEVEX} - Enable generation of VEX (AVX) encoding of
+instructions where the VEX instructions forms were introduced
+\e{after} the corresponding EVEX (AVX-512) instruction forms without
+requiring an explicit \c{\{vex\}} prefix. This is implicit if the
+\c{EVEX} flag is disabled and the \c{VEX} flag is enabled. Default
+off.
+
+
+\H{FLOAT} \i\c{FLOAT}: Handling of \I{floating-point, constants}floating-point constants
+
+By default, floating-point constants are rounded to nearest, and IEEE
+denormals are supported.  The following options can be set to alter
+this behaviour:
+
+\b\c{FLOAT DAZ}       - Flush denormals to zero
+
+\b\c{FLOAT NODAZ}     - Do not flush denormals to zero (default)
+
+\b\c{FLOAT NEAR}      - Round to nearest (default)
+
+\b\c{FLOAT UP}        - Round up (toward +Infinity)
+
+\b\c{FLOAT DOWN}      - Round down (toward -Infinity)
+
+\b\c{FLOAT ZERO}      - Round toward zero
+
+\b\c{FLOAT DEFAULT}   - Restore default settings
+
+The standard macros \i\c{__?FLOAT_DAZ?__}, \i\c{__?FLOAT_ROUND?__}, and
+\i\c{__?FLOAT?__} contain the current state, as long as the programmer
+has avoided the use of the brackeded primitive form, (\c{[FLOAT]}).
+
+\c{__?FLOAT?__} contains the full set of floating-point settings; this
+value can be saved away and invoked later to restore the setting.
+
+
+\H{asmdir-warning} \i\c{[WARNING]}: Enable or disable warnings
+
+The \c{[WARNING]} directive can be used to enable or disable classes
+of warnings in the same way as the \c{-w} option, see \k{warnings} for
+more details about warning classes.
+
+\b \c{[warning +}\e{warning-class}\c{]} enables warnings for
+   \e{warning-class}.
+
+\b \c{[warning -}\e{warning-class}\c{]} disables warnings for
+   \e{warning-class}.
+
+\b \c{[warning *}\e{warning-class}\c{]} restores \e{warning-class} to
+   the original value, either the default value or as specified on the
+   command line.
+
+\b \c{[warning push]} saves the current warning state on a stack.
+
+\b \c{[warning pop]} restores the current warning state from the stack.
+
+The \c{[WARNING]} directive also accepts the \c{all}, \c{error} and
+\c{error=}\e{warning-class} specifiers, see \k{opt-w}.
+
+No "user form" (without the brackets) currently exists.
+
+

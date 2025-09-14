@@ -1,0 +1,50 @@
+import("../../../gn/perfetto.gni")
+import("../../../gn/perfetto_android_sdk.gni")
+
+assert(enable_perfetto_android_java_sdk)
+
+SOURCE_SET_SOURCES = [
+  "dev_perfetto_sdk_PerfettoNativeMemoryCleaner.cc",
+  "dev_perfetto_sdk_PerfettoNativeMemoryCleaner.h",
+  "dev_perfetto_sdk_PerfettoTrace.cc",
+  "dev_perfetto_sdk_PerfettoTrackEventExtra.cc",
+  "dev_perfetto_sdk_PerfettoTrackEventExtra.h",
+  "macros.h",
+]
+
+#TODO(ktimofeev): use builtin 'nativehelper' lib when building in AOSP.
+SOURCE_SET_DEPS = [
+  "../../../gn:default_deps",
+  "../nativehelper:nativehelper",
+  "../perfetto_sdk_for_jni:perfetto_sdk_for_jni",
+]
+
+source_set("libperfetto_jni_src") {
+  sources = SOURCE_SET_SOURCES
+  deps = SOURCE_SET_DEPS
+}
+
+source_set("libperfetto_framework_jni_src") {
+  sources = SOURCE_SET_SOURCES
+  deps = SOURCE_SET_DEPS
+  cflags = [ "-DPERFETTO_JNI_JARJAR_PREFIX=com/android/internal/" ]
+}
+
+perfetto_android_jni_library("libperfetto_jni") {
+  deps = [
+    ":libperfetto_jni_src",
+    "../../../gn:default_deps",
+    "../../shared_lib:libperfetto_c",
+  ]
+  binary_name = "libperfetto_jni.so"
+  bazel_linkopts = "-llog"
+}
+
+perfetto_android_jni_library("libperfetto_framework_jni") {
+  deps = [
+    ":libperfetto_framework_jni_src",
+    "../../../gn:default_deps",
+    "../../shared_lib:libperfetto_c",
+  ]
+  binary_name = "libperfetto_framework_jni.so"
+}

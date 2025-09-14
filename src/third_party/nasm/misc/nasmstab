@@ -1,0 +1,296 @@
+#!/usr/bin/perl
+ 
+sub StabLine  ($ $ $ $ $ $) {
+        local ($comment,$n_strx,$type,$other,$desc,$value) = @_;
+        print $comment;
+        print "","dd",$n_strx;
+        print "","db",$type;
+        print "","db",$other;
+        print "","dw",$desc;
+        print "","dd","0" . $value . "h";
+}
+
+sub RStabLine  ($ $ $ $ $) {
+        local ($comment,$offset,$info,$type,$symbol) = @_;
+        print $comment;
+        print "","dd",$offset;
+        print "","db",$type;
+        print "","db",$symbol;
+        print "","dw",$info;
+}
+
+#this sub exists because i've no idea how to print non-ascii numbers in perl
+
+sub OutBin ( $ $ ) {
+        local ($offset, $shnum) = @_;
+        seek(FINAL,$offset,0);
+        if ( $shnum == 2 ) { printf FINAL "\x02" } ;
+        if ( $shnum == 3 ) { printf FINAL "\x03" } ;
+        if ( $shnum == 4 ) { printf FINAL "\x04" } ;
+        if ( $shnum == 5 ) { printf FINAL "\x05" } ;
+        if ( $shnum == 6 ) { printf FINAL "\x06" } ;
+        if ( $shnum == 7 ) { printf FINAL "\x07" } ;
+        if ( $shnum == 8 ) { printf FINAL "\x08" } ;
+        if ( $shnum == 9 ) { printf FINAL "\x09" } ;
+        if ( $shnum == 10 ) { printf FINAL "\x0a" } ;
+        if ( $shnum == 11 ) { printf FINAL "\x0b" } ;
+        if ( $shnum == 12 ) { printf FINAL "\x0c" } ;
+        if ( $shnum == 13 ) { printf FINAL "\x0d" } ;
+        if ( $shnum == 14 ) { printf FINAL "\x0e" } ;
+        if ( $shnum == 15 ) { printf FINAL "\x0f" } ;
+}
+
+sub DispHelp () {
+        $\="\n";
+        print "Usage:";
+        print "\t-f,--input-file";
+        print "\t\tThe input file name (only required option)";
+        print "\t-o,--output-file";
+        print "\t\tThe output file name (if not specified, *.asm becomes *.o";
+        print "\t\tand anything else becomes a.out)";
+        print "\t-l,--list-file";
+        print "\t\tThe listing file's name (default: trailing .asm is
+removed";
+        print "\t\tif there and .lst is appended)";
+        print "\t-s,--second-asm-file";
+        print "\t\tThe second asm file's name (default: trailing .asm is";
+        print "\t\tremoved if there and .nasm is appended)";
+        print "\n";
+        exit ;
+}
+
+if ( $ARGV[0] eq "" ) { $ARGV[0] = "-h" };
+
+$i = 0;
+$filename = "";
+$outname  = "";
+
+while ( $ARGV[$i] ne "" ) {
+        $_ = $ARGV[$i];
+        if ( m/^-/ ) {
+                if ( m/^-f$/ ) { $filename = $ARGV[++$i] };
+                if ( m/^-o$/ ) { $outname  = $ARGV[++$i] };
+                if ( m/^-l$/ ) { $listname = $ARGV[++$i] };
+                if ( m/^-s$/ ) { $asmname  = $ARGV[++$i] };
+                if ( m/^-h$/ ) { DispHelp };
+        } elsif ( m/^--\w+/ ) {
+                if ( m/^--input-file$/ )      { $filename = $ARGV[++$i] };
+                if ( m/^--output-file$/ )     { $outname  = $ARGV[++$i] };
+                if ( m/^--list-file$/ )       { $listname = $ARGV[++$i] };
+                if ( m/^--second-asm-file$/ ) { $asmname  = $ARGV[++$i] };
+                if ( m/^--help/ ) { DispHelp };
+        } elsif ( m/^--$/ ) {
+                while ( $ARGV[++$i] ) {
+                        $NasmOptions .= " ";
+                        $NasmOptions .= $_;
+                };
+        } else {
+                DispHelp()
+        };
+        $i++;
+};
+
+if ( $filename eq "" ) { DispHelp() };
+
+if ( $outname eq "" ) {
+        $outname = $filename;
+        $outname =~ s/\.asm/.o/;
+        if ( $outname eq $filename ) { $outname = "a.out" };
+};
+
+if ( $listname eq "" ) {
+        $listname = $filename;
+        $listname =~ s/\.asm//;
+        $listname .= ".lst";
+};
+
+if ( $asmname eq "" ) {
+        $asmname = $filename;
+        $asmname =~ s/\.asm//;
+        $asmname .= ".nasm";
+};
+
+$err = `nasm -f elf ${filename} -l ${listname} -o ${outname} `;
+
+if ( $err ) { die "\n$err\n"};
+
+open(LISTFILE,"${listname}") or die "\n $0: Could not reopen list file!\n";
+open(ASMFILE,">${asmname}")  or die "\n $0: Could not open asm file!\n";
+
+select ASMFILE;
+
+open(OLDASM,$filename) or die "\n$0: Cannot open file $filename\n";
+
+while ( $x = <OLDASM> ) {
+        print $x;
+}
+
+@stab = ("n_desc", "value");
+@rel_stab = ("offset");
+$i = 0;
+$current_section = "";
+$has_text = 'FALSE';
+$midst_of_macro = 'FALSE';
+$line_dec = 0 ;
+
+while ( $x = <LISTFILE> ) {
+        if ( $x =~ m/[^;]*%include/ ) {
+                $x = <LISTFILE>;
+                while ( $x =~ m/\s+\d+\s+\<\d+\>\s+/ ) {
+                        $x = <LISTFILE>;
+                        $line_dec++;
+                }
+        }
+        if ( $current_section eq ".text" ) {
+                if ( $x =~ m/^\s+(\S+)\s+(\S+)\s+(\S+)\s+[^<]+$/ ) {
+                        $stab[$i++] = $1-$line_dec;     #linenum
+                        $stab[$i++] = $2;               #offset
+                        $count++;
+                        if ( $3 =~ m/-/ ) {
+                                $x = <LISTFILE>;
+                                $line_dec++;
+                        }
+                        $midst_of_macro = 'FALSE';
+                } elsif ( $x =~ m/^\s+(\S+)\s+(\S+)\s+(\S+)\s+<\d+>/ ) {
+                        if ( $midst_of_macro eq 'TRUE' ) {
+                                $stab[$i] = $stab[$i-2]; #same linenum
+                                $line_dec++;
+                        } else {
+                                $stab[$i] = $1 - ++$line_dec;
+                                $midst_of_macro = 'TRUE';
+                        }
+                        $count++;
+                        $i++;
+                        $stab[$i++] = $2;
+                        if ( $3 =~ m/-/ ) {
+                                $x = <LISTFILE>;
+                                $line_dec++;
+                        }
+
+                }
+                $has_text = 'TRUE';
+        } elsif ( $x =~ m/\s+\S+\s+\S+\s+\S+\s+<\d+>/ ) { # is it a macro?
+                $line_dec++;
+        }
+        if ( $x =~ s/(section|segment)\s+([^\s]+)/$2/ ) {
+                        $current_section = $2;
+        }
+};
+
+close LISTFILE;
+
+unless ( $has_text eq "TRUE" ) {
+        $err = `nasm -f elf ${asmname} -o ${outname}`;
+        print STDERR $err;
+        exit;
+}
+
+#Write Stab section
+$, = "\t";      #output field separator
+$\ = "\n";      #output record separator
+
+print "section .stab noalloc";
+StabLine(";header",1,0,0,$count+1,length($filename)*2+3);
+StabLine(";so",length($asmname)+2,"064h",0,0,0);
+
+$offset = 12;
+$i = 0;
+$j = 0;
+$rel_stab[$j++] = $offset + 8;
+
+while ( $stab[$i] ) {
+        StabLine(";N_SLINE" . " " . ( ($i+2) / 2 ), 0, "044h", 0,
+                $stab[$i++], $stab[$i++]);
+        $offset += 12;
+        $rel_stab[$j++] = $offset + 8;
+}
+
+#Write .rel.stab section
+print "\n\nsection .rel.stab noalloc";
+
+open (READELF,"readelf -s ${outname} |") or die "\n$0: Could not run readelf\n";
+
+while ( $x = <READELF> ) {
+   if ( $x =~ m/\s+(\d+):\s+00000000\s+\d+\s+SECTION\s+\w+\s+\w+\s+1\s+/){ $textsymnum = $1;
+   };
+};
+close READELF;
+
+$i = 0;
+
+while ( $rel_stab[$i] ne "" ) {
+        RStabLine(";relocation for N_SLINE " . ($i), $rel_stab[$i], 0, 1, $textsymnum);
+        $i++;
+} ;
+
+#Write .stabstr section
+
+print "\n\nsection .stabstr noalloc";
+
+print "","db","0";
+print "","db",'"' . $asmname . '"';
+print "","db","0";
+print "","db",'"' . $asmname . '"' ;
+print "","db","0";
+
+close ASMFILE;
+
+$err = `nasm -f elf ${asmname} -o ${outname}`;
+
+if ( $err ) { die "\n$err\n" } ;
+
+open (READELF,"readelf -h -S ${outname} |") or die "\n$0: Could not run readelf\n";
+
+
+while ( $x = <READELF> ) {
+        if ( $x =~ m/Start\s+of\s+section\s+headers:\s+(\d+)\s+/ ) {
+                $shoff = $1;
+        }
+        if ( $x =~ m/Size\s+of\s+section\s+headers:\s+(\d+)\s+/ ) {
+                $shentsize = $1;
+        }
+        if ( $x =~ m/\[\s*(\d+)\]\s+.rel.stab\s+/ ) {
+                $relnum = $1;
+        }
+        if ( $x =~ m/\[\s*(\d+)\]\s+.stab\s+/ ) {
+                $stabnum = $1;
+        }
+        if ( $x =~ m/\[\s*(\d+)\]\s+.stabstr\s+/ ) {
+                $stabstrnum = $1;
+        }
+        if ( $x =~ m/\[\s*(\d+)\]\s+.symtab\s+/ ) {
+                $symtabnum = $1;
+        }
+}
+close READELF;
+
+sysopen (FINAL,"${outname}",2,0) or die "\n$0: Could not open ${outname}";
+$, = "";        #output field separator
+$\ = "";        #output record separator
+
+#set .rel.stab->type to rel
+OutBin($shoff + ($shentsize * $relnum) + 4,9);
+
+#set .rel.stab->link to .symtab
+OutBin($shoff + ($shentsize * $relnum) + 24,$symtabnum);
+
+#set .rel.stab->info to .stab
+OutBin($shoff + ($shentsize * $relnum) + 28,$stabnum);
+
+#set .rel.stab->entsize to 8
+OutBin($shoff + ($shentsize * $relnum) + 36,8);
+
+#set .stab->link to .stabstr
+OutBin($shoff + ($shentsize * $stabnum) + 24,$stabstrnum);
+
+#set .stab->entsize to 12
+OutBin($shoff + ($shentsize * $stabnum) + 36,12);
+
+#set .stabstr->type to strtab
+OutBin($shoff + ($shentsize * $stabstrnum) + 4,3);
+
+close FINAL;
+
+#Date: 17 Mar 2002 15:51:20 -0800
+#From: kitsred@hotmail.com (kired)
+#Newsgroups: alt.lang.asm

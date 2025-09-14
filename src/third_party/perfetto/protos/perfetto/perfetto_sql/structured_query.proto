@@ -1,0 +1,288 @@
+/*
+ * Copyright (C) 2025 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+package perfetto.protos;
+
+// Represents a PerfettoSQL query as a protobuf.
+//
+// SQL is amazing for writing interactive queries and human readability and
+// development but it is really bad for machine readability. Specifically, given
+// an SQL query, it's very hard to figure out what the author "intended" from
+// that as the same query can be written in countless different ways. This
+// makes building automated tools which take SQL and represent the data flow
+// visually very difficult to build.
+//
+// The goal of this proto is *not* in any way to replace SQL. In fact that's
+// an explicit *non-goal*. Instead, the idea here is this proto encodes it is a
+// very restricted, well-defined subset of the functionality of SQL that we see
+// a lot of usage of when writing PerfettoSQL queries.
+//
+// Basically, trace analysis has a lot of common "patterns" when it comes to
+// writing queries and this proto aims to have a central place codifying those
+// so all Perfetto tooling can share a common interchange format. Specifically,
+// unlike SQL which is quite optimized for human readability, this proto is more
+// designed for easy machine consumption with a secondary goal to still be
+// pretty easy for humans to read/write/modify in small doses. Note that it
+// *will* be verbose to deal with complex instances of this proto.
+//
+// It will always be easy to go from this proto to PerfettoSQL: trace processor
+// exposes APIs for this. It's also easy to bring SQL directly into the proto
+// world through use of the `Sql` source (see below).
+message PerfettoSqlStructuredQuery {
+  // A table or view acting as the source of the query, possibly living in a
+  // PerfettoSQL module.
+  message Table {
+    // The name of the table or view to query. Required.
+    optional string table_name = 1;
+
+    // The name of the module this table lives in. Optional, does not need to
+    // be specified if the table exists in the global scope (e.g. track table,
+    // slice table, any table/function in the prelude). Required otherwise.
+    optional string module_name = 2;
+
+    // The name of the columns of this table which will be used by this query.
+    // Required.
+    //
+    // Note: specifying this field is *mandatory* at all times. In the future,
+    // this may become option for public tables in the standard library.
+    repeated string column_names = 3;
+  }
+
+  // A set of slices which will act as the source for the query. This is
+  // basically equivalent to doing a query on the "slice" table (+ the
+  // appropriate joins) followed by a filter on various columns.
+  //
+  // This message exists for *pure* human convinience as we expect this pattern
+  // to be very commonly used by users.
+  //
+  // Produces a source with the schema
+  // (id, ts, dur, slice_name, thread_name, process_name, track_name).
+  message SimpleSlices {
+    // Glob for the name of the slices. Optional.
+    optional string slice_name_glob = 1;
+
+    // Glob for the thread name of the slices. Optional.
+    optional string thread_name_glob = 2;
+
+    // Glob for the process name of the slices. Optional.
+    optional string process_name_glob = 3;
+
+    // Glob for the track name of the slices. Optional.
+    optional string track_name_glob = 4;
+  }
+
+  // An arbitrary SQL query to use as the source for the query.
+  message Sql {
+    // The SQL string. Required.
+    //
+    // `sql` can contain multiple, semi-colon separated statements but must
+    // adhere to the following principles:
+    // 1) Only the final statement can return results (i.e. be a `SELECT`
+    // statement): every other statement must be a statement returning no output
+    // (e.g. INCLUDE PERFETTO MODULE, CREATE PERFETTO TABLE etc.).
+    // 2) The final statement *must* be a valid `SELECT` statement returning
+    // results with at least one column.
+    optional string sql = 1;
+
+    // The name of columns which will be returned by the SQL. Required.
+    repeated string column_names = 2;
+
+    // DEPRECATED, as `sql` field supports multi-statement queries.
+    //
+    // SQL string that has to be run before running the SQL.
+    // Supports multi statement queries. Optional.
+    optional string preamble = 3;
+  }
+
+  // Performs a "time-based" intersection of data from `base` with multiple
+  // sets of intervals.
+  //
+  // Examples:
+  // The best way to understand this operator is through example usecases
+  //  1) Compute the CPU usage during some CUJs:
+  //    * `base` points to a query contain CPU scheduling data.
+  //    * `interval_intersect` points to a query containing the CUJ boundaries.
+  //  2) Compute the memory usage of a process during an app startup
+  //    * `base` points to a query contain the memory usage of that process over
+  //      time.
+  //    * `interval_intersect` points to a structued query containing the app
+  //      startups.
+  //  3) Compute dropped frames during an layout while scrolling
+  //    * `base` points to a strucuted query containing the dropped frames
+  //      over time.
+  //    * `interval_intersect` points to two structured queries: the first
+  //      containing the layout intervals, the second containing the scroll
+  //      intervals.
+  //
+  // Schema:
+  //  1) Every query in `interval_intersect` must have both `ts` and
+  //     `dur` columns. It must also have an `id` column: this is necessary
+  //     because of the current implementation; this may be relaxed in the
+  //     future.
+  //    * Both `ts` and `dur` columns. In this case, the `base` interval
+  //      must overlap with one interval from each of `interval_intersect`
+  //      to be included.
+  //    * `ts` column without `dur` column. In this case, the `base`
+  //      timestamp must lie *between* one interval from each of
+  //      `interval_intersect` to be included.
+  //  3) The query in `base` must also have an `id` column: this is necessary
+  //     because of the current implementation; this may be relaxed in the
+  //     future.
+  //
+  // Handling of `dur`:
+  // The `dur` column is treated specially. It is changed to have the amount of
+  // time for which intervals in `base` overlaps with all structured queries in
+  // `interval_intersect`.
+  //
+  // Overlap with multiple intervals:
+  // If one row in `base` overlaps with *multiple* sets of intervals from each
+  // query in `interval_intersect`, then *multiple* rows will be
+  // produced, one for each sets of overlaps.
+  //
+  // Example in ASCII art:
+  //   base:       [-----------]     [--------]
+  //   ii1 :                [-----------]
+  //   ii2 :      [---------------] [-----]
+  // output:                [--]     [--]
+  message IntervalIntersect {
+    // The base query
+    optional PerfettoSqlStructuredQuery base = 1;
+    repeated PerfettoSqlStructuredQuery interval_intersect = 2;
+  }
+
+  // An opaque id field for the query. The convention is to use underscores
+  // and lower case (foo_bar) but this is not enforced. Optional in the general
+  // case but strongly recommended for good error messages. Required in cases
+  // where this query is used as a "shared" query.
+  optional string id = 1;
+
+  // Represents the "source" of the query which will be translared to an SQL
+  // "FROM" clause. One of the following is required.
+  oneof source {
+    // Source is an SQL table, possible in a PerfettoSQL module.
+    Table table = 2;
+
+    // Source is an arbitrary snippet of SQL.
+    Sql sql = 3;
+
+    // Source is a simple set of slices.
+    SimpleSlices simple_slices = 4;
+
+    // Source is a nested query. Useful for aliasing columns,
+    // filtering etc.
+    PerfettoSqlStructuredQuery inner_query = 5;
+
+    // Source is a nested query with the given id which should be
+    // looked up in some external data structure.
+    //
+    // This field is quite special and cannot be used in all StructuredQuery
+    // contexts. It exists to share some common structured queries between many
+    // other structured queries and is only available in contexts where this is
+    // supported.
+    //
+    // Contexts where this is supported that we are aware of:
+    // 1) Trace-Based Metrics v2
+    //
+    // Please see the documentation of the embedding system for more context.
+    string inner_query_id = 6;
+
+    // Source is an interval intersect operation. See IntervalIntersect
+    // documentation for more information.
+    IntervalIntersect interval_intersect = 7;
+  }
+
+  // Represents a single filter on a column.
+  message Filter {
+    // The column name to be filtered. Required.
+    optional string column_name = 1;
+
+    // The operator to use to perform filtering. Required.
+    enum Operator {
+      UNKNOWN = 0;
+      EQUAL = 1;
+      NOT_EQUAL = 2;
+      LESS_THAN = 3;
+      LESS_THAN_EQUAL = 4;
+      GREATER_THAN = 5;
+      GREATER_THAN_EQUAL = 6;
+      IS_NULL = 8;
+      IS_NOT_NULL = 9;
+
+      // Unix GLOB. Only makes sense for string columns.
+      GLOB = 7;
+    }
+    optional Operator op = 2;
+
+    // The RHS for filtering. All values specified here will be ORed together
+    // allowing easy IN and GLOB IN filtering. If operation is different than
+    // IS_NULL or IS_NOT_NULL, at least one of these fields must be non-empty.
+    // Only the first non-empty field will be considered.
+    repeated string string_rhs = 3;
+    repeated double double_rhs = 4;
+    repeated int64 int64_rhs = 5;
+  }
+
+  // A set of filters which are ANDed together. Optional, can be empty.
+  repeated Filter filters = 8;
+
+  // Represents a GROUP BY + aggregation operation in SQL. Optional.
+  message GroupBy {
+    // The column names to group by. At least one column is required.
+    repeated string column_names = 1;
+
+    // The list of aggregations to perform.
+    message Aggregate {
+      enum Op {
+        UNSPECIFIED = 0;
+        COUNT = 1;
+        SUM = 2;
+        MIN = 3;
+        MAX = 4;
+        MEAN = 5;
+        MEDIAN = 6;
+        DURATION_WEIGHTED_MEAN = 7;
+      }
+
+      optional string column_name = 1;
+      optional Op op = 2;
+      optional string result_column_name = 3;
+    }
+    repeated Aggregate aggregates = 2;
+  }
+  optional GroupBy group_by = 9;
+
+  // Represents the selection of columns from the source. Maps to a SELECT
+  // operation. Optional.
+  //
+  // Depending on whether `group_by` was specified the columns available from
+  // the source will be different:
+  // * if `group_by` is specified, all the columns in `group_by.column_names`
+  //   and `group_by.aggregates.result_column_name` are available.
+  // * if `group_by` is not specified, all columns in the source are eligible.
+  //
+  // If this is *not* specified, all columns from the source will be output.
+  message SelectColumn {
+    // The existing name of the column from the source. Required.
+    optional string column_name = 1;
+
+    // The new name of the column. If not set, the name of the column is
+    // `column_name`. Optional.
+    optional string alias = 2;
+  }
+  repeated SelectColumn select_columns = 10;
+}

@@ -1,0 +1,142 @@
+# Copyright (C) 2024 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../../gn/fuzzer.gni")
+import("../../../gn/perfetto.gni")
+import("../../../gn/test.gni")
+
+source_set("service") {
+  public_deps = [
+    "..:common",
+    "../../../include/perfetto/ext/base",
+    "../../../include/perfetto/ext/tracing/core",
+  ]
+  deps = [
+    "../../../gn:default_deps",
+    "../../../include/perfetto/tracing",
+    "../../../protos/perfetto/common:zero",
+    "../../../protos/perfetto/config:zero",
+    "../../../protos/perfetto/trace:zero",
+    "../../../protos/perfetto/trace/perfetto:zero",  # For MetatraceWriter.
+    "../../android_stats",
+    "../../base",
+    "../../base:clock_snapshots",
+    "../../base:version",
+    "../../protozero/filtering:message_filter",
+    "../../protozero/filtering:string_filter",
+    "../core",
+  ]
+  sources = [
+    "clock.cc",
+    "clock.h",
+    "dependencies.h",
+    "histogram.h",
+    "metatrace_writer.cc",
+    "metatrace_writer.h",
+    "packet_stream_validator.cc",
+    "packet_stream_validator.h",
+    "random.cc",
+    "random.h",
+    "trace_buffer.cc",
+    "trace_buffer.h",
+    "tracing_service_impl.cc",
+    "tracing_service_impl.h",
+  ]
+  if (is_android && perfetto_build_with_android) {
+    deps += [
+      "../../android_internal:headers",
+      "../../android_internal:lazy_library_loader",
+    ]
+  }
+}
+
+if (enable_perfetto_zlib) {
+  source_set("zlib_compressor") {
+    deps = [
+      "../../../gn:default_deps",
+      "../../../gn:zlib",
+      "../../../include/perfetto/tracing",
+      "../core",
+    ]
+    sources = [
+      "zlib_compressor.cc",
+      "zlib_compressor.h",
+    ]
+  }
+}
+
+perfetto_unittest_source_set("unittests") {
+  testonly = true
+  deps = [
+    ":service",
+    "../../../gn:default_deps",
+    "../../../gn:gtest_and_gmock",
+    "../../../protos/perfetto/trace:cpp",
+    "../../../protos/perfetto/trace:zero",
+    "../../../protos/perfetto/trace/ftrace:cpp",
+    "../../../protos/perfetto/trace/perfetto:cpp",
+    "../../../src/protozero/filtering:bytecode_generator",
+    "../../base",
+    "../../base:test_support",
+    "../core",
+    "../test:test_support",
+  ]
+
+  if (enable_perfetto_zlib) {
+    deps += [
+      ":zlib_compressor",
+      "../../../gn:zlib",
+    ]
+  }
+
+  sources = [
+    "histogram_unittest.cc",
+    "packet_stream_validator_unittest.cc",
+    "trace_buffer_unittest.cc",
+  ]
+
+  if (enable_perfetto_zlib) {
+    sources += [ "zlib_compressor_unittest.cc" ]
+  }
+
+  # These tests rely on test_task_runner.h which
+  # has no Windows implementation.
+  if (!is_win) {
+    sources += [ "tracing_service_impl_unittest.cc" ]
+  }
+}
+
+if (enable_perfetto_benchmarks) {
+  source_set("benchmarks") {
+    testonly = true
+    deps = [
+      ":service",
+      "../../../gn:benchmark",
+      "../../../gn:default_deps",
+      "../../../protos/perfetto/trace:zero",
+      "../../../protos/perfetto/trace/ftrace:zero",
+      "../../protozero",
+      "../core",
+    ]
+    sources = [ "packet_stream_validator_benchmark.cc" ]
+  }
+}
+
+perfetto_fuzzer_test("packet_stream_validator_fuzzer") {
+  sources = [ "packet_stream_validator_fuzzer.cc" ]
+  deps = [
+    ":service",
+    "../../../gn:default_deps",
+  ]
+}

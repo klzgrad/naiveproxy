@@ -1,0 +1,275 @@
+/*
+ * Copyright (C) 2024 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+syntax = "proto2";
+
+package perfetto.protos;
+
+// These are the protos for the V8 data source.
+//
+// All events are associated to a V8 isolate instance. There can be multiple
+// instances associated to a given thread, although this is rare.
+//
+// Generated code in V8 is allocated in the V8 heap (in a special executeable
+// section), this means that code can be garbage collected (when no longer used)
+// or can be moved around (e.g. during heap compactation). This means that a
+// given callsite might correspond to function `A` at one point in time and to
+// function `B` later on.
+// In addition V8 code has various levels of optimization, so a function might
+// have multiple associated code snippets.
+//
+// V8 does not track code deletion, so we have to indirectly infer it by
+// detecting code overlaps, if a newer code creation event overlaps with older
+// code we need to asume that the old code was deleted. Code moves are logged,
+// and there is an event to track those.
+
+// Strings used by V8 can have different encodings, instead of coverting to a
+// common encoding (e.g. UTF-8) on device is expensive. Instead we send the
+// "raw" string and do the convestion at trace ingestion time.
+//
+// ATTENTION: There is some overhead in using a message (as opossed to having
+// the `oneof encoded_string`` direcly embedded in the message), so use this
+// message in places were these extra bytes don't matter that much.
+// Next id: 5
+message V8String {
+  oneof encoded_string {
+    // ISO/IEC 8859-1:1998 encoding aka latin1
+    // https://en.wikipedia.org/wiki/ISO/IEC_8859-1
+    bytes latin1 = 1;
+    // UTF-16 Little Endian Encoding
+    bytes utf16_le = 2;
+    // UTF-16 Big Endian Encoding
+    bytes utf16_be = 3;
+  }
+}
+
+// Interned version of V8String
+message InternedV8String {
+  optional uint64 iid = 1;
+  // We inline the fields in V8String here to save some bytes in the serialized
+  // proto format. Interning is about saving bytes so this makes sense here.
+  oneof encoded_string {
+    // ISO/IEC 8859-1:1998 encoding aka latin1
+    // https://en.wikipedia.org/wiki/ISO/IEC_8859-1
+    bytes latin1 = 2;
+    // UTF-16 Little Endian Encoding
+    bytes utf16_le = 3;
+    // UTF-16 Big Endian Encoding
+    bytes utf16_be = 4;
+  }
+}
+
+// Represents a script that was compiled to generate code. Some V8 code is
+// generated out of scripts and will reference a V8Script other types of code
+// will not (e.g. builtins).
+message InternedV8JsScript {
+  optional uint64 iid = 1;
+  // Unique in a given isolate
+  optional int32 script_id = 2;
+
+  enum Type {
+    TYPE_UNKNOWN = 0;
+    TYPE_NORMAL = 1;
+    TYPE_EVAL = 2;
+    TYPE_MODULE = 3;
+    TYPE_NATIVE = 4;
+    TYPE_EXTENSION = 5;
+    TYPE_INSPECTOR = 6;
+  }
+
+  optional Type type = 3;
+  optional V8String name = 4;
+  // Actual source of the script
+  optional V8String source = 5;
+}
+
+message InternedV8WasmScript {
+  optional uint64 iid = 1;
+  // Unique in a given isolate
+  optional int32 script_id = 2;
+
+  optional string url = 3;
+  // Raw transferred wasm native module wire bytes.
+  optional bytes wire_bytes = 4;
+}
+
+message InternedV8JsFunction {
+  enum Kind {
+    KIND_UNKNOWN = 0;
+    KIND_NORMAL_FUNCTION = 1;
+    KIND_MODULE = 2;
+    KIND_ASYNC_MODULE = 3;
+    KIND_BASE_CONSTRUCTOR = 4;
+    KIND_DEFAULT_BASE_CONSTRUCTOR = 5;
+    KIND_DEFAULT_DERIVED_CONSTRUCTOR = 6;
+    KIND_DERIVED_CONSTRUCTOR = 7;
+    KIND_GETTER_FUNCTION = 8;
+    KIND_STATIC_GETTER_FUNCTION = 9;
+    KIND_SETTER_FUNCTION = 10;
+    KIND_STATIC_SETTER_FUNCTION = 11;
+    KIND_ARROW_FUNCTION = 12;
+    KIND_ASYNC_ARROW_FUNCTION = 13;
+    KIND_ASYNC_FUNCTION = 14;
+    KIND_ASYNC_CONCISE_METHOD = 15;
+    KIND_STATIC_ASYNC_CONCISE_METHOD = 16;
+    KIND_ASYNC_CONCISE_GENERATOR_METHOD = 17;
+    KIND_STATIC_ASYNC_CONCISE_GENERATOR_METHOD = 18;
+    KIND_ASYNC_GENERATOR_FUNCTION = 19;
+    KIND_GENERATOR_FUNCTION = 20;
+    KIND_CONCISE_GENERATOR_METHOD = 21;
+    KIND_STATIC_CONCISE_GENERATOR_METHOD = 22;
+    KIND_CONCISE_METHOD = 23;
+    KIND_STATIC_CONCISE_METHOD = 24;
+    KIND_CLASS_MEMBERS_INITIALIZER_FUNCTION = 25;
+    KIND_CLASS_STATIC_INITIALIZER_FUNCTION = 26;
+    KIND_INVALID = 27;
+  }
+  optional uint64 iid = 1;
+  optional uint64 v8_js_function_name_iid = 2;
+  optional uint64 v8_js_script_iid = 3;
+
+  optional bool is_toplevel = 4;
+  optional Kind kind = 5;
+
+  // Where in the script source this function is defined. This is counted in
+  // bytes not characters.
+  optional uint32 byte_offset = 6;
+  optional uint32 line = 7;
+  optional uint32 column = 8;
+}
+
+// A V8 Isolate instance. A V8 Isolate represents an isolated instance of the V8
+// engine.
+message InternedV8Isolate {
+  optional uint64 iid = 1;
+
+  optional uint32 pid = 2;
+
+  // Process unique isolate id.
+  optional int32 isolate_id = 3;
+
+  // A code range is a virtual memory cage that may contain executable code.
+  // Depending on the Isolate settings the Isolate might have one or not.
+  // See:
+  // https://source.chromium.org/chromium/chromium/src/+/main:v8/src/heap/code-range.h
+  // If the isolate defines code range this will be tracked here.
+  message CodeRange {
+    optional uint64 base_address = 1;
+    optional uint64 size = 2;
+    // Used when short builtin calls are enabled, where embedded builtins are
+    // copied into the CodeRange so calls can be nearer.
+    optional uint64 embedded_blob_code_copy_start_address = 3;
+    // Whether this code range is shared with other Isolates in the same process
+    optional bool is_process_wide = 4;
+  }
+  optional CodeRange code_range = 4;
+  // The embedded blob holds code for built in functions that are precompiled in
+  // the V8 library.
+  optional uint64 embedded_blob_code_start_address = 5;
+  optional uint64 embedded_blob_code_size = 6;
+}
+
+message V8JsCode {
+  enum Tier {
+    TIER_UNKNOWN = 0;
+    TIER_IGNITION = 1;
+    TIER_SPARKPLUG = 2;
+    TIER_MAGLEV = 3;
+    TIER_TURBOSHAFT = 4;
+    TIER_TURBOFAN = 5;
+  }
+  optional uint64 v8_isolate_iid = 1;
+  optional uint32 tid = 2;
+  optional uint64 v8_js_function_iid = 3;
+  optional Tier tier = 4;
+
+  optional uint64 instruction_start = 5;
+  optional uint64 instruction_size_bytes = 6;
+  oneof instructions {
+    bytes machine_code = 7;
+    bytes bytecode = 8;
+  }
+}
+
+message V8InternalCode {
+  enum Type {
+    TYPE_UNKNOWN = 0;
+    TYPE_BYTECODE_HANDLER = 1;
+    TYPE_FOR_TESTING = 2;
+    TYPE_BUILTIN = 3;
+    TYPE_WASM_FUNCTION = 4;
+    TYPE_WASM_TO_CAPI_FUNCTION = 5;
+    TYPE_WASM_TO_JS_FUNCTION = 6;
+    TYPE_JS_TO_WASM_FUNCTION = 7;
+    TYPE_JS_TO_JS_FUNCTION = 8;
+    TYPE_C_WASM_ENTRY = 9;
+  }
+  optional uint64 v8_isolate_iid = 1;
+  optional uint32 tid = 2;
+  optional string name = 3;
+  optional Type type = 4;
+  optional int32 builtin_id = 5;
+
+  optional uint64 instruction_start = 6;
+  optional uint64 instruction_size_bytes = 7;
+  optional bytes machine_code = 8;
+}
+
+message V8WasmCode {
+  enum Tier {
+    TIER_UNKNOWN = 0;
+    TIER_LIFTOFF = 1;
+    TIER_TURBOFAN = 2;
+  }
+  optional uint64 v8_isolate_iid = 1;
+  optional uint32 tid = 2;
+  optional uint64 v8_wasm_script_iid = 3;
+  optional string function_name = 4;
+
+  optional Tier tier = 5;
+  optional int32 code_offset_in_module = 6;
+
+  optional uint64 instruction_start = 7;
+  optional uint64 instruction_size_bytes = 8;
+  optional bytes machine_code = 9;
+}
+
+message V8RegExpCode {
+  optional uint64 v8_isolate_iid = 1;
+  optional uint32 tid = 2;
+  optional V8String pattern = 3;
+
+  optional uint64 instruction_start = 4;
+  optional uint64 instruction_size_bytes = 5;
+  optional bytes machine_code = 6;
+}
+
+// Move event for V8 code (JS / Wasm / Internal / Regexp) that was relocated in
+// memory by V8's GC.
+message V8CodeMove {
+  optional uint64 isolate_iid = 1;
+  optional uint32 tid = 2;
+  optional uint64 from_instruction_start_address = 3;
+  optional uint64 to_instruction_start_address = 4;
+  optional uint64 instruction_size_bytes = 5;
+  oneof to_instructions {
+    bytes to_machine_code = 6;
+    bytes to_bytecode = 7;
+  }
+}
+
+message V8CodeDefaults {
+  optional uint32 tid = 1;
+}

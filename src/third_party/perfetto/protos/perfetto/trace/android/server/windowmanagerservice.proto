@@ -1,0 +1,617 @@
+/*
+ * Copyright (C) 2017 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+import "protos/perfetto/trace/android/app/statusbarmanager.proto";
+import "protos/perfetto/trace/android/content/activityinfo.proto";
+import "protos/perfetto/trace/android/content/configuration.proto";
+import "protos/perfetto/trace/android/graphics/rect.proto";
+import "protos/perfetto/trace/android/server/windowcontainerthumbnail.proto";
+import "protos/perfetto/trace/android/server/surfaceanimator.proto";
+import "protos/perfetto/trace/android/view/displaycutout.proto";
+import "protos/perfetto/trace/android/view/displayinfo.proto";
+import "protos/perfetto/trace/android/view/surface.proto";
+import "protos/perfetto/trace/android/view/windowlayoutparams.proto";
+import "protos/perfetto/trace/android/privacy.proto";
+import "protos/perfetto/trace/android/typedef.proto";
+
+import "protos/perfetto/trace/android/view/surfacecontrol.proto";
+import "protos/perfetto/trace/android/view/insetssource.proto";
+import "protos/perfetto/trace/android/view/insetssourcecontrol.proto";
+
+import "protos/perfetto/trace/android/view/enums.proto";
+
+package perfetto.protos;
+
+message WindowManagerServiceDumpProto {
+  optional WindowManagerPolicyProto policy = 1;
+  // window hierarchy root
+  optional RootWindowContainerProto root_window_container = 2;
+  optional IdentifierProto focused_window = 3;
+  optional string focused_app = 4;
+  optional IdentifierProto input_method_window = 5;
+  optional bool display_frozen = 6;
+  optional int32 rotation = 7 [
+    (.perfetto.protos.typedef) = "android.view.Surface.Rotation",
+    deprecated = true
+  ];
+  optional int32 last_orientation = 8 [
+    (.perfetto.protos.typedef) =
+        "android.content.pm.ActivityInfo.ScreenOrientation",
+    deprecated = true
+  ];
+  optional int32 focused_display_id = 9;
+  optional bool hard_keyboard_available = 10;
+  optional bool window_frames_valid = 11;
+  optional BackNavigationProto back_navigation = 12;
+}
+
+// represents RootWindowContainer object
+message RootWindowContainerProto {
+  optional WindowContainerProto window_container = 1;
+  repeated DisplayContentProto displays = 2 [deprecated = true];
+  // IdentifierProto windows
+  reserved 3;
+  // window references in top down z order
+  repeated WindowStateProto windows = 4 [deprecated = true];
+  optional KeyguardControllerProto keyguard_controller = 5;
+  // Whether or not the home activity is the recents activity. This is needed
+  // for the CTS tests to know what activity types to check for when invoking
+  // splitscreen multi-window.
+  optional bool is_home_recents_component = 6;
+  repeated IdentifierProto pending_activities = 7 [deprecated = true];
+  optional int32 default_min_size_resizable_task = 8 [deprecated = true];
+}
+
+message BarControllerProto {
+  optional StatusBarManagerProto.WindowState state = 1;
+  optional StatusBarManagerProto.TransientWindowState transient_state = 2;
+}
+
+message WindowOrientationListenerProto {
+  optional bool enabled = 1;
+  optional SurfaceProto.Rotation rotation = 2;
+}
+
+message KeyguardServiceDelegateProto {
+  optional bool showing = 1;
+  optional bool occluded = 2;
+  optional bool secure = 3;
+  enum ScreenState {
+    SCREEN_STATE_OFF = 0;
+    SCREEN_STATE_TURNING_ON = 1;
+    SCREEN_STATE_ON = 2;
+    SCREEN_STATE_TURNING_OFF = 3;
+  }
+  optional ScreenState screen_state = 4;
+  enum InteractiveState {
+    INTERACTIVE_STATE_SLEEP = 0;
+    INTERACTIVE_STATE_WAKING = 1;
+    INTERACTIVE_STATE_AWAKE = 2;
+    INTERACTIVE_STATE_GOING_TO_SLEEP = 3;
+  }
+  optional InteractiveState interactive_state = 5;
+}
+
+message KeyguardControllerProto {
+  optional bool keyguard_showing = 1;
+  repeated KeyguardOccludedProto keyguard_occluded_states = 2
+      [deprecated = true];
+  optional bool aod_showing = 3;
+  repeated KeyguardPerDisplayProto keyguard_per_display = 4;
+  optional bool keyguard_going_away = 5;
+}
+
+message KeyguardOccludedProto {
+  optional int32 display_id = 1;
+  optional bool keyguard_occluded = 2;
+}
+
+message KeyguardPerDisplayProto {
+  optional int32 display_id = 1;
+  optional bool keyguard_showing = 2;
+  optional bool aod_showing = 3;
+  optional bool keyguard_occluded = 4;
+  optional bool keyguard_going_away = 5;
+}
+
+// represents PhoneWindowManager
+message WindowManagerPolicyProto {
+  optional int32 last_system_ui_flags = 1 [deprecated = true];
+  enum UserRotationMode {
+    USER_ROTATION_FREE = 0;
+    USER_ROTATION_LOCKED = 1;
+  }
+  optional UserRotationMode rotation_mode = 2;
+  optional SurfaceProto.Rotation rotation = 3;
+  optional ActivityInfoProto.ScreenOrientation orientation = 4;
+  optional bool screen_on_fully = 5;
+  optional bool keyguard_draw_complete = 6;
+  optional bool window_manager_draw_complete = 7;
+  optional string focused_app_token = 8 [deprecated = true];
+  optional IdentifierProto focused_window = 9 [deprecated = true];
+  optional IdentifierProto top_fullscreen_opaque_window = 10
+      [deprecated = true];
+  optional IdentifierProto top_fullscreen_opaque_or_dimming_window = 11
+      [deprecated = true];
+  optional bool keyguard_occluded = 12;
+  optional bool keyguard_occluded_changed = 13;
+  optional bool keyguard_occluded_pending = 14;
+  optional bool force_status_bar = 15 [deprecated = true];
+  optional bool force_status_bar_from_keyguard = 16 [deprecated = true];
+  optional BarControllerProto status_bar = 17 [deprecated = true];
+  optional BarControllerProto navigation_bar = 18 [deprecated = true];
+  optional WindowOrientationListenerProto orientation_listener = 19
+      [deprecated = true];
+  optional KeyguardServiceDelegateProto keyguard_delegate = 20;
+}
+
+// represents AppTransition
+message AppTransitionProto {
+  enum AppState {
+    APP_STATE_IDLE = 0;
+    APP_STATE_READY = 1;
+    APP_STATE_RUNNING = 2;
+    APP_STATE_TIMEOUT = 3 [deprecated = true];
+  }
+  optional AppState app_transition_state = 1;
+
+  optional TransitionTypeEnum last_used_app_transition = 2;
+}
+
+// represents DisplayContent object
+message DisplayContentProto {
+  // Use root_display_area instead
+  optional WindowContainerProto window_container = 1 [deprecated = true];
+  optional int32 id = 2;
+  // RootTasks
+  reserved 3;
+  optional DockedTaskDividerControllerProto docked_task_divider_controller = 4
+      [deprecated = true];
+  // Will be removed soon.
+  optional PinnedTaskControllerProto pinned_task_controller = 5
+      [deprecated = true];
+  // non app windows
+  repeated WindowTokenProto above_app_windows = 6 [deprecated = true];
+  repeated WindowTokenProto below_app_windows = 7 [deprecated = true];
+  repeated WindowTokenProto ime_windows = 8 [deprecated = true];
+  optional int32 dpi = 9;
+  optional DisplayInfoProto display_info = 10;
+  optional int32 rotation = 11 [
+    (.perfetto.protos.typedef) = "android.view.Surface.Rotation",
+    deprecated = true
+  ];
+  optional ScreenRotationAnimationProto screen_rotation_animation = 12;
+  optional DisplayFramesProto display_frames = 13;
+  optional int32 surface_size = 14 [deprecated = true];
+  optional string focused_app = 15;
+  optional AppTransitionProto app_transition = 16;
+  repeated IdentifierProto opening_apps = 17;
+  repeated IdentifierProto closing_apps = 18;
+  repeated IdentifierProto changing_apps = 19;
+  repeated WindowTokenProto overlay_windows = 20 [deprecated = true];
+  optional DisplayAreaProto root_display_area = 21;
+
+  optional bool single_task_instance = 22 [deprecated = true];
+  optional int32 focused_root_task_id = 23;
+  optional IdentifierProto resumed_activity = 24;
+  repeated TaskProto tasks = 25 [deprecated = true];
+  optional bool display_ready = 26;
+  optional WindowStateProto input_method_target = 27 [deprecated = true];
+  optional WindowStateProto input_method_input_target = 28 [deprecated = true];
+  optional WindowStateProto input_method_control_target = 29
+      [deprecated = true];
+  optional WindowStateProto current_focus = 30 [deprecated = true];
+  optional ImeInsetsSourceProviderProto ime_insets_source_provider = 31;
+  optional bool can_show_ime = 32 [deprecated = true];
+
+  optional DisplayRotationProto display_rotation = 33;
+  optional int32 ime_policy = 34;
+
+  repeated InsetsSourceProviderProto insets_source_providers = 35;
+  optional bool is_sleeping = 36;
+  repeated string sleep_tokens = 37;
+  repeated RectProto keep_clear_areas = 38;
+  optional int32 min_size_of_resizeable_task_dp = 39;
+  optional IdentifierProto input_method_layering_target_identifier = 40;
+  optional IdentifierProto input_method_input_target_identifier = 41;
+  optional IdentifierProto input_method_control_target_identifier = 42;
+  optional IdentifierProto current_focus_identifier = 43;
+  optional RemoteInsetsControlTargetProto remote_insets_control_target = 44;
+}
+
+// represents DisplayArea object
+message DisplayAreaProto {
+  optional WindowContainerProto window_container = 1;
+  optional string name = 2 [(.perfetto.protos.privacy).dest = DEST_EXPLICIT];
+  repeated DisplayAreaChildProto children = 3 [deprecated = true];
+  optional bool is_task_display_area = 4;
+  optional bool is_root_display_area = 5;
+  optional int32 feature_id = 6;
+  optional bool is_organized = 7;
+  optional bool is_ignoring_orientation_request = 8;
+}
+
+// represents a generic child of a DisplayArea
+message DisplayAreaChildProto {
+  // At most one of the following should be present:
+
+  // represents a DisplayArea child
+  optional DisplayAreaProto display_area = 1;
+  // represents a WindowToken child
+  optional WindowTokenProto window = 2;
+  // represents an unknown child - the class name is recorded
+  repeated string unknown = 3;
+}
+
+// represents DisplayFrames
+message DisplayFramesProto {
+  optional RectProto stable_bounds = 1 [deprecated = true];
+  optional RectProto dock = 2 [deprecated = true];
+  optional RectProto current = 3 [deprecated = true];
+}
+
+message DisplayRotationProto {
+  optional int32 rotation = 1
+      [(.perfetto.protos.typedef) = "android.view.Surface.Rotation"];
+  optional bool frozen_to_user_rotation = 2;
+  optional int32 user_rotation = 3
+      [(.perfetto.protos.typedef) = "android.view.Surface.Rotation"];
+  optional int32 fixed_to_user_rotation_mode = 4;
+  optional int32 last_orientation = 5
+      [(.perfetto.protos.typedef) =
+           "android.content.pm.ActivityInfo.ScreenOrientation"];
+  optional bool is_fixed_to_user_rotation = 6;
+}
+
+// represents DockedTaskDividerController
+message DockedTaskDividerControllerProto {
+  optional bool minimized_dock = 1 [deprecated = true];
+}
+
+// represents PinnedTaskController
+message PinnedTaskControllerProto {
+  optional RectProto default_bounds = 1 [deprecated = true];
+  optional RectProto movement_bounds = 2 [deprecated = true];
+}
+
+// represents Task
+message TaskProto {
+  optional WindowContainerProto window_container = 1 [deprecated = true];
+  optional int32 id = 2;
+  // activity
+  reserved 3;
+  optional bool fills_parent = 4;
+  optional RectProto bounds = 5;
+  optional RectProto displayed_bounds = 6 [deprecated = true];
+  optional bool defer_removal = 7;
+  optional int32 surface_width = 8;
+  optional int32 surface_height = 9;
+
+  repeated TaskProto tasks = 10 [deprecated = true];
+  repeated ActivityRecordProto activities = 11 [deprecated = true];
+
+  optional IdentifierProto resumed_activity = 12;
+  optional string real_activity = 13;
+  optional string orig_activity = 14;
+
+  optional int32 display_id = 15 [deprecated = true];
+  optional int32 root_task_id = 16;
+  optional int32 activity_type = 17 [
+    (.perfetto.protos.typedef) = "android.app.WindowConfiguration.ActivityType",
+    deprecated = true
+  ];
+  optional int32 resize_mode = 18
+      [(.perfetto.protos.typedef) =
+           "android.appwidget.AppWidgetProviderInfo.ResizeModeFlags"];
+  optional int32 min_width = 19 [deprecated = true];
+  optional int32 min_height = 20 [deprecated = true];
+
+  optional RectProto adjusted_bounds = 21;
+  optional RectProto last_non_fullscreen_bounds = 22;
+  optional bool adjusted_for_ime = 23;
+  optional float adjust_ime_amount = 24;
+  optional float adjust_divider_amount = 25;
+  optional bool animating_bounds = 26 [deprecated = true];
+  optional float minimize_amount = 27;
+  optional bool created_by_organizer = 28;
+  optional string affinity = 29;
+  optional bool has_child_pip_activity = 30;
+  optional TaskFragmentProto task_fragment = 31;
+  optional string task_name = 32;
+}
+
+// represents TaskFragment
+message TaskFragmentProto {
+  optional WindowContainerProto window_container = 1;
+  optional int32 display_id = 2;
+  optional int32 activity_type = 3
+      [(.perfetto.protos.typedef) =
+           "android.app.WindowConfiguration.ActivityType"];
+  optional int32 min_width = 4;
+  optional int32 min_height = 5;
+}
+
+// represents ActivityRecordProto
+message ActivityRecordProto {
+  optional string name = 1 [(.perfetto.protos.privacy).dest = DEST_EXPLICIT];
+  optional WindowTokenProto window_token = 2;
+  optional bool last_surface_showing = 3;
+  optional bool is_waiting_for_transition_start = 4;
+  optional bool is_animating = 5;
+  optional WindowContainerThumbnailProto thumbnail = 6;
+  optional bool fills_parent = 7;
+  optional bool app_stopped = 8;
+  optional bool visible_requested = 9;
+  optional bool client_visible = 10;
+  optional bool defer_hiding_client = 11;
+  optional bool reported_drawn = 12;
+  optional bool reported_visible = 13;
+  optional int32 num_interesting_windows = 14;
+  optional int32 num_drawn_windows = 15;
+  optional bool all_drawn = 16;
+  optional bool last_all_drawn = 17;
+  // removed
+  reserved 18;
+  optional IdentifierProto starting_window = 19;
+  optional bool starting_displayed = 20;
+  optional bool starting_moved = 201;
+  optional bool visible_set_from_transferred_starting_window = 22;
+  repeated RectProto frozen_bounds = 23 [deprecated = true];
+  optional bool visible = 24;
+  // configuration_container
+  reserved 25;
+  optional IdentifierProto identifier = 26 [deprecated = true];
+  optional string state = 27 [(.perfetto.protos.privacy).dest = DEST_EXPLICIT];
+  optional bool front_of_task = 28;
+  optional int32 proc_id = 29;
+  optional bool translucent = 30;
+  optional bool pip_auto_enter_enabled = 31;
+  optional bool in_size_compat_mode = 32;
+  optional float min_aspect_ratio = 33;
+  optional bool provides_max_bounds = 34;
+  optional bool enable_recents_screenshot = 35;
+  optional int32 last_drop_input_mode = 36;
+  optional int32 override_orientation = 37
+      [(.perfetto.protos.typedef) =
+           "android.content.pm.ActivityInfo.ScreenOrientation"];
+  optional bool should_send_compat_fake_focus = 38;
+  optional bool should_force_rotate_for_camera_compat = 39;
+  optional bool should_refresh_activity_for_camera_compat = 40;
+  optional bool should_refresh_activity_via_pause_for_camera_compat = 41;
+  optional bool should_override_min_aspect_ratio = 42;
+  optional bool should_ignore_orientation_request_loop = 43;
+  optional bool should_override_force_resize_app = 44;
+  optional bool should_enable_user_aspect_ratio_settings = 45;
+  optional bool is_user_fullscreen_override_enabled = 46;
+  optional int64 request_open_in_browser_education_timestamp = 47;
+  optional bool should_allow_simulate_requested_orientation_for_camera_compat =
+      48;
+  optional RectProto safe_region_bounds = 49;
+}
+
+// represents WindowToken
+message WindowTokenProto {
+  optional WindowContainerProto window_container = 1;
+  optional int32 hash_code = 2;
+  repeated WindowStateProto windows = 3 [deprecated = true];
+  optional bool waiting_to_show = 5 [deprecated = true];
+  optional bool paused = 6;
+}
+
+// represents WindowState
+message WindowStateProto {
+  optional WindowContainerProto window_container = 1;
+  optional IdentifierProto identifier = 2 [deprecated = true];
+  // Unique identifier of a DisplayContent stack.
+  optional int32 display_id = 3;
+  // Unique identifier for the task stack.
+  optional int32 stack_id = 4;
+  optional WindowLayoutParamsProto attributes = 5;
+  optional RectProto given_content_insets = 6;
+  optional RectProto frame = 7 [deprecated = true];
+  optional RectProto containing_frame = 8 [deprecated = true];
+  optional RectProto parent_frame = 9 [deprecated = true];
+  optional RectProto content_frame = 10 [deprecated = true];
+  optional RectProto content_insets = 11 [deprecated = true];
+  optional RectProto surface_insets = 12;
+  optional WindowStateAnimatorProto animator = 13;
+  optional bool animating_exit = 14;
+  repeated WindowStateProto child_windows = 15 [deprecated = true];
+  optional RectProto surface_position = 16;
+  optional int32 requested_width = 18;
+  optional int32 requested_height = 19;
+  optional int32 view_visibility = 20
+      [(.perfetto.protos.typedef) = "android.view.View.Visibility"];
+  optional int32 system_ui_visibility = 21 [deprecated = true];
+  optional bool has_surface = 22;
+  optional bool is_ready_for_display = 23;
+  optional RectProto display_frame = 24 [deprecated = true];
+  optional RectProto overscan_frame = 25 [deprecated = true];
+  optional RectProto visible_frame = 26 [deprecated = true];
+  optional RectProto decor_frame = 27 [deprecated = true];
+  optional RectProto outset_frame = 28 [deprecated = true];
+  optional RectProto overscan_insets = 29 [deprecated = true];
+  optional RectProto visible_insets = 30 [deprecated = true];
+  optional RectProto stable_insets = 31 [deprecated = true];
+  optional RectProto outsets = 32 [deprecated = true];
+  optional DisplayCutoutProto cutout = 33 [deprecated = true];
+  optional bool remove_on_exit = 34;
+  optional bool destroying = 35;
+  optional bool removed = 36;
+  optional bool is_on_screen = 37;
+  optional bool is_visible = 38;
+  optional bool pending_seamless_rotation = 39;
+  optional int64 finished_seamless_rotation_frame = 40 [deprecated = true];
+  optional WindowFramesProto window_frames = 41;
+  optional bool force_seamless_rotation = 42;
+  optional bool has_compat_scale = 43;
+  optional float global_scale = 44;
+  repeated RectProto keep_clear_areas = 45;
+  repeated RectProto unrestricted_keep_clear_areas = 46;
+  repeated InsetsSourceProto mergedLocalInsetsSources = 47;
+  optional int32 requested_visible_types = 48;
+  optional RectProto dim_bounds = 49;
+  optional int32 buffer_seq_id = 50;
+  optional int32 sync_seq_id = 51;
+}
+
+// represents RemoteInsetsControlTarget
+message RemoteInsetsControlTargetProto {
+  optional IdentifierProto identifier = 1;
+  optional int32 requested_visible_types = 2;
+  optional int32 animating_types = 3;
+}
+
+message IdentifierProto {
+  optional int32 hash_code = 1;
+  optional int32 user_id = 2;
+  // Either a component name/string (eg: "com.android.settings/.FallbackHome")
+  // or a window title ("NavigationBar").
+  optional string title = 3 [(.perfetto.protos.privacy).dest = DEST_EXPLICIT];
+}
+
+// represents WindowStateAnimator
+message WindowStateAnimatorProto {
+  optional RectProto last_clip_rect = 1;
+  optional WindowSurfaceControllerProto surface = 2;
+  enum DrawState {
+    NO_SURFACE = 0;
+    DRAW_PENDING = 1;
+    COMMIT_DRAW_PENDING = 2;
+    READY_TO_SHOW = 3;
+    HAS_DRAWN = 4;
+  }
+  optional DrawState draw_state = 3;
+  optional RectProto system_decor_rect = 4;
+}
+
+// represents WindowSurfaceController
+message WindowSurfaceControllerProto {
+  optional bool shown = 1;
+  optional int32 layer = 2;
+}
+
+// represents ScreenRotationAnimation
+message ScreenRotationAnimationProto {
+  optional bool started = 1;
+  optional bool animation_running = 2;
+}
+
+// represents WindowContainer
+message WindowContainerProto {
+  optional ConfigurationContainerProto configuration_container = 1;
+  optional int32 orientation = 2
+      [(.perfetto.protos.typedef) =
+           "android.content.pm.ActivityInfo.ScreenOrientation"];
+  optional bool visible = 3;
+  optional SurfaceAnimatorProto surface_animator = 4;
+  repeated WindowContainerChildProto children = 5;
+  optional IdentifierProto identifier = 6;
+  optional SurfaceControlProto surface_control = 7;
+}
+
+// represents a generic child of a WindowContainer
+message WindowContainerChildProto {
+  // A window container can have multiple children of different types stored as
+  // a WindowContainerChildProto but each instance of WindowContainerChildProto
+  // can only contain a single type.
+  //
+  // We do not know the derived type and the class is dumped
+  // as a WindowContainer
+  optional WindowContainerProto window_container = 2;
+  // represents a DisplayContent child
+  optional DisplayContentProto display_content = 3;
+  // represents a DisplayArea child
+  optional DisplayAreaProto display_area = 4;
+  // represents a Task child
+  optional TaskProto task = 5;
+  // represents an ActivityRecord child
+  optional ActivityRecordProto activity = 6;
+  // represents a WindowToken child
+  optional WindowTokenProto window_token = 7;
+  // represents a WindowState child
+  optional WindowStateProto window = 8;
+  // represents a WindowState child
+  optional TaskFragmentProto task_fragment = 9;
+}
+
+// represents ConfigurationContainer
+message ConfigurationContainerProto {
+  optional ConfigurationProto override_configuration = 1;
+  optional ConfigurationProto full_configuration = 2;
+  optional ConfigurationProto merged_override_configuration = 3;
+}
+
+// represents WindowFrames
+message WindowFramesProto {
+  optional RectProto containing_frame = 1 [deprecated = true];
+  optional RectProto content_frame = 2 [deprecated = true];
+  optional RectProto decor_frame = 3 [deprecated = true];
+  optional RectProto display_frame = 4;
+  optional RectProto frame = 5;
+  optional RectProto outset_frame = 6;
+  optional RectProto overscan_frame = 7 [deprecated = true];
+  optional RectProto parent_frame = 8;
+  optional RectProto visible_frame = 9 [deprecated = true];
+  optional DisplayCutoutProto cutout = 10 [deprecated = true];
+  optional RectProto content_insets = 11 [deprecated = true];
+  optional RectProto overscan_insets = 12 [deprecated = true];
+  optional RectProto visible_insets = 13 [deprecated = true];
+  optional RectProto stable_insets = 14 [deprecated = true];
+  optional RectProto outsets = 15;
+  optional RectProto compat_frame = 16;
+}
+
+message InsetsSourceProviderProto {
+  optional InsetsSourceProto source = 1;
+  optional RectProto frame = 2;
+  optional InsetsSourceControlProto fake_control = 3;
+  optional InsetsSourceControlProto control = 4;
+  optional WindowStateProto control_target = 5 [deprecated = true];
+  optional WindowStateProto pending_control_target = 6 [deprecated = true];
+  optional WindowStateProto fake_control_target = 7 [deprecated = true];
+  optional SurfaceControlProto captured_leash = 8;
+  optional RectProto ime_overridden_frame = 9 [deprecated = true];
+  optional bool is_leash_ready_for_dispatching = 10;
+  optional bool client_visible = 11;
+  optional bool server_visible = 12;
+  optional bool seamless_rotating = 13;
+  optional int64 finish_seamless_rotate_frame_number = 14;
+  optional bool controllable = 15;
+  optional WindowStateProto source_window_state = 16 [deprecated = true];
+
+  optional IdentifierProto control_target_identifier = 17;
+  optional IdentifierProto pending_control_target_identifier = 18;
+  optional IdentifierProto fake_control_target_identifier = 19;
+  optional IdentifierProto source_window_state_identifier = 20;
+}
+
+message ImeInsetsSourceProviderProto {
+  optional InsetsSourceProviderProto insets_source_provider = 1;
+  optional WindowStateProto ime_target_from_ime = 2 [deprecated = true];
+  optional bool is_ime_layout_drawn = 3 [deprecated = true];
+  optional IdentifierProto ime_target_from_ime_identifier = 4;
+}
+
+message BackNavigationProto {
+  optional bool animation_in_progress = 1;
+  optional int32 last_back_type = 2;
+  optional bool show_wallpaper = 3;
+  optional string main_open_activity = 4;
+  optional bool animation_running = 5;
+}

@@ -1,0 +1,57 @@
+; -*- nasm -*-
+; NASM macro file to allow the `bin' output format to generate
+; simple .EXE files by constructing the EXE header by hand.
+; Adapted from a contribution by Yann Guidon <whygee_corp@hol.fr>
+
+%define EXE_stack_size EXE_realstacksize
+
+%macro EXE_begin 0
+	  ORG 0E0h
+	  section .text
+
+header_start:
+	  db 4Dh,5Ah		; EXE file signature
+	  dw EXE_allocsize % 512
+	  dw (EXE_allocsize + 511) / 512
+	  dw 0			; relocation information: none
+	  dw (header_end-header_start)/16 ; header size in paragraphs
+	  dw (EXE_absssize + EXE_realstacksize) / 16 ; min extra mem
+	  dw (EXE_absssize + EXE_realstacksize) / 16 ; max extra mem
+	  dw -10h		; Initial SS (before fixup)
+	  dw EXE_endbss + EXE_realstacksize ; Initial SP (1K DPMI+1K STACK)
+	  dw 0			; (no) Checksum
+	  dw 100h		; Initial IP - start just after the header
+	  dw -10h		; Initial CS (before fixup)
+	  dw 0			; file offset to relocation table: none
+	  dw 0			; (no overlay)
+	  align 16,db 0
+header_end:
+
+EXE_startcode:
+	  section .data
+EXE_startdata:
+	  section .bss
+EXE_startbss:
+%endmacro
+
+%macro EXE_stack 1
+EXE_realstacksize equ %1
+%define EXE_stack_size EXE_bogusstacksize ; defeat EQU in EXE_end
+%endmacro
+
+%macro EXE_end 0
+	  section .text
+EXE_endcode:
+	  section .data
+EXE_enddata:
+	  section .bss
+	  alignb 4
+EXE_endbss:
+
+EXE_acodesize equ (EXE_endcode-EXE_startcode+3) & (~3)
+EXE_datasize equ EXE_enddata-EXE_startdata
+EXE_absssize equ (EXE_endbss-EXE_startbss+3) & (~3)
+EXE_allocsize equ EXE_acodesize + EXE_datasize
+
+EXE_stack_size equ 0x800	; default if nothing else was used
+%endmacro

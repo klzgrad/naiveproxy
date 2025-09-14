@@ -1,0 +1,76 @@
+/*
+ * Copyright (C) 2021 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+// message types used in perf.data.
+
+syntax = "proto3";
+
+// This is in perfetto.third_party to avoid clashing with potential other
+// copies of this proto.
+package perfetto.third_party.simpleperf.proto;
+
+message DebugUnwindFeature {
+  message File {
+    string path = 1;
+    uint64 size = 2;
+  }
+
+  repeated File file = 1;
+}
+
+message FileFeature {
+  // This enum is not defined in the original simpleperf proto file.
+  // We added it here for convenience. Simpleperf uses a regular c++ enum
+  // instead. See comment in type field.
+  enum DsoType {
+    DSO_KERNEL = 0;
+    DSO_KERNEL_MODULE = 1;
+    DSO_ELF_FILE = 2;
+    DSO_DEX_FILE = 3;
+    DSO_SYMBOL_MAP_FILE = 4;
+    DSO_UNKNOWN_FILE = 5;
+  }
+  string path = 1;
+  // The original simpleperf proto defines this field as a uint32. We use an
+  // enum here instead for convenience. enum fields are encoded as if they were
+  // int32 values, and both uint32 and int32 values have the same proto wire
+  // format, so using the enum here is fine.
+  DsoType type = 2;
+  uint64 min_vaddr = 3;
+
+  message Symbol {
+    uint64 vaddr = 1;
+    uint32 len = 2;
+    string name = 3;
+  }
+  repeated Symbol symbol = 4;
+
+  message DexFile {
+    repeated uint64 dex_file_offset = 1;
+  }
+  message ElfFile {
+    uint64 file_offset_of_min_vaddr = 1;
+  }
+  message KernelModule {
+    uint64 memory_offset_of_min_vaddr = 1;
+  }
+
+  oneof type_specific_msg {
+    DexFile dex_file = 5;            // Only when type = DSO_DEX_FILE
+    ElfFile elf_file = 6;            // Only when type = DSO_ELF_FILE
+    KernelModule kernel_module = 7;  // Only when type = DSO_KERNEL_MODULE
+  }
+}

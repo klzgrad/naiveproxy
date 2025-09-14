@@ -1,0 +1,86 @@
+--
+-- Copyright 2020 The Android Open Source Project
+--
+-- Licensed under the Apache License, Version 2.0 (the "License");
+-- you may not use this file except in compliance with the License.
+-- You may obtain a copy of the License at
+--
+--     https://www.apache.org/licenses/LICENSE-2.0
+--
+-- Unless required by applicable law or agreed to in writing, software
+-- distributed under the License is distributed on an "AS IS" BASIS,
+-- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-- See the License for the specific language governing permissions and
+-- limitations under the License.
+
+INSERT OR REPLACE INTO power_profile VALUES
+("bonito", 0, 0, 300000, 15.2466666667),
+("bonito", 0, 0, 576000, 18.2166666667),
+("bonito", 0, 0, 748800, 20.1866666667),
+("bonito", 0, 0, 998400, 23.29),
+("bonito", 0, 0, 1209600, 25.0116666667),
+("bonito", 0, 0, 1324800, 28.485),
+("bonito", 0, 0, 1516800, 31.6866666667),
+("bonito", 0, 0, 1708800, 35.79),
+("bonito", 1, 0, 300000, 15.2466666667),
+("bonito", 1, 0, 576000, 18.2166666667),
+("bonito", 1, 0, 748800, 20.1866666667),
+("bonito", 1, 0, 998400, 23.29),
+("bonito", 1, 0, 1209600, 25.0116666667),
+("bonito", 1, 0, 1324800, 28.485),
+("bonito", 1, 0, 1516800, 31.6866666667),
+("bonito", 1, 0, 1708800, 35.79),
+("bonito", 2, 0, 300000, 15.2466666667),
+("bonito", 2, 0, 576000, 18.2166666667),
+("bonito", 2, 0, 748800, 20.1866666667),
+("bonito", 2, 0, 998400, 23.29),
+("bonito", 2, 0, 1209600, 25.0116666667),
+("bonito", 2, 0, 1324800, 28.485),
+("bonito", 2, 0, 1516800, 31.6866666667),
+("bonito", 2, 0, 1708800, 35.79),
+("bonito", 3, 0, 300000, 15.2466666667),
+("bonito", 3, 0, 576000, 18.2166666667),
+("bonito", 3, 0, 748800, 20.1866666667),
+("bonito", 3, 0, 998400, 23.29),
+("bonito", 3, 0, 1209600, 25.0116666667),
+("bonito", 3, 0, 1324800, 28.485),
+("bonito", 3, 0, 1516800, 31.6866666667),
+("bonito", 3, 0, 1708800, 35.79),
+("bonito", 4, 0, 300000, 15.2466666667),
+("bonito", 4, 0, 576000, 18.2166666667),
+("bonito", 4, 0, 748800, 20.1866666667),
+("bonito", 4, 0, 998400, 23.29),
+("bonito", 4, 0, 1209600, 25.0116666667),
+("bonito", 4, 0, 1324800, 28.485),
+("bonito", 4, 0, 1516800, 31.6866666667),
+("bonito", 4, 0, 1708800, 35.79),
+("bonito", 5, 0, 300000, 15.2466666667),
+("bonito", 5, 0, 576000, 18.2166666667),
+("bonito", 5, 0, 748800, 20.1866666667),
+("bonito", 5, 0, 998400, 23.29),
+("bonito", 5, 0, 1209600, 25.0116666667),
+("bonito", 5, 0, 1324800, 28.485),
+("bonito", 5, 0, 1516800, 31.6866666667),
+("bonito", 5, 0, 1708800, 35.79),
+("bonito", 6, 1, 300000, 24.06),
+("bonito", 6, 1, 652800, 27.56),
+("bonito", 6, 1, 825600, 29.0),
+("bonito", 6, 1, 979200, 31.675),
+("bonito", 6, 1, 1132800, 34.53),
+("bonito", 6, 1, 1363200, 38.885),
+("bonito", 6, 1, 1536000, 43.075),
+("bonito", 6, 1, 1747200, 48.705),
+("bonito", 6, 1, 1843200, 64.57),
+("bonito", 6, 1, 1996800, 69.805),
+("bonito", 6, 1, 2016000, 76.545),
+("bonito", 7, 1, 300000, 24.06),
+("bonito", 7, 1, 652800, 27.56),
+("bonito", 7, 1, 825600, 29.0),
+("bonito", 7, 1, 979200, 31.675),
+("bonito", 7, 1, 1132800, 34.53),
+("bonito", 7, 1, 1363200, 38.885),
+("bonito", 7, 1, 1536000, 43.075),
+("bonito", 7, 1, 1747200, 48.705),
+("bonito", 7, 1, 1843200, 64.57),
+("bonito", 7, 1, 1996800, 69.805),
+("bonito", 7, 1, 2016000, 76.545);

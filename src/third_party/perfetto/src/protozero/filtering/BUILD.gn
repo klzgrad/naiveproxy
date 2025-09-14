@@ -1,0 +1,164 @@
+# Copyright (C) 2021 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../../gn/fuzzer.gni")
+import("../../../gn/perfetto_host_executable.gni")
+import("../../../gn/proto_library.gni")
+import("../../../gn/test.gni")
+
+source_set("message_filter") {
+  sources = [
+    "message_filter.cc",
+    "message_filter.h",
+    "message_tokenizer.h",
+  ]
+  deps = [
+    ":bytecode_parser",
+    ":string_filter",
+    "..:protozero",
+    "../../../gn:default_deps",
+    "../../base",
+  ]
+}
+
+source_set("bytecode_common") {
+  sources = [ "filter_bytecode_common.h" ]
+  deps = [ "../../../gn:default_deps" ]
+}
+
+source_set("bytecode_parser") {
+  sources = [
+    "filter_bytecode_parser.cc",
+    "filter_bytecode_parser.h",
+  ]
+  deps = [
+    ":bytecode_common",
+    "..:protozero",
+    "../../../gn:default_deps",
+    "../../base",
+  ]
+}
+
+source_set("bytecode_generator") {
+  sources = [
+    "filter_bytecode_generator.cc",
+    "filter_bytecode_generator.h",
+  ]
+  deps = [
+    ":bytecode_common",
+    "..:protozero",
+    "../../../gn:default_deps",
+    "../../base",
+  ]
+}
+
+source_set("string_filter") {
+  sources = [
+    "string_filter.cc",
+    "string_filter.h",
+  ]
+  deps = [
+    "..:protozero",
+    "../../../gn:default_deps",
+    "../../base",
+  ]
+}
+
+source_set("filter_util") {
+  testonly = true
+  sources = [
+    "filter_util.cc",
+    "filter_util.h",
+  ]
+  deps = [
+    ":bytecode_generator",
+    ":bytecode_parser",
+    "..:protozero",
+    "../../../gn:default_deps",
+    "../../../gn:protobuf_full",
+    "../../base",
+  ]
+}
+
+perfetto_unittest_source_set("unittests") {
+  testonly = true
+  deps = [
+    ":bytecode_common",
+    ":bytecode_generator",
+    ":bytecode_parser",
+    ":message_filter",
+    ":string_filter",
+    "..:protozero",
+    "../../../gn:default_deps",
+    "../../../gn:gtest_and_gmock",
+    "../../../protos/perfetto/trace:lite",
+    "../../base",
+    "../../base:test_support",
+  ]
+  sources = [
+    "filter_bytecode_generator_unittest.cc",
+    "filter_bytecode_parser_unittest.cc",
+    "message_tokenizer_unittest.cc",
+    "string_filter_unittest.cc",
+  ]
+
+  # On chromium component build we cannot have a test target depening boh on
+  # protobuf-full and protobuf-lite. Just skip those targets there.
+  # See also https://crug.com/1210223 .
+  if (perfetto_build_standalone || perfetto_build_with_android) {
+    deps += [ ":filter_util" ]
+    sources += [
+      "filter_util_unittest.cc",
+      "message_filter_unittest.cc",
+    ]
+  }
+}
+
+if (enable_perfetto_benchmarks) {
+  source_set("benchmarks") {
+    testonly = true
+    deps = [
+      ":message_filter",
+      ":string_filter",
+      "../../../gn:benchmark",
+      "../../../gn:default_deps",
+      "../../base",
+      "../../base:test_support",
+    ]
+    sources = [
+      "message_filter_benchmark.cc",
+      "string_filter_benchmark.cc",
+    ]
+  }
+}
+
+perfetto_fuzzer_test("protozero_bytecode_parser_fuzzer") {
+  sources = [ "filter_bytecode_parser_fuzzer.cc" ]
+  deps = [
+    ":bytecode_parser",
+    "..:protozero",
+    "../../../gn:default_deps",
+    "../../base",
+  ]
+}
+
+perfetto_fuzzer_test("protozero_message_filter_fuzzer") {
+  sources = [ "message_filter_fuzzer.cc" ]
+  deps = [
+    ":message_filter",
+    "..:protozero",
+    "../../../gn:default_deps",
+    "../../base",
+  ]
+}
