@@ -533,6 +533,9 @@ int main(int argc, char* argv[]) {
     naive_proxies.push_back(std::move(naive_proxy));
   }
 
+  if (getenv("TEST_MARK_STARTUP") != nullptr) {
+    LOG(INFO) << "TEST_MARK_STARTUP";
+  }
   base::RunLoop().Run();
 
   return EXIT_SUCCESS;

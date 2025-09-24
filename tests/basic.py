@@ -97,7 +97,9 @@ def start_naive(naive_args, config_file):
         cmdline = [argv.naive]
     cmdline.extend(naive_args)
 
-    proc = subprocess.Popen(cmdline, stdout=subprocess.DEVNULL,
+    env = os.environ.copy()
+    env["TEST_MARK_STARTUP"] = "yes"
+    proc = subprocess.Popen(cmdline, stdout=subprocess.DEVNULL, env=env,
                             stderr=subprocess.PIPE, text=True, encoding='utf-8')
     print('subprocess.Popen', ' '.join(cmdline), 'pid:', proc.pid)
 
@@ -122,7 +124,7 @@ def start_naive(naive_args, config_file):
             print('terminate pid', proc.pid)
             proc.terminate()
             return 'Failed to listen'
-        elif 'Listening on ' in line:
+        elif 'TEST_MARK_STARTUP' in line:
             timeout.cancel()
             return proc
 
