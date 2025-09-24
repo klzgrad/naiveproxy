@@ -245,6 +245,16 @@ test_naive('Multiple listens - config file', 'http://127.0.0.1:{PORT2}',
            config_content='"listen":["socks://:{PORT1}", "http://:{PORT2}"],"log":""',
            config_file='multiple-listen.json')
 
+test_naive('Multiple proxies - command line', 'socks5h://127.0.0.1:{PORT1}',
+           '--log --listen=socks://:{PORT1} --listen=socks://:{PORT2} --proxy=http://127.0.0.1:{PORT3} --proxy=http://127.0.0.1:{PORT4}',
+           '--log --listen=http://:{PORT3} --listen=http://:{PORT4} --proxy=socks://127.0.0.1:{PORT5}',
+           '--log --listen=socks://:{PORT5}')
+
+test_naive('Multiple proxies - command line', 'socks5h://127.0.0.1:{PORT2}',
+           '--log --listen=socks://:{PORT1} --listen=socks://:{PORT2} --proxy=http://127.0.0.1:{PORT3} --proxy=http://127.0.0.1:{PORT4}',
+           '--log --listen=http://:{PORT3} --listen=http://:{PORT4} --proxy=socks://127.0.0.1:{PORT5}',
+           '--log --listen=socks://:{PORT5}')
+
 test_naive('Trivial - listen scheme only', 'socks5h://127.0.0.1:1080',
            '--log --listen=socks://')
 

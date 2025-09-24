@@ -172,7 +172,8 @@ std::unique_ptr<URLRequestContext> BuildCertURLRequestContext(NetLog* net_log) {
 std::unique_ptr<URLRequestContext> BuildURLRequestContext(
     const NaiveConfig& config,
     scoped_refptr<CertNetFetcherURLRequest> cert_net_fetcher,
-    NetLog* net_log) {
+    NetLog* net_log,
+    int proxy_chain_index = 0) {
   URLRequestContextBuilder builder;
 
   builder.DisableHttpCache();
@@ -212,8 +213,13 @@ std::unique_ptr<URLRequestContext> BuildURLRequestContext(
   ProxyConfig proxy_config;
   proxy_config.proxy_rules().type =
       net::ProxyConfig::ProxyRules::Type::PROXY_LIST;
-  proxy_config.proxy_rules().single_proxies.SetSingleProxyChain(
-      config.proxy_chain);
+  if (config.proxy_chains.empty()) {
+    proxy_config.proxy_rules().single_proxies.SetSingleProxyChain(
+        ProxyChain::Direct());
+  } else {
+    proxy_config.proxy_rules().single_proxies.SetSingleProxyChain(
+        config.proxy_chains.at(proxy_chain_index));
+  }
   LOG(INFO) << "Proxying via "
             << proxy_config.proxy_rules().single_proxies.ToDebugString();
   auto proxy_service =
@@ -456,14 +462,20 @@ int main(int argc, char* argv[]) {
   cert_net_fetcher = base::MakeRefCounted<net::CertNetFetcherURLRequest>();
   cert_net_fetcher->SetURLRequestContext(cert_context.get());
 #endif
-  auto context =
-      net::BuildURLRequestContext(config, std::move(cert_net_fetcher), net_log);
-  auto* session = context->http_transaction_factory()->GetSession();
+
+  if (config.proxy_chains.size() >= 2 &&
+      config.proxy_chains.size() != config.listen.size()) {
+    std::cerr << "Listen addresses do not match multiple proxy chains"
+              << std::endl;
+    return EXIT_FAILURE;
+  }
 
   std::vector<std::unique_ptr<net::NaiveProxy>> naive_proxies;
+  std::vector<std::unique_ptr<net::URLRequestContext>> contexts;
   std::unique_ptr<net::RedirectResolver> resolver;
 
-  for (const net::NaiveListenConfig& listen_config : config.listen) {
+  for (size_t listen_i = 0; listen_i < config.listen.size(); ++listen_i) {
+    const net::NaiveListenConfig& listen_config = config.listen[listen_i];
     auto listen_socket =
         std::make_unique<net::TCPServerSocket>(net_log, net::NetLogSource());
 
@@ -503,6 +515,15 @@ int main(int argc, char* argv[]) {
           config.resolver_prefix);
     }
 
+    if (config.proxy_chains.size() >= 2) {
+      contexts.push_back(net::BuildURLRequestContext(
+          config, std::move(cert_net_fetcher), net_log, listen_i));
+    } else if (contexts.empty()) {
+      contexts.push_back(net::BuildURLRequestContext(
+          config, std::move(cert_net_fetcher), net_log));
+    }
+    auto& context = contexts.back();
+    auto* session = context->http_transaction_factory()->GetSession();
     auto naive_proxy = std::make_unique<net::NaiveProxy>(
         std::move(listen_socket), listen_config.protocol, listen_config.user,
         listen_config.pass, config.insecure_concurrency, resolver.get(),

@@ -44,7 +44,7 @@ struct NaiveConfig {
   HttpRequestHeaders extra_headers;
 
   // The last server is assumed to be Naive.
-  ProxyChain proxy_chain = ProxyChain::Direct();
+  std::vector<ProxyChain> proxy_chains;
   std::set<HostPortPair> origins_to_force_quic_on;
   std::map<url::SchemeHostPort, AuthCredentials> auth_store;
 

@@ -76,17 +76,13 @@ NaiveConfig::~NaiveConfig() = default;
 
 bool NaiveConfig::Parse(const base::Value::Dict& value) {
   if (const base::Value* v = value.Find("listen")) {
-    listen.clear();
+    std::vector<std::string> listen_strs;
     if (const std::string* str = v->GetIfString()) {
-      if (!listen.emplace_back().Parse(*str)) {
-        return false;
-      }
+      listen_strs.push_back(*str);
     } else if (const base::Value::List* strs = v->GetIfList()) {
       for (const auto& str_e : *strs) {
         if (const std::string* s = str_e.GetIfString()) {
-          if (!listen.emplace_back().Parse(*s)) {
-            return false;
-          }
+          listen_strs.push_back(*s);
         } else {
           std::cerr << "Invalid listen element" << std::endl;
           return false;
@@ -95,6 +91,14 @@ bool NaiveConfig::Parse(const base::Value::Dict& value) {
     } else {
       std::cerr << "Invalid listen" << std::endl;
       return false;
+    }
+    if (!listen_strs.empty()) {
+      listen.clear();
+    }
+    for (const std::string& str : listen_strs) {
+      if (!listen.emplace_back().Parse(str)) {
+        return false;
+      }
     }
   }
 
@@ -126,8 +130,24 @@ bool NaiveConfig::Parse(const base::Value::Dict& value) {
   }
 
   if (const base::Value* v = value.Find("proxy")) {
+    std::vector<std::string> proxy_strs;
     if (const std::string* str = v->GetIfString(); str && !str->empty()) {
-      base::StringTokenizer proxy_uri_list(*str, ",");
+      proxy_strs.push_back(*str);
+    } else if (const base::Value::List* strs = v->GetIfList()) {
+      for (const auto& str_e : *strs) {
+        if (const std::string* s = str_e.GetIfString(); s && !s->empty()) {
+          proxy_strs.push_back(*s);
+        } else {
+          std::cerr << "Invalid proxy element" << std::endl;
+          return false;
+        }
+      }
+    } else {
+      std::cerr << "Invalid proxy argument" << std::endl;
+      return false;
+    }
+    for (const std::string& str : proxy_strs) {
+      base::StringTokenizer proxy_uri_list(str, ",");
       std::vector<ProxyServer> proxy_servers;
       bool seen_tcp = false;
       while (proxy_uri_list.GetNext()) {
@@ -187,6 +207,7 @@ bool NaiveConfig::Parse(const base::Value::Dict& value) {
             << std::endl;
         return false;
       }
+      ProxyChain proxy_chain;
       if (std::any_of(proxy_servers.begin(), proxy_servers.end(),
                       [](const ProxyServer& s) { return s.is_quic(); })) {
         proxy_chain = ProxyChain::ForIpProtection(proxy_servers);
@@ -198,9 +219,7 @@ bool NaiveConfig::Parse(const base::Value::Dict& value) {
         std::cerr << "Invalid proxy chain" << std::endl;
         return false;
       }
-    } else {
-      std::cerr << "Invalid proxy argument" << std::endl;
-      return false;
+      proxy_chains.push_back(proxy_chain);
     }
   }
 
