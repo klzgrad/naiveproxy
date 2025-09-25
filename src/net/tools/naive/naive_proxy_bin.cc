@@ -13,6 +13,7 @@
 #include "base/at_exit.h"
 #include "base/check.h"
 #include "base/command_line.h"
+#include "base/environment.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/json/json_file_value_serializer.h"
@@ -533,7 +534,7 @@ int main(int argc, char* argv[]) {
     naive_proxies.push_back(std::move(naive_proxy));
   }
 
-  if (getenv("TEST_MARK_STARTUP") != nullptr) {
+  if (base::Environment::Create()->HasVar("TEST_MARK_STARTUP")) {
     LOG(INFO) << "TEST_MARK_STARTUP";
   }
   base::RunLoop().Run();

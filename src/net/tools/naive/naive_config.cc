@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <iostream>
 
+#include "base/environment.h"
 #include "base/strings/escape.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_tokenizer.h"
@@ -283,6 +284,39 @@ bool NaiveConfig::Parse(const base::Value::Dict& value) {
 
   if (value.contains("no-post-quantum")) {
     no_post_quantum = true;
+  }
+
+  if (const base::Value* v = value.Find("env")) {
+    std::vector<std::string> env_strs;
+    if (const std::string* str = v->GetIfString(); str && !str->empty()) {
+      env_strs.push_back(*str);
+    } else if (const base::Value::List* strs = v->GetIfList()) {
+      for (const auto& str_e : *strs) {
+        if (const std::string* s = str_e.GetIfString(); s && !s->empty()) {
+          env_strs.push_back(*s);
+        } else {
+          std::cerr << "Invalid env element" << std::endl;
+          return false;
+        }
+      }
+    } else {
+      std::cerr << "Invalid env argument" << std::endl;
+      return false;
+    }
+    auto env = base::Environment::Create();
+    for (const std::string& str : env_strs) {
+      size_t equal_pos = str.find_first_of('=');
+      if (equal_pos != std::string::npos && equal_pos > 0 &&
+          equal_pos + 1 < str.size()) {
+        std::string env_name = str.substr(0, equal_pos);
+        std::string env_value = str.substr(equal_pos + 1);
+        if (!env->SetVar(env_name, env_value)) {
+          std::cerr << "Invalid env element " << str << std::endl;
+        }
+      } else {
+        std::cerr << "Invalid env element " << str << std::endl;
+      }
+    }
   }
 
   return true;
