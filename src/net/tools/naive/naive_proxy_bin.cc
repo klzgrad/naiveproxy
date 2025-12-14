@@ -85,6 +85,12 @@
 #include "base/allocator/partition_allocator/src/partition_alloc/shim/allocator_shim.h"
 #endif
 
+#if BUILDFLAG(IS_APPLE)
+#if PA_BUILDFLAG(USE_ALLOCATOR_SHIM)
+#include "partition_alloc/shim/allocator_shim.h"
+#endif
+#endif  // BUILDFLAG(IS_MAC)
+
 namespace {
 
 constexpr int kListenBackLog = 512;
