@@ -1,0 +1,141 @@
+# Copyright (C) 2022 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../../../../gn/perfetto_tp_tables.gni")
+import("../../../../../gn/test.gni")
+
+assert(enable_perfetto_trace_processor_sqlite)
+
+source_set("functions") {
+  sources = [
+    "args.cc",
+    "args.h",
+    "base64.cc",
+    "base64.h",
+    "clock_functions.h",
+    "counter_intervals.cc",
+    "counter_intervals.h",
+    "create_function.cc",
+    "create_function.h",
+    "create_view_function.cc",
+    "create_view_function.h",
+    "dominator_tree.cc",
+    "dominator_tree.h",
+    "graph_scan.cc",
+    "graph_scan.h",
+    "graph_traversal.cc",
+    "graph_traversal.h",
+    "import.cc",
+    "import.h",
+    "interval_intersect.cc",
+    "interval_intersect.h",
+    "layout_functions.cc",
+    "layout_functions.h",
+    "math.cc",
+    "math.h",
+    "pprof_functions.cc",
+    "pprof_functions.h",
+    "replace_numbers_function.cc",
+    "replace_numbers_function.h",
+    "sqlite3_str_split.cc",
+    "sqlite3_str_split.h",
+    "stack_functions.cc",
+    "stack_functions.h",
+    "structural_tree_partition.cc",
+    "structural_tree_partition.h",
+    "to_ftrace.cc",
+    "to_ftrace.h",
+    "type_builders.cc",
+    "type_builders.h",
+    "utils.h",
+    "window_functions.h",
+  ]
+  deps = [
+    ":tables",
+    "../../..:demangle",
+    "../../..:export_json",
+    "../../..:metatrace",
+    "../../../../../gn:default_deps",
+    "../../../../../gn:sqlite",
+    "../../../../../include/perfetto/protozero:protozero",
+    "../../../../../protos/perfetto/common:zero",
+    "../../../../../protos/perfetto/trace:zero",
+    "../../../../../protos/perfetto/trace/ftrace:zero",
+    "../../../../../protos/perfetto/trace_processor:zero",
+    "../../../../base",
+    "../../../containers",
+    "../../../dataframe",
+    "../../../importers/common",
+    "../../../importers/ftrace:ftrace_descriptors",
+    "../../../perfetto_sql/intrinsics/table_functions",
+    "../../../sqlite",
+    "../../../storage",
+    "../../../tables",
+    "../../../types",
+    "../../../util:args_utils",
+    "../../../util:glob",
+    "../../../util:json_writer",
+    "../../../util:profile_builder",
+    "../../../util:regex",
+    "../../../util:sql_argument",
+    "../../../util:stdlib",
+    "../../engine",
+    "../../parser",
+    "../types",
+  ]
+  public_deps = [ ":interface" ]
+  if (enable_perfetto_llvm_symbolizer) {
+    sources += [
+      "symbolize.cc",
+      "symbolize.h",
+    ]
+    deps += [
+      "../../../../profiling/symbolizer:llvm_symbolizer",
+      "../../../../profiling/symbolizer:llvm_symbolizer_c_api",
+    ]
+  }
+}
+
+source_set("interface") {
+  sources = [
+    "sql_function.cc",
+    "sql_function.h",
+  ]
+  deps = [
+    "../../../../../gn:default_deps",
+    "../../../../../gn:sqlite",
+    "../../../../../include/perfetto/trace_processor:basic_types",
+    "../../../../base",
+  ]
+}
+
+perfetto_tp_tables("tables") {
+  sources = [ "tables.py" ]
+}
+
+perfetto_unittest_source_set("unittests") {
+  testonly = true
+  sources = [
+    "replace_numbers_function_unittest.cc",
+    "sqlite3_str_split_unittest.cc",
+  ]
+  deps = [
+    ":functions",
+    "../../../../../gn:default_deps",
+    "../../../../../gn:gtest_and_gmock",
+    "../../../../../gn:sqlite",
+    "../../../../base",
+    "../../../sqlite",
+  ]
+}

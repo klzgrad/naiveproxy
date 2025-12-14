@@ -1,0 +1,351 @@
+/*
+ * Copyright (C) 2023 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+package perfetto.protos;
+
+import "protos/perfetto/trace/android/surfaceflinger_common.proto";
+import "protos/perfetto/trace/android/graphics/rect.proto";
+
+// Message used by Winscope to process legacy trace files.
+// Represents a file full of surface flinger transactions.
+// Encoded, it should start with 0x54 0x4E 0x58 0x54 0x52 0x41 0x43 0x45
+// (.TNXTRACE), such that they can be easily identified.
+message TransactionTraceFile {
+  // constant; MAGIC_NUMBER = (long) MAGIC_NUMBER_H << 32 |
+  // MagicNumber.MAGIC_NUMBER_L (this is needed because enums have to be 32 bits
+  // and there's no nice way to put 64bit constants into .proto files.
+  enum MagicNumber {
+    INVALID = 0;
+    // TNXT (little-endian ASCII)
+    MAGIC_NUMBER_L = 0x54584E54;
+    // RACE (little-endian ASCII)
+    MAGIC_NUMBER_H = 0x45434152;
+  }
+
+  // Must be the first field, set to value in MagicNumber
+  optional fixed64 magic_number = 1;
+  repeated TransactionTraceEntry entry = 2;
+
+  // offset between real-time clock and elapsed time clock in nanoseconds.
+  // Calculated as: systemTime(SYSTEM_TIME_REALTIME) -
+  // systemTime(SYSTEM_TIME_MONOTONIC)
+  optional fixed64 real_to_elapsed_time_offset_nanos = 3;
+  optional uint32 version = 4;
+}
+
+message TransactionTraceEntry {
+  optional int64 elapsed_realtime_nanos = 1;
+  optional int64 vsync_id = 2;
+  repeated TransactionState transactions = 3;
+  repeated LayerCreationArgs added_layers = 4;
+  repeated uint32 destroyed_layers = 5;
+  repeated DisplayState added_displays = 6;
+  repeated int32 removed_displays = 7;
+  repeated uint32 destroyed_layer_handles = 8;
+  optional bool displays_changed = 9;
+  repeated DisplayInfo displays = 10;
+}
+
+message DisplayInfo {
+  optional uint32 layer_stack = 1;
+  optional int32 display_id = 2;
+  optional int32 logical_width = 3;
+  optional int32 logical_height = 4;
+  optional Transform transform_inverse = 5;
+  optional Transform transform = 6;
+  optional bool receives_input = 7;
+  optional bool is_secure = 8;
+  optional bool is_primary = 9;
+  optional bool is_virtual = 10;
+  optional int32 rotation_flags = 11;
+  optional int32 transform_hint = 12;
+}
+
+message LayerCreationArgs {
+  optional uint32 layer_id = 1;
+  optional string name = 2;
+  optional uint32 flags = 3;
+  optional uint32 parent_id = 4;
+  optional uint32 mirror_from_id = 5;
+  optional bool add_to_root = 6;
+  optional uint32 layer_stack_to_mirror = 7;
+}
+
+message Transform {
+  optional float dsdx = 1;
+  optional float dtdx = 2;
+  optional float dtdy = 3;
+  optional float dsdy = 4;
+  optional float tx = 5;
+  optional float ty = 6;
+}
+
+message TransactionBarrier {
+  optional string barrier_token = 1;
+  optional uint32 kind = 2;
+}
+
+message TransactionState {
+  optional int32 pid = 1;
+  optional int32 uid = 2;
+  optional int64 vsync_id = 3;
+  optional int32 input_event_id = 4;
+  optional int64 post_time = 5;
+  optional uint64 transaction_id = 6;
+  repeated LayerState layer_changes = 7;
+  repeated DisplayState display_changes = 8;
+  repeated uint64 merged_transaction_ids = 9;
+  optional uint64 apply_token = 10;
+  repeated TransactionBarrier transaction_barriers = 11;
+}
+
+// Keep insync with layer_state_t
+message LayerState {
+  optional uint32 layer_id = 1;
+  // Changes are split into ChangesLsb and ChangesMsb. First 32 bits are in
+  // ChangesLsb and the next 32 bits are in ChangesMsb. This is needed because
+  // enums have to be 32 bits and there's no nice way to put 64bit constants
+  // into .proto files.
+  enum ChangesLsb {
+    eChangesLsbNone = 0;
+    ePositionChanged = 0x00000001;
+    eLayerChanged = 0x00000002;
+    // unused = 0x00000004;
+    eAlphaChanged = 0x00000008;
+
+    eMatrixChanged = 0x00000010;
+    eTransparentRegionChanged = 0x00000020;
+    eFlagsChanged = 0x00000040;
+    eLayerStackChanged = 0x00000080;
+
+    eReleaseBufferListenerChanged = 0x00000400;
+    eShadowRadiusChanged = 0x00000800;
+
+    eBufferCropChanged = 0x00002000;
+    eRelativeLayerChanged = 0x00004000;
+    eReparent = 0x00008000;
+
+    eColorChanged = 0x00010000;
+    eBufferTransformChanged = 0x00040000;
+    eTransformToDisplayInverseChanged = 0x00080000;
+
+    eCropChanged = 0x00100000;
+    eBufferChanged = 0x00200000;
+    eAcquireFenceChanged = 0x00400000;
+    eDataspaceChanged = 0x00800000;
+
+    eHdrMetadataChanged = 0x01000000;
+    eSurfaceDamageRegionChanged = 0x02000000;
+    eApiChanged = 0x04000000;
+    eSidebandStreamChanged = 0x08000000;
+
+    eColorTransformChanged = 0x10000000;
+    eHasListenerCallbacksChanged = 0x20000000;
+    eInputInfoChanged = 0x40000000;
+    // 0x80000000; (proto stores enums as signed int)
+    eCornerRadiusChanged = -2147483648;
+  };
+  enum ChangesMsb {
+    eChangesMsbNone = 0;
+    eDestinationFrameChanged = 0x1;
+    eCachedBufferChanged = 0x2;
+    eBackgroundColorChanged = 0x4;
+    eMetadataChanged = 0x8;
+    eColorSpaceAgnosticChanged = 0x10;
+    eFrameRateSelectionPriority = 0x20;
+    eFrameRateChanged = 0x40;
+    eBackgroundBlurRadiusChanged = 0x80;
+    eProducerDisconnect = 0x100;
+    eFixedTransformHintChanged = 0x200;
+    eFrameNumberChanged = 0x400;
+    eBlurRegionsChanged = 0x800;
+    eAutoRefreshChanged = 0x1000;
+    eStretchChanged = 0x2000;
+    eTrustedOverlayChanged = 0x4000;
+    eDropInputModeChanged = 0x8000;
+    eClientDrawnCornerRadiusChanged = 0x00010000;
+    eSystemContentPriorityChanged = 0x00020000;
+    eBoxShadowSettingsChanged = 0x00040000;
+    eBorderSettingsChanged = 0x00080000;
+  };
+  optional uint64 what = 2;
+  optional float x = 3;
+  optional float y = 4;
+  optional int32 z = 5;
+  optional uint32 w = 6;
+  optional uint32 h = 7;
+  optional uint32 layer_stack = 8;
+
+  enum Flags {
+    eFlagsNone = 0;
+    eLayerHidden = 0x01;
+    eLayerOpaque = 0x02;
+    eLayerSkipScreenshot = 0x40;
+    eLayerSecure = 0x80;
+    eEnableBackpressure = 0x100;
+    eLayerIsDisplayDecoration = 0x200;
+  };
+  optional uint32 flags = 9;
+  optional uint32 mask = 10;
+
+  message Matrix22 {
+    optional float dsdx = 1;
+    optional float dtdx = 2;
+    optional float dtdy = 3;
+    optional float dsdy = 4;
+  };
+
+  message CornerRadii {
+    optional float tl = 1;
+    optional float tr = 2;
+    optional float bl = 3;
+    optional float br = 4;
+  }
+  optional Matrix22 matrix = 11;
+  optional float corner_radius = 12 [deprecated = true];
+  optional uint32 background_blur_radius = 13;
+  optional uint32 parent_id = 14;
+  optional uint32 relative_parent_id = 15;
+
+  optional float alpha = 16;
+  message Color3 {
+    optional float r = 1;
+    optional float g = 2;
+    optional float b = 3;
+  }
+  optional Color3 color = 17;
+  optional RegionProto transparent_region = 18;
+  optional uint32 transform = 19;
+  optional bool transform_to_display_inverse = 20;
+  optional RectProto crop = 21;
+
+  message BufferData {
+    optional uint64 buffer_id = 1;
+    optional uint32 width = 2;
+    optional uint32 height = 3;
+    optional uint64 frame_number = 4;
+
+    enum BufferDataChange {
+      BufferDataChangeNone = 0;
+      fenceChanged = 0x01;
+      frameNumberChanged = 0x02;
+      cachedBufferChanged = 0x04;
+    }
+    optional uint32 flags = 5;
+    optional uint64 cached_buffer_id = 6;
+
+    enum PixelFormat {
+      PIXEL_FORMAT_UNKNOWN = 0;
+      PIXEL_FORMAT_CUSTOM = -4;
+      PIXEL_FORMAT_TRANSLUCENT = -3;
+      PIXEL_FORMAT_TRANSPARENT = -2;
+      PIXEL_FORMAT_OPAQUE = -1;
+      PIXEL_FORMAT_RGBA_8888 = 1;
+      PIXEL_FORMAT_RGBX_8888 = 2;
+      PIXEL_FORMAT_RGB_888 = 3;
+      PIXEL_FORMAT_RGB_565 = 4;
+      PIXEL_FORMAT_BGRA_8888 = 5;
+      PIXEL_FORMAT_RGBA_5551 = 6;
+      PIXEL_FORMAT_RGBA_4444 = 7;
+      PIXEL_FORMAT_RGBA_FP16 = 22;
+      PIXEL_FORMAT_RGBA_1010102 = 43;
+      PIXEL_FORMAT_R_8 = 0x38;
+    }
+    optional PixelFormat pixel_format = 7;
+    optional uint64 usage = 8;
+  }
+  optional BufferData buffer_data = 22;
+  optional int32 api = 23;
+  optional bool has_sideband_stream = 24;
+  optional ColorTransformProto color_transform = 25;
+  repeated BlurRegion blur_regions = 26;
+
+  message WindowInfo {
+    optional uint32 layout_params_flags = 1;
+    optional int32 layout_params_type = 2;
+    optional RegionProto touchable_region = 3;
+    optional int32 surface_inset = 4;
+    // unused
+    optional bool focusable = 5;
+    // unused
+    optional bool has_wallpaper = 6;
+    optional float global_scale_factor = 7;
+    optional uint32 crop_layer_id = 8;
+    optional bool replace_touchable_region_with_crop = 9;
+    optional RectProto touchable_region_crop = 10;
+    optional Transform transform = 11;
+    optional uint32 input_config = 12;
+  }
+  optional WindowInfo window_info_handle = 27;
+  optional float bg_color_alpha = 28;
+  optional int32 bg_color_dataspace = 29;
+  optional bool color_space_agnostic = 30;
+  optional float shadow_radius = 31;
+  optional int32 frame_rate_selection_priority = 32;
+  optional float frame_rate = 33;
+  optional int32 frame_rate_compatibility = 34;
+  optional int32 change_frame_rate_strategy = 35;
+  optional uint32 fixed_transform_hint = 36;
+  optional uint64 frame_number = 37;
+  optional bool auto_refresh = 38;
+  // unused
+  optional bool is_trusted_overlay = 39;
+  optional RectProto buffer_crop = 40;
+  optional RectProto destination_frame = 41;
+
+  enum DropInputMode {
+    NONE = 0;
+    ALL = 1;
+    OBSCURED = 2;
+  };
+  optional DropInputMode drop_input_mode = 42;
+
+  optional TrustedOverlay trusted_overlay = 43;
+
+  optional float background_blur_scale = 44;
+
+  optional CornerRadii corner_radii = 45;
+
+  optional CornerRadii client_drawn_corner_radii = 46;
+
+  optional int32 system_content_priority = 47;
+
+  optional BoxShadowSettings box_shadow_settings = 48;
+
+  optional BorderSettings border_settings = 49;
+}
+
+message DisplayState {
+  enum Changes {
+    eChangesNone = 0;
+    eSurfaceChanged = 0x01;
+    eLayerStackChanged = 0x02;
+    eDisplayProjectionChanged = 0x04;
+    eDisplaySizeChanged = 0x08;
+    eFlagsChanged = 0x10;
+  };
+  optional int32 id = 1;
+  optional uint32 what = 2;
+  optional uint32 flags = 3;
+  optional uint32 layer_stack = 4;
+  optional uint32 orientation = 5;
+  optional RectProto layer_stack_space_rect = 6;
+  optional RectProto oriented_display_space_rect = 7;
+  optional uint32 width = 8;
+  optional uint32 height = 9;
+}

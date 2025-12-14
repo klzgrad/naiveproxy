@@ -1,0 +1,107 @@
+\C{trouble} Troubleshooting
+
+This chapter describes some of the common problems that users have
+been known to encounter with NASM, and answers them.  If you think you
+have found a bug in NASM, please see \k{bugs}.
+
+
+\H{problems} Common Problems
+
+\S{inefficient} NASM Generates \i{Inefficient Code}
+
+We sometimes get `bug' reports about NASM generating inefficient, or
+even `wrong', code on instructions such as \c{ADD ESP,8}. This is a
+deliberate design feature, connected to predictability of output:
+NASM, on seeing \c{ADD ESP,8}, will generate the form of the
+instruction which leaves room for a 32-bit offset. You need to code
+\I\c{BYTE}\c{ADD ESP,BYTE 8} if you want the space-efficient form of
+the instruction. This isn't a bug, it's user error: if you prefer to
+have NASM produce the more efficient code automatically enable
+optimization with the \c{-O} option (see \k{opt-O}).
+
+
+\S{jmprange} My Jumps are Out of Range\I{out of range, jumps}
+
+Similarly, people complain that when they issue \i{conditional
+jumps} (which are \c{SHORT} by default) that try to jump too far,
+NASM reports `short jump out of range' instead of making the jumps
+longer.
+
+This, again, is partly a predictability issue, but in fact has a
+more practical reason as well. NASM has no means of being told what
+type of processor the code it is generating will be run on; so it
+cannot decide for itself that it should generate \i\c{Jcc NEAR} type
+instructions, because it doesn't know that it's working for a 386 or
+above. Alternatively, it could replace the out-of-range short
+\c{JNE} instruction with a very short \c{JE} instruction that jumps
+over a \c{JMP NEAR}; this is a sensible solution for processors
+below a 386, but hardly efficient on processors which have good
+branch prediction \e{and} could have used \c{JNE NEAR} instead. So,
+once again, it's up to the user, not the assembler, to decide what
+instructions should be generated. See \k{opt-O}.
+
+
+\S{proborg} \i\c{ORG} Doesn't Work
+
+People writing \i{boot sector} programs in the \c{bin} format often
+complain that \c{ORG} doesn't work the way they'd like: in order to
+place the \c{0xAA55} signature word at the end of a 512-byte boot
+sector, people who are used to MASM tend to code
+
+\c         ORG 0
+\c
+\c         ; some boot sector code
+\c
+\c         ORG 510
+\c         DW 0xAA55
+
+This is not the intended use of the \c{ORG} directive in NASM, and
+will not work. The correct way to solve this problem in NASM is to
+use the \i\c{TIMES} directive, like this:
+
+\c         ORG 0
+\c
+\c         ; some boot sector code
+\c
+\c         TIMES 510-($-$$) DB 0
+\c         DW 0xAA55
+
+The \c{TIMES} directive will insert exactly enough zero bytes into
+the output to move the assembly point up to 510. This method also
+has the advantage that if you accidentally fill your boot sector too
+full, NASM will catch the problem at assembly time and report it, so
+you won't end up with a boot sector that you have to disassemble to
+find out what's wrong with it.
+
+
+\S{probtimes} \i\c{TIMES} Doesn't Work
+
+The other common problem with the above code is people who write the
+\c{TIMES} line as
+
+\c         TIMES 510-$ DB 0
+
+by reasoning that \c{$} should be a pure number, just like 510, so
+the difference between them is also a pure number and can happily be
+fed to \c{TIMES}.
+
+NASM is a \e{modular} assembler: the various component parts are
+designed to be easily separable for re-use, so they don't exchange
+information unnecessarily. In consequence, the \c{bin} output
+format, even though it has been told by the \c{ORG} directive that
+the \c{.text} section should start at 0, does not pass that
+information back to the expression evaluator. So from the
+evaluator's point of view, \c{$} isn't a pure number: it's an offset
+from a section base. Therefore the difference between \c{$} and 510
+is also not a pure number, but involves a section base. Values
+involving section bases cannot be passed as arguments to \c{TIMES}.
+
+The solution, as in the previous section, is to code the \c{TIMES}
+line in the form
+
+\c         TIMES 510-($-$$) DB 0
+
+in which \c{$} and \c{$$} are offsets from the same section base,
+and so their difference is a pure number. This will solve the
+problem and generate sensible code.
+

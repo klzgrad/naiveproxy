@@ -1,0 +1,159 @@
+/*
+ * Copyright (C) 2024 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+import public "protos/perfetto/trace/track_event/track_event.proto";
+
+package perfetto.protos;
+
+// Information about sending and receiving messages on threads with
+// Looper and MessageQueue.
+message AndroidMessageQueue {
+  // Thread name sending a message on the MessageQueue.
+  optional string sending_thread_name = 1;
+  // Thread name receiving a message on the MessageQueue.
+  optional string receiving_thread_name = 2;
+  // User-defined message code for messages in the MessageQueue.
+  optional int32 message_code = 3;
+  // Intended delay in millis before a message on the MessageQueue is executed.
+  optional uint64 message_delay_ms = 4;
+}
+
+message AndroidJobSchedulerJob {
+  // Job id.
+  optional int32 job_id = 1;
+  // Job user id.
+  optional int32 source_uid = 2;
+  // Job user id.
+  optional int32 proxy_uid = 3;
+  // FINISHED = 0;
+  // STARTED = 1;
+  // SCHEDULED = 2;
+  // CANCELLED = 3;
+  optional int32 state = 4;
+  // The standby bucket of the app that scheduled the job. These match the
+  // framework constants defined in JobSchedulerService.java with the addition
+  // of UNKNOWN using -1, as ACTIVE is already assigned 0.
+  // UNKNOWN = -1;
+  // ACTIVE = 0;
+  // WORKING_SET = 1;
+  // FREQUENT = 2;
+  // RARE = 3;
+  // NEVER = 4;
+  // RESTRICTED = 5;
+  // EXEMPTED = 6;
+  optional int32 standby_bucket = 5;
+  // The priority set by the app (via JobInfo.Builder.setPriority()).
+  optional int32 requested_priority = 6;
+  // The priority JobScheduler ran the job at. Only valid for STARTED and
+  // FINISHED states.
+  optional int32 effective_priority = 7;
+  // Number of times JobScheduler has tried to run this particular job. This
+  // value is incremented when a job is stopped and rescheduled for various
+  // reasons (lost network, constraints no longer satisfied, etc). For periodic
+  // be newly scheduled and therefore this value reflects the time since the
+  // most recent (re)schedule. This is only valid for the STARTED and FINISHED
+  // states.
+  optional int32 num_previous_attempts = 8;
+  // The deadline that the Job has requested.
+  // This is only valid if has_deadline_constraint is true.
+  optional int64 deadline_ms = 9;
+  // The delay that the Job has requested.
+  // This is only valid if has_timing_delay_constraint is true.
+  optional int64 delay_ms = 10;
+  // The amount of time that elapsed between the job being scheduled (state =
+  // SCHEDULED) and it being started (state = STARTED). Persisted jobs loaded at
+  // boot are considered to be scheduled at boot, so all values are within the
+  // current boot cycle. Periodic and other rescheduled jobs are considered to
+  // be newly scheduled and therefore this value reflects the time since the
+  // most recent (re)schedule. This is only valid for the STARTED and FINISHED
+  // states.
+  optional int64 job_start_latency_ms = 11;
+  // The number of JobWorkItems the app has attached to this job but not
+  // completed (by calling JobParameters.completeWork()).
+  optional int32 num_uncompleted_work_items = 12;
+  // Proc state of the UID of the logged event
+  // See android.app.ProcessStateEnum
+  optional int32 proc_state = 13;
+  // Interval for the job to recur when it is set as periodic.
+  optional int64 periodic_job_interval_ms = 14;
+  // Flex interval for the periodic job. This value is set via the second
+  // parameter of JobInfo.Builder.setPeriodic(long, long). The job can
+  // execute at any time in a window flex length at the end of the period.
+  // Trace tag set via JobInfo.Builder.setTraceTag(). Basic PII filtering has
+  // been applied,
+  // but further filtering should be done by clients.
+  optional int64 periodic_job_flex_interval_ms = 15;
+  // Number of reschedules due to job being abandoned.
+  optional int32 num_reschedules_due_to_abandonment = 16;
+  // Back off policy applied to the job that gets rescheduled.
+  // The internal reason a job has stopped.
+  // UNKNOWN_POLICY = 0;
+  // LINEAR = 1;
+  // EXPONENTIAL = 2;
+  optional int32 back_off_policy_type = 17;
+  // The publicly returned reason onStopJob() was called.
+  // This is only applicable when the state is FINISHED.
+  // The default value is INTERNAL_STOP_REASON_UNKNOWN.
+  optional int32 internal_stop_reason = 18;
+  // This is only applicable when the state is FINISHED, but may be undefined if
+  // JobService.onStopJob() was never called for the job.
+  optional int32 public_stop_reason = 19;
+  // Bitfield of boolean states of the job.
+  optional int64 job_state_flags = 20;
+}
+
+// Information about an android.graphics.Bitmap.
+message AndroidBitmap {
+  // Allocation size, in bytes.
+  optional int64 size = 1;
+  // Width, in pixels.
+  optional int32 width = 2;
+  // Height, in pixels.
+  optional int32 height = 3;
+  // Density, in DPI.
+  optional int32 density = 4;
+  // Config, in android.graphics.Bitmap.Config ordinal values.
+  optional int32 config = 5;
+  // Whether the pixel data is mutable.
+  // b/398624484: this should be a boolean.
+  optional int32 mutable_pixels = 6;
+  // Pixel storage type, in android::PixelStorageType ordinal values.
+  optional int32 pixel_storage_type = 7;
+  // Bitmap id; see android.graphics.Bitmap#mId.
+  optional int64 id = 8;
+}
+
+message AndroidTrackEvent {
+  // Usable range: [2001, 2999]
+  // Next id: 2006
+  extend TrackEvent {
+    // The name of a binder service.
+    optional string binder_service_name = 2001;
+    // The name of a binder interface.
+    optional string binder_interface_name = 2002;
+    // The name of an apex.
+    optional string apex_name = 2003;
+
+    // MessageQueue messages.
+    optional AndroidMessageQueue message_queue = 2004;
+    // Bitmaps
+    optional AndroidBitmap bitmap = 2005;
+    // JobScheduler jobs.
+    optional AndroidJobSchedulerJob job_scheduler_job = 2006;
+  }
+}

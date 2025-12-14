@@ -1,0 +1,296 @@
+/*
+ * Copyright (C) 2023 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+package perfetto.protos;
+
+import "protos/perfetto/trace/android/surfaceflinger_common.proto";
+import "protos/perfetto/trace/android/graphics/rect.proto";
+
+// Message used by Winscope to process legacy trace files.
+// Represents a file full of surface flinger trace entries.
+// Encoded, it should start with 0x4c 0x59 0x52 0x54 0x52 0x41 0x43 0x45
+// (.LYRTRACE), such that they can be easily identified.
+message LayersTraceFileProto {
+  // constant; MAGIC_NUMBER = (long) MAGIC_NUMBER_H << 32 |
+  // MagicNumber.MAGIC_NUMBER_L (this is needed because enums have to be 32 bits
+  // and there's no nice way to put 64bit constants into .proto files.
+  enum MagicNumber {
+    INVALID = 0;
+    // LYRT (little-endian ASCII)
+    MAGIC_NUMBER_L = 0x5452594c;
+    // RACE (little-endian ASCII)
+    MAGIC_NUMBER_H = 0x45434152;
+  }
+
+  // Must be the first field, set to value in MagicNumber
+  optional fixed64 magic_number = 1;
+
+  repeated LayersSnapshotProto entry = 2;
+
+  // Offset between real-time clock and elapsed time clock in nanoseconds.
+  // Calculated as: systemTime(SYSTEM_TIME_REALTIME) -
+  // systemTime(SYSTEM_TIME_MONOTONIC)
+  optional fixed64 real_to_elapsed_time_offset_nanos = 3;
+}
+
+message LayersSnapshotProto {
+  // elapsed realtime in nanos since boot of when this entry was logged
+  optional sfixed64 elapsed_realtime_nanos = 1;
+
+  // SurfaceFlinger's stage where the snapshot was triggered.
+  // Currently either "visibleRegionsDirty" or "bufferLatched".
+  optional string where = 2;
+
+  optional LayersProto layers = 3;
+
+  // Blob for the current HWC information for all layers, reported by dumpsys.
+  // Example:
+  //   "maxDownScale: 4, maxFullWidth: 8192, HWState: 1, AssignedState: 3, ..."
+  optional string hwc_blob = 4;
+
+  // Excludes state sent during composition like visible region and composition
+  // type.
+  optional bool excludes_composition_state = 5;
+
+  // Number of missed entries since the last entry was recorded.
+  optional uint32 missed_entries = 6;
+
+  repeated DisplayProto displays = 7;
+
+  optional int64 vsync_id = 8;
+}
+
+// Contains a list of all layers.
+message LayersProto {
+  repeated LayerProto layers = 1;
+}
+
+message DisplayProto {
+  optional uint64 id = 1;
+  // Display descriptor, e.g. "Built-In Screen"
+  optional string name = 2;
+  optional uint32 layer_stack = 3;
+  optional SizeProto size = 4;
+  optional RectProto layer_stack_space_rect = 5;
+  optional TransformProto transform = 6;
+  optional bool is_virtual = 7;
+  optional double dpi_x = 8;
+  optional double dpi_y = 9;
+}
+
+// Must match definition in the IComposerClient HAL
+enum HwcCompositionType {
+  // Invalid composition type
+  HWC_TYPE_UNSPECIFIED = 0;
+  // Layer was composited by the client into the client target buffer
+  HWC_TYPE_CLIENT = 1;
+  // Layer was composited by the device through hardware overlays
+  HWC_TYPE_DEVICE = 2;
+  // Layer was composited by the device using a color
+  HWC_TYPE_SOLID_COLOR = 3;
+  // Similar to DEVICE, but the layer position may have been asynchronously set
+  // through setCursorPosition
+  HWC_TYPE_CURSOR = 4;
+  // Layer was composited by the device via a sideband stream
+  HWC_TYPE_SIDEBAND = 5;
+  // Layer was composited by hardware optimized for display decoration
+  HWC_TYPE_DISPLAY_DECORATION = 6;
+}
+
+// Information about each layer.
+message LayerProto {
+  // unique id per layer.
+  optional int32 id = 1;
+  // unique name per layer.
+  // Example: "Wallpaper".
+  optional string name = 2;
+  // list of children this layer may have. May be empty.
+  repeated int32 children = 3 [packed = true];
+  // list of layers that are z order relative to this layer.
+  repeated int32 relatives = 4 [packed = true];
+  // The type of layer.
+  // Examples: "ContainerLayer", "BufferStateLayer".
+  optional string type = 5;
+  optional RegionProto transparent_region = 6;
+  optional RegionProto visible_region = 7;
+  optional RegionProto damage_region = 8;
+  optional uint32 layer_stack = 9;
+  // The layer's z order. Can be z order in layer stack, relative to parent,
+  // or relative to another layer specified in zOrderRelative.
+  optional int32 z = 10;
+  // The layer's position on the display.
+  optional PositionProto position = 11;
+  // The layer's requested position.
+  optional PositionProto requested_position = 12;
+  // The layer's size.
+  optional SizeProto size = 13;
+  // The layer's crop in its own bounds.
+  optional RectProto crop = 14;
+  // The layer's crop in its parent's bounds.
+  optional RectProto final_crop = 15 [deprecated = true];
+  optional bool is_opaque = 16;
+  optional bool invalidate = 17;
+  // Composition states's dataspace.
+  // Examples: "STANDARD_BT709", "STANDARD_BT601_625".
+  // See full enum in
+  // frameworks/native/libs/nativewindow/include/android/data_space.h
+  optional string dataspace = 18;
+  // Buffer's pixel format
+  // Examples: "PIXEL_FORMAT_TRANSLUCENT", "PIXEL_FORMAT_RGBA_8888".
+  // See full enum in frameworks/native/libs/ui/include/ui/PixelFormat.h
+  optional string pixel_format = 19;
+  // The layer's actual color.
+  optional ColorProto color = 20;
+  // The layer's requested color.
+  optional ColorProto requested_color = 21;
+  // Can be any combination of
+  //    hidden = 0x01
+  //    opaque = 0x02,
+  //    secure = 0x80,
+  optional uint32 flags = 22;
+  // The layer's actual transform
+  optional TransformProto transform = 23;
+  // The layer's requested transform.
+  optional TransformProto requested_transform = 24;
+  // The parent layer. This value can be null if there is no parent.
+  optional int32 parent = 25;
+  // The layer that this layer has a z order relative to. This value can be
+  // null.
+  optional int32 z_order_relative_of = 26;
+  // This value can be null if there's nothing to draw.
+  optional ActiveBufferProto active_buffer = 27;
+  // The number of frames available.
+  optional int32 queued_frames = 28;
+  optional bool refresh_pending = 29;
+  // The layer's composer backend destination frame
+  optional RectProto hwc_frame = 30;
+  // The layer's composer backend source crop
+  optional FloatRectProto hwc_crop = 31;
+  // The layer's composer backend transform
+  optional int32 hwc_transform = 32;
+  optional int32 window_type = 33 [deprecated = true];
+  optional int32 app_id = 34 [deprecated = true];
+  // The layer's composition type
+  optional HwcCompositionType hwc_composition_type = 35;
+  // If it's a buffer layer, indicate if the content is protected
+  optional bool is_protected = 36;
+  // Current frame number being rendered.
+  optional uint64 curr_frame = 37;
+  // A list of barriers that the layer is waiting to update state.
+  repeated BarrierLayerProto barrier_layer = 38;
+  // If active_buffer is not null, record its transform.
+  optional TransformProto buffer_transform = 39;
+  optional int32 effective_scaling_mode = 40;
+  // Layer's corner radius
+  optional float corner_radius = 41 [deprecated = true];
+  // Metadata map. May be empty.
+  map<int32, string> metadata = 42;
+
+  optional TransformProto effective_transform = 43;
+  optional FloatRectProto source_bounds = 44;
+  optional FloatRectProto bounds = 45;
+  optional FloatRectProto screen_bounds = 46;
+
+  optional InputWindowInfoProto input_window_info = 47;
+
+  // Crop used to draw the rounded corner.
+  optional FloatRectProto corner_radius_crop = 48;
+
+  // length of the shadow to draw around the layer, it may be set on the
+  // layer or set by a parent layer.
+  optional float shadow_radius = 49;
+  optional ColorTransformProto color_transform = 50;
+
+  optional bool is_relative_of = 51;
+  // Layer's background blur radius in pixels.
+  optional int32 background_blur_radius = 52;
+
+  optional uint32 owner_uid = 53;
+
+  // Regions of a layer, where blur should be applied.
+  repeated BlurRegion blur_regions = 54;
+
+  optional bool is_trusted_overlay = 55;
+
+  // Corner radius explicitly set on layer rather than inherited
+  optional float requested_corner_radius = 56 [deprecated = true];
+
+  optional RectProto destination_frame = 57;
+
+  optional uint32 original_id = 58;
+
+  optional TrustedOverlay trusted_overlay = 59;
+
+  // Layer's scale during background blur, relative to 1.0f=100%
+  optional float background_blur_scale = 60;
+
+  // Layer's corner radius.
+  optional CornerRadiiProto corner_radii = 61;
+
+  // Corner radius explicitly set on layer rather than inherited
+  optional CornerRadiiProto requested_corner_radii = 62;
+
+  // Corner radius explicity set as drawn by client
+  optional CornerRadiiProto client_drawn_corner_radii = 63;
+
+  // Priority value of the layer set by the system.
+  optional int32 system_content_priority = 64;
+
+  // Settings which specify how shadows should be drawn for a layer.
+  optional BoxShadowSettings box_shadow_settings = 65;
+
+  // Settings which specify how an outline should be drawn for a layer.
+  optional BorderSettings border_settings = 66;
+
+  // "True" corner radii of the layer computed by SurfaceFlinger.
+  optional CornerRadiiProto effective_radii = 67;
+}
+
+message PositionProto {
+  optional float x = 1;
+  optional float y = 2;
+}
+
+message FloatRectProto {
+  optional float left = 1;
+  optional float top = 2;
+  optional float right = 3;
+  optional float bottom = 4;
+}
+
+message CornerRadiiProto {
+  optional float tl = 1;
+  optional float tr = 2;
+  optional float bl = 3;
+  optional float br = 4;
+}
+
+message ActiveBufferProto {
+  optional uint32 width = 1;
+  optional uint32 height = 2;
+  optional uint32 stride = 3;
+  optional int32 format = 4;
+  optional uint64 usage = 5;
+}
+
+message BarrierLayerProto {
+  // layer id the barrier is waiting on.
+  optional int32 id = 1;
+  // frame number the barrier is waiting on.
+  optional uint64 frame_number = 2;
+}

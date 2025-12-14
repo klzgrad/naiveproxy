@@ -1,0 +1,118 @@
+/*
+ * Copyright (C) 2023 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+package perfetto.protos;
+
+// This file defines the schema for {, de}serializing contents of TraceProcessor
+// storage. This schema should is not an API and should not be dependent upon -
+// it is an implementation detail of Trace Processor and can be changed at any
+// time.
+
+// Outside level schema of all serialized objects. Each self contained
+// serialized object is a separate packet and they don't depend on each other
+// for serialization.
+message SerializedTraceProcessor {
+  repeated SerializedTraceProcessorPacket packet = 1;
+}
+
+// One of independent serialized objects.
+message SerializedTraceProcessorPacket {
+  oneof packet {
+    SerializedColumn column = 1;
+  }
+}
+
+// Schema for serializing the column of Trace Processor table.
+message SerializedColumn {
+  // Schema used to store a serialized |BitVector|.
+  message BitVector {
+    optional bytes words = 1;
+    optional bytes counts = 2;
+    optional uint32 size = 3;
+  }
+  // A schema for serialization of any of the descendants of |storage::Storage|.
+  message Storage {
+    // Dummy storage should not contain any data. It's used to signify that
+    // there is a column present, and it's not usable.
+    message DummyStorage {}
+
+    // A schema for serialization of |storage::IdStorage|.
+    message IdStorage {
+      optional uint64 size = 1;
+    }
+
+    // A schema for serialization of |storage::Numeric|.
+    message NumericStorage {
+      optional bytes values = 1;
+      optional bool is_sorted = 2;
+      optional uint32 column_type = 3;
+    }
+
+    // A schema for serialization of |storage::SetIdStorage|.
+    message SetIdStorage {
+      optional bytes values = 1;
+    }
+
+    // A schema for serialization of |storage::StringStorage|.
+    message StringStorage {
+      optional bytes values = 1;
+      optional bool is_sorted = 2;
+    }
+
+    // A schema for serialization of |storage::NullOverlay|.
+    message NullOverlay {
+      optional BitVector bit_vector = 1;
+      optional Storage storage = 2;
+    }
+
+    // A schema for serialization of |storage::ArrangementOverlay|.
+    message ArrangementOverlay {
+      optional bytes values = 1;
+      optional Storage storage = 2;
+    }
+
+    // A schema for serialization of |storage::SelectorOverlay|.
+    message SelectorOverlay {
+      optional BitVector bit_vector = 1;
+      optional Storage storage = 2;
+    }
+
+    // A schema for serialization of |storage::DenseNullOverlay|.
+    message DenseNullOverlay {
+      optional BitVector bit_vector = 1;
+      optional Storage storage = 2;
+    }
+
+    oneof data {
+      DummyStorage dummy_storage = 1;
+      IdStorage id_storage = 2;
+      NumericStorage numeric_storage = 3;
+      SetIdStorage set_id_storage = 4;
+      StringStorage string_storage = 5;
+      NullOverlay null_overlay = 6;
+      ArrangementOverlay arrangement_overlay = 7;
+      SelectorOverlay selector_overlay = 8;
+      DenseNullOverlay dense_null_overlay = 9;
+    }
+  }
+
+  // Name of the table this column is part of.
+  optional string table_name = 1;
+  optional string column_name = 2;
+  optional Storage storage = 3;
+}

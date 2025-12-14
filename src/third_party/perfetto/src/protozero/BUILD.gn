@@ -1,0 +1,152 @@
+# Copyright (C) 2017 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../gn/fuzzer.gni")
+import("../../gn/perfetto.gni")
+import("../../gn/perfetto_cc_proto_descriptor.gni")
+import("../../gn/perfetto_component.gni")
+import("../../gn/proto_library.gni")
+import("../../gn/test.gni")
+
+perfetto_component("protozero") {
+  public_configs = [ "../../gn:default_config" ]
+  public_deps = [
+    "../../include/perfetto/base",
+    "../../include/perfetto/protozero",
+  ]
+  deps = [
+    "../../gn:default_deps",
+    "../base",
+  ]
+  sources = [
+    "field.cc",
+    "gen_field_helpers.cc",
+    "message.cc",
+    "message_arena.cc",
+    "packed_repeated_fields.cc",
+    "proto_decoder.cc",
+    "scattered_heap_buffer.cc",
+    "scattered_stream_null_delegate.cc",
+    "scattered_stream_writer.cc",
+    "static_buffer.cc",
+    "virtual_destructors.cc",
+  ]
+}
+
+source_set("proto_ring_buffer") {
+  public_deps = [ "../../include/perfetto/ext/protozero" ]
+  deps = [
+    ":protozero",
+    "../../gn:default_deps",
+    "../base",
+  ]
+  sources = [ "proto_ring_buffer.cc" ]
+}
+
+perfetto_unittest_source_set("unittests") {
+  testonly = true
+  deps = [
+    ":proto_ring_buffer",
+    ":protozero",
+    ":testing_messages_cpp",
+    ":testing_messages_lite",
+    ":testing_messages_other_package_cpp",
+    ":testing_messages_other_package_lite",
+    ":testing_messages_other_package_zero",
+    ":testing_messages_subpackage_cpp",
+    ":testing_messages_subpackage_lite",
+    ":testing_messages_subpackage_zero",
+    ":testing_messages_zero",
+    "../../gn:default_deps",
+    "../../gn:gtest_and_gmock",
+    "../base",
+    "../base:test_support",
+    "descriptor_diff:unittests",
+    "filtering:unittests",
+  ]
+  sources = [
+    "copyable_ptr_unittest.cc",
+    "message_arena_unittest.cc",
+    "message_handle_unittest.cc",
+    "message_unittest.cc",
+    "proto_decoder_unittest.cc",
+    "proto_ring_buffer_unittest.cc",
+    "proto_utils_unittest.cc",
+    "scattered_stream_writer_unittest.cc",
+    "test/cppgen_conformance_unittest.cc",
+    "test/fake_scattered_buffer.cc",
+    "test/fake_scattered_buffer.h",
+    "test/protozero_conformance_unittest.cc",
+  ]
+}
+
+# Generates both xxx.pbzero.h and xxx.pb.h (official proto).
+
+perfetto_proto_library("testing_messages_@TYPE@") {
+  deps = [
+    ":testing_messages_other_package_@TYPE@",
+    ":testing_messages_subpackage_@TYPE@",
+  ]
+  sources = [
+    "test/example_proto/extensions.proto",
+    "test/example_proto/library.proto",
+    "test/example_proto/library_internals/galaxies.proto",
+    "test/example_proto/test_messages.proto",
+    "test/example_proto/upper_import.proto",
+  ]
+  generate_descriptor = "test_messages.descriptor"
+  generator_visibility =
+      [ "../trace_processor:gen_cc_test_messages_descriptor" ]
+  descriptor_root_source = "test/example_proto/test_messages.proto"
+  proto_path = perfetto_root_path
+}
+
+perfetto_proto_library("testing_messages_other_package_@TYPE@") {
+  sources = [ "test/example_proto/other_package/test_messages.proto" ]
+  proto_path = perfetto_root_path
+}
+
+perfetto_proto_library("testing_messages_subpackage_@TYPE@") {
+  sources = [ "test/example_proto/subpackage/test_messages.proto" ]
+  proto_path = perfetto_root_path
+}
+
+perfetto_fuzzer_test("protozero_decoder_fuzzer") {
+  sources = [ "proto_decoder_fuzzer.cc" ]
+  deps = [
+    ":protozero",
+    "../../gn:default_deps",
+    "../base",
+  ]
+}
+
+if (enable_perfetto_benchmarks) {
+  source_set("benchmarks") {
+    testonly = true
+    deps = [
+      ":proto_ring_buffer",
+      ":protozero",
+      ":testing_messages_lite",
+      ":testing_messages_zero",
+      "../../gn:benchmark",
+      "../../gn:default_deps",
+      "../base",
+      "../base:test_support",
+    ]
+    sources = [
+      "test/proto_ring_buffer_benchmark.cc",
+      "test/protozero_benchmark.cc",
+    ]
+  }
+}

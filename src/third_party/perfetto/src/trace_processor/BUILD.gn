@@ -1,0 +1,426 @@
+# Copyright (C) 2018 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../gn/fuzzer.gni")
+import("../../gn/perfetto.gni")
+import("../../gn/perfetto_cc_proto_descriptor.gni")
+import("../../gn/perfetto_host_executable.gni")
+import("../../gn/test.gni")
+import("../../gn/wasm.gni")
+
+# Prevent that this file is accidentally included in embedder builds.
+assert(enable_perfetto_trace_processor)
+
+# The library which eases processing of Perfetto traces by exposing reading
+# friendly APIs.
+if (enable_perfetto_trace_processor_sqlite) {
+  static_library("trace_processor") {
+    complete_static_lib = true
+    public_deps = [ ":lib" ]
+  }
+}
+
+if (enable_perfetto_ui) {
+  trace_processor_wasm_deps = [
+    ":lib",
+    "../../gn:default_deps",
+    "../base",
+    "rpc:wasm_bridge",
+  ]
+
+  wasm_lib("trace_processor_wasm") {
+    name = "trace_processor"
+    deps = trace_processor_wasm_deps
+  }
+
+  wasm_lib("trace_processor_memory64_wasm") {
+    name = "trace_processor_memory64"
+    is_memory64 = true
+    deps = trace_processor_wasm_deps
+  }
+}
+
+# Depended upon by Chrome to do proto -> JSON conversion of traces.
+# Must be small binary size as all code here needs to be shipped in
+# Chrome.
+source_set("export_json") {
+  sources = [
+    "export_json.cc",
+    "export_json.h",
+  ]
+  deps = [
+    ":storage_minimal",
+    "../../gn:default_deps",
+    "../../include/perfetto/ext/trace_processor:export_json",
+    "../base",
+    "containers",
+    "importers/common",
+    "storage",
+    "tables",
+    "types",
+    "util:args_utils",
+    "util:json_parser",
+  ]
+  public_deps = [ "../../include/perfetto/ext/trace_processor:export_json" ]
+}
+
+source_set("metatrace") {
+  sources = [
+    "tp_metatrace.cc",
+    "tp_metatrace.h",
+  ]
+  deps = [
+    "../../gn:default_deps",
+    "../../include/perfetto/ext/base",
+    "../../include/perfetto/trace_processor",
+    "../../protos/perfetto/trace_processor:zero",
+  ]
+}
+
+# In Bazel builds the ":demangle" target (below) should be a static_library so
+# it gets mapped to an actual target (rather than being squashed as a filegroup)
+# and can be replaced in Google internal builds via perfetto_cfg.bzl.
+# Unfortunately, however, static_library targets seem to break Wasm builds on
+# Mac. For this reason we just make it a source_set for all other build types.
+if (is_perfetto_build_generator) {
+  _demangle_target_type = "static_library"
+} else {
+  _demangle_target_type = "source_set"
+}
+
+target(_demangle_target_type, "demangle") {
+  sources = [ "demangle.cc" ]
+  deps = [
+    "../../gn:default_deps",
+    "../../include/perfetto/base",
+    "../../include/perfetto/ext/base",
+  ]
+  public_deps = [ "../../include/perfetto/ext/trace_processor:demangle" ]
+  if (enable_perfetto_llvm_demangle) {
+    deps += [ "../../gn:llvm_demangle" ]
+  }
+}
+
+source_set("storage_minimal") {
+  sources = [
+    "forwarding_trace_parser.cc",
+    "forwarding_trace_parser.h",
+    "trace_processor_context.cc",
+    "trace_processor_storage.cc",
+    "trace_processor_storage_impl.cc",
+    "trace_processor_storage_impl.h",
+    "trace_reader_registry.cc",
+    "trace_reader_registry.h",
+    "virtual_destructors.cc",
+  ]
+  deps = [
+    "../../gn:default_deps",
+    "../base",
+    "../protozero",
+    "containers",
+    "importers/common",
+    "importers/common:parser_types",
+    "importers/ftrace:minimal",
+    "importers/fuchsia:fuchsia_record",
+    "importers/memory_tracker:graph_processor",
+    "importers/proto:minimal",
+    "importers/systrace:systrace_line",
+    "sorter",
+    "storage",
+    "tables",
+    "types",
+    "util:blob",
+    "util:descriptors",
+    "util:gzip",
+    "util:proto_to_args_parser",
+    "util:trace_type",
+  ]
+  public_deps = [ "../../include/perfetto/trace_processor:storage" ]
+}
+
+if (enable_perfetto_trace_processor_sqlite) {
+  source_set("lib") {
+    sources = [
+      "iterator_impl.cc",
+      "iterator_impl.h",
+      "read_trace.cc",
+      "read_trace_internal.cc",
+      "read_trace_internal.h",
+      "trace_processor.cc",
+      "trace_processor_impl.cc",
+      "trace_processor_impl.h",
+    ]
+    deps = [
+      ":metatrace",
+      ":storage_minimal",
+      "../../gn:default_deps",
+      "../../protos/perfetto/common:zero",
+      "../../protos/perfetto/trace:zero",
+      "../../protos/perfetto/trace/perfetto:zero",
+      "../../protos/perfetto/trace_processor:zero",
+      "../../protos/perfetto/trace_summary:zero",
+      "../base",
+      "../base:clock_snapshots",
+      "../protozero",
+      "dataframe",
+      "importers/android_bugreport",
+      "importers/archive",
+      "importers/art_hprof",
+      "importers/art_method",
+      "importers/common",
+      "importers/etw:full",
+      "importers/ftrace:full",
+      "importers/fuchsia:full",
+      "importers/ninja",
+      "importers/perf",
+      "importers/perf_text",
+      "importers/pprof",
+      "importers/proto:full",
+      "importers/proto:minimal",
+      "importers/simpleperf_proto",
+      "importers/systrace:full",
+      "metrics",
+      "perfetto_sql/engine",
+      "perfetto_sql/generator",
+      "perfetto_sql/intrinsics/functions",
+      "perfetto_sql/intrinsics/operators",
+      "perfetto_sql/intrinsics/table_functions",
+      "perfetto_sql/stdlib",
+      "sqlite",
+      "storage",
+      "tables",
+      "trace_summary",
+      "trace_summary:gen_cc_trace_summary_descriptor",
+      "types",
+      "util:clock",
+      "util:gzip",
+      "util:json_parser",
+      "util:protozero_to_json",
+      "util:protozero_to_text",
+      "util:regex",
+      "util:stdlib",
+      "util:trace_type",
+    ]
+
+    if (enable_perfetto_etm_importer) {
+      deps += [
+        "importers/etm",
+        "perfetto_sql/intrinsics/operators:etm",
+      ]
+    }
+
+    public_deps = [
+      "../../gn:sqlite",  # iterator_impl.h includes sqlite3.h.
+      "../../include/perfetto/trace_processor",
+    ]
+    if (enable_perfetto_trace_processor_mac_instruments) {
+      deps += [ "importers/instruments" ]
+    }
+    if (enable_perfetto_trace_processor_json) {
+      deps += [
+        "importers/gecko",
+        "importers/json",
+      ]
+    }
+  }
+
+  executable("trace_processor_shell") {
+    deps = [
+      ":lib",
+      "../../gn:default_deps",
+      "../../gn:protobuf_full",
+      "../../protos/perfetto/trace_processor:zero",
+      "../../src/profiling:deobfuscator",
+      "../../src/profiling/symbolizer",
+      "../../src/profiling/symbolizer:symbolize_database",
+      "../base",
+      "../base:version",
+      "metrics",
+      "rpc",
+      "rpc:stdiod",
+      "sqlite",
+      "util:stdlib",
+    ]
+    if (enable_perfetto_trace_processor_linenoise) {
+      deps += [ "../../gn:linenoise" ]
+    }
+    if (enable_perfetto_trace_processor_httpd) {
+      deps += [ "rpc:httpd" ]
+    }
+    sources = [ "trace_processor_shell.cc" ]
+    if ((perfetto_build_standalone || build_with_chromium) &&
+        !is_perfetto_build_generator) {
+      data_deps = [
+        # The diff testing framework depends on these descriptors.
+        "../../protos/perfetto/metrics:descriptor",
+        "../../protos/perfetto/trace:descriptor",
+        "../../protos/perfetto/trace:test_extensions_descriptor",
+        "../../protos/perfetto/trace_processor:stack_descriptor",
+        "../../protos/perfetto/trace_summary:descriptor",
+        "../../protos/third_party/pprof:descriptor",
+        "../../protos/third_party/simpleperf:descriptor",
+      ]
+      if (enable_perfetto_llvm_symbolizer) {
+        data_deps += [ "../profiling/symbolizer:llvm_symbolizer_wrapper" ]
+      }
+    }
+  }
+
+  # Shell target which does not link all the extra libraryes linked by
+  # trace processor shell (e.g. httpd, libprotobuf etc.). Use for binary size
+  # analysis of the trace processor library.
+  executable("trace_processor_minimal_shell") {
+    deps = [
+      ":lib",
+      "../../gn:default_deps",
+      "../base",
+    ]
+    sources = [ "minimal_shell.cc" ]
+  }
+}  # if (enable_perfetto_trace_processor_sqlite)
+
+perfetto_unittest_source_set("top_level_unittests") {
+  testonly = true
+
+  sources = [
+    "forwarding_trace_parser_unittest.cc",
+    "ref_counted_unittest.cc",
+    "trace_blob_unittest.cc",
+  ]
+  deps = [
+    ":storage_minimal",
+    "../../gn:default_deps",
+    "../../gn:gtest_and_gmock",
+    "../../include/perfetto/trace_processor",
+    "util:trace_type",
+  ]
+
+  if (enable_perfetto_trace_processor_json && !is_win) {
+    # export_json_unittest.cc uses base::TempFile, which is not supported on
+    # windows.
+    sources += [ "export_json_unittest.cc" ]
+    deps += [
+      ":export_json",
+      "../../gn:jsoncpp",
+      "../../include/perfetto/ext/trace_processor:export_json",
+      "containers",
+      "importers/common",
+      "importers/proto:minimal",
+      "storage",
+      "tables",
+      "types",
+    ]
+  }
+}
+
+perfetto_unittest_source_set("unittests") {
+  testonly = true
+
+  # Do not add sources to this target: use top_level_unittests
+  # instead. This us really just a grouping
+  deps = [
+    ":top_level_unittests",
+    "containers:unittests",
+    "dataframe:unittests",
+    "dataframe/impl:unittests",
+    "importers/android_bugreport:unittests",
+    "importers/common:unittests",
+    "importers/ftrace:unittests",
+    "importers/fuchsia:unittests",
+    "importers/memory_tracker:unittests",
+    "importers/perf:unittests",
+    "importers/proto:unittests",
+    "importers/syscalls:unittests",
+    "importers/systrace:unittests",
+    "perfetto_sql/generator:unittests",
+    "rpc:unittests",
+    "sorter:unittests",
+    "types:unittests",
+    "util:unittests",
+  ]
+  if (enable_perfetto_trace_processor_json) {
+    deps += [ "importers/json:unittests" ]
+  }
+  if (enable_perfetto_trace_processor_sqlite) {
+    deps += [
+      "perfetto_sql/engine:unittests",
+      "perfetto_sql/intrinsics/functions:unittests",
+      "perfetto_sql/intrinsics/operators:unittests",
+      "perfetto_sql/intrinsics/table_functions:unittests",
+      "perfetto_sql/parser:unittests",
+      "perfetto_sql/preprocessor:unittests",
+      "perfetto_sql/tokenizer:unittests",
+      "sqlite:unittests",
+    ]
+  }
+  if (enable_perfetto_etm_importer) {
+    deps += [ "importers/etm:unittests" ]
+  }
+}
+
+perfetto_cc_proto_descriptor("gen_cc_test_messages_descriptor") {
+  descriptor_name = "test_messages.descriptor"
+  descriptor_target = "../protozero:testing_messages_descriptor"
+}
+
+source_set("integrationtests") {
+  testonly = true
+  sources = []
+  deps = []
+  if (enable_perfetto_trace_processor_sqlite) {
+    sources += [
+      "read_trace_integrationtest.cc",
+      "trace_database_integrationtest.cc",
+    ]
+    deps += [
+      ":lib",
+      "../../gn:default_deps",
+      "../../gn:gtest_and_gmock",
+      "../../protos/perfetto/common:zero",
+      "../../protos/perfetto/trace:zero",
+      "../../protos/perfetto/trace_processor:zero",
+      "../base",
+      "../base:test_support",
+      "sqlite",
+      "trace_summary:integrationtests",
+    ]
+  }
+}
+
+if (enable_perfetto_trace_processor_json) {
+  source_set("storage_minimal_smoke_tests") {
+    testonly = true
+    sources = [ "storage_minimal_smoke_test.cc" ]
+    deps = [
+      ":export_json",
+      ":storage_minimal",
+      "../../gn:default_deps",
+      "../../gn:gtest_and_gmock",
+      "../../gn:gtest_main",
+      "../../gn:jsoncpp",
+      "../../include/perfetto/ext/base",
+      "../base:test_support",
+    ]
+  }
+}
+
+perfetto_fuzzer_test("trace_processor_fuzzer") {
+  testonly = true
+  sources = [ "trace_parsing_fuzzer.cc" ]
+  deps = [
+    ":storage_minimal",
+    "../../gn:default_deps",
+    "../base",
+  ]
+}

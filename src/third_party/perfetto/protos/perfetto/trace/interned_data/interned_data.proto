@@ -1,0 +1,153 @@
+/*
+ * Copyright (C) 2019 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+import "protos/perfetto/trace/android/app_wakelock_data.proto";
+import "protos/perfetto/trace/android/network_trace.proto";
+import "protos/perfetto/trace/chrome/v8.proto";
+import "protos/perfetto/trace/gpu/gpu_render_stage_event.proto";
+import "protos/perfetto/trace/track_event/chrome_histogram_sample.proto";
+import "protos/perfetto/trace/track_event/debug_annotation.proto";
+import "protos/perfetto/trace/track_event/log_message.proto";
+import "protos/perfetto/trace/track_event/track_event.proto";
+import "protos/perfetto/trace/track_event/source_location.proto";
+import "protos/perfetto/trace/profiling/profile_common.proto";
+
+package perfetto.protos;
+
+// ------------------------------ DATA INTERNING: ------------------------------
+// Interning indexes are built up gradually by adding the entries contained in
+// each TracePacket of the same packet sequence (packets emitted by the same
+// producer and TraceWriter, see |trusted_packet_sequence_id|). Thus, packets
+// can only refer to interned data from other packets in the same sequence.
+//
+// The writer will emit new entries when it encounters new internable values
+// that aren't yet in the index. Data in current and subsequent TracePackets can
+// then refer to the entry by its position (interning ID, abbreviated "iid") in
+// its index. An interning ID with value 0 is considered invalid (not set).
+//
+// Because of the incremental build-up, the interning index will miss data when
+// TracePackets are lost, e.g. because a chunk was overridden in the central
+// ring buffer. To avoid invalidation of the whole trace in such a case, the
+// index is periodically reset (see SEQ_INCREMENTAL_STATE_CLEARED).
+// When packet loss occurs, the reader will only lose interning data up to the
+// next reset.
+// -----------------------------------------------------------------------------
+
+// Message that contains new entries for the interning indices of a packet
+// sequence.
+//
+// The writer will usually emit new entries in the same TracePacket that first
+// refers to them (since the last reset of interning state). They may also be
+// emitted proactively in advance of referring to them in later packets.
+//
+// Next reserved id: 8 (up to 15).
+// Next id: 44.
+message InternedData {
+  // TODO(eseckler): Replace iid fields inside interned messages with
+  // map<iid, message> type fields in InternedData.
+
+  // Each field's message type needs to specify an |iid| field, which is the ID
+  // of the entry in the field's interning index. Each field constructs its own
+  // index, thus interning IDs are scoped to the tracing session and field
+  // (usually as a counter for efficient var-int encoding), and optionally to
+  // the incremental state generation of the packet sequence.
+  repeated EventCategory event_categories = 1;
+  repeated EventName event_names = 2;
+  repeated DebugAnnotationName debug_annotation_names = 3;
+  repeated DebugAnnotationValueTypeName debug_annotation_value_type_names = 27;
+  repeated SourceLocation source_locations = 4;
+  repeated UnsymbolizedSourceLocation unsymbolized_source_locations = 28;
+  repeated LogMessageBody log_message_body = 20;
+  repeated HistogramName histogram_names = 25;
+
+  // Note: field IDs up to 15 should be used for frequent data only.
+
+  // Build IDs of exectuable files.
+  repeated InternedString build_ids = 16;
+  // Paths to executable files.
+  repeated InternedString mapping_paths = 17;
+  // Paths to source files.
+  repeated InternedString source_paths = 18;
+  // Names of functions used in frames below.
+  repeated InternedString function_names = 5;
+  // Executable files mapped into processes.
+  repeated Mapping mappings = 19;
+  // Frames of callstacks of a program.
+  repeated Frame frames = 6;
+  // A callstack of a program.
+  repeated Callstack callstacks = 7;
+
+  // Additional Vulkan information sent in a VulkanMemoryEvent message
+  repeated InternedString vulkan_memory_keys = 22;
+
+  // Graphics context of a render stage event.  This represent the GL
+  // context for an OpenGl app or the VkDevice for a Vulkan app.
+  repeated InternedGraphicsContext graphics_contexts = 23;
+
+  // Description of a GPU hardware queue or render stage.
+  repeated InternedGpuRenderStageSpecification gpu_specifications = 24;
+
+  // This is set when FtraceConfig.symbolize_ksyms = true.
+  // The id of each symbol the number that will be reported in ftrace events
+  // like sched_block_reason.caller and is obtained from a monotonic counter.
+  // The same symbol can have different indexes in different bundles.
+  // This is is NOT the real address. This is to avoid disclosing KASLR through
+  // traces.
+  repeated InternedString kernel_symbols = 26;
+
+  // Interned string values in the DebugAnnotation proto.
+  repeated InternedString debug_annotation_string_values = 29;
+
+  // Interned packet context for android.network_packets.
+  repeated NetworkPacketContext packet_context = 30;
+
+  // Interned name of a js function. We only intern js functions as there is a
+  // lot of duplication for them, but less so for other strings in the V8 data
+  // source.
+  repeated InternedV8String v8_js_function_name = 31;
+  // Js functions can be emitted multiple times for various compilation tiers,
+  // so it makes sense to deduplicate all this.
+  repeated InternedV8JsFunction v8_js_function = 32;
+  // Interned JS script (there is one associated with each JS function)
+  repeated InternedV8JsScript v8_js_script = 33;
+  // Interned Wasm script (there is one associated with each Wasm function)
+  repeated InternedV8WasmScript v8_wasm_script = 34;
+  // Every V8 event is associated with an isolate, intern the isolate to remove
+  // duplication.
+  repeated InternedV8Isolate v8_isolate = 35;
+
+  // Interned protolog strings args.
+  repeated InternedString protolog_string_args = 36;
+  // Interned protolog stacktraces.
+  repeated InternedString protolog_stacktrace = 37;
+
+  // viewcapture
+  repeated InternedString viewcapture_package_name = 38;
+  repeated InternedString viewcapture_window_name = 39;
+  repeated InternedString viewcapture_view_id = 40;
+  repeated InternedString viewcapture_class_name = 41;
+
+  // Interned context for android.app_wakelocks.
+  repeated AppWakelockInfo app_wakelock_info = 42;
+
+  // Interned correlation ids in track_event.
+  repeated InternedString correlation_id_str = 43;
+
+  // removed ProfiledFrameSymbols profiled_frame_symbols
+  reserved 21;
+}

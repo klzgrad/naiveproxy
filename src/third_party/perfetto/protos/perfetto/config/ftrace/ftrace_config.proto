@@ -1,0 +1,364 @@
+/*
+ * Copyright (C) 2017 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+package perfetto.protos;
+
+// Next id: 38
+message FtraceConfig {
+  // Ftrace events to record, example: "sched/sched_switch".
+  repeated string ftrace_events = 1;
+
+  // Android-specific event categories:
+  repeated string atrace_categories = 2;
+  repeated string atrace_apps = 3;
+  // Some processes can emit data through atrace or through the perfetto SDK via
+  // the "track_event" data source. For these categories, the SDK will be
+  // preferred, if possible, for this config.
+  repeated string atrace_categories_prefer_sdk = 28;
+  // If true, do *not* add in extra ftrace events when |atrace_categories| are
+  // set. This skips the legacy "atrace" behaviour of adding hardcoded ftrace
+  // events for convenience (and the vendor-specific events on top).
+  // Introduced in: perfetto v52.
+  optional bool atrace_userspace_only = 34;
+
+  // Size of each per-cpu kernel ftrace ring buffer.
+  // Not guaranteed if there are multiple concurrent tracing sessions, as the
+  // buffers cannot be resized without pausing recording in the kernel.
+  optional uint32 buffer_size_kb = 10;
+
+  // If true, |buffer_size_kb| is interpreted as a lower bound, allowing the
+  // implementation to choose a bigger buffer size.
+  //
+  // Most configs for perfetto v43+ should simply leave both fields unset.
+  //
+  // If you need a config compatible with a range of perfetto builds and you
+  // used to set a non-default buffer_size_kb, consider setting both fields.
+  // Example:
+  //   buffer_size_kb: 4096
+  //   buffer_size_lower_bound: true
+  // On older builds, the per-cpu buffers will be exactly 4 MB.
+  // On v43+, buffers will be at least 4 MB.
+  // In both cases, neither is guaranteed if there are other concurrent
+  // perfetto ftrace sessions, as the buffers cannot be resized without pausing
+  // the recording in the kernel.
+  // Introduced in: perfetto v43.
+  optional bool buffer_size_lower_bound = 27;
+
+  // If set, specifies how often the tracing daemon reads from the kernel ring
+  // buffer. Not guaranteed if there are multiple concurrent tracing sessions.
+  // Leave unset unless you're fine-tuning a local config.
+  optional uint32 drain_period_ms = 11;
+
+  // If set, the tracing daemon will read kernel ring buffers as soon as
+  // they're filled past this percentage of occupancy. In other words, a value
+  // of 50 means that a read pass is triggered as soon as any per-cpu buffer is
+  // half-full. Not guaranteed if there are multiple concurrent tracing
+  // sessions.
+  // Currently does nothing on Linux kernels below v6.9.
+  // Introduced in: perfetto v48.
+  optional uint32 drain_buffer_percent = 29;
+
+  // Configuration for compact encoding of scheduler events. When enabled (and
+  // recording the relevant ftrace events), specific high-volume events are
+  // encoded in a denser format than normal.
+  message CompactSchedConfig {
+    // If true, and sched_switch or sched_waking ftrace events are enabled,
+    // record those events in the compact format.
+    //
+    // If the field is unset, the default is:
+    // * perfetto v42.0+: enabled
+    // * before: disabled
+    optional bool enabled = 1;
+  }
+  optional CompactSchedConfig compact_sched = 12;
+
+  // Optional filter for "ftrace/print" events.
+  //
+  // The filter consists of multiple rules. As soon as a rule matches (the rules
+  // are processed in order), its `allow` field will be used as the outcome: if
+  // `allow` is true, the event will be included in the trace, otherwise it will
+  // be discarded. If an event does not match any rule, it will be allowed by
+  // default (a rule with an empty prefix and allow=false, disallows everything
+  // by default).
+  message PrintFilter {
+    message Rule {
+      // Matches an atrace message of the form:
+      // <type>|pid|<prefix>...
+      message AtraceMessage {
+        optional string type = 1;
+        optional string prefix = 2;
+      }
+      oneof match {
+        // This rule matches if `prefix` matches exactly with the beginning of
+        // the "ftrace/print" "buf" field.
+        string prefix = 1;
+        // This rule matches if the "buf" field contains an atrace-style print
+        // message as specified in `atrace_msg`.
+        AtraceMessage atrace_msg = 3;
+      }
+      optional bool allow = 2;
+    }
+    repeated Rule rules = 1;
+  }
+  optional PrintFilter print_filter = 22;
+
+  // Enables symbol name resolution against /proc/kallsyms.
+  // It requires that either traced_probes is running as root or that
+  // kptr_restrict has been manually lowered.
+  // It does not disclose KASLR, symbol addresses are mangled.
+  optional bool symbolize_ksyms = 13;
+
+  // When symbolize_ksyms=true, determines whether the traced_probes daemon
+  // should keep the symbol map in memory (and reuse it for future tracing
+  // sessions) or clear it (saving memory) and re-create it on each tracing
+  // session (wasting cpu and wall time).
+  // The tradeoff is roughly:
+  //  KSYMS_RETAIN: pay a fixed ~1.2 MB cost after the first trace.
+  //  KSYMS_CLEANUP_ON_STOP: pay a ~300-500ms cost when starting each trace.
+  // Default behavior: KSYMS_CLEANUP_ON_STOP.
+  enum KsymsMemPolicy {
+    KSYMS_UNSPECIFIED = 0;
+    KSYMS_CLEANUP_ON_STOP = 1;
+    KSYMS_RETAIN = 2;
+  }
+  optional KsymsMemPolicy ksyms_mem_policy = 17;
+
+  // When this boolean is true AND the ftrace_events contains "kmem/rss_stat",
+  // this option causes traced_probes to enable the "kmem/rss_stat_throttled"
+  // event instead if present, and fall back to "kmem/rss_stat" if not present.
+  // The historical context for this is the following:
+  // - Up to Android S (12), the rss_stat was internally throttled in its
+  //   kernel implementation.
+  // - A change introduced in the kernels after S has introduced a new
+  //   "rss_stat_throttled" making the original "rss_stat" event unthrottled
+  //   (hence very spammy).
+  // - Not all Android T/13 devices will receive a new kernel though, hence we
+  //   need to deal with both cases.
+  // For more context: go/rss-stat-throttled.
+  optional bool throttle_rss_stat = 15;
+
+  // If true, use self-describing proto messages when writing events not known
+  // at compile time (aka generic events). Each event bundle will have a set of
+  // serialised proto descriptors for events within that bundle.
+  //
+  // Default if unset:
+  // * v53+: true
+  // * before v53: false
+  //
+  // Added in: perfetto v50.
+  optional bool denser_generic_event_encoding = 32;
+
+  // If true, avoid enabling events that aren't statically known by
+  // traced_probes. Otherwise, the default is to emit such events as
+  // GenericFtraceEvent protos.
+  // Prefer to keep this flag at its default. This was added for Android
+  // tracing, where atrace categories and/or atrace HAL requested events can
+  // expand to events that aren't of interest to the tracing user.
+  // Introduced in: Android T.
+  optional bool disable_generic_events = 16;
+
+  // The subset of syscalls to record. To record all syscalls, leave this unset
+  // and add "ftrace_events: raw_syscalls/sys_{enter,exit}" to the config.
+  // * before perfetto v43, requires the config to also enable
+  //   raw_syscalls/sys_{enter,exit}.
+  // * perfetto v43+ does the right thing if you set only this field.
+  // Example: ["sys_read", "sys_open"].
+  // Introduced in: Android U.
+  repeated string syscall_events = 18;
+
+  // If true, enable the "function_graph" kernel tracer that emits events
+  // whenever a kernel function is entered and exited
+  // (funcgraph_entry/funcgraph_exit).
+  // Notes on use:
+  // * Requires |symbolize_ksyms| for function name resolution.
+  // * Use |function_filters| or |function_graph_roots| to constrain the traced
+  //   set of functions, otherwise the event bandwidth will be too high for
+  //   practical use.
+  // * The data source might be rejected if there is already a concurrent
+  //   ftrace data source that does not use function graph itself, as we do not
+  //   support switching kernel tracers mid-trace.
+  // * Requires a kernel compiled with CONFIG_FUNCTION_GRAPH_TRACER. This is
+  //   enabled if "cat /sys/kernel/tracing/available_tracers" includes
+  //   "function_graph".
+  // Android:
+  // * Available only on debuggable builds.
+  // * Introduced in: Android U.
+  optional bool enable_function_graph = 19;
+
+  // Constrains the set of functions traced when |enable_function_graph| is
+  // true. Supports globs, e.g. "sched*". You can specify multiple filters,
+  // in which case all matching functions will be traced. See kernel
+  // documentation on ftrace "set_ftrace_filter" file for more details.
+  // Android:
+  // * Available only on debuggable builds.
+  // * Introduced in: Android U.
+  repeated string function_filters = 20;
+
+  // If |enable_function_graph| is true, trace this set of functions *and* all
+  // of its callees. Supports globs. Can be set together with
+  // |function_filters|, in which case only callees matching the filter will be
+  // traced. If setting both, you most likely want all roots to also be
+  // included in |function_filters|.
+  // Android:
+  // * Available only on debuggable builds.
+  // * Introduced in: Android U.
+  repeated string function_graph_roots = 21;
+
+  // If |enable_function_graph| is true, only trace the specified
+  // number of calls down the stack. Sets the max_graph_depth value
+  // in sys/kernel/tracing/
+  //
+  // Only respected for the first tracing session that enables
+  // function_graph tracing.
+  //
+  // Introduced in: perfetto v51.
+  // Supported on: Android 25Q3+.
+  optional uint32 function_graph_max_depth = 33;
+
+  message KprobeEvent {
+    enum KprobeType {
+      KPROBE_TYPE_UNKNOWN = 0;
+      KPROBE_TYPE_KPROBE = 1;
+      KPROBE_TYPE_KRETPROBE = 2;
+      KPROBE_TYPE_BOTH = 3;
+    }
+    // Kernel function name to attach to, for example "fuse_file_write_iter"
+    optional string probe = 1;
+    optional KprobeType type = 2;
+  }
+  // Ftrace events to record, specific for kprobes and kretprobes
+  repeated KprobeEvent kprobe_events = 30;
+
+  // If true, does not clear kernel ftrace buffers when starting the trace.
+  // This makes sense only if this is the first ftrace data source instance
+  // created after the daemon has been started. Can be useful for gathering boot
+  // traces, if ftrace has been separately configured (e.g. via kernel
+  // commandline).
+  // NB: when configuring the pre-perfetto ftrace, prefer to set
+  // "/sys/kernel/tracing/trace_clock" to "boot" if your trace will contain
+  // anything besides ftrace. Otherwise timestamps might be skewed.
+  optional bool preserve_ftrace_buffer = 23;
+
+  // If true, overrides the default timestamp clock and uses a raw hardware
+  // based monotonic clock for getting timestamps.
+  // * Introduced in: Android U.
+  optional bool use_monotonic_raw_clock = 24;
+
+  // If |instance_name| is not empty, then attempt to use that tracefs instance
+  // for event recording. Normally, this means
+  // `/sys/kernel/tracing/instances/$instance_name`.
+  //
+  // Names "hyp" and "hypervisor" are reserved.
+  //
+  // The instance must already exist, the tracing daemon *will not* create it
+  // for you as it typically doesn't have such permissions.
+  // Only a subset of features is guaranteed to work with non-default instances,
+  // at the time of writing:
+  //  * ftrace_events
+  //  * buffer_size_kb
+  optional string instance_name = 25;
+
+  // For perfetto developer use. If true and on a debuggable android build,
+  // serialise raw tracing pages that the implementation cannot parse.
+  optional bool debug_ftrace_abi = 31;
+
+  // =================================================
+  // Exclusive single-tenant features: HERE BE DRAGONS
+  // =================================================
+  // The features below are considered "advanced" and require an exclusive
+  // tracing session (as of Android 25Q3+ and Perfetto v52).
+  //
+  // These features directly manipulate the kernel's global ftrace state and
+  // are incompatible with concurrent ftrace sessions. They are only enabled
+  // if included in the *first* ftrace data source configured. Subsequent
+  // ftrace data sources (even those not using advanced features) will be
+  // rejected while a session with these features is active.
+  //
+  // To run the session in exclusive mode, see:
+  // https://perfetto.dev/docs/learning-more/android#exclusive-tracing-sessions.
+
+  // Filter ftrace events by Thread ID (TID).
+  // This writes the TIDs to `/sys/kernel/tracing/set_event_pid`.
+  //
+  // Note: this is an exclusive feature, see:
+  // https://perfetto.dev/docs/learning-more/android#exclusive-tracing-sessions.
+  //
+  // Introduced in: perfetto v52.
+  // Supported on: Android 25Q3+.
+  repeated uint32 tids_to_trace = 35;
+
+  // Tracefs options to set directly in the tracefs instance. This is a very
+  // niche feature since almost all of the options deal with formatting textual
+  // output (the /trace file), which perfetto doesn't use.
+  //
+  // The options with a known use-case:
+  // * event-fork: when using `tids_to_trace` above, the kernel will
+  //   automatically add newly spawned descendant threads to the set of TIDs.
+  //
+  // Full list of options is available at
+  // https://docs.kernel.org/trace/ftrace.html#trace-options.
+  //
+  // Note: this is an exclusive feature, see:
+  // https://perfetto.dev/docs/learning-more/android#exclusive-tracing-sessions.
+  //
+  // Introduced in: perfetto v52.
+  // Supported on: Android 25Q3+.
+  message TracefsOption {
+    enum State {
+      STATE_UNKNOWN = 0;
+      STATE_ENABLED = 1;
+      STATE_DISABLED = 2;
+    }
+    // The name of the tracefs option as found in tracefs/trace_options (without
+    // the "no" prefix).
+    optional string name = 1;
+    optional State state = 2;
+  }
+  repeated TracefsOption tracefs_options = 36;
+
+  // This mask restricts tracing to a specific set of CPUs using a
+  // comma-separated hex mask. Each hex number (up to 8 digits) represents a
+  // 32-bit chunk of the CPU mask.
+  //
+  // The chunks are ordered from high CPUs to low CPUs (left to right):
+  //    - Rightmost chunk: CPUs 0-31
+  //    - 2nd chunk from right: CPUs 32-63
+  //    - ...and so on.
+  //
+  // Example (assuming NR_CPUS=128, requiring 4 chunks):
+  // The full mask would be in the format: "chunk3,chunk2,chunk1,chunk0"
+  // where chunk3 maps to CPUs 96-127, chunk2 to 64-95, chunk1 to 32-63, and
+  // chunk0 to 0-31.
+  //    - "ffffffff,0,0,0": Enables CPUs 96-127 only.
+  //    - "f,ff": Enables CPUs 0-7 (from "ff") and CPUs 32-35 (from "f").
+  //
+  // Note: This is an exclusive feature, see:
+  // https://perfetto.dev/docs/learning-more/android#exclusive-tracing-sessions.
+  //
+  // Introduced in: perfetto v52.
+  // Supported on: Android 25Q3+.
+  optional string tracing_cpumask = 37;
+
+  // No-op in perfetto v28+. Name preserved because of existing references in
+  // textproto configs.
+  optional bool initialize_ksyms_synchronously_for_testing = 14
+      [deprecated = true];
+
+  // Previously drain_buffer_percent, perfetto v43-v47.
+  reserved 26;
+}

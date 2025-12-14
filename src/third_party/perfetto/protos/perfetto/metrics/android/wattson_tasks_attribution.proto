@@ -1,0 +1,60 @@
+/*
+ * Copyright (C) 2024 The Android Open Source Project
+ *
+ * Licensed under the Apache License; Version 2.0 (the "License")= ;
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing; software
+ * distributed under the License is distributed on an "AS IS" BASIS;
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND; either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+package perfetto.protos;
+
+message AndroidWattsonTasksAttributionMetric {
+  // Each version increment means updated structure format or field
+  optional int32 metric_version = 1;
+  // Each version increment means power model has been updated and estimates
+  // might change for the exact same input. Don't compare estimates across
+  // different power model versions.
+  optional int32 power_model_version = 2;
+  // Lists tasks (e.g. threads, process, package) and associated estimates
+  repeated AndroidWattsonTaskPeriodInfo period_info = 3;
+  // Best effort power estimate made without all the essential traces, but with
+  // enough information to make an educated extrapolation of a HW state. The
+  // only example right now is for cpu_idle, of which the cpu_idle state can be
+  // extrapolated from the swapper thread (aka idle thread).
+  optional bool is_crude_estimate = 4;
+}
+
+// Groups of power per task for each period
+message AndroidWattsonTaskPeriodInfo {
+  optional int32 period_id = 1;
+  optional string period_name = 2;
+  repeated AndroidWattsonTaskInfo task_info = 3;
+}
+
+message AndroidWattsonTaskInfo {
+  // Average estimated power for wall duration in mW
+  optional float estimated_mw = 1;
+  // Total energy over wall duration across CPUs in mWs
+  optional float estimated_mws = 2;
+  // Energy attributed to a thread for causing CPU idle exit
+  optional float idle_transitions_mws = 3;
+  // Sum of estimated_mws and idle_transition_mws, which represents the energy
+  // during the active time and the energy to transition into active,
+  // respectively
+  optional float total_mws = 4;
+  optional string thread_name = 5;
+  optional string process_name = 6;
+  optional string package_name = 7;
+  optional int32 thread_id = 8;
+  optional int32 process_id = 9;
+}

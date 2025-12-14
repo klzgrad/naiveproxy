@@ -1,0 +1,119 @@
+/*
+ * Copyright (C) 2025 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+package perfetto.protos;
+
+// GenericKernelTaskStateEvent is the standard proto to capture thread state
+// change events in a generic kernel implementation. This is mainly for the
+// case where scheduler events are not directly supported in the kernel's
+// tracing mechanism.
+//
+// By capturing these task state events Perfetto is able to infer higher-level
+// events such as context switches and task waking events, providing as much
+// parity as possible with established tracing frameworks such as
+// Linux's ftrace.
+message GenericKernelTaskStateEvent {
+  // CPU in which the event occurred.
+  // This field is only relevant with the TASK_STATE_RUNNING state. There is
+  // no specific meaning to the cpu field in a non-running state event.
+  optional int32 cpu = 1;
+  // Command name for the thread.
+  optional string comm = 2;
+  // Thread id.
+  optional int64 tid = 3;
+
+  // TaskStateEnum represents the valid states of a thread.
+  // These states are a generic representation of the actual thread state and
+  // don't necessarily map one-to-one to the states the actual OS kernel
+  // tracks internally.
+  //
+  // Note: Consecutive TASK_STATE_RUNNING states for the same TID is considered
+  // an error resulting in potential data loss.
+  enum TaskStateEnum {
+    TASK_STATE_UNKNOWN = 0;
+    TASK_STATE_CREATED = 1;
+    TASK_STATE_RUNNABLE = 2;
+    TASK_STATE_RUNNING = 3;
+    TASK_STATE_INTERRUPTIBLE_SLEEP = 4;
+    TASK_STATE_UNINTERRUPTIBLE_SLEEP = 5;
+    TASK_STATE_STOPPED = 6;
+    TASK_STATE_DEAD = 7;
+    TASK_STATE_DESTROYED = 8;
+  }
+  // New state of the thread.
+  optional TaskStateEnum state = 4;
+
+  // Priority of the thread.
+  // This value is OS agnostic and should only be interpreted based on the
+  // kernel who emitted the message.
+  optional int32 prio = 5;
+}
+
+// GenericKernelTaskRenameEvent is the standard proto to capture the renaming
+// of a thread.
+message GenericKernelTaskRenameEvent {
+  // Thread id.
+  optional int64 tid = 1;
+  // New command name for the thread.
+  optional string comm = 2;
+}
+
+// Metadata about the processes and threads in the trace.
+// The main goal of this proto is to provide a generic kernel
+// implementation a mechanism to outline its process structure.
+message GenericKernelProcessTree {
+  // Representation of a thread.
+  message Thread {
+    // Thread id.
+    optional int64 tid = 1;
+
+    // Id of the parent process.
+    optional int64 pid = 2;
+
+    // The command name of the thread.
+    optional string comm = 3;
+
+    // True if thread is the main thread.
+    optional bool is_main_thread = 4;
+  }
+
+  // Representation of a process.
+  message Process {
+    // Process id.
+    optional int64 pid = 1;
+
+    // Parent process id.
+    optional int64 ppid = 2;
+
+    // The command line of the process.
+    // If the cmdline has spaces in it, then we use the characters from
+    // position 0 to the first instance of the space char (' ') as the name
+    // of the process. If no spaces are present, then the entire cmdline is
+    // used as the name.
+    optional string cmdline = 3;
+  }
+
+  // List of processes and threads in the kernel. These lists are incremental
+  // and not exhaustive. A process and its threads might show up separately in
+  // different ProcessTree messages. A thread might not show up at all, if
+  // no sched switch activity was detected, for instance:
+  // #0 { processes: [{pid: 10, ...}], threads: [{tid: 11, pid: 10}] }
+  // #1 { threads: [{tid: 12, pid: 10}] }
+  // #2 { processes: [{pid: 20, ...}], threads: [{tid: 13, pid: 10}] }
+  repeated Process processes = 1;
+  repeated Thread threads = 2;
+}

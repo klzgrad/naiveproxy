@@ -1,0 +1,58 @@
+# Copyright (C) 2020 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("perfetto.gni")
+
+# This template is used when generating build files via tools/gen_android_bp
+# and tools/gen_bazel. This is to solve the problem that other build systems
+# don't have a similar concept to GN's source_set and dependencies can only
+# happen between static libraries (or shared, but we don't use them).
+
+# In future this could be used for chromium component builds, where each
+# component becomes its own shared library (see b/159411946). This alone isn't
+# enough for that use case as it will require splitting also the various
+# export.h files.
+
+# TODO(primiano): we cannot split components as static libraries in Android
+# because heapprofd_client rebuilds base with
+# -DPERFETTO_ANDROID_ASYNC_SAFE_LOG. Once this is fixed re-enable the
+# ODRChecker in tools/gen_android_bp.
+
+# The condition below really means: "is Bazel generator".
+if (is_perfetto_build_generator && !perfetto_build_with_android) {
+  perfetto_component_type = "static_library"
+} else {
+  perfetto_component_type = "source_set"
+}
+
+template("perfetto_component") {
+  target(perfetto_component_type, target_name) {
+    forward_variables_from(invoker, "*")
+    if (perfetto_component_type == "static_library") {
+      # Mangle the name of the library putting the full path in it. In component
+      # builds we don't care about file names, as nobody depends from the
+      # outside on the internal component libraries.
+      # This is because library targets are stored in the root output folder
+      # (not in a subfolder that matches their path). This mangling avoid file
+      # avoid name clashes when the target is called "common" or similar, so we
+      # use src_ipc_common.a rather than common.a.
+      _name = get_label_info(target_name, "label_no_toolchain")
+      _name = string_replace(_name, "//", "")
+      _name = string_replace(_name, "/", "_")
+      _name = string_replace(_name, ":", "_")
+      output_name = _name
+      complete_static_lib = true
+    }
+  }
+}

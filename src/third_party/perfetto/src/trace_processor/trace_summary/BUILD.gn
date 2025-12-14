@@ -1,0 +1,67 @@
+# Copyright (C) 2019 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../../gn/perfetto_cc_proto_descriptor.gni")
+import("../../../gn/test.gni")
+
+assert(enable_perfetto_trace_processor_sqlite)
+
+source_set("trace_summary") {
+  sources = [
+    "summary.cc",
+    "summary.h",
+  ]
+  deps = [
+    ":gen_cc_trace_summary_descriptor",
+    "../../../gn:default_deps",
+    "../../../include/perfetto/trace_processor",
+    "../../../include/perfetto/trace_processor:basic_types",
+    "../../../protos/perfetto/trace_summary:zero",
+    "../../base",
+    "../../protozero",
+    "../../protozero/text_to_proto",
+    "../perfetto_sql/generator",
+    "../util:descriptors",
+    "../util:protozero_to_text",
+  ]
+
+  # trace_summary optionally depends on zlib.
+  if (enable_perfetto_zlib) {
+    deps += [ "../../../gn:zlib" ]
+  }
+}
+
+perfetto_cc_proto_descriptor("gen_cc_trace_summary_descriptor") {
+  descriptor_name = "trace_summary.descriptor"
+  descriptor_target = "../../../protos/perfetto/trace_summary:descriptor"
+}
+
+source_set("integrationtests") {
+  testonly = true
+  sources = [ "summary_integrationtest.cc" ]
+  deps = [
+    ":gen_cc_trace_summary_descriptor",
+    ":trace_summary",
+    "../../../gn:default_deps",
+    "../../../gn:gtest_and_gmock",
+    "../../../include/perfetto/trace_processor",
+    "../../base",
+    "../../base:test_support",
+    "../util:descriptors",
+  ]
+
+  if (enable_perfetto_zlib) {
+    deps += [ "../../../gn:zlib" ]
+  }
+}

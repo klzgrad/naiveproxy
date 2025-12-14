@@ -1,0 +1,113 @@
+/*
+ * Copyright (C) 2023 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+package perfetto.protos;
+
+// ShellTransition messages record information about the shell transitions in
+// the system. This is used to track the animations that are created and execute
+// through the shell transition system.
+message ShellTransition {
+  // The unique identifier of the transition.
+  optional int32 id = 1;
+
+  // The time the transition was created on the WM side
+  // (using SystemClock.elapsedRealtimeNanos())
+  optional int64 create_time_ns = 2;
+  // The time the transition was sent from the WM side to shell
+  // (using SystemClock.elapsedRealtimeNanos())
+  optional int64 send_time_ns = 3;
+  // The time the transition was dispatched by shell to execute
+  // (using SystemClock.elapsedRealtimeNanos())
+  optional int64 dispatch_time_ns = 4;
+  // If the transition merge was accepted by the transition handler, this
+  // contains the time the transition was merged into transition with id
+  // `merge_target`.
+  // (using SystemClock.elapsedRealtimeNanos())
+  optional int64 merge_time_ns = 5;
+  // The time shell proposed the transition should be merged to the transition
+  // handler into transition with id `merge_target`.
+  // (using SystemClock.elapsedRealtimeNanos()).
+  optional int64 merge_request_time_ns = 6;
+  // If the transition was aborted on the shell side, this is the time that
+  // occurred.
+  // (using SystemClock.elapsedRealtimeNanos())
+  optional int64 shell_abort_time_ns = 7;
+  // If the transition was aborted on the wm side, this is the time that
+  // occurred.
+  // (using SystemClock.elapsedRealtimeNanos())
+  optional int64 wm_abort_time_ns = 8;
+  // The time WM considers the transition to be complete.
+  // (using SystemClock.elapsedRealtimeNanos())
+  optional int64 finish_time_ns = 9;
+
+  // The id of the transaction that WM proposed to use as the starting
+  // transaction. It contains all the layer changes required to setup the
+  // transition and should be executed right at the start of the transition
+  // by the transition handler.
+  optional uint64 start_transaction_id = 10;
+  // The if of the transaction that WM proposed to use as the finish
+  // transaction. It contains all the layer changes required to set the final
+  // state of the transition.
+  optional uint64 finish_transaction_id = 11;
+
+  // The id of the handler that executed the transition. A HandlerMappings
+  // message in the trace will contain the mapping of id to a string
+  // representation of the handler.
+  optional int32 handler = 12;
+  // The transition type of this transition (e.g. TO_FRONT, OPEN, CLOSE).
+  optional int32 type = 13;
+
+  // The list of targets that are part of this transition.
+  repeated Target targets = 14;
+  // The id of the transition we have requested to merge or have merged this
+  // transition into.
+  optional int32 merge_target = 15;
+
+  // The flags set on this transition.
+  optional int32 flags = 16;
+  // The time the starting window was removed. Tracked because this can
+  // happen after the transition finishes, but the app may not yet be visible
+  // until the starting window is removed. So in a sense the transition is not
+  // finished until the starting window is removed. (b/284302118)
+  // (using SystemClock.elapsedRealtimeNanos())
+  optional int64 starting_window_remove_time_ns = 17;
+
+  // Contains the information about the windows targeted in a transition.
+  message Target {
+    // The transition mode of this target (e.g. TO_FRONT, CLOSE...)
+    optional int32 mode = 1;
+    // The layer id of this target.
+    optional int32 layer_id = 2;
+    // The window id of this target.
+    optional int32 window_id = 3;
+    // The flags set on this target.
+    optional int32 flags = 4;
+  }
+}
+
+// Contains mappings from handler ids to string representation of the handlers.
+message ShellHandlerMappings {
+  repeated ShellHandlerMapping mapping = 1;
+}
+
+message ShellHandlerMapping {
+  // The id of the handler used in the ShellTransition message.
+  optional int32 id = 1;
+  // A human readable and meaningful string representation of the handler.
+  optional string name = 2;
+}

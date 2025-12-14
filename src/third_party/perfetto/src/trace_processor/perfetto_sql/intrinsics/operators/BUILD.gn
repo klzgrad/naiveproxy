@@ -1,0 +1,79 @@
+# Copyright (C) 2022 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../../../../gn/test.gni")
+
+assert(enable_perfetto_trace_processor_sqlite)
+
+source_set("operators") {
+  sources = [
+    "counter_mipmap_operator.cc",
+    "counter_mipmap_operator.h",
+    "slice_mipmap_operator.cc",
+    "slice_mipmap_operator.h",
+    "span_join_operator.cc",
+    "span_join_operator.h",
+    "window_operator.cc",
+    "window_operator.h",
+  ]
+  deps = [
+    "../../..:metatrace",
+    "../../../../../gn:default_deps",
+    "../../../../../gn:sqlite",
+    "../../../../../include/perfetto/trace_processor",
+    "../../../../../protos/perfetto/trace_processor:zero",
+    "../../../../base",
+    "../../../containers",
+    "../../../sqlite",
+    "../../engine",
+  ]
+  if (enable_perfetto_etm_importer) {
+    deps += [ ":etm" ]
+  }
+}
+
+if (enable_perfetto_etm_importer) {
+  source_set("etm") {
+    sources = [
+      "etm_decode_trace_vtable.cc",
+      "etm_decode_trace_vtable.h",
+      "etm_iterate_range_vtable.cc",
+      "etm_iterate_range_vtable.h",
+    ]
+    deps = [
+      "../../../../../gn:default_deps",
+      "../../../../../gn:sqlite",
+      "../../../../../include/perfetto/base",
+      "../../../../../include/perfetto/ext/base:base",
+      "../../../../base",
+      "../../../importers/etm",
+      "../../../sqlite",
+      "../../../storage",
+    ]
+  }
+}
+
+perfetto_unittest_source_set("unittests") {
+  testonly = true
+  sources = [ "span_join_operator_unittest.cc" ]
+  deps = [
+    ":operators",
+    "../../../../../gn:default_deps",
+    "../../../../../gn:gtest_and_gmock",
+    "../../../../../gn:sqlite",
+    "../../../containers",
+    "../../../sqlite",
+    "../../engine",
+  ]
+}
