@@ -317,16 +317,6 @@ int QuicProxyClientSocket::DoLoop(int last_io_result) {
         rv = DoReadReplyComplete(rv);
         net_log_.EndEventWithNetErrorCode(
             NetLogEventType::HTTP_TRANSACTION_TUNNEL_READ_HEADERS, rv);
-        if (use_fastopen_ && read_headers_pending_) {
-          read_headers_pending_ = false;
-          if (rv < 0) {
-            // read_callback_ will be called with this error and be reset.
-            // Further data after that will be ignored.
-            next_state_ = STATE_DISCONNECTED;
-          }
-          // Prevents calling connect_callback_.
-          rv = ERR_IO_PENDING;
-        }
         break;
       case STATE_PROCESS_RESPONSE_HEADERS:
         DCHECK_EQ(OK, rv);
@@ -338,6 +328,16 @@ int QuicProxyClientSocket::DoLoop(int last_io_result) {
       case STATE_PROCESS_RESPONSE_CODE:
         DCHECK_EQ(OK, rv);
         rv = DoProcessResponseCode();
+        if (use_fastopen_ && read_headers_pending_) {
+          read_headers_pending_ = false;
+          if (rv < 0) {
+            // read_callback_ will be called with this error and be reset.
+            // Further data after that will be ignored.
+            next_state_ = STATE_DISCONNECTED;
+          }
+          // Prevents calling connect_callback_.
+          rv = ERR_IO_PENDING;
+        }
         break;
       default:
         NOTREACHED() << "bad state";

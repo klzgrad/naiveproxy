@@ -362,6 +362,17 @@ int SpdyProxyClientSocket::DoLoop(int last_io_result) {
         rv = DoReadReplyComplete(rv);
         net_log_.EndEventWithNetErrorCode(
             NetLogEventType::HTTP_TRANSACTION_TUNNEL_READ_HEADERS, rv);
+        break;
+      case STATE_PROCESS_RESPONSE_HEADERS:
+        DCHECK_EQ(OK, rv);
+        rv = DoProcessResponseHeaders();
+        break;
+      case STATE_PROCESS_RESPONSE_HEADERS_COMPLETE:
+        rv = DoProcessResponseHeadersComplete(rv);
+        break;
+      case STATE_PROCESS_RESPONSE_CODE:
+        DCHECK_EQ(OK, rv);
+        rv = DoProcessResponseCode();
         if (use_fastopen_ && read_headers_pending_) {
           read_headers_pending_ = false;
           if (rv < 0) {
@@ -376,17 +387,6 @@ int SpdyProxyClientSocket::DoLoop(int last_io_result) {
             rv = ERR_IO_PENDING;
           }
         }
-        break;
-      case STATE_PROCESS_RESPONSE_HEADERS:
-        DCHECK_EQ(OK, rv);
-        rv = DoProcessResponseHeaders();
-        break;
-      case STATE_PROCESS_RESPONSE_HEADERS_COMPLETE:
-        rv = DoProcessResponseHeadersComplete(rv);
-        break;
-      case STATE_PROCESS_RESPONSE_CODE:
-        DCHECK_EQ(OK, rv);
-        rv = DoProcessResponseCode();
         break;
       default:
         NOTREACHED() << "bad state";
