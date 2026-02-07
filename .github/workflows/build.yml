@@ -55,9 +55,16 @@ jobs:
         arch: [x64]
     env:
       EXTRA_FLAGS: 'target_cpu="${{ matrix.arch }}"'
-      BUNDLE: naiveproxy-${{ github.event.release.tag_name }}-${{ github.job }}-${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v4
+      - name: Set bundle name
+        run: |
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            VERSION="${{ github.event.release.tag_name }}"
+          else
+            VERSION="$(git rev-parse --short HEAD)"
+          fi
+          echo "BUNDLE=naiveproxy-${VERSION}-${{ github.job }}-${{ matrix.arch }}" >> $GITHUB_ENV
       - name: Cache toolchains
         uses: actions/cache@v4
         with:
@@ -100,10 +107,9 @@ jobs:
           cp out/Release/naive.exe config.json ../LICENSE ../USAGE.txt ${{ env.BUNDLE }}
           7z a ${{ env.BUNDLE }}.zip ${{ env.BUNDLE }}
           openssl sha256 out/Release/naive.exe >sha256sum.txt
-          echo "SHA256SUM=$(cut -d' ' -f2 sha256sum.txt)" >>$GITHUB_ENV
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.BUNDLE }}.zip naive executable sha256 ${{ env.SHA256SUM }}
+          name: ${{ env.BUNDLE }}
           path: |
             src/sha256sum.txt
             src/${{ env.BUNDLE }}.zip
