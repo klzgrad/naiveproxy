@@ -1,0 +1,257 @@
+// Copyright (C) 2026 The Android Open Source Project
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto2";
+
+package perfetto.third_party.primes;
+
+// A little-endian encoded fixed 128-bit value, split into high/low fixed64.
+message Fixed128 {
+  optional fixed64 high = 1;
+  optional fixed64 low = 2;
+}
+
+message Duration {
+  optional int64 seconds = 1;
+  optional int32 nanos = 2;
+}
+
+message Timestamp {
+  optional int64 seconds = 1;
+  optional int32 nanos = 2;
+}
+
+// Fork of the Primes tracing format (go/primes-ios-tracing-critical-path).
+// Next ID: 13.
+message Trace {
+  optional fixed64 id = 1;
+
+  // The name of this trace, either:
+  // - The literal name provided by the client, if the name was
+  //   a compile-time constant.
+  // - A hash of the provided string, if it was a runtime-generated
+  //   string, to prevent capturing PII.
+  // - A JSON object containing a mix of typed strings and discriminators
+  //   This is an experimental format See javascript/common/tracing/span_id.ts
+  //   for the format.
+  optional string name = 2;
+
+  // Fields from the Primes Trace proto that are not useful in the context of
+  // Perfetto.
+  reserved 3, 5, 6, 8, 9, 10;
+
+  // When the trace started.
+  optional Timestamp start_time = 4;
+
+  // An optional duration of the total length of the trace. If absent, the trace
+  // length can be calculated as the duration from the earliest
+  // edge.trace_start_offset to the latest offset. This is provided only as an
+  // optimization for the common case of wanting to process trace duration
+  // without enumerating all edges.
+  optional Duration duration = 11;
+
+  // Trace edges.
+  repeated TraceEdge edges = 7;
+
+  // The call site of the root or most dominant span of the trace.
+  optional CallSite root_call_site = 12;
+}
+
+// The edge of a trace. Edges either belong to a slice or a mark. A slice
+// describes a region of code executing on a single execution context (i.e.
+// thread). A mark describes a point in time. Slices and marks may have causal
+// relationships (`follows_from_ids` or `flow_ids`) with other slices and marks.
+//
+// Entities are identified by their `id` field, and other entities may refer to
+// them in their `parent_id` and `follows_from_ids` fields. Entity references
+// may only refer to entities with numerically lower IDs.
+//
+// To process edges in order, you can sort edges by their `id` and then by their
+// `type`, such that SLICE_BEGIN edges come before SLICE_END edges. That will
+// ensure that by the time you visit an edge with `id` of N, you have seen all
+// other edges that it may refer to (with id <= `N`).
+message TraceEdge {
+  // The ID of the entity (slice or mark) that this edge belongs to. IDs
+  // uniquely identify an entity but *not* an edge, because a SLICE_BEGIN and a
+  // SLICE_END for the same slice share the same ID.
+  //
+  // IDs are also referenced by `parent_id` and `follows_from_ids` fields.
+  optional uint64 id = 1;
+
+  // When this edge occurred, as an offset from the trace start time. A slice's
+  // duration is the delta between the SLICE_BEGIN and SLICE_END offsets.
+  optional Duration trace_start_offset = 2;
+
+  /// A slice or mark's details. A slice's TraceEntityDetilas is held on its
+  /// SLICE_BEGIN edge.
+  message TraceEntityDetails {
+    // The name of this entity, either:
+    // - The literal name provided by the client, if the name was
+    //   a compile-time constant.
+    // - A hash of the provided string, if it was a runtime-generated
+    //   string, to prevent capturing PII.
+    // - A JSON object containing a mix of typed strings and discriminators
+    //   This is an experimental format See javascript/common/tracing/span_id.ts
+    //   for the format.
+    optional string name = 1;
+
+    // The parent of this entity. It may be:
+    // - Zero, for the parent root slice within a trace.
+    // - The ID of another slice, on the same thread.
+    // - The ID of another mark, if this slice is the root of a trace context
+    //   propagation.
+    //
+    // Parent IDs must be numerically less than this entity's `id`.
+    optional uint64 parent_id = 2;
+
+    // Other edges this entity follows-from, meaning slices or marks that must
+    // complete before this edge.
+    //
+    // A trace entity may have both follows_from_ids and flow_ids.
+    //
+    // Follows-from IDs must be numerically less than this entity's `id`.
+    repeated uint64 follows_from_ids = 3;
+
+    // Trace flows that this entity belongs to.
+    //
+    // Flow IDs are arbitrary values that are unique to a conceptual flow, or
+    // related sequence of actions. Slices or marks in a flow have an inferred
+    // follows-from relationship in timestamp order.
+    //
+    // If a given slice/mark overlaps another slice in the same flow, consumers
+    // may either infer that later slice was dependent on the *start* of the
+    // earlier slice or just ignore the relationship.
+    //
+    // A trace entity may have both follows_from_ids and flow_ids.
+    repeated uint64 flow_ids = 4;
+
+    // The injected call site that created this slice.
+    optional CallSite call_site = 5;
+  }
+
+  // The beginning edge of a slice, which has all the details about the slice.
+  //
+  // When trace contexts are propagated, they are "rooted" on their propagated-
+  // to context by a SliceBegin that has a thread_id and/or an executor_id set.
+  //
+  // In general, when interpreting slices for their tracks of execution,
+  // consumers of this proto should first use executor_id and then use
+  // thread_id.
+  message SliceBegin {
+    optional TraceEntityDetails entity_details = 1;
+
+    // The thread this slice is running on. Must only be set for the
+    // autogenerated slice of the root trace context and the autogenerated
+    // slice of a trace context propagation, even if the parent thread_id
+    // is the same. Otherwise, it will be unset and you can infer the
+    // thread_id of this slice from its parent's thread_id.
+    //
+    // A thread_id of zero is considered invalid.
+    optional uint64 thread_id = 2;
+
+    // The name of the thread at the time this slice was installed.  Must only
+    // be set for the autogenerated slice of the root trace context and the
+    // autogenerated slice of a trace context propagation. Thread names should
+    // not be assumed to be constant (for a given thread_id) through the life of
+    // a trace.
+    // Producers of this proto must ensure it does not contain PII.
+    optional string thread_name = 5;
+
+    // If this slice is installed on an executor (like a dispatch queue, fiber,
+    // or Java executor), the name of that executor. Must only be set for the
+    // autogenerated slice of the root trace context and the autogenerated slice
+    // of a trace context propagation.
+    // Producers of this proto must ensure it does not contain PII.
+    optional string executor_name = 6;
+
+    enum ExecutorType {
+      UNKNOWN = 0;
+      // The main executor, assumed to be serial.
+      MAIN = 1;
+      // A serial executor, where only one operation may execute at a time.
+      SERIAL = 2;
+      // A concurrent executor, where operations may execute in parallel.
+      CONCURRENT = 3;
+    }
+
+    // If this slice is installed on an executor, the type of executor. Must
+    // only be set for the autogenerated slice of the root trace context and the
+    // autogenerated slice of a trace context propagation.
+    //
+    // MAIN and SERIAL executors may be treated similarly to a thread, in that
+    // slices on a given MAIN/SERIAL executor (identified by executor_id) are
+    // guaranteed to not overlap. Therefore MAIN/SERIAL executors may be treated
+    // like threads.
+    //
+    // Because CONCURRENT executors may have work running coincident on the same
+    // executor (identified by executor_id) at the same time, consumers are
+    // encouraged to use the combination of executor_id and thread_id to
+    // uniquely identify a serial installation of a trace context propagation.
+    optional ExecutorType executor_type = 7;
+
+    // A unique identifier for the executor within the trace. Must only be set
+    // for the autogenerated slice of a trace context propagation. Must not
+    // contain any user data or PII.
+    //
+    // A executor_id of zero is considered invalid.
+    optional uint64 executor_id = 8;
+
+    // The elapsed total CPU time of this thread at the beginning of the
+    // slice. In isolation, the value has no meaning and should only be used in
+    // the context of the total_cpu_time of the slice end edge.
+    optional Duration total_cpu_time = 3;
+
+    // The elapsed user CPU time of this thread at the beginning of the slice,
+    // if supported by the platform. Like total_cpu_time, can only be understood
+    // with the user_cpu_time of the slice end edge. The implied system CPU time
+    // is total_cpu_time - user_cpu_time.
+    optional Duration user_cpu_time = 4;
+  }
+
+  // The end of the slice, which is used to calculate deltas between slice begin
+  // and slice end.
+  message SliceEnd {
+    // The elapsed total CPU time of this thread at the end of the
+    // slice. Use the slice begin's total_cpu_time to calculate the time elapsed
+    // while the slice was active.
+    optional Duration total_cpu_time = 3;
+
+    // The elapsed user CPU time of this thread at the end of the
+    // slice. Use the slice begin's total_cpu_time to calculate the time elapsed
+    // while the slice was active.
+    optional Duration user_cpu_time = 4;
+  }
+
+  // A mark, which only has a single edge.
+  message Mark {
+    optional TraceEntityDetails entity_details = 1;
+  }
+
+  // The type of trace edge.
+  // - A SLICE_BEGIN and SLICE_END pair constitute a slice. The state for that
+  //   slice is stored on the SLICE_BEGIN and the SLICE_END will be unset other
+  //   than `offset`. A SLICE_END's `id` is set to the same `id` as the
+  // - A slice's TraceEntityDetails is held on the SliceBegin edge.
+  oneof type {
+    SliceBegin slice_begin = 3;
+    SliceEnd slice_end = 4;
+    Mark mark = 5;
+  }
+}
+
+message CallSite {
+  optional string class_name = 1;
+  optional string method_name = 2;
+  optional int32 line_number = 3;
+}

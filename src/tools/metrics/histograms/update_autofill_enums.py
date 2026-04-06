@@ -1,0 +1,212 @@
+#!/usr/bin/env python3
+# Copyright 2023 The Chromium Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+"""Synchronizes Autofill's enums.xml and histograms.xml with the code.
+
+- Scans components/autofill/core/browser/field_types.h for FieldTypes
+  and updates histograms that are calculated from this enum.
+- Updates enums derived from the Autofill AI schema.
+"""
+
+import os
+import re
+
+import setup_modules
+
+import chromium_src.tools.metrics.common.path_util as path_util
+import chromium_src.tools.metrics.histograms.update_histogram_enum as update_histogram_enum
+
+from chromium_src.components.autofill.core.browser.data_model.autofill_ai.entity_schema_parser import parse_entity_schema
+
+AUTOFILL_AI_ENTITY_DIR = \
+    'components/autofill/core/browser/data_model/autofill_ai'
+
+FIELD_TYPES_PATH = 'components/autofill/core/browser/field_types.h'
+FIELD_PREDICTION_GROUPS_PATH = \
+    'components/autofill/core/browser/metrics/prediction_quality_metrics.cc'
+ENTITY_SCHEMA_PATH = AUTOFILL_AI_ENTITY_DIR + '/entity_schema.json'
+PREDICTION_SOURCE_PATH = 'components/autofill/core/browser/autofill_field.h'
+
+def ReadEnum(filename, first_line, last_line_exclusive):
+  """Extracts an enum from a file.
+
+  Args:
+    filename: name of file to read.
+    first_line: prefix of a line where extracting values starts. Leading
+      whitespaces are ignored.
+    last_line_exclusive: prefix of a line before which extraction stops.
+      This means that the line matching this parameter is not considered
+      a valid enum entry that is returned. Leading whitespaces are ignored.
+
+  Returns:
+    Dictionary from enum ids (integers) to names (strings).
+  """
+
+  # Read the enum FieldType as a list of lines.
+  before_enum = True
+  content = []
+  with open(path_util.GetInputFile(filename)) as f:
+    for line in f.readlines():
+      stripped_line = line.strip()
+      # Search for beginning of enum.
+      if before_enum:
+        if stripped_line.startswith(first_line):
+          before_enum = False
+        continue
+      # Terminate at end of enum.
+      if stripped_line.startswith(last_line_exclusive):
+        break
+      content.append(stripped_line)
+
+  ENUM_REGEX = re.compile(
+      r"""^\s*?(\w+)\s+=         # capture the enum name
+          \s+(\d+)(?:,.*)?$  # capture the id
+          """, re.VERBOSE)
+
+  enums = {}
+  for line in content:
+    enum_match = ENUM_REGEX.search(line)
+    if enum_match:
+      enum_name = enum_match.group(1)
+      enum_id = int(enum_match.group(2))
+      enums[enum_id] = enum_name
+
+  return enums
+
+
+def ReadFieldTypes(filename):
+  return ReadEnum(filename, 'enum FieldType {', 'MAX_VALID_FIELD_TYPE =')
+
+
+def ReadFieldPredictionGroups(filename):
+  result = ReadEnum(filename, 'enum FieldTypeGroupForMetrics {',
+                    'NUM_FIELD_TYPE_GROUPS_FOR_METRICS')
+  # Strip the GROUP_ prefix because it only adds clutter.
+  return {k: v.replace('GROUP_', '') for k, v in result.items()}
+
+
+def GenerateAutofilledFieldUserEditingStatusByFieldType(field_types):
+  result = {}
+  for enum_id, enum_name in field_types.items():
+    result[16 * enum_id + 0] = f'{enum_name}: edited'
+    result[16 * enum_id + 1] = f'{enum_name}: accepted'
+  return result
+
+
+def GenerateAutofillFieldPredictionQualityByFieldType():
+  groups = ReadFieldPredictionGroups(FIELD_PREDICTION_GROUPS_PATH)
+  result = {}
+  for enum_id, enum_name in groups.items():
+    result[256 * enum_id + 0] = f'{enum_name}: True Positive'
+    result[256 * enum_id + 1] = f'{enum_name}: True Negative (Ambiguous)'
+    result[256 * enum_id + 2] = f'{enum_name}: True Negative (Unknown)'
+    result[256 * enum_id + 3] = f'{enum_name}: True Negative (Empty)'
+    result[256 * enum_id + 4] = f'{enum_name}: False Positive (Mismatch)'
+    result[256 * enum_id + 5] = f'{enum_name}: False Positive (Ambiguous)'
+    result[256 * enum_id + 6] = f'{enum_name}: False Positive (Unknown)'
+    result[256 * enum_id + 7] = f'{enum_name}: False Positive (Empty)'
+    result[256 * enum_id + 8] = f'{enum_name}: False Negative (Mismatch)'
+    result[256 * enum_id + 9] = f'{enum_name}: False Negative (Unknown)'
+  return result
+
+
+def GenerateAutofillDataUtilizationByFieldType(field_types):
+  result = {}
+  for enum_id, enum_name in field_types.items():
+    result[64 * enum_id +
+           0] = f'{enum_name}: Not autofilled or autofilled value edited'
+    result[64 * enum_id + 1] = f'{enum_name}: Autofilled value accepted'
+  return result
+
+
+def GenerateFillingAcceptanceByFieldType(field_types):
+  result = {}
+  for enum_id, enum_name in field_types.items():
+    result[4 * enum_id + 0] = f'{enum_name}: Ignored'
+    result[4 * enum_id + 1] = f'{enum_name}: Accepted'
+  return result
+
+
+def GenerateAutofillAiReauthResultByFieldType(field_types):
+  result = {}
+  for enum_id, enum_name in field_types.items():
+    result[4 * enum_id + 0] = f'{enum_name}: Success'
+    result[4 * enum_id + 1] = f'{enum_name}: Failure'
+  return result
+
+
+def GenerateAutofillPredictionSourceByFieldType(field_types):
+  prediction_sources = ReadEnum(PREDICTION_SOURCE_PATH,
+                                'enum class AutofillPredictionSource {',
+                                'kMaxValue')
+  result = {}
+  for type_id, type_name in field_types.items():
+    for source_id, source_name in prediction_sources.items():
+      result[16 * type_id + source_id] = f'{type_name}: {source_name}'
+  return result
+
+
+def GenerateAutofillAiEntityType():
+  result = {}
+  schema = parse_entity_schema(path_util.GetInputFile(ENTITY_SCHEMA_PATH))
+  for enum_id, entity in enumerate(schema):
+    result[enum_id] = entity['name']
+  return result
+
+if __name__ == '__main__':
+  field_types = ReadFieldTypes(FIELD_TYPES_PATH)
+
+  update_histogram_enum.UpdateHistogramFromDict(
+      'tools/metrics/histograms/metadata/autofill/enums.xml',
+      'AutofillFieldType', field_types, FIELD_TYPES_PATH,
+      os.path.basename(__file__))
+
+  update_histogram_enum.UpdateHistogramFromDict(
+      'tools/metrics/histograms/metadata/autofill/enums.xml',
+      'AutofilledFieldUserEditingStatusByFieldType',
+      GenerateAutofilledFieldUserEditingStatusByFieldType(field_types),
+      FIELD_TYPES_PATH, os.path.basename(__file__))
+
+  update_histogram_enum.UpdateHistogramFromDict(
+      'tools/metrics/histograms/metadata/autofill/enums.xml',
+      'AutofillFieldPredictionQualityByFieldType',
+      GenerateAutofillFieldPredictionQualityByFieldType(),
+      FIELD_PREDICTION_GROUPS_PATH, os.path.basename(__file__))
+
+  update_histogram_enum.UpdateHistogramFromDict(
+      'tools/metrics/histograms/metadata/autofill/enums.xml',
+      'AutofillDataUtilizationByFieldType',
+      GenerateAutofillDataUtilizationByFieldType(field_types), FIELD_TYPES_PATH,
+      os.path.basename(__file__))
+
+  update_histogram_enum.UpdateHistogramFromDict(
+      'tools/metrics/histograms/metadata/autofill/enums.xml',
+      'FillingAcceptanceByFieldType',
+      GenerateFillingAcceptanceByFieldType(field_types), FIELD_TYPES_PATH,
+      os.path.basename(__file__))
+
+  update_histogram_enum.UpdateHistogramFromDict(
+      'tools/metrics/histograms/metadata/autofill/enums.xml',
+      'AutofillAiReauthResultByFieldType',
+      GenerateAutofillAiReauthResultByFieldType(field_types), FIELD_TYPES_PATH,
+      os.path.basename(__file__))
+
+  update_histogram_enum.UpdateHistogramFromDict(
+      'tools/metrics/histograms/metadata/autofill/enums.xml',
+      'AutofillPredictionSourceByFieldType',
+      GenerateAutofillPredictionSourceByFieldType(field_types),
+      FIELD_TYPES_PATH, os.path.basename(__file__))
+
+  update_histogram_enum.UpdateHistogramFromDict(
+      'tools/metrics/histograms/metadata/autofill/histograms.xml',
+      'AutofillFieldType',
+      field_types,
+      FIELD_TYPES_PATH,
+      os.path.basename(__file__),
+      update_comment=False)
+
+  update_histogram_enum.UpdateHistogramFromDict(
+      'tools/metrics/histograms/metadata/autofill/enums.xml',
+      'AutofillAiEntityType', GenerateAutofillAiEntityType(),
+      ENTITY_SCHEMA_PATH, os.path.basename(__file__))

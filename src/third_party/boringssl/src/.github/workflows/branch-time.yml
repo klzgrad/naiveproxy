@@ -1,0 +1,64 @@
+# Copyright 2026 The BoringSSL Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Check Branch Time
+
+on:
+  schedule:
+    - cron: '0 */12 * * *'  # Run every 12 hours.
+  workflow_dispatch: # Allows you to run the check manually from the UI
+
+env:
+  UPSTREAM_URL: 'https://boringssl.googlesource.com/boringssl'
+  BRANCH_NAME: 'main'
+
+  MAX_TIME_LAG_SECONDS: 86400  # 24 hours
+
+jobs:
+  check-mirror:
+    runs-on: ubuntu-latest
+    permissions: read-all
+    steps:
+      - name: Checkout GitHub Repository
+        uses: actions/checkout@v4
+        with:
+          ref: 'main'
+          fetch-depth:  0 # Required to accurately count commits and find ancestors
+      - name: Add and Fetch Upstream Source of Truth
+        run: |
+          git remote add upstream ${{ env.UPSTREAM_URL }}
+          git fetch upstream ${{ env.BRANCH_NAME }}
+      - name: Verify Commit Times & Lag
+        run: |
+          GH_HEAD_HASH=$(git rev-parse HEAD)
+
+          # %ct extracts the Committer Date as a UNIX timestamp
+          GH_COMMIT_TIME=$(git show -s --format=%ct $GH_HEAD_HASH)
+
+          # Check if the current GitHub HEAD exists in Upstream
+          if ! git merge-base --is-ancestor $GH_HEAD_HASH upstream/${{ env.BRANCH_NAME }}; then
+             echo "::warning::GitHub HEAD ($GH_HEAD_HASH) is not an ancestor of Upstream HEAD. Has the mirror diverged or rebased?"
+             exit 1
+          fi
+
+          # Check the total time lag between the Upstream HEAD and GitHub HEAD
+          UPSTREAM_HEAD_TIME=$(git show -s --format=%ct upstream/${{ env.BRANCH_NAME }})
+          TIME_DIFF=$((UPSTREAM_HEAD_TIME - GH_COMMIT_TIME))
+
+          echo "Time difference between Upstream HEAD and GitHub HEAD is $TIME_DIFF seconds."
+
+          if [ "$TIME_DIFF" -gt "${{ env.MAX_TIME_LAG_SECONDS }}" ]; then
+            echo "::error::Time lag is too high! ($TIME_DIFF seconds > ${{ env.MAX_TIME_LAG_SECONDS }} seconds)"
+            exit 1
+          fi

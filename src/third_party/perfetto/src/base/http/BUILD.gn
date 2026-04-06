@@ -1,0 +1,50 @@
+# Copyright (C) 2021 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../../gn/perfetto.gni")
+import("../../../gn/perfetto_component.gni")
+import("../../../gn/test.gni")
+
+perfetto_component("http") {
+  deps = [
+    "..:base",
+    "..:unix_socket",
+    "../../../gn:default_deps",
+  ]
+  public_deps = [
+    "../../../include/perfetto/base",
+    "../../../include/perfetto/ext/base/http",
+  ]
+  sources = [
+    "http_server.cc",
+    "sha1.cc",
+  ]
+}
+
+perfetto_unittest_source_set("unittests") {
+  testonly = true
+  deps = [
+    ":http",
+    "..:test_support",
+    "../../../gn:default_deps",
+    "../../../gn:gtest_and_gmock",
+  ]
+  sources = [ "sha1_unittest.cc" ]
+
+  # The HTTP server unittests cannot be run in parallel. Chromium runs tests
+  # in parallel on some bots so exclude all of these ones.
+  if (!build_with_chromium) {
+    sources += [ "http_server_unittest.cc" ]
+  }
+}

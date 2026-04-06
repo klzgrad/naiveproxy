@@ -1,0 +1,578 @@
+<!--
+Copyright 2020 The Chromium Authors
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
+
+<!--
+This file is used to generate a comprehensive list of WebAudio histograms
+along with a detailed description for each histogram.
+
+For best practices on writing histogram descriptions, see
+https://chromium.googlesource.com/chromium/src.git/+/HEAD/tools/metrics/histograms/README.md
+
+Please follow the instructions in the OWNERS file in this directory to find a
+reviewer. If no OWNERS file exists, please consider signing up at
+go/reviewing-metrics (Googlers only), as all subdirectories are expected to
+have an OWNERS file. As a last resort you can send the CL to
+chromium-metrics-reviews@google.com.
+-->
+
+<histogram-configuration>
+
+<histograms>
+
+<variants name="NodeType">
+  <variant name="AnalyserNode"/>
+  <variant name="AudioBufferSourceNode"/>
+  <variant name="AudioDestinationNode"/>
+  <variant name="AudioWorkletNode"/>
+  <variant name="BiquadFilterNode"/>
+  <variant name="ChannelMergerNode"/>
+  <variant name="ChannelSplitterNode"/>
+  <variant name="ConstantSourceNode"/>
+  <variant name="ConvolverNode"/>
+  <variant name="DelayNode"/>
+  <variant name="DynamicsCompressorNode"/>
+  <variant name="GainNode"/>
+  <variant name="IIRFilterNode"/>
+  <variant name="MediaElementAudioSourceNode"/>
+  <variant name="MediaStreamAudioDestinationNode"/>
+  <variant name="MediaStreamAudioSourceNode"/>
+  <variant name="OscillatorNode"/>
+  <variant name="PannerNode"/>
+  <variant name="ScriptProcessorNode"/>
+  <variant name="StereoPannerNode"/>
+  <variant name="WaveShaperNode"/>
+<!-- Add any other AudioNode types that will use this UMA metric -->
+
+</variants>
+
+<variants name="RenderMode">
+  <variant name="DualThread"
+      summary="Dual thread rendering mode. This mode is active when an
+               AudioWorklet is connected to the audio graph. Rendering
+               callbacks are done on both AudioDeviceThread and
+               AudioWorkletThread."/>
+  <variant name="SingleThread"
+      summary="Single thread rendering mode. This mode is used when no
+               AudioWorklet is connected to the audio graph. Rendering
+               callbacks are executed solely on the AudioDevice thread."/>
+</variants>
+
+<variants name="WebAudioCallbackAggregationDuration">
+  <variant name=".Intervals"
+      summary="Streams ran for more than 1 interval (1000 callbacks)"/>
+  <variant name=".Short" summary="Streams ran for less than 1000 callbacks"/>
+</variants>
+
+<variants name="WebAudioLatencyTag">
+  <variant name="" summary="All latencies combined"/>
+  <variant name=".LatencyBalanced"/>
+  <variant name=".LatencyExactMs"/>
+  <variant name=".LatencyInteractive"/>
+  <variant name=".LatencyPlayback"/>
+  <variant name=".LatencyUnknown"/>
+</variants>
+
+<histogram name="WebAudio.AudioBuffer.Length" units="frames"
+    expires_after="2026-08-09">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    The length (in frames) requested by createBuffer(). Recorded for every call
+    to createBuffer(). Probably many (tens or hundreds) per page.
+  </summary>
+</histogram>
+
+<histogram name="WebAudio.AudioBuffer.NumberOfChannels" units="units"
+    expires_after="2026-07-05">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    The number of channels requested by createBuffer(). Recorded for every call
+    to createBuffer(). Probably many (tens or hundreds) per page.
+  </summary>
+</histogram>
+
+<histogram name="WebAudio.AudioBuffer.SampleRate384kHz" units="Hz"
+    expires_after="2026-07-05">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    The sample rate (in Hz) requested by createBuffer(). Recorded for every call
+    to createBuffer(). Probably many (tens or hundreds) per page.
+  </summary>
+</histogram>
+
+<histogram name="WebAudio.AudioBuffer.SampleRateRatio384kHz" units="units"
+    expires_after="2026-07-05">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    The ratio of the buffer sample rate from createBuffer() to the context
+    sample rate. This indicates if the buffer needs to be resampled. Recorded
+    for every call to createBuffer(). Probably many (tens or hundreds) per page.
+  </summary>
+</histogram>
+
+<histogram name="WebAudio.AudioContext.AudibleTime" units="s"
+    expires_after="2026-07-05">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    Records the total audible time of an AudioContext in seconds. The histogram
+    has 8 buckets, representing durations of 0s, 1s, ..., up to 7s. Values of 8s
+    or more are counted in the overflow bucket.
+  </summary>
+</histogram>
+
+<histogram name="WebAudio.AudioContext.ConcurrentAudioContexts" units="count"
+    expires_after="2026-07-05">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    Records the maximum number of concurrently active AudioContexts that existed
+    at one time within a render frame's lifetime (capped at 100 for reporting).
+    This is recorded when the frame is destroyed.
+  </summary>
+</histogram>
+
+<histogram name="WebAudio.AudioContext.CreateTime" units="ms"
+    expires_after="2026-07-26">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>cduvall@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    Measures the time it takes to create the AudioContext object. This is
+    recorded every time an AudioContext is successfully created.
+  </summary>
+</histogram>
+
+<histogram name="WebAudio.AudioContext.DestroyedWithoutClose" enum="Boolean"
+    expires_after="2026-07-05">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    Records when an AudioContext is destroyed (i.e., garbage collected) without
+    the DidClose() method being explicitly called on it first. This is recorded
+    with a value of `true` in the AudioContext destructor if the context is not
+    already in a closed state. Or A value of `false` is recorded if the
+    AudioContext was already in a 'closed' state when it was destroyed.
+  </summary>
+</histogram>
+
+<histogram name="WebAudio.AudioContext.HardwareSampleRate" units="Hz"
+    expires_after="2026-07-05">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    The hardware sample rate (in Hz) used by an AudioContext. Recorded for every
+    WebAudio AudioContext that is created; probably only one or two per page.
+  </summary>
+</histogram>
+
+<histogram name="WebAudio.AudioContext.latencyHintCategory" units="units"
+    expires_after="2026-07-26">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    If provided, the latencyHint option category of &quot;interactive&quot;,
+    &quot;balanced&quot;, &quot;playback&quot;, or &quot;exact&quot;, in that
+    order where &quot;exact&quot; means an explicit floating point value was
+    provided. Recorded for every AudioContext that is constructed with a
+    latencyHint.
+  </summary>
+</histogram>
+
+<histogram name="WebAudio.AudioContext.latencyHintMilliSeconds" units="ms"
+    expires_after="2026-06-28">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    If the latencyHint is provided and is a floating-point number, the value in
+    milliseconds is recorded. This is recorded for every AudioContext that is
+    constructed with a floating-point latencyHint value.
+  </summary>
+</histogram>
+
+<histogram name="WebAudio.AudioContext.MaxChannelsAvailable" units="units"
+    expires_after="2026-07-05">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    The maximum number of (hardware) channels available in an AudioContext.
+    Recorded for every WebAudio AudioContext that is created; probably only one
+    or two per page.
+  </summary>
+</histogram>
+
+<histogram
+    name="WebAudio.AudioContext.MediaPlaybackWhileNotVisible.InterruptionType"
+    enum="AudioContextInterruptionType" expires_after="2026-04-19">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>gabrielbrito@microsoft.com</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    Tracks the reason for the AudioContext being interrupted when the frame is
+    being controlled by the MediaPlaybackWhileNotVisible permission policy and
+    the frame is not visible.
+  </summary>
+</histogram>
+
+<histogram name="WebAudio.AudioContext.Operation"
+    enum="WebAudioContextOperation" expires_after="2026-07-26">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>fdoray@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    Tracks occurences of AudioContext operations, to allow assessing what
+    proportion of AudioContexts are explicitly closed.
+  </summary>
+</histogram>
+
+<histogram name="WebAudio.AudioContextOptions.sampleRate" units="Hz"
+    expires_after="2026-07-05">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    The sample rate requested by developer to be used as the sample rate when
+    constructing an AudioContext with an AudioContextOptions dictionary. This is
+    recorded for each AudioContext created, probably just one or two per page.
+  </summary>
+</histogram>
+
+<histogram name="WebAudio.AudioContextOptions.sampleRateRatio" units="units"
+    expires_after="2026-06-28">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    The ratio of the user-selected sample rate to the hardware sample rate of an
+    AudioContext. The ratio is represented as a percentage. This is recorded for
+    each AudioContext created, probably just one or two per page.
+  </summary>
+</histogram>
+
+<histogram name="WebAudio.AudioDestination.CallbackBufferSize" units="units"
+    expires_after="2026-07-05">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    The callback buffer size (in audio frames) for WebAudio rendering between
+    the WebAudio graph and the audio device thread. This can differ from the
+    value recommended by the audio hardware due to internal constraints in
+    WebAudio. Recorded for every WebAudio AudioContext that is created.
+  </summary>
+</histogram>
+
+<histogram name="WebAudio.AudioDestination.HardwareBufferSize" units="units"
+    expires_after="2026-07-05">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    The buffer size (in audio frames) for WebAudio rendering recommended by the
+    audio hardware. Recorded for every WebAudio AudioContext that is created.
+  </summary>
+</histogram>
+
+<histogram name="WebAudio.AudioDestination.HardwareOutputLatency" units="ms"
+    expires_after="2026-07-26">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    The latency reported from the audio hardware. This number can be dynamic at
+    runtime but the metric is collected only once at the first platform audio
+    callback after an AudioContext is created.
+  </summary>
+</histogram>
+
+<histogram name="WebAudio.AudioDestination.OutputDeviceStatus"
+    enum="OutputDeviceStatus" expires_after="2026-06-21">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    Records the status of the selected audio output device at the time a sink is
+    created. This helps understand the reliability and availability of output
+    devices.
+  </summary>
+</histogram>
+
+<histogram name="WebAudio.AudioDestination.{ModeTag}.FIFODelay{LatencyTag}"
+    units="ms" expires_after="2026-08-23">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    The audio delay in milliseconds based on the number of available frames of
+    the PushPUllFIFO in AudioDestination. The metric is averaged and reported at
+    every 1000 render callbacks. This metric is categorized by
+    &quot;ModeTag&quot;, which indicates the rendering mode: DualThread, used
+    when audio worklet is involved. Or SingleThread, used when audio worklet is
+    not involved.
+  </summary>
+  <token key="ModeTag" variants="RenderMode"/>
+  <token key="LatencyTag" variants="WebAudioLatencyTag"/>
+</histogram>
+
+<histogram
+    name="WebAudio.AudioDestination.{ModeTag}.FIFOUnderrunCount{Duration}{LatencyTag}"
+    units="underruns" expires_after="2026-08-23">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    The number of times the PushPullFIFO in AudioDestination experienced an
+    underrun. The &quot;Intervals&quot; duration indicates that the metric is
+    measured and logged every 1000 audio render callbacks. For
+    &quot;Short&quot;, it is logged at the end of the audio stream. This metric
+    is categorized by &quot;ModeTag&quot;, which indicates the rendering mode:
+    DualThread, used when audio worklet is involved. Or SingleThread, used when
+    audio worklet is not involved.
+  </summary>
+  <token key="ModeTag" variants="RenderMode"/>
+  <token key="Duration" variants="WebAudioCallbackAggregationDuration"/>
+  <token key="LatencyTag" variants="WebAudioLatencyTag"/>
+</histogram>
+
+<histogram
+    name="WebAudio.AudioDestination.{ModeTag}.RenderTimeRatio{LatencyTag}"
+    units="%" expires_after="2026-08-23">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    The percentage of time spent in AudioDestination::Render relative to the
+    expected callback interval.
+  </summary>
+  <token key="ModeTag" variants="RenderMode"/>
+  <token key="LatencyTag" variants="WebAudioLatencyTag"/>
+</histogram>
+
+<histogram
+    name="WebAudio.AudioDestination.{ModeTag}.RequestRenderGapTimeRatio{LatencyTag}"
+    units="%" expires_after="2026-08-23">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    The percentage of time elapsed between a request to
+    AudioDestination::RequestRender and its actual start, relative to the
+    expected callback interval.
+  </summary>
+  <token key="ModeTag" variants="RenderMode"/>
+  <token key="LatencyTag" variants="WebAudioLatencyTag"/>
+</histogram>
+
+<histogram
+    name="WebAudio.AudioDestination.{ModeTag}.RequestRenderTimeRatio{LatencyTag}"
+    units="%" expires_after="2026-08-23">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    The percentage of time spent in AudioDestination::RequestRender relative to
+    the expected callback interval.
+  </summary>
+  <token key="ModeTag" variants="RenderMode"/>
+  <token key="LatencyTag" variants="WebAudioLatencyTag"/>
+</histogram>
+
+<histogram
+    name="WebAudio.AudioDestination.{ModeTag}.TotalPlayoutDelay{LatencyTag}"
+    units="ms" expires_after="2026-08-23">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    The audio delay in milliseconds that covers the whole pipeline from the
+    WebAudio graph to the speaker. This metric is categorized by
+    &quot;ModeTag&quot;, which indicates the rendering mode: DualThread, used
+    when audio worklet is involved. Or SingleThread, used when audio worklet is
+    not involved. The metric is averaged and reported at every 1000 render
+    callbacks.
+  </summary>
+  <token key="ModeTag" variants="RenderMode"/>
+  <token key="LatencyTag" variants="WebAudioLatencyTag"/>
+</histogram>
+
+<histogram name="WebAudio.AudioNode.ProcessTimeRatio.{NodeTag}" units="%"
+    expires_after="2026-07-05">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    Reports the ratio of an AudioHandler's Process() method execution time to
+    its allocated time budget for a given render quantum. This is reported as a
+    percentage, averaged over 1000 Process() calls. For example, if Process()
+    consistently takes half the allocated time, 50 will be reported. The maximum
+    recorded percentage is capped at 100. The &quot;NodeTag&quot; suffix
+    indicates the specific type of AudioNode (e.g., GainNode, DelayNode).
+  </summary>
+  <token key="NodeTag" variants="NodeType"/>
+</histogram>
+
+<histogram name="WebAudio.AudioWorklet.PeakDedicatedBackingThreadCount"
+    units="threads" expires_after="2026-12-01">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    The maximum number of dedicated backing worklet threads throughout the
+    lifetime of the document/frame.
+  </summary>
+</histogram>
+
+<histogram name="WebAudio.AudioWorklet.PeakSharedBackingThreadRefCount"
+    units="refcounts" expires_after="2026-12-01">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    The maximum number of ref counts using the shared backing thread throughout
+    the lifetime of the document/frame.
+  </summary>
+</histogram>
+
+<histogram name="WebAudio.Autoplay" enum="WebAudioAutoplayStatus"
+    expires_after="2026-07-05">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    The autoplay status of an AudioContext when destroyed. This include all
+    types of frames. In order to know the value only for main frames, the
+    .CrossOrigin values can be substracted.
+  </summary>
+</histogram>
+
+<histogram name="WebAudio.Autoplay.CrossOrigin" enum="WebAudioAutoplayStatus"
+    expires_after="2026-07-05">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    The autoplay status of an AudioContext when destroyed in a cross-origin
+    frame.
+  </summary>
+</histogram>
+
+<histogram name="WebAudio.Autoplay.UnlockType"
+    enum="WebAudioAutoplayUnlockType" expires_after="2026-12-01">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    Records how an AudioContext was unlocked (if it was). This is recorded when
+    the AudioContext is destroyed.
+  </summary>
+</histogram>
+
+<histogram name="WebAudio.BiquadFilter.Type" enum="BiquadFilterType"
+    expires_after="2026-07-05">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    The type of the BiquadFilterNode. Recorded each time the type is set. This
+    recorded once (to lowpass) when a biquad filter is created and also recorded
+    whenever the filter type changes due to user action or programatically. It
+    is unlikely the type will change more than once.
+  </summary>
+</histogram>
+
+<histogram name="WebAudio.ConvolverNode.ImpulseResponseLength" units="ms"
+    expires_after="2026-12-01">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    The duration in millisec of impulse responses for a ConvolverNode. Recorded
+    each time the impulse response is set for a ConvolverNode.
+  </summary>
+</histogram>
+
+<histogram name="WebAudio.IIRFilterNode.Order" units="units"
+    expires_after="2026-07-05">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    The order of the WebAudio IIRFilterNode. The order is one less than the
+    number of feedback coefficients used in the denominator of the IIRFilter
+    transfer function. Recorded each time an IIRFilter is constructed.
+  </summary>
+</histogram>
+
+<histogram name="WebAudio.OfflineAudioContext.CreateTime" units="ms"
+    expires_after="2026-07-26">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>cduvall@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    Measures the time it takes to create the OfflineAudioContext object. This is
+    recorded every time an OfflineAudioContext is successfully created.
+  </summary>
+</histogram>
+
+<histogram name="WebAudio.PannerNode.PanningModel" enum="PanningModelType"
+    expires_after="2026-07-05">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    The panning model for the PannerNode. Recorded once with the default value
+    at creation and once again whenver it is changed. Once changed, it is
+    unlikely to be changed again. If there are any PannerNodes created at all,
+    then there is probably one for each source (AudioBufferSourceNode,
+    OscillatorNode, or other source).
+  </summary>
+</histogram>
+
+<histogram name="WebAudio.PushPullFIFO.UnderflowGlitches" enum="Boolean"
+    expires_after="2026-08-23">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    Captures if WebAudio caused glitches or not due to the FIFO underflow. It is
+    recorded when PushPullFIFO is destroyed. (e.g. navigating away from the
+    page.)
+  </summary>
+</histogram>
+
+<histogram name="WebAudio.PushPullFIFO.UnderflowPercentage" units="%"
+    expires_after="2026-08-23">
+  <owner>mjwilson@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/modules/webaudio/OWNERS</owner>
+  <summary>
+    Percentage of FIFO underflow happened due to the the missed deadline of
+    WebAudio rendering engine. It is recorded when PushPullFIFO is destroyed.
+    (e.g. navigating away from the page.)
+  </summary>
+</histogram>
+
+</histograms>
+
+</histogram-configuration>

@@ -1,0 +1,104 @@
+// Copyright 2025 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#ifndef BASE_MEMORY_MEMORY_PRESSURE_LISTENER_REGISTRY_H_
+#define BASE_MEMORY_MEMORY_PRESSURE_LISTENER_REGISTRY_H_
+
+#include "base/base_export.h"
+#include "base/functional/callback_forward.h"
+#include "base/memory/memory_pressure_level.h"
+#include "base/memory/memory_pressure_listener.h"
+#include "base/observer_list.h"
+#include "base/threading/thread_checker.h"
+
+namespace base {
+
+class BASE_EXPORT MemoryPressureListenerRegistry {
+ public:
+  static bool Exists();
+  static MemoryPressureListenerRegistry& Get();
+  static MemoryPressureListenerRegistry* MaybeGet();
+
+  MemoryPressureListenerRegistry();
+  ~MemoryPressureListenerRegistry();
+
+  // Intended for use by the platform specific implementation.
+  static void NotifyMemoryPressure(MemoryPressureLevel memory_pressure_level);
+
+  // Same as NotifyMemoryPressure, but can be invoked from any thread. If not
+  // called from the process's main thread, this will post a task to it.
+  static void NotifyMemoryPressureFromAnyThread(
+      MemoryPressureLevel memory_pressure_level);
+
+  // Adds/removes a listener.
+  void AddObserver(MemoryPressureListenerRegistration* listener);
+  void RemoveObserver(MemoryPressureListenerRegistration* listener);
+
+  // These methods should not be used anywhere else but in memory measurement
+  // code, where they are intended to maintain stable conditions across
+  // measurements.
+  static bool AreNotificationsSuppressed();
+  static void IncreaseNotificationSuppressionCount();
+  static void DecreaseNotificationSuppressionCount();
+  static void SimulatePressureNotification(
+      MemoryPressureLevel memory_pressure_level);
+  // Invokes `SimulatePressureNotification` asynchronously on the main thread,
+  // ensuring that any pending registration tasks have completed by the time it
+  // runs, then posts back `on_notification_sent_callback` to the calling
+  // sequence, allowing tests to ensure that the notification was received by
+  // the MemoryPressureListener under test.
+  static void SimulatePressureNotificationAsync(
+      MemoryPressureLevel memory_pressure_level,
+      OnceClosure on_notification_sent_callback);
+
+ private:
+  // Sets the current memory pressure level, and then notifies listeners, if
+  // notifications are not suppressed.
+  void SetMemoryPressureLevel(MemoryPressureLevel memory_pressure_level);
+
+  // Calls OnMemoryPressure(memory_pressure_level) on all listeners.
+  void SendMemoryPressureNotification(
+      MemoryPressureLevel memory_pressure_level);
+
+  bool AreNotificationsSuppressedImpl();
+  void IncreaseNotificationSuppressionCountImpl();
+  void DecreaseNotificationSuppressionCountImpl();
+  void SimulatePressureNotificationImpl(
+      MemoryPressureLevel memory_pressure_level);
+
+  MemoryPressureLevel last_memory_pressure_level_
+      GUARDED_BY_CONTEXT(thread_checker_) = MEMORY_PRESSURE_LEVEL_NONE;
+
+  // While regular memory pressure notifications are suppressed, it's still
+  // possible to simulate memory pressure using
+  // `SimulatePressureNotification()`.
+  std::optional<MemoryPressureLevel> simulated_memory_pressure_level_
+      GUARDED_BY_CONTEXT(thread_checker_);
+
+  ObserverList<MemoryPressureListenerRegistration>::Unchecked listeners_
+      GUARDED_BY_CONTEXT(thread_checker_);
+
+  size_t notification_suppression_count_ GUARDED_BY_CONTEXT(thread_checker_) =
+      0u;
+
+  THREAD_CHECKER(thread_checker_);
+};
+
+// Used to suppress memory pressure notifications, as long as an instance of
+// this class exists.
+class BASE_EXPORT MemoryPressureSuppressionToken {
+ public:
+  MemoryPressureSuppressionToken();
+
+  MemoryPressureSuppressionToken(const MemoryPressureSuppressionToken&) =
+      delete;
+  MemoryPressureSuppressionToken& operator=(
+      const MemoryPressureSuppressionToken&) = delete;
+
+  ~MemoryPressureSuppressionToken();
+};
+
+}  // namespace base
+
+#endif  // BASE_MEMORY_MEMORY_PRESSURE_LISTENER_REGISTRY_H_

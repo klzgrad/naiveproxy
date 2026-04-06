@@ -1,0 +1,693 @@
+/*
+ * Copyright (C) 2024 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+import public "protos/perfetto/trace/track_event/track_event.proto";
+
+package perfetto.protos;
+
+// Information about sending and receiving messages on threads with
+// Looper and MessageQueue.
+message AndroidMessageQueue {
+  // Thread name sending a message on the MessageQueue.
+  optional string sending_thread_name = 1;
+  // Thread name receiving a message on the MessageQueue.
+  optional string receiving_thread_name = 2;
+  // User-defined message code for messages in the MessageQueue.
+  optional int32 message_code = 3;
+  // Intended delay in millis before a message on the MessageQueue is executed.
+  optional uint64 message_delay_ms = 4;
+}
+
+message AndroidJobSchedulerJob {
+  // Job id.
+  optional int32 job_id = 1;
+  // Job user id.
+  optional int32 source_uid = 2;
+  // Job user id.
+  optional int32 proxy_uid = 3;
+  // FINISHED = 0;
+  // STARTED = 1;
+  // SCHEDULED = 2;
+  // CANCELLED = 3;
+  optional int32 state = 4;
+  // The standby bucket of the app that scheduled the job. These match the
+  // framework constants defined in JobSchedulerService.java with the addition
+  // of UNKNOWN using -1, as ACTIVE is already assigned 0.
+  // UNKNOWN = -1;
+  // ACTIVE = 0;
+  // WORKING_SET = 1;
+  // FREQUENT = 2;
+  // RARE = 3;
+  // NEVER = 4;
+  // RESTRICTED = 5;
+  // EXEMPTED = 6;
+  optional int32 standby_bucket = 5;
+  // The priority set by the app (via JobInfo.Builder.setPriority()).
+  optional int32 requested_priority = 6;
+  // The priority JobScheduler ran the job at. Only valid for STARTED and
+  // FINISHED states.
+  optional int32 effective_priority = 7;
+  // Number of times JobScheduler has tried to run this particular job. This
+  // value is incremented when a job is stopped and rescheduled for various
+  // reasons (lost network, constraints no longer satisfied, etc). For periodic
+  // be newly scheduled and therefore this value reflects the time since the
+  // most recent (re)schedule. This is only valid for the STARTED and FINISHED
+  // states.
+  optional int32 num_previous_attempts = 8;
+  // The deadline that the Job has requested.
+  // This is only valid if has_deadline_constraint is true.
+  optional int64 deadline_ms = 9;
+  // The delay that the Job has requested.
+  // This is only valid if has_timing_delay_constraint is true.
+  optional int64 delay_ms = 10;
+  // The amount of time that elapsed between the job being scheduled (state =
+  // SCHEDULED) and it being started (state = STARTED). Persisted jobs loaded at
+  // boot are considered to be scheduled at boot, so all values are within the
+  // current boot cycle. Periodic and other rescheduled jobs are considered to
+  // be newly scheduled and therefore this value reflects the time since the
+  // most recent (re)schedule. This is only valid for the STARTED and FINISHED
+  // states.
+  optional int64 job_start_latency_ms = 11;
+  // The number of JobWorkItems the app has attached to this job but not
+  // completed (by calling JobParameters.completeWork()).
+  optional int32 num_uncompleted_work_items = 12;
+  // Proc state of the UID of the logged event
+  // See android.app.ProcessStateEnum
+  optional int32 proc_state = 13;
+  // Interval for the job to recur when it is set as periodic.
+  optional int64 periodic_job_interval_ms = 14;
+  // Flex interval for the periodic job. This value is set via the second
+  // parameter of JobInfo.Builder.setPeriodic(long, long). The job can
+  // execute at any time in a window flex length at the end of the period.
+  // Trace tag set via JobInfo.Builder.setTraceTag(). Basic PII filtering has
+  // been applied,
+  // but further filtering should be done by clients.
+  optional int64 periodic_job_flex_interval_ms = 15;
+  // Number of reschedules due to job being abandoned.
+  optional int32 num_reschedules_due_to_abandonment = 16;
+  // Back off policy applied to the job that gets rescheduled.
+  // The internal reason a job has stopped.
+  // UNKNOWN_POLICY = 0;
+  // LINEAR = 1;
+  // EXPONENTIAL = 2;
+  optional int32 back_off_policy_type = 17;
+  // The publicly returned reason onStopJob() was called.
+  // This is only applicable when the state is FINISHED.
+  // The default value is INTERNAL_STOP_REASON_UNKNOWN.
+  optional int32 internal_stop_reason = 18;
+  // This is only applicable when the state is FINISHED, but may be undefined if
+  // JobService.onStopJob() was never called for the job.
+  optional int32 public_stop_reason = 19;
+  // Bitfield of boolean states of the job.
+  optional int64 job_state_flags = 20;
+}
+
+// Information about an android.graphics.Bitmap.
+message AndroidBitmap {
+  // Allocation size, in bytes.
+  optional int64 size = 1;
+  // Width, in pixels.
+  optional int32 width = 2;
+  // Height, in pixels.
+  optional int32 height = 3;
+  // Density, in DPI.
+  optional int32 density = 4;
+  // Config, in android.graphics.Bitmap.Config ordinal values.
+  optional int32 config = 5;
+  // Whether the pixel data is mutable.
+  // b/398624484: this should be a boolean.
+  optional int32 mutable_pixels = 6;
+  // Pixel storage type, in android::PixelStorageType ordinal values.
+  optional int32 pixel_storage_type = 7;
+  // Bitmap id; see android.graphics.Bitmap#mId.
+  optional int64 id = 8;
+}
+
+// Information about a compositing workload submitted by SurfaceFlinger.
+message AndroidSurfaceFlingerWorkload {
+  // ID of the "parent" requesting the workload
+  enum Source {
+    // Unknown source
+    UNKNOWN = 0;
+    // Workload was triggered by a frame signal event
+    FRAME_SIGNAL = 1;
+  }
+  optional Source source = 1;
+
+  // Output that the workload is eventually compositing into
+  optional string output_name = 2;
+
+  // Frame timeline vsync ID corresponding to this workload.
+  optional int64 vsync_id = 3;
+
+  // Interesting properties for a workload
+  message Summary {
+    // Corresponds to Atrace slices, but with stable names
+    message Timings {
+      // Walltime for slices corresponding to CPU work done by SurfaceFlinger
+      message SfCpu {
+        // Top-level time spent signaling a frame update
+        optional int64 frame_signal_nanos = 1;
+        // Time spent committing new transactions to be composited
+        optional int64 commit_nanos = 2;
+        // Time spent for the compositing operation itself
+        optional int64 composite_nanos = 3;
+      }
+      optional SfCpu sf_cpu = 1;
+
+      // Walltime for slices corresponding to HWC work, observed by
+      // SurfaceFlinger
+      message Hwc {
+        // Time spent presenting a frame
+        optional int64 present_nanos = 1;
+        // Time spent validating a frame
+        optional int64 validate_nanos = 2;
+        // Time spent either validating or presenting, if HWC is choosing a path
+        // to take
+        optional int64 present_or_validate_nanos = 3;
+      }
+      optional Hwc hwc = 2;
+
+      // Walltime for slices corresponding to RenderEngine work
+      message Re {
+        // Time spent drawing layers on the CPU
+        optional int64 draw_layers_nanos = 1;
+        // Time spent waiting for a GPU fence to signal GPU completion
+        optional int64 gpu_completion_nanos = 2;
+      }
+      optional Re re = 3;
+
+      // Walltime for slices corresponding to Skia work, observed by
+      // SurfaceFlinger
+      message Skia {
+        // Time spent flushing commands
+        optional int64 flush_nanos = 1;
+        // Time spent submitting commands to the GPU driver
+        optional int64 submit_nanos = 2;
+      }
+      optional Skia skia = 4;
+    }
+    optional Timings timings = 1;
+
+    // Statistics tracked that describes a workload
+    message Stats {
+      // Number of layers that needed to be composited via the GPU.
+      optional int32 gpu_composited_layers = 1;
+      // Number of layers that needed to be composited via the DPU.
+      optional int32 dpu_composited_layers = 2;
+    }
+    optional Stats stats = 2;
+  }
+  optional Summary summary = 4;
+}
+
+enum ReceiverType {
+  RECEIVER_TYPE_UNKNOWN = 0;
+  RECEIVER_TYPE_RUNTIME = 1;
+  RECEIVER_TYPE_MANIFEST = 2;
+}
+
+enum ProcessStartType {
+  PROCESS_START_TYPE_UNKNOWN = 0;
+  PROCESS_START_TYPE_WARM = 1;
+  PROCESS_START_TYPE_HOT = 2;
+  PROCESS_START_TYPE_COLD = 3;
+}
+
+enum PackageStoppedState {
+  PACKAGE_STATE_UNKNOWN = 0;
+  PACKAGE_STATE_NORMAL = 1;
+  PACKAGE_STATE_STOPPED = 2;
+}
+
+enum BroadcastDeliveryGroupPolicy {
+  BROADCAST_DELIVERY_GROUP_POLICY_ALL = 0;
+  BROADCAST_DELIVERY_GROUP_POLICY_MOST_RECENT = 1;
+  BROADCAST_DELIVERY_GROUP_POLICY_MERGED = 2;
+}
+
+enum ProcessStateEnum {
+  PROCESS_STATE_UNSPECIFIED = 0;
+  PROCESS_STATE_UNKNOWN_TO_PROTO = 998;
+  PROCESS_STATE_UNKNOWN = 999;
+  PROCESS_STATE_PERSISTENT = 1000;
+  PROCESS_STATE_PERSISTENT_UI = 1001;
+  PROCESS_STATE_TOP = 1002;
+  PROCESS_STATE_BOUND_TOP = 1020;
+  PROCESS_STATE_FOREGROUND_SERVICE = 1003;
+  PROCESS_STATE_BOUND_FOREGROUND_SERVICE = 1004;
+  PROCESS_STATE_IMPORTANT_FOREGROUND = 1005;
+  PROCESS_STATE_IMPORTANT_BACKGROUND = 1006;
+  PROCESS_STATE_TRANSIENT_BACKGROUND = 1007;
+  PROCESS_STATE_BACKUP = 1008;
+  PROCESS_STATE_SERVICE = 1009;
+  PROCESS_STATE_RECEIVER = 1010;
+  PROCESS_STATE_TOP_SLEEPING = 1011;
+  PROCESS_STATE_HEAVY_WEIGHT = 1012;
+  PROCESS_STATE_HOME = 1013;
+  PROCESS_STATE_LAST_ACTIVITY = 1014;
+  PROCESS_STATE_CACHED_ACTIVITY = 1015;
+  PROCESS_STATE_CACHED_ACTIVITY_CLIENT = 1016;
+  PROCESS_STATE_CACHED_RECENT = 1017;
+  PROCESS_STATE_CACHED_EMPTY = 1018;
+  PROCESS_STATE_NONEXISTENT = 1019;
+}
+
+enum ProcessCapabilityEnum {
+  PROCESS_CAPABILITY_UNKNOWN = 0;
+  PROCESS_CAPABILITY_FOREGROUND_LOCATION = 1;
+  PROCESS_CAPABILITY_FOREGROUND_CAMERA = 2;
+  PROCESS_CAPABILITY_FOREGROUND_MICROPHONE = 3;
+  PROCESS_CAPABILITY_POWER_RESTRICTED_NETWORK = 4;
+  PROCESS_CAPABILITY_BFSL = 5;
+  PROCESS_CAPABILITY_USER_RESTRICTED_NETWORK = 6;
+  PROCESS_CAPABILITY_FOREGROUND_AUDIO_CONTROL = 7;
+  PROCESS_CAPABILITY_CPU_TIME = 8;
+  PROCESS_CAPABILITY_IMPLICIT_CPU_TIME = 9;
+}
+
+enum AppExitReasonCode {
+  APP_EXIT_REASON_UNKNOWN = 0;
+  APP_EXIT_REASON_EXIT_SELF = 1;
+  APP_EXIT_REASON_SIGNALED = 2;
+  APP_EXIT_REASON_LOW_MEMORY = 3;
+  APP_EXIT_REASON_CRASH = 4;
+  APP_EXIT_REASON_CRASH_NATIVE = 5;
+  APP_EXIT_REASON_ANR = 6;
+  APP_EXIT_REASON_INITIALIZATION_FAILURE = 7;
+  APP_EXIT_REASON_PERMISSION_CHANGE = 8;
+  APP_EXIT_REASON_EXCESSIVE_RESOURCE_USAGE = 9;
+  APP_EXIT_REASON_USER_REQUESTED = 10;
+  APP_EXIT_REASON_USER_STOPPED = 11;
+  APP_EXIT_REASON_DEPENDENCY_DIED = 12;
+  APP_EXIT_REASON_OTHER = 13;
+  APP_EXIT_REASON_FREEZER = 14;
+  APP_EXIT_REASON_PACKAGE_STATE_CHANGE = 15;
+  APP_EXIT_REASON_PACKAGE_UPDATED = 16;
+}
+
+enum AppExitSubReasonCode {
+  APP_EXIT_SUBREASON_UNKNOWN = 0;
+  APP_EXIT_SUBREASON_WAIT_FOR_DEBUGGER = 1;
+  APP_EXIT_SUBREASON_TOO_MANY_CACHED = 2;
+  APP_EXIT_SUBREASON_TOO_MANY_EMPTY = 3;
+  APP_EXIT_SUBREASON_TRIM_EMPTY = 4;
+  APP_EXIT_SUBREASON_LARGE_CACHED = 5;
+  APP_EXIT_SUBREASON_MEMORY_PRESSURE = 6;
+  APP_EXIT_SUBREASON_EXCESSIVE_CPU = 7;
+  APP_EXIT_SUBREASON_SYSTEM_UPDATE_DONE = 8;
+  APP_EXIT_SUBREASON_KILL_ALL_FG = 9;
+  APP_EXIT_SUBREASON_KILL_ALL_BG_EXCEPT = 10;
+  APP_EXIT_SUBREASON_KILL_UID = 11;
+  APP_EXIT_SUBREASON_KILL_PID = 12;
+  APP_EXIT_SUBREASON_INVALID_START = 13;
+  APP_EXIT_SUBREASON_INVALID_STATE = 14;
+  APP_EXIT_SUBREASON_IMPERCEPTIBLE = 15;
+  APP_EXIT_SUBREASON_REMOVE_LRU = 16;
+  APP_EXIT_SUBREASON_ISOLATED_NOT_NEEDED = 17;
+  APP_EXIT_SUBREASON_CACHED_IDLE_FORCED_APP_STANDBY = 18;
+  APP_EXIT_SUBREASON_FREEZER_BINDER_IOCTL = 19;
+  APP_EXIT_SUBREASON_FREEZER_BINDER_TRANSACTION = 20;
+  APP_EXIT_SUBREASON_FORCE_STOP = 21;
+  APP_EXIT_SUBREASON_REMOVE_TASK = 22;
+  APP_EXIT_SUBREASON_STOP_APP = 23;
+  APP_EXIT_SUBREASON_KILL_BACKGROUND = 24;
+  APP_EXIT_SUBREASON_PACKAGE_UPDATE = 25;
+  APP_EXIT_SUBREASON_UNDELIVERED_BROADCAST = 26;
+  APP_EXIT_SUBREASON_SDK_SANDBOX_DIED = 27;
+  APP_EXIT_SUBREASON_SDK_SANDBOX_NOT_NEEDED = 28;
+  APP_EXIT_SUBREASON_EXCESSIVE_BINDER_OBJECTS = 29;
+  APP_EXIT_SUBREASON_OOM_KILL = 30;
+  APP_EXIT_SUBREASON_FREEZER_BINDER_ASYNC_FULL = 31;
+  APP_EXIT_SUBREASON_EXCESSIVE_OUTGOING_BROADCASTS_WHILE_CACHED = 32;
+  APP_EXIT_SUBREASON_ANR_TYPE_APP_TRIGGERED = 33;
+  APP_EXIT_SUBREASON_ANR_TYPE_BIND_APPLICATION = 34;
+  APP_EXIT_SUBREASON_ANR_TYPE_BROADCAST_OF_INTENT = 35;
+  APP_EXIT_SUBREASON_ANR_TYPE_CONTENT_PROVIDER_NOT_RESPONDING = 36;
+  APP_EXIT_SUBREASON_ANR_TYPE_EXECUTING_SERVICE = 37;
+  APP_EXIT_SUBREASON_ANR_TYPE_FOREGROUND_SHORT_SERVICE_TIMEOUT = 39;
+  APP_EXIT_SUBREASON_ANR_TYPE_INPUT_DISPATCHING_TIMEOUT = 41;
+  APP_EXIT_SUBREASON_ANR_TYPE_INPUT_DISPATCHING_TIMEOUT_NO_FOCUSED_WINDOW = 42;
+  APP_EXIT_SUBREASON_ANR_TYPE_JOB_SERVICE_START = 45;
+  APP_EXIT_SUBREASON_ANR_TYPE_START_FOREGROUND_SERVICE = 47;
+  APP_EXIT_SUBREASON_EXCESSIVE_ENQUEUED_BROADCASTS_COUNT = 49;
+}
+
+enum Importance {
+  option allow_alias = true;
+
+  IMPORTANCE_UNKNOWN = 0;
+  IMPORTANCE_FOREGROUND = 100;
+  IMPORTANCE_FOREGROUND_SERVICE = 125;
+  IMPORTANCE_TOP_SLEEPING_PRE_28 = 150;
+  IMPORTANCE_VISIBLE = 200;
+  IMPORTANCE_PERCEPTIBLE_PRE_26 = 130;
+  IMPORTANCE_PERCEPTIBLE = 230;
+  IMPORTANCE_CANT_SAVE_STATE_PRE_26 = 170;
+  IMPORTANCE_SERVICE = 300;
+  IMPORTANCE_TOP_SLEEPING = 325;
+  IMPORTANCE_CANT_SAVE_STATE = 350;
+  IMPORTANCE_CACHED = 400;
+  IMPORTANCE_BACKGROUND = 400;
+  IMPORTANCE_EMPTY = 500;
+  IMPORTANCE_GONE = 1000;
+}
+
+enum BroadcastType {
+  BROADCAST_TYPE_NONE = 0;
+  BROADCAST_TYPE_BACKGROUND = 1;
+  BROADCAST_TYPE_FOREGROUND = 2;
+  BROADCAST_TYPE_ALARM = 4;
+  BROADCAST_TYPE_INTERACTIVE = 8;
+  BROADCAST_TYPE_ORDERED = 16;
+  BROADCAST_TYPE_PRIORITIZED = 32;
+  BROADCAST_TYPE_RESULT_TO = 64;
+  BROADCAST_TYPE_DEFERRABLE_UNTIL_ACTIVE = 128;
+  BROADCAST_TYPE_PUSH_MESSAGE = 256;
+  BROADCAST_TYPE_PUSH_MESSAGE_OVER_QUOTA = 512;
+  BROADCAST_TYPE_STICKY = 1024;
+  BROADCAST_TYPE_INITIAL_STICKY = 2048;
+}
+
+enum HostingTypeId {
+  HOSTING_TYPE_UNKNOWN = 0;
+  HOSTING_TYPE_ACTIVITY = 1;
+  HOSTING_TYPE_ADDED_APPLICATION = 2;
+  HOSTING_TYPE_BACKUP = 3;
+  HOSTING_TYPE_BROADCAST = 4;
+  HOSTING_TYPE_CONTENT_PROVIDER = 5;
+  HOSTING_TYPE_LINK_FAIL = 6;
+  HOSTING_TYPE_ON_HOLD = 7;
+  HOSTING_TYPE_NEXT_ACTIVITY = 8;
+  HOSTING_TYPE_NEXT_TOP_ACTIVITY = 9;
+  HOSTING_TYPE_RESTART = 10;
+  HOSTING_TYPE_SERVICE = 11;
+  HOSTING_TYPE_SYSTEM = 12;
+  HOSTING_TYPE_TOP_ACTIVITY = 13;
+  HOSTING_TYPE_EMPTY = 14;
+}
+
+enum UnfreezeReason {
+  UFR_NONE = 0;
+  UFR_ACTIVITY = 1;
+  UFR_FINISH_RECEIVER = 2;
+  UFR_START_RECEIVER = 3;
+  UFR_BIND_SERVICE = 4;
+  UFR_UNBIND_SERVICE = 5;
+  UFR_START_SERVICE = 6;
+  UFR_GET_PROVIDER = 7;
+  UFR_REMOVE_PROVIDER = 8;
+  UFR_UI_VISIBILITY = 9;
+  UFR_ALLOWLIST = 10;
+  UFR_PROCESS_BEGIN = 11;
+  UFR_PROCESS_END = 12;
+  UFR_TRIM_MEMORY = 13;
+  UFR_PING = 15;
+  UFR_FILE_LOCKS = 16;
+  UFR_FILE_LOCK_CHECK_FAILURE = 17;
+  UFR_BINDER_TXNS = 18;
+  UFR_FEATURE_FLAGS = 19;
+  UFR_SHORT_FGS_TIMEOUT = 20;
+  UFR_SYSTEM_INIT = 21;
+  UFR_BACKUP = 22;
+  UFR_SHELL = 23;
+  UFR_REMOVE_TASK = 24;
+  UFR_UID_IDLE = 25;
+  UFR_STOP_SERVICE = 26;
+  UFR_EXECUTING_SERVICE = 27;
+  UFR_RESTRICTION_CHANGE = 28;
+  UFR_COMPONENT_DISABLED = 29;
+  UFR_OOM_ADJ_FOLLOW_UP = 30;
+  UFR_OOM_ADJ_RECONFIGURATION = 31;
+  UFR_OOM_ADJ_REASON_SERVICE_BINDER_CALL = 32;
+  UFR_OOM_ADJ_REASON_BATCH_UPDATE_REQUEST = 33;
+}
+
+enum TriggerType {
+  TRIGGER_TYPE_UNKNOWN = 0;
+  TRIGGER_TYPE_ALARM = 1;
+  TRIGGER_TYPE_PUSH_MESSAGE = 2;
+  TRIGGER_TYPE_PUSH_MESSAGE_OVER_QUOTA = 3;
+  TRIGGER_TYPE_JOB = 4;
+}
+
+enum OomChangeReasonEnum {
+  OOM_ADJ_REASON_NONE = 0;
+  OOM_ADJ_REASON_ACTIVITY = 1;
+  OOM_ADJ_REASON_FINISH_RECEIVER = 2;
+  OOM_ADJ_REASON_START_RECEIVER = 3;
+  OOM_ADJ_REASON_BIND_SERVICE = 4;
+  OOM_ADJ_REASON_UNBIND_SERVICE = 5;
+  OOM_ADJ_REASON_START_SERVICE = 6;
+  OOM_ADJ_REASON_GET_PROVIDER = 7;
+  OOM_ADJ_REASON_REMOVE_PROVIDER = 8;
+  OOM_ADJ_REASON_UI_VISIBILITY = 9;
+  OOM_ADJ_REASON_ALLOWLIST = 10;
+  OOM_ADJ_REASON_PROCESS_BEGIN = 11;
+  OOM_ADJ_REASON_PROCESS_END = 12;
+  OOM_ADJ_REASON_SHORT_FGS_TIMEOUT = 13;
+  OOM_ADJ_REASON_SYSTEM_INIT = 14;
+  OOM_ADJ_REASON_BACKUP = 15;
+  OOM_ADJ_REASON_SHELL = 16;
+  OOM_ADJ_REASON_REMOVE_TASK = 17;
+  OOM_ADJ_REASON_UID_IDLE = 18;
+  OOM_ADJ_REASON_STOP_SERVICE = 19;
+  OOM_ADJ_REASON_EXECUTING_SERVICE = 20;
+  OOM_ADJ_REASON_RESTRICTION_CHANGE = 21;
+  OOM_ADJ_REASON_COMPONENT_DISABLED = 22;
+  OOM_ADJ_REASON_FOLLOW_UP = 23;
+  OOM_ADJ_REASON_RECONFIGURATION = 24;
+  OOM_ADJ_REASON_SERVICE_BINDER_CALL = 25;
+  OOM_ADJ_REASON_BATCH_UPDATE_REQUEST = 26;
+}
+
+message AndroidBroadcastEvent {
+  // The package uid of the broadcast receiver.
+  optional int32 receiver_uid = 1;
+
+  // The pid of the broadcast receiver.
+  optional int32 receiver_pid = 2;
+
+  // The package uid of the broadcast sender.
+  optional int32 sender_uid = 3;
+
+  // The pid of the broadcast sender.
+  optional int32 sender_pid = 4;
+
+  // The action name of the broadcast.
+  optional string action_name = 5;
+
+  // The type of the current broadcast receiver.
+  optional ReceiverType receiver_type = 6;
+
+  // The start type of the host process.
+  optional ProcessStartType proc_start_type = 7;
+
+  // The delay in ms from enqueue to dispatch of this intent to the set of
+  // receivers.
+  optional int64 dispatch_delay_ms = 8;
+
+  // The delay in ms from beginning of dispatch to this specific receiver.
+  optional int64 receive_delay_ms = 9;
+
+  // The delay in ms from dispatch to finish the handling of this intent.
+  optional int64 finish_delay_ms = 10;
+
+  // The stopped state (if any) the package was in before the broadcast was
+  // delivered.
+  optional PackageStoppedState package_stopped_state = 11;
+
+  // The type of the broadcast. It's a mask of BroadcastType.
+  optional int32 broadcast_type = 12;
+
+  // Delivery group policy set for the broadcast.
+  optional BroadcastDeliveryGroupPolicy delivery_group_policy = 13;
+
+  // Flags set in the broadcast intent.
+  optional int32 intent_flags = 14;
+
+  // The intent filter priority of the broadcast receiver.
+  optional int32 filter_priority = 15;
+
+  // The procstate of the broadcast sender.
+  optional ProcessStateEnum sender_process_state = 16;
+
+  // The procstate of the broadcast receiver before receiving this broadcast.
+  optional ProcessStateEnum receiver_process_state = 17;
+
+  // Whether this is the first launch of the app since install
+  optional uint32 first_launch = 18;
+}
+
+message AndroidFreezerEvent {
+  // The uid of the process being frozen or unfrozen.
+  optional int32 uid = 1;
+
+  // The pid of the process being frozen or unfrozen.
+  optional int32 pid = 2;
+
+  // Time since last unfrozen.
+  optional int64 unfrozen_dur_ms = 3;
+
+  // Time since last frozen.
+  optional int64 frozen_dur_ms = 4;
+
+  // Unfreeze reason.
+  optional UnfreezeReason unfreeze_reason = 5;
+}
+
+message AndroidProcessStartEvent {
+  // The uid of the ProcessRecord.
+  optional int32 uid = 1;
+
+  // The process pid.
+  optional int32 pid = 2;
+
+  // The process name.
+  optional string process_name = 3;
+
+  // Number of milliseconds it takes to reach bind application.
+  optional int64 bind_application_delay_ms = 4;
+
+  // Number of milliseconds it takes to finish start of the process.
+  optional int64 process_start_delay_ms = 5;
+
+  // hostingNameStr field in ProcessRecord.
+  optional string hosting_name = 6;
+
+  // The hosting type of the process.
+  optional HostingTypeId hosting_type = 7;
+
+  // The trigger type for the process start.
+  optional TriggerType trigger_type = 8;
+}
+
+// This can be delayed for up to 15s in some cases. It should typically
+// be paired with AndroidBinderDiedEvent which has less latency.
+message AndroidProcessDiedEvent {
+  // Uid of the package of the dying process.
+  optional int32 uid = 1;
+
+  // Pid of the dying process.
+  optional int32 pid = 2;
+
+  // The process name of the dying process.
+  optional string process_name = 3;
+
+  // The reason code of why the process dies.
+  optional AppExitReasonCode reason = 4;
+
+  // The supplemental reason code of why the process dies.
+  optional AppExitSubReasonCode sub_reason = 5;
+
+  // The importance of the process when it dies.
+  optional Importance importance = 6;
+
+  // The last known RSS (in kB) of the process before it dies, could be 0.
+  optional int32 rss_kb = 7;
+
+  // Whether or not this process is hosting one or more foreground services.
+  optional int32 has_foreground_services = 8;
+}
+
+// This is expected to come earlier than AndroidProcessDiedEvent.
+// For death reasons, see AndroidProcessDiedEvent.
+message AndroidBinderDiedEvent {
+  // Uid of the package of the dying process.
+  optional int32 uid = 1;
+
+  // Pid of the dying process.
+  optional int32 pid = 2;
+
+  // The process name of the dying process.
+  optional string process_name = 3;
+}
+
+message AndroidProcessStateChangedEvent {
+  // Uid of the package of the process changing state.
+  optional int32 uid = 1;
+
+  // Pid of the process changing state.
+  optional int32 pid = 2;
+
+  // Previous proc state.
+  optional ProcessStateEnum prev_proc_state = 3;
+
+  // Current proc state.
+  optional ProcessStateEnum cur_proc_state = 4;
+
+  // Previous capability flags.
+  optional int32 prev_capability_flags = 5;
+
+  // Current capability flags.
+  optional int32 cur_capability_flags = 6;
+
+  // Previous oom score.
+  optional int32 prev_oom_score = 7;
+
+  // Current oom score.
+  optional int32 cur_oom_score = 8;
+
+  // Reason for the process state change.
+  optional OomChangeReasonEnum reason = 9;
+
+  // Sequence id to identify all process state changes in
+  // one oom_adjuster event. See:
+  // https://cs.android.com/android/platform/superproject/+/android-latest-release:frameworks/base/services/core/java/com/android/server/am/OomAdjuster.java;l=286;drc=9f59f0d6214008c9c7825102e64edb46ddb06297
+  optional int64 seq_id = 10;
+
+  // Bitmask of reasons for granting PROCESS_CAPABILITY_CPU_TIME.
+  optional int32 cpu_time_reasons = 11;
+
+  // Bitmask of reasons for granting PROCESS_CAPABILITY_IMPLICIT_CPU_TIME.
+  optional int32 implicit_cpu_time_reasons = 12;
+}
+
+message AndroidTrackEvent {
+  // Usable range: [2001, 2999]
+  // Next id: 2014
+  extend TrackEvent {
+    // The name of a binder service.
+    optional string binder_service_name = 2001;
+    // The name of a binder interface.
+    optional string binder_interface_name = 2002;
+    // The name of an apex.
+    optional string apex_name = 2003;
+
+    // MessageQueue messages.
+    optional AndroidMessageQueue message_queue = 2004;
+    // Bitmaps
+    optional AndroidBitmap bitmap = 2005;
+    // JobScheduler jobs.
+    optional AndroidJobSchedulerJob job_scheduler_job = 2006;
+    // SurfaceFlinger workload.
+    optional AndroidSurfaceFlingerWorkload surfaceflinger_workload = 2007;
+    // Broadcasts delivered.
+    optional AndroidBroadcastEvent broadcast_event = 2008;
+    // Freezer event.
+    optional AndroidFreezerEvent freezer_event = 2009;
+    // Process start event.
+    optional AndroidProcessStartEvent process_start_event = 2010;
+    // Process died event.
+    optional AndroidProcessDiedEvent process_died_event = 2011;
+    // Process state changed event.
+    optional AndroidProcessStateChangedEvent process_state_changed_event = 2012;
+    // Binder died event.
+    optional AndroidBinderDiedEvent binder_died_event = 2013;
+  }
+}

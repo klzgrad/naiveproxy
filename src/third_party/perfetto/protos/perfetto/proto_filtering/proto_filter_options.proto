@@ -1,0 +1,56 @@
+/*
+ * Copyright (C) 2025 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+package perfetto.protos;
+
+import "google/protobuf/descriptor.proto";
+import "protos/perfetto/common/semantic_type.proto";
+
+// Field-level options for proto filtering. These options can be used to
+// annotate proto fields with filtering behavior, eliminating the need for
+// command-line flags when generating filter bytecode.
+message ProtoFilterOptions {
+  // The semantic type for this field. Only meaningful for string fields.
+  // This indicates what kind of data the string contains, allowing
+  // semantic-aware filtering rules.
+  optional SemanticType semantic_type = 1;
+
+  // If true, this string field should be passed through the string filter
+  // before being included in the output. Only applies to string fields.
+  // Note: If semantic_type is set, filter_string is implicitly true.
+  optional bool filter_string = 2;
+
+  // If true, this nested message field is passed through as opaque bytes
+  // without recursing into its structure. Only applies to message fields.
+  optional bool passthrough = 3;
+
+  // If true and semantic_type is set, the field is also included in v2
+  // bytecode (not just v54 overlay). This is useful for fields that
+  // need to be filtered by older parsers. Defaults to false.
+  optional bool allow_v2_with_semantic_type = 4;
+
+  // If true and filter_string is set, the field is also included in v1
+  // bytecode. This is useful for fields that need to be filtered by older
+  // parsers. Defaults to false.
+  optional bool allow_v1_with_filter_string = 5;
+}
+
+// Extend google.protobuf.FieldOptions with filtering metadata.
+extend google.protobuf.FieldOptions {
+  optional ProtoFilterOptions proto_filter = 73400001;
+}

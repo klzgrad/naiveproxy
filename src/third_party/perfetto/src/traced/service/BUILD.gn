@@ -1,0 +1,98 @@
+# Copyright (C) 2017 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../../gn/test.gni")
+
+# The unprivileged trace daemon that listens for Producer and Consumer
+# connections, handles the coordination of the tracing sessions and owns the
+# log buffers.
+executable("traced") {
+  deps = [
+    # Both traced and traced_probes depend on "libprefetto" instead of directly
+    # on lib. This is to reduce binary size on android builds. All the code is
+    # built into libperfetto and the executables are just tiny shells that call
+    # into the xxx_main() defined in the library.
+    "../../../:libperfetto",
+    "../../../gn:default_deps",
+    "../../../include/perfetto/ext/traced",
+  ]
+  sources = [ "main.cc" ]
+  assert_no_deps = [ "../../../gn:protobuf_lite" ]
+
+  # Abseil is only used in Perfetto via the gRPC/libprotobuf.
+  if (perfetto_build_standalone || is_perfetto_build_generator) {
+    assert_no_deps += [ "../../buildtools:abseil_cpp" ]
+  }
+}
+
+# Contains all the implementation but not the main() entry point. This target
+# is shared both by the executable and tests.
+source_set("service") {
+  public_deps = [
+    "../../../include/perfetto/ext/traced",
+    "../../../include/perfetto/tracing",
+  ]
+  deps = [
+    ":builtin_producer",
+    "../../../gn:default_deps",
+    "../../base",
+    "../../base:version",
+    "../../tracing/core",
+    "../../tracing/ipc/service",
+    "../../tracing/service:service",
+  ]
+  if (enable_perfetto_zlib) {
+    deps += [ "../../tracing/service:zlib_compressor" ]
+  }
+
+  sources = [ "service.cc" ]
+
+  # Abseil is only used in Perfetto via the gRPC/libprotobuf.
+  if (perfetto_build_standalone || is_perfetto_build_generator) {
+    assert_no_deps = [ "../../../buildtools:abseil_cpp" ]
+  }
+}
+
+source_set("builtin_producer") {
+  public_deps = [
+    "../../../include/perfetto/ext/traced",
+    "../../../include/perfetto/tracing",
+  ]
+  deps = [
+    "../../../gn:default_deps",
+    "../../../protos/perfetto/config/android:zero",
+    "../../base",
+    "../../tracing/core",
+    "../../tracing/service:service",
+  ]
+
+  sources = [
+    "builtin_producer.cc",
+    "builtin_producer.h",
+  ]
+}
+
+perfetto_unittest_source_set("unittests") {
+  testonly = true
+  deps = [
+    ":builtin_producer",
+    "../../../gn:default_deps",
+    "../../../gn:gtest_and_gmock",
+    "../../../protos/perfetto/config/android:cpp",
+    "../../base",
+    "../../base:test_support",
+    "../../tracing/core",
+  ]
+  sources = [ "builtin_producer_unittest.cc" ]
+}

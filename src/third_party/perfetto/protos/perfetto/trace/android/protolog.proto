@@ -1,0 +1,64 @@
+/*
+ * Copyright (C) 2023 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+import "protos/perfetto/common/protolog_common.proto";
+
+package perfetto.protos;
+
+/* represents a single log entry */
+message ProtoLogMessage {
+  /* log statement identifier, created from message string and log level. */
+  optional fixed64 message_id = 1;
+  /* string parameters passed to the log call that have been interned. */
+  repeated uint32 str_param_iids = 2;
+  /* integer parameters passed to the log call. */
+  repeated sint64 sint64_params = 3;
+  /* floating point parameters passed to the log call. */
+  repeated double double_params = 4;
+  /* boolean parameters passed to the log call. */
+  repeated int32 boolean_params = 5;
+  // id of the interned stacktrace string
+  // (only dumped if explicitly confuigured to do so)
+  optional uint32 stacktrace_iid = 6;
+}
+
+/* contains all the data required to fully decode the protolog messages */
+message ProtoLogViewerConfig {
+  message MessageData {
+    // the id of the message that is logged in a ProtoLogMessage
+    optional fixed64 message_id = 1;
+    // the string representation of the message
+    optional string message = 2;
+    // the level of the message
+    optional ProtoLogLevel level = 3;
+    // the id of the log group this message belongs to
+    optional uint32 group_id = 4;
+    // path to the file where the message was logged
+    optional string location = 5;
+  }
+
+  /* information about a ProtoLog log group */
+  message Group {
+    optional uint32 id = 1;
+    optional string name = 2;
+    optional string tag = 3;
+  }
+
+  repeated MessageData messages = 1;
+  repeated Group groups = 2;
+}

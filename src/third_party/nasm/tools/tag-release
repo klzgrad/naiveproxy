@@ -1,0 +1,58 @@
+#!/bin/sh
+
+version=""
+repo=""
+branch=""
+push=0
+
+for opt; do
+    case "$opt" in
+    --ver=*)
+        version=`echo $opt | sed 's/[-a-zA-Z0-9]*=//'`
+        ;;
+    --repo=*)
+        repo=`echo $opt | sed 's/[-a-zA-Z0-9]*=//'`
+        ;;
+    --branch=*)
+        branch=`echo $opt | sed 's/[-a-zA-Z0-9]*=//'`
+        ;;
+    --push)
+	push=1
+	;;
+    --no-push)
+        push=0
+        ;;
+    -*)
+	echo "Invalid option: $opt" 1>&2
+	exit 1
+	;;
+    *)
+        version=$opt
+        ;;
+    esac
+done
+
+if [ -z "$version" ]; then
+    echo "  Usage"
+    echo "      $0 --ver=num [--repo=name --branch=name --push]" 1>&2
+    echo "  Example"
+    echo "      $0 --ver=2.10rc1 --repo=git+ssh://user@repo.or.cz/nasm.git --branch=master --no-push" 1>&2
+    echo "  With --no-push the changes are not pushed out to remote repo"
+    exit 1
+fi
+
+tag="nasm-$version"
+
+echo "$version" > version
+git add version
+git commit -m "NASM $version"
+git tag -a -m "NASM $version" "$tag"
+
+if [ $push = 1 ]; then
+    set -x
+    git push $repo $branch
+    git push $repo $tag
+    git push --tags $repo
+    set +x
+fi
+

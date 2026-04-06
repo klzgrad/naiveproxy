@@ -1,0 +1,348 @@
+<!--
+Copyright 2023 The Chromium Authors
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
+
+<!--
+This file is used to generate a comprehensive list of Trusted Vault histograms
+along with a detailed description for each histogram.
+
+For best practices on writing histogram descriptions, see
+https://chromium.googlesource.com/chromium/src.git/+/HEAD/tools/metrics/histograms/README.md
+
+Please follow the instructions in the OWNERS file in this directory to find a
+reviewer. If no OWNERS file exists, please consider signing up at
+go/reviewing-metrics (Googlers only), as all subdirectories are expected to
+have an OWNERS file. As a last resort you can send the CL to
+chromium-metrics-reviews@google.com.
+-->
+
+<histogram-configuration>
+
+<histograms>
+
+<variants name="LocalRecoveryFactorType">
+  <variant name=".ICloudKeychain" summary="iCloud Keychain"/>
+  <variant name=".PhysicalDevice" summary="Local physical device"/>
+</variants>
+
+<variants name="SecurityDomainId">
+  <variant name=".ChromeSync"
+      summary="The security domain used for Chrome Sync"/>
+  <variant name=".HwProtected" summary="The security domain used for passkeys"/>
+</variants>
+
+<histogram name="TrustedVault.AccessTokenFetchSuccess{SecurityDomainId}"
+    enum="Boolean" expires_after="2026-08-30">
+  <owner>mmoskvitin@google.com</owner>
+  <owner>mastiz@chromium.org</owner>
+  <summary>
+    Records whether access token fetching attempt was successful upon every
+    request to Security Domains service.
+  </summary>
+  <token key="SecurityDomainId" variants="SecurityDomainId"/>
+</histogram>
+
+<histogram
+    name="TrustedVault.DownloadAuthenticationFactorsRegistrationState{SecurityDomainId}"
+    enum="DownloadAuthenticationFactorsRegistrationStateResult"
+    expires_after="2026-10-05">
+  <owner>mmoskvitin@google.com</owner>
+  <owner>mastiz@chromium.org</owner>
+  <owner>thomasth@google.com</owner>
+  <summary>
+    Records the results of DownloadAuthenticationFactorsRegistrationState calls.
+    This function determines the recoverability state of a security domain.
+
+    It is recorded whenever DownloadAuthenticationFactorsRegistrationState is
+    called. For passkeys this happens during WebAuthn calls, in some cases
+    without a Google Password Manager passkey being selected, only present.
+
+    Security domain: {SecurityDomainId}
+  </summary>
+  <token key="SecurityDomainId" variants="SecurityDomainId"/>
+</histogram>
+
+<histogram
+    name="TrustedVault.DownloadKeysStatus{LocalRecoveryFactorType}{SecurityDomainId}"
+    enum="TrustedVaultDownloadKeysStatus" expires_after="2026-07-05">
+  <owner>mmoskvitin@google.com</owner>
+  <owner>mastiz@chromium.org</owner>
+  <owner>thomasth@google.com</owner>
+  <summary>
+    Records the result of an attempt to download trusted vault keys from the
+    server for {SecurityDomainId}. &quot;Downloading&quot; here refers to
+    fetching a private member key from {LocalRecoveryFactorType}, fetching
+    wrapped member keys from the backend and validating / decrypting the keys.
+
+    Note: This histogram covers all registration versions.
+  </summary>
+  <token key="LocalRecoveryFactorType" variants="LocalRecoveryFactorType"/>
+  <token key="SecurityDomainId" variants="SecurityDomainId"/>
+</histogram>
+
+<histogram name="TrustedVault.FileReadStatus{SecurityDomainId}"
+    enum="TrustedVaultFileReadStatus" expires_after="2026-11-30">
+  <owner>mmoskvitin@google.com</owner>
+  <owner>mastiz@chromium.org</owner>
+  <summary>
+    Recorded when reading local trusted vault file for {SecurityDomainId}.
+  </summary>
+  <token key="SecurityDomainId" variants="SecurityDomainId"/>
+</histogram>
+
+<histogram name="TrustedVault.FileWriteSuccess{SecurityDomainId}"
+    enum="Boolean" expires_after="2026-07-05">
+  <owner>mmoskvitin@google.com</owner>
+  <owner>mastiz@chromium.org</owner>
+  <summary>
+    Records whether writing local trusted vault file for {SecurityDomainId} was
+    successful upon each write.
+  </summary>
+  <token key="SecurityDomainId" variants="SecurityDomainId"/>
+</histogram>
+
+<histogram
+    name="TrustedVault.JavascriptSetClientEncryptionKeysForSecurityDomain"
+    enum="SecurityDomainId" expires_after="2026-07-31">
+  <owner>mastiz@chromium.org</owner>
+  <owner>martinkr@google.com</owner>
+  <summary>
+    Records the security domains passed as arguments to the Javascript API
+    chrome.setClientEncryptionKeys() on the renderer side (one sample per
+    security domain; multiple domains can be passed in one API call). Every
+    unrecognized security domain name is recorded as &quot;invalid&quot;.
+  </summary>
+</histogram>
+
+<histogram name="TrustedVault.JavascriptSetClientEncryptionKeysValidArgs"
+    enum="BooleanValid" expires_after="2026-07-31">
+  <owner>mastiz@chromium.org</owner>
+  <owner>martinkr@google.com</owner>
+  <summary>
+    For each invocation of the Javascript API chrome.setClientEncryptionKeys(),
+    records whether the passed arguments could be successfully parsed (one
+    sample per invocation).
+  </summary>
+</histogram>
+
+<histogram
+    name="TrustedVault.ListSecurityDomainMembersPinStatus{SecurityDomainId}"
+    enum="TrustedVaultListSecurityDomainMembersPinStatus"
+    expires_after="2025-10-11">
+  <owner>nsatragno@chromium.org</owner>
+  <owner>mastiz@chromium.org</owner>
+  <summary>
+    Records the status of a Google Password Manager PIN as reported by
+    listSecurityDomainMembers calls. This is called whenever Chrome needs to
+    consult the state of the user's security domain, like when refreshing a GPM
+    PIN or running a GPM enclave passkey transaction.
+  </summary>
+  <token key="SecurityDomainId" variants="SecurityDomainId"/>
+</histogram>
+
+<histogram name="TrustedVault.RecoverabilityStatusOnRequestCompletion"
+    enum="TrustedVaultRecoverabilityStatus" expires_after="2026-09-11">
+  <owner>mmrashad@google.com</owner>
+  <owner>mmoskvitin@google.com</owner>
+  <summary>
+    Records the status of the degraded recoverability upon the request
+    completion. Note that this is the status on the server side, which could be
+    error if the request was failed.
+  </summary>
+</histogram>
+
+<histogram name="TrustedVault.RecoverKeysOutcome{SecurityDomainId}"
+    enum="TrustedVaultRecoverKeysOutcome" expires_after="2026-07-05">
+  <owner>mmoskvitin@google.com</owner>
+  <owner>mastiz@chromium.org</owner>
+  <owner>thomasth@google.com</owner>
+  <summary>
+    Records the outcome of an attempt to recover trusted vault keys for
+    {SecurityDomainId} using all available local recovery factors.
+
+    Note: If this fails, then user interaction is required to fetch keys.
+  </summary>
+  <token key="SecurityDomainId" variants="SecurityDomainId"/>
+</histogram>
+
+<histogram
+    name="TrustedVault.RecoveryFactorRegistered{LocalRecoveryFactorType}{SecurityDomainId}"
+    enum="Boolean" expires_after="2026-05-03">
+  <owner>mmoskvitin@google.com</owner>
+  <owner>mastiz@chromium.org</owner>
+  <owner>thomasth@google.com</owner>
+  <summary>
+    Simplified version of TrustedVault.RecoveryFactorRegistrationState. Records
+    whether, according to information on this device, a recovery factor is
+    registered (and ignores whether re-registration was
+    completed/pending/in-flight) upon startup (if signed in) or upon first
+    signin.
+
+    Recorded at most once for every recovery factor / security domain
+    combination per profile within the browser process lifetime.
+
+    Recovery factor: {LocalRecoveryFactorType}
+
+    Security domain: {SecurityDomainId}
+  </summary>
+  <token key="LocalRecoveryFactorType" variants="LocalRecoveryFactorType"/>
+  <token key="SecurityDomainId" variants="SecurityDomainId"/>
+</histogram>
+
+<histogram
+    name="TrustedVault.RecoveryFactorRegistrationOutcome{LocalRecoveryFactorType}{SecurityDomainId}"
+    enum="TrustedVaultRecoveryFactorRegistrationOutcome"
+    expires_after="2026-07-05">
+  <owner>mmoskvitin@google.com</owner>
+  <owner>mastiz@chromium.org</owner>
+  <owner>thomasth@google.com</owner>
+  <summary>
+    Records the outcome of a recovery factor registration attempt for a private
+    key stored in/on {LocalRecoveryFactorType} upon request completion or
+    failure.
+
+    Security domain: {SecurityDomainId}
+  </summary>
+  <token key="LocalRecoveryFactorType" variants="LocalRecoveryFactorType"/>
+  <token key="SecurityDomainId" variants="SecurityDomainId"/>
+</histogram>
+
+<histogram
+    name="TrustedVault.RecoveryFactorRegistrationState{LocalRecoveryFactorType}{SecurityDomainId}"
+    enum="TrustedVaultRecoveryFactorRegistrationState"
+    expires_after="2026-07-12">
+  <owner>mmoskvitin@google.com</owner>
+  <owner>mastiz@chromium.org</owner>
+  <owner>thomasth@google.com</owner>
+  <summary>
+    Records whether, according to information on this device, a recovery factor
+    is registered on the server upon startup (if signed in) or upon first
+    signin, and if not registered, provides insights into why.
+
+    Recorded at most once for every recovery factor / security domain
+    combination per browser process lifetime.
+
+    Recovery factor: {LocalRecoveryFactorType}
+
+    Security domain: {SecurityDomainId}
+  </summary>
+  <token key="LocalRecoveryFactorType" variants="LocalRecoveryFactorType"/>
+  <token key="SecurityDomainId" variants="SecurityDomainId"/>
+</histogram>
+
+<histogram name="TrustedVault.RecoveryKeyStoreCertificatesFetchStatus"
+    enum="RecoveryKeyStoreCertificatesFetchStatus" expires_after="2026-06-03">
+  <owner>nsatragno@chromium.org</owner>
+  <owner>mastiz@chromium.org</owner>
+  <owner>mmoskvitin@google.com</owner>
+  <summary>
+    Recorded as a result of fetching the recovery key store certificates (i.e.
+    cert.xml and cert.sig.xml files).
+  </summary>
+</histogram>
+
+<histogram name="TrustedVault.RecoveryKeyStoreURLFetchResponse{Reason}"
+    enum="CombinedHttpResponseAndNetErrorCode" expires_after="2025-07-31">
+  <owner>mastiz@chromium.org</owner>
+  <owner>mmoskvitin@chromium.org</owner>
+  <owner>martinkr@google.com</owner>
+  <summary>
+    Counts of responses (both http code and net error code) for requests to the
+    recovery key store server (aka Vault Service). Note that requests that timed
+    out are not covered by this histogram.
+
+    {Reason}
+  </summary>
+  <token key="Reason">
+    <variant name="" summary="Any reason"/>
+    <variant name=".ListRecoveryKeyStores"
+        summary="List the set of recovery key stores"/>
+    <variant name=".UpdateRecoveryKeyStore"
+        summary="Upload a set of recovery keys"/>
+  </token>
+</histogram>
+
+<histogram
+    name="TrustedVault.SecurityDomainServiceURLFetchResponse{Reason}{SecurityDomainId}"
+    enum="CombinedHttpResponseAndNetErrorCode" expires_after="2026-08-30">
+  <owner>mastiz@chromium.org</owner>
+  <owner>mmoskvitin@chromium.org</owner>
+  <owner>martinkr@google.com</owner>
+  <summary>
+    Counts of responses (both http code and net error code) for requests to the
+    Trusted Vault server (aka Security Domain Service), broken out by {Reason}
+    and {SecurityDomainId}. Note that requests that timed out are not covered by
+    this histogram.
+  </summary>
+  <token key="SecurityDomainId" variants="SecurityDomainId">
+    <variant name="" summary="Any security domain"/>
+  </token>
+  <token key="Reason">
+    <variant name="" summary="Any reason"/>
+    <variant name=".DownloadAuthenticationFactorsRegistrationState"
+        summary="Downloading of auth factor registrations"/>
+    <variant name=".DownloadIsRecoverabilityDegraded"
+        summary="Downloading of the recoverability-degraded state"/>
+    <variant name=".DownloadKeys" summary="Downloading of keys"/>
+    <variant name=".RegisterDevice" summary="Local device registration"/>
+    <variant name=".RegisterGooglePasswordManagerPIN"
+        summary="Google Password Manager PIN registration"/>
+    <variant name=".RegisterICloudKeychain"
+        summary="Registration of a secret synced by iCloud Keychain"/>
+    <variant name=".RegisterLockScreenKnowledgeFactor"
+        summary="Registration of a lock screen knowledge factor (e.g. PIN or
+                 local password)"/>
+    <variant name=".RegisterUnspecifiedAuthenticationFactor"
+        summary="Registration of an authentication factor of unspecified type"/>
+  </token>
+</histogram>
+
+<histogram name="TrustedVault.SetEncryptionKeysForSecurityDomain{ProfileType}"
+    enum="SecurityDomainId" expires_after="2026-07-19">
+  <owner>mastiz@chromium.org</owner>
+  <owner>martinkr@google.com</owner>
+  <summary>
+    Records the security domains passed as arguments to the Javascript API
+    chrome.setClientEncryptionKeys() (or chrome.setSyncEncryptionKeys()) on the
+    browser side (one sample per passed domain; multiple domains can be passed
+    in one API call). Every unrecognized security domain name is recorded as
+    &quot;invalid&quot;.
+
+    {ProfileType}
+  </summary>
+  <token key="ProfileType">
+    <variant name=".AllProfiles" summary="All profile types"/>
+    <variant name=".OffTheRecordOnly" summary="Off-the-record profiles only"/>
+  </token>
+</histogram>
+
+<histogram name="TrustedVault.TrustedVaultDegradedRecoverabilityValue"
+    enum="TrustedVaultDegradedRecoverabilityValue" expires_after="2026-03-22">
+  <owner>mmrashad@google.com</owner>
+  <owner>mmoskvitin@google.com</owner>
+  <summary>
+    Records the known degraded recoverability value when the degraded
+    recoverability handler is started. Note that the value reflects state
+    restored from the file and recorded before sending new request to the
+    server.
+  </summary>
+</histogram>
+
+<histogram
+    name="TrustedVault.TrustedVaultHintDegradedRecoverabilityChangedReason"
+    enum="TrustedVaultHintDegradedRecoverabilityChangedReason"
+    expires_after="2026-11-17">
+  <owner>mmrashad@google.com</owner>
+  <owner>mmoskvitin@google.com</owner>
+  <summary>
+    Recorded when an immediate degraded recoverability request is going to be
+    sent to the server. Records which heuristic triggered immediate request of
+    the current degraded recoverability state from the server.
+  </summary>
+</histogram>
+
+</histograms>
+
+</histogram-configuration>

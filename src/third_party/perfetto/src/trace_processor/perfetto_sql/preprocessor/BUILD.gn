@@ -1,0 +1,63 @@
+# Copyright (C) 2024 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../../../gn/test.gni")
+
+assert(enable_perfetto_trace_processor_sqlite)
+
+source_set("preprocessor") {
+  sources = [
+    "perfetto_sql_preprocessor.cc",
+    "perfetto_sql_preprocessor.h",
+  ]
+  deps = [
+    ":grammar",
+    "../../../../gn:default_deps",
+    "../../../base",
+    "../../sqlite",
+    "../tokenizer",
+  ]
+}
+
+source_set("grammar") {
+  sources = [
+    "preprocessor_grammar.c",
+    "preprocessor_grammar.h",
+    "preprocessor_grammar_interface.h",
+  ]
+  deps = [ "../../../../gn:default_deps" ]
+  visibility = [ ":preprocessor" ]
+  if (perfetto_build_standalone) {
+    configs -= [ "//gn/standalone:extra_warnings" ]  # nogncheck
+  } else {
+    cflags_c = [
+      "-Wno-unused-parameter",
+      "-Wno-unreachable-code",
+    ]
+  }
+}
+
+perfetto_unittest_source_set("unittests") {
+  testonly = true
+  sources = [ "perfetto_sql_preprocessor_unittest.cc" ]
+  deps = [
+    ":preprocessor",
+    "../../../../gn:default_deps",
+    "../../../../gn:gtest_and_gmock",
+    "../../../../gn:sqlite",
+    "../../../base",
+    "../../sqlite",
+    "../parser:test_utils",
+  ]
+}

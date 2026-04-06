@@ -1,0 +1,839 @@
+\C{16bit} Writing 16-bit Code (DOS, Windows 3/3.1)
+
+This chapter attempts to cover some of the common issues encountered
+when writing 16-bit code to run under \c{MS-DOS} or \c{Windows 3.x}. It
+covers how to link programs to produce \c{.EXE} or \c{.COM} files,
+how to write \c{.SYS} device drivers, and how to interface assembly
+language code with 16-bit C compilers and with Borland Pascal.
+
+
+\H{exefiles} Producing \i\c{.EXE} Files
+
+Any large program written under DOS needs to be built as a \c{.EXE}
+file: only \c{.EXE} files have the necessary internal structure
+required to span more than one 64K segment. \i{Windows} programs,
+also, have to be built as \c{.EXE} files, since Windows does not
+support the \c{.COM} format.
+
+In general, you generate \c{.EXE} files by using the \c{obj} output
+format to produce one or more \i\c{.obj} files, and then linking
+them together using a linker. However, NASM also supports the direct
+generation of simple DOS \c{.EXE} files using the \c{bin} output
+format (by using \c{DB} and \c{DW} to construct the \c{.EXE} file
+header), and a macro package is supplied to do this. Thanks to
+Yann Guidon for contributing the code for this.
+
+NASM may also support \c{.EXE} natively as another output format in
+future releases.
+
+
+\S{objexe} Using the \c{obj} Format To Generate \c{.EXE} Files
+
+This section describes the usual method of generating \c{.EXE} files
+by linking \c{.OBJ} files together.
+
+Most 16-bit programming language packages come with a suitable
+linker; if you have none of these, there is a free linker called
+\i{VAL}\I{linker, free}, available in \c{LZH} archive format from
+\W{ftp://x2ftp.oulu.fi/pub/msdos/programming/lang/}\i\c{x2ftp.oulu.fi}.
+An LZH archiver can be found at
+\W{ftp://ftp.simtel.net/pub/simtelnet/msdos/arcers}\i\c{ftp.simtel.net}.
+There is another `free' linker (though this one doesn't come with
+sources) called \i{FREELINK}, available from
+\W{http://www.pcorner.com/tpc/old/3-101.html}\i\c{www.pcorner.com}.
+A third, \i\c{djlink}, written by DJ Delorie, is available at
+\W{http://www.delorie.com/djgpp/16bit/djlink/}\i\c{www.delorie.com}.
+A fourth linker, \i\c{ALINK}, written by Anthony A.J. Williams, is
+available at \W{http://alink.sourceforge.net}\i\c{alink.sourceforge.net}.
+
+When linking several \c{.OBJ} files into a \c{.EXE} file, you should
+ensure that exactly one of them has a start point defined (using the
+\I{program entry point}\i\c{..start} special symbol defined by the
+\c{obj} format: see \k{dotdotstart}). If no module defines a start
+point, the linker will not know what value to give the entry-point
+field in the output file header; if more than one defines a start
+point, the linker will not know \e{which} value to use.
+
+An example of a NASM source file which can be assembled to a
+\c{.OBJ} file and linked on its own to a \c{.EXE} is given here. It
+demonstrates the basic principles of defining a stack, initialising
+the segment registers, and declaring a start point. This file is
+also provided in the \I{test subdirectory}\c{test} subdirectory of
+the NASM archives, under the name \c{objexe.asm}.
+
+\c segment code
+\c
+\c ..start:
+\c         mov     ax,data
+\c         mov     ds,ax
+\c         mov     ax,stack
+\c         mov     ss,ax
+\c         mov     sp,stacktop
+
+This initial piece of code sets up \c{DS} to point to the data
+segment, and initializes \c{SS} and \c{SP} to point to the top of
+the provided stack. Notice that interrupts are implicitly disabled
+for one instruction after a move into \c{SS}, precisely for this
+situation, so that there's no chance of an interrupt occurring
+between the loads of \c{SS} and \c{SP} and not having a stack to
+execute on.
+
+Note also that the special symbol \c{..start} is defined at the
+beginning of this code, which means that will be the entry point
+into the resulting executable file.
+
+\c         mov     dx,hello
+\c         mov     ah,9
+\c         int     0x21
+
+The above is the main program: load \c{DS:DX} with a pointer to the
+greeting message (\c{hello} is implicitly relative to the segment
+\c{data}, which was loaded into \c{DS} in the setup code, so the
+full pointer is valid), and call the DOS print-string function.
+
+\c         mov     ax,0x4c00
+\c         int     0x21
+
+This terminates the program using another DOS system call.
+
+\c segment data
+\c
+\c hello:  db      'hello, world', 13, 10, '$'
+
+The data segment contains the string we want to display.
+
+\c segment stack stack
+\c         resb 64
+\c stacktop:
+
+The above code declares a stack segment containing 64 bytes of
+uninitialized stack space, and points \c{stacktop} at the top of it.
+The directive \c{segment stack stack} defines a segment \e{called}
+\c{stack}, and also of \e{type} \c{STACK}. The latter is not
+necessary to the correct running of the program, but linkers are
+likely to issue warnings or errors if your program has no segment of
+type \c{STACK}.
+
+The above file, when assembled into a \c{.OBJ} file, will link on
+its own to a valid \c{.EXE} file, which when run will print `hello,
+world' and then exit.
+
+
+\S{binexe} Using the \c{bin} Format To Generate \c{.EXE} Files
+
+The \c{.EXE} file format is simple enough that it's possible to
+build a \c{.EXE} file by writing a pure-binary program and sticking
+a 32-byte header on the front. This header is simple enough that it
+can be generated using \c{DB} and \c{DW} commands by NASM itself, so
+that you can use the \c{bin} output format to directly generate
+\c{.EXE} files.
+
+Included in the NASM archives, in the \I{misc subdirectory}\c{misc}
+subdirectory, is a file \i\c{exebin.mac} of macros. It defines three
+macros: \i\c{EXE_begin}, \i\c{EXE_stack} and \i\c{EXE_end}.
+
+To produce a \c{.EXE} file using this method, you should start by
+using \c{%include} to load the \c{exebin.mac} macro package into
+your source file. You should then issue the \c{EXE_begin} macro call
+(which takes no arguments) to generate the file header data. Then
+write code as normal for the \c{bin} format - you can use all three
+standard sections \c{.text}, \c{.data} and \c{.bss}. At the end of
+the file you should call the \c{EXE_end} macro (again, no arguments),
+which defines some symbols to mark section sizes, and these symbols
+are referred to in the header code generated by \c{EXE_begin}.
+
+In this model, the code you end up writing starts at \c{0x100}, just
+like a \c{.COM} file - in fact, if you strip off the 32-byte header
+from the resulting \c{.EXE} file, you will have a valid \c{.COM}
+program. All the segment bases are the same, so you are limited to a
+64K program, again just like a \c{.COM} file. Note that an \c{ORG}
+directive is issued by the \c{EXE_begin} macro, so you should not
+explicitly issue one of your own.
+
+You can't directly refer to your segment base value, unfortunately,
+since this would require a relocation in the header, and things
+would get a lot more complicated. So you should get your segment
+base by copying it out of \c{CS} instead.
+
+On entry to your \c{.EXE} file, \c{SS:SP} are already set up to
+point to the top of a 2Kb stack. You can adjust the default stack
+size of 2Kb by calling the \c{EXE_stack} macro. For example, to
+change the stack size of your program to 64 bytes, you would call
+\c{EXE_stack 64}.
+
+A sample program which generates a \c{.EXE} file in this way is
+given in the \c{test} subdirectory of the NASM archive, as
+\c{binexe.asm}.
+
+
+\H{comfiles} Producing \i\c{.COM} Files
+
+While large DOS programs must be written as \c{.EXE} files, small
+ones are often better written as \c{.COM} files. \c{.COM} files are
+pure binary, and therefore most easily produced using the \c{bin}
+output format.
+
+
+\S{combinfmt} Using the \c{bin} Format To Generate \c{.COM} Files
+
+\c{.COM} files expect to be loaded at offset \c{100h} into their
+segment (though the segment may change). Execution then begins at
+\I\c{ORG}\c{100h}, i.e. right at the start of the program. So to
+write a \c{.COM} program, you would create a source file looking
+like
+
+\c         org 100h
+\c
+\c section .text
+\c
+\c start:
+\c         ; put your code here
+\c
+\c section .data
+\c
+\c         ; put data items here
+\c
+\c section .bss
+\c
+\c         ; put uninitialized data here
+
+The \c{bin} format puts the \c{.text} section first in the file, so
+you can declare data or BSS items before beginning to write code if
+you want to and the code will still end up at the front of the file
+where it belongs.
+
+The BSS (uninitialized data) section does not take up space in the
+\c{.COM} file itself: instead, addresses of BSS items are resolved
+to point at space beyond the end of the file, on the grounds that
+this will be free memory when the program is run. Therefore you
+should not rely on your BSS being initialized to all zeros when you
+run.
+
+To assemble the above program, you should use a command line like
+
+\c nasm myprog.asm -fbin -o myprog.com
+
+The \c{bin} format would produce a file called \c{myprog} if no
+explicit output file name were specified, so you have to override it
+and give the desired file name.
+
+
+\S{comobjfmt} Using the \c{obj} Format To Generate \c{.COM} Files
+
+If you are writing a \c{.COM} program as more than one module, you
+may wish to assemble several \c{.OBJ} files and link them together
+into a \c{.COM} program. You can do this, provided you have a linker
+capable of outputting \c{.COM} files directly (\i{TLINK} does this),
+or alternatively a converter program such as \i\c{EXE2BIN} to
+transform the \c{.EXE} file output from the linker into a \c{.COM}
+file.
+
+If you do this, you need to take care of several things:
+
+\b The first object file containing code should start its code
+segment with a line like \c{RESB 100h}. This is to ensure that the
+code begins at offset \c{100h} relative to the beginning of the code
+segment, so that the linker or converter program does not have to
+adjust address references within the file when generating the
+\c{.COM} file. Other assemblers use an \i\c{ORG} directive for this
+purpose, but \c{ORG} in NASM is a format-specific directive to the
+\c{bin} output format, and does not mean the same thing as it does
+in MASM-compatible assemblers.
+
+\b You don't need to define a stack segment.
+
+\b All your segments should be in the same group, so that every time
+your code or data references a symbol offset, all offsets are
+relative to the same segment base. This is because, when a \c{.COM}
+file is loaded, all the segment registers contain the same value.
+
+
+\H{sysfiles} Producing \i\c{.SYS} Files
+
+\i{MS-DOS device drivers} - \c{.SYS} files - are pure binary files,
+similar to \c{.COM} files, except that they start at origin zero
+rather than \c{100h}. Therefore, if you are writing a device driver
+using the \c{bin} format, you do not need the \c{ORG} directive,
+since the default origin for \c{bin} is zero. Similarly, if you are
+using \c{obj}, you do not need the \c{RESB 100h} at the start of
+your code segment.
+
+\c{.SYS} files start with a header structure, containing pointers to
+the various routines inside the driver which do the work. This
+structure should be defined at the start of the code segment, even
+though it is not actually code.
+
+For more information on the format of \c{.SYS} files, and the data
+which has to go in the header structure, a list of books is given in
+the Frequently Asked Questions list for the newsgroup
+\W{news:comp.os.msdos.programmer}\i\c{comp.os.msdos.programmer}.
+
+
+\H{16c} Interfacing to 16-bit C Programs
+
+This section covers the basics of writing assembly routines that
+call, or are called from, C programs. To do this, you would
+typically write an assembly module as a \c{.OBJ} file, and link it
+with your C modules to produce a \i{mixed-language program}.
+
+
+\S{16cunder} External Symbol Names
+
+\I{C symbol names}\I{underscore, in C symbols}C compilers have the
+convention that the names of all global symbols (functions or data)
+they define are formed by prefixing an underscore to the name as it
+appears in the C program. So, for example, the function a C
+programmer thinks of as \c{printf} appears to an assembly language
+programmer as \c{_printf}. This means that in your assembly
+programs, you can define symbols without a leading underscore, and
+not have to worry about name clashes with C symbols.
+
+If you find the underscores inconvenient, you can define macros to
+replace the \c{GLOBAL} and \c{EXTERN} directives as follows:
+
+\c %macro  cglobal 1
+\c
+\c   global  _%1
+\c   %define %1 _%1
+\c
+\c %endmacro
+\c
+\c %macro  cextern 1
+\c
+\c   extern  _%1
+\c   %define %1 _%1
+\c
+\c %endmacro
+
+(These forms of the macros only take one argument at a time; a
+\c{%rep} construct could solve this.)
+
+If you then declare an external like this:
+
+\c cextern printf
+
+then the macro will expand it as
+
+\c extern  _printf
+\c %define printf _printf
+
+Thereafter, you can reference \c{printf} as if it was a symbol, and
+the preprocessor will put the leading underscore on where necessary.
+
+The \c{cglobal} macro works similarly. You must use \c{cglobal}
+before defining the symbol in question, but you would have had to do
+that anyway if you used \c{GLOBAL}.
+
+Also see \k{opt-pfix}.
+
+\S{16cmodels} \i{Memory Models}
+
+NASM contains no mechanism to support the various C memory models
+directly; you have to keep track yourself of which one you are
+writing for. This means you have to keep track of the following
+things:
+
+\b In models using a single code segment (tiny, small and compact),
+functions are near. This means that function pointers, when stored
+in data segments or pushed on the stack as function arguments, are
+16 bits long and contain only an offset field (the \c{CS} register
+never changes its value, and always gives the segment part of the
+full function address), and that functions are called using ordinary
+near \c{CALL} instructions and return using \c{RETN} (which, in
+NASM, is synonymous with \c{RET} anyway). This means both that you
+should write your own routines to return with \c{RETN}, and that you
+should call external C routines with near \c{CALL} instructions.
+
+\b In models using more than one code segment (medium, large and
+huge), functions are far. This means that function pointers are 32
+bits long (consisting of a 16-bit offset followed by a 16-bit
+segment), and that functions are called using \c{CALL FAR} (or
+\c{CALL seg:offset}) and return using \c{RETF}. Again, you should
+therefore write your own routines to return with \c{RETF} and use
+\c{CALL FAR} to call external routines.
+
+\b In models using a single data segment (tiny, small and medium),
+data pointers are 16 bits long, containing only an offset field (the
+\c{DS} register doesn't change its value, and always gives the
+segment part of the full data item address).
+
+\b In models using more than one data segment (compact, large and
+huge), data pointers are 32 bits long, consisting of a 16-bit offset
+followed by a 16-bit segment. You should still be careful not to
+modify \c{DS} in your routines without restoring it afterwards, but
+\c{ES} is free for you to use to access the contents of 32-bit data
+pointers you are passed.
+
+\b The huge memory model allows single data items to exceed 64K in
+size. In all other memory models, you can access the whole of a data
+item just by doing arithmetic on the offset field of the pointer you
+are given, whether a segment field is present or not; in huge model,
+you have to be more careful of your pointer arithmetic.
+
+\b In most memory models, there is a \e{default} data segment, whose
+segment address is kept in \c{DS} throughout the program. This data
+segment is typically the same segment as the stack, kept in \c{SS},
+so that functions' local variables (which are stored on the stack)
+and global data items can both be accessed easily without changing
+\c{DS}. Particularly large data items are typically stored in other
+segments. However, some memory models (though not the standard
+ones, usually) allow the assumption that \c{SS} and \c{DS} hold the
+same value to be removed. Be careful about functions' local
+variables in this latter case.
+
+In models with a single code segment, the segment is called
+\i\c{_TEXT}, so your code segment must also go by this name in order
+to be linked into the same place as the main code segment. In models
+with a single data segment, or with a default data segment, it is
+called \i\c{_DATA}.
+
+
+\S{16cfunc} Function Definitions and Function Calls
+
+\I{functions, C calling convention}The \i{C calling convention} in
+16-bit programs is as follows. In the following description, the
+words \e{caller} and \e{callee} are used to denote the function
+doing the calling and the function which gets called.
+
+\b The caller pushes the function's parameters on the stack, one
+after another, in reverse order (right to left, so that the first
+argument specified to the function is pushed last).
+
+\b The caller then executes a \c{CALL} instruction to pass control
+to the callee. This \c{CALL} is either near or far depending on the
+memory model.
+
+\b The callee receives control, and typically (although this is not
+actually necessary, in functions which do not need to access their
+parameters) starts by saving the value of \c{SP} in \c{BP} so as to
+be able to use \c{BP} as a base pointer to find its parameters on
+the stack. However, the caller was probably doing this too, so part
+of the calling convention states that \c{BP} must be preserved by
+any C function. Hence the callee, if it is going to set up \c{BP} as
+a \i\e{frame pointer}, must push the previous value first.
+
+\b The callee may then access its parameters relative to \c{BP}.
+The word at \c{[BP]} holds the previous value of \c{BP} as it was
+pushed; the next word, at \c{[BP+2]}, holds the offset part of the
+return address, pushed implicitly by \c{CALL}. In a small-model
+(near) function, the parameters start after that, at \c{[BP+4]}; in
+a large-model (far) function, the segment part of the return address
+lives at \c{[BP+4]}, and the parameters begin at \c{[BP+6]}. The
+leftmost parameter of the function, since it was pushed last, is
+accessible at this offset from \c{BP}; the others follow, at
+successively greater offsets. Thus, in a function such as \c{printf}
+which takes a variable number of parameters, the pushing of the
+parameters in reverse order means that the function knows where to
+find its first parameter, which tells it the number and type of the
+remaining ones.
+
+\b The callee may also wish to decrease \c{SP} further, so as to
+allocate space on the stack for local variables, which will then be
+accessible at negative offsets from \c{BP}.
+
+\b The callee, if it wishes to return a value to the caller, should
+leave the value in \c{AL}, \c{AX} or \c{DX:AX} depending on the size
+of the value. Floating-point results are sometimes (depending on the
+compiler) returned in \c{ST0}.
+
+\b Once the callee has finished processing, it restores \c{SP} from
+\c{BP} if it had allocated local stack space, then pops the previous
+value of \c{BP}, and returns via \c{RETN} or \c{RETF} depending on
+memory model.
+
+\b When the caller regains control from the callee, the function
+parameters are still on the stack, so it typically adds an immediate
+constant to \c{SP} to remove them (instead of executing a number of
+slow \c{POP} instructions). Thus, if a function is accidentally
+called with the wrong number of parameters due to a prototype
+mismatch, the stack will still be returned to a sensible state since
+the caller, which \e{knows} how many parameters it pushed, does the
+removing.
+
+It is instructive to compare this calling convention with that for
+Pascal programs (described in \k{16bpfunc}). Pascal has a simpler
+convention, since no functions have variable numbers of parameters.
+Therefore the callee knows how many parameters it should have been
+passed, and is able to deallocate them from the stack itself by
+passing an immediate argument to the \c{RET} or \c{RETF}
+instruction, so the caller does not have to do it. Also, the
+parameters are pushed in left-to-right order, not right-to-left,
+which means that a compiler can give better guarantees about
+sequence points without performance suffering.
+
+Thus, you would define a function in C style in the following way.
+The following example is for small model:
+
+\c global  _myfunc
+\c
+\c _myfunc:
+\c         push    bp
+\c         mov     bp,sp
+\c         sub     sp,0x40         ; 64 bytes of local stack space
+\c         mov     bx,[bp+4]       ; first parameter to function
+\c
+\c         ; some more code
+\c
+\c         mov     sp,bp           ; undo "sub sp,0x40" above
+\c         pop     bp
+\c         ret
+
+For a large-model function, you would replace \c{RET} by \c{RETF},
+and look for the first parameter at \c{[BP+6]} instead of
+\c{[BP+4]}. Of course, if one of the parameters is a pointer, then
+the offsets of \e{subsequent} parameters will change depending on
+the memory model as well: far pointers take up four bytes on the
+stack when passed as a parameter, whereas near pointers take up two.
+
+At the other end of the process, to call a C function from your
+assembly code, you would do something like this:
+
+\c extern  _printf
+\c
+\c       ; and then, further down...
+\c
+\c       push    word [myint]        ; one of my integer variables
+\c       push    word mystring       ; pointer into my data segment
+\c       call    _printf
+\c       add     sp,byte 4           ; `byte' saves space
+\c
+\c       ; then those data items...
+\c
+\c segment _DATA
+\c
+\c myint         dw    1234
+\c mystring      db    'This number -> %d <- should be 1234',10,0
+
+This piece of code is the small-model assembly equivalent of the C
+code
+
+\c     int myint = 1234;
+\c     printf("This number -> %d <- should be 1234\n", myint);
+
+In large model, the function-call code might look more like this. In
+this example, it is assumed that \c{DS} already holds the segment
+base of the segment \c{_DATA}. If not, you would have to initialize
+it first.
+
+\c       push    word [myint]
+\c       push    word seg mystring   ; Now push the segment, and...
+\c       push    word mystring       ; ... offset of "mystring"
+\c       call    far _printf
+\c       add    sp,byte 6
+
+The integer value still takes up one word on the stack, since large
+model does not affect the size of the \c{int} data type. The first
+argument (pushed last) to \c{printf}, however, is a data pointer,
+and therefore has to contain a segment and offset part. The segment
+should be stored second in memory, and therefore must be pushed
+first. (Of course, \c{PUSH DS} would have been a shorter instruction
+than \c{PUSH WORD SEG mystring}, if \c{DS} was set up as the above
+example assumed.) Then the actual call becomes a far call, since
+functions expect far calls in large model; and \c{SP} has to be
+increased by 6 rather than 4 afterwards to make up for the extra
+word of parameters.
+
+
+\S{16cdata} Accessing Data Items
+
+To get at the contents of C variables, or to declare variables which
+C can access, you need only declare the names as \c{GLOBAL} or
+\c{EXTERN}. (Again, the names require leading underscores, as stated
+in \k{16cunder}.) Thus, a C variable declared as \c{int i} can be
+accessed from assembler as
+
+\c extern _i
+\c
+\c         mov ax,[_i]
+
+And to declare your own integer variable which C programs can access
+as \c{extern int j}, you do this (making sure you are assembling in
+the \c{_DATA} segment, if necessary):
+
+\c global  _j
+\c
+\c _j      dw      0
+
+To access a C array, you need to know the size of the components of
+the array. For example, \c{int} variables are two bytes long, so if
+a C program declares an array as \c{int a[10]}, you can access
+\c{a[3]} by coding \c{mov ax,[_a+6]}. (The byte offset 6 is obtained
+by multiplying the desired array index, 3, by the size of the array
+element, 2.) The sizes of the C base types in 16-bit compilers are:
+1 for \c{char}, 2 for \c{short} and \c{int}, 4 for \c{long} and
+\c{float}, and 8 for \c{double}.
+
+To access a C \i{data structure}, you need to know the offset from
+the base of the structure to the field you are interested in. You
+can either do this by converting the C structure definition into a
+NASM structure definition (using \i\c{STRUC}), or by calculating the
+one offset and using just that.
+
+To do either of these, you should read your C compiler's manual to
+find out how it organizes data structures. NASM gives no special
+alignment to structure members in its own \c{STRUC} macro, so you
+have to specify alignment yourself if the C compiler generates it.
+Typically, you might find that a structure like
+
+\c struct {
+\c     char c;
+\c     int i;
+\c } foo;
+
+might be four bytes long rather than three, since the \c{int} field
+would be aligned to a two-byte boundary. However, this sort of
+feature tends to be a configurable option in the C compiler, either
+using command-line options or \c{#pragma} lines, so you have to find
+out how your own compiler does it.
+
+
+\S{16cmacro} \i\c{c16.mac}: Helper Macros for the 16-bit C Interface
+
+Included in the NASM archives, in the \I{misc subdirectory}\c{misc}
+directory, is a file \c{c16.mac} of macros. It defines three macros:
+\i\c{proc}, \i\c{arg} and \i\c{endproc}. These are intended to be
+used for C-style procedure definitions, and they automate a lot of
+the work involved in keeping track of the calling convention.
+
+(An alternative, TASM compatible form of \c{arg} is also now built
+into NASM's preprocessor. See \k{stackrel} for details.)
+
+An example of an assembly function using the macro set is given
+here:
+
+\c proc    _nearproc
+\c
+\c %$i     arg
+\c %$j     arg
+\c         mov     ax,[bp + %$i]
+\c         mov     bx,[bp + %$j]
+\c         add     ax,[bx]
+\c
+\c endproc
+
+This defines \c{_nearproc} to be a procedure taking two arguments,
+the first (\c{i}) an integer and the second (\c{j}) a pointer to an
+integer. It returns \c{i + *j}.
+
+Note that the \c{arg} macro has an \c{EQU} as the first line of its
+expansion, and since the label before the macro call gets prepended
+to the first line of the expanded macro, the \c{EQU} works, defining
+\c{%$i} to be an offset from \c{BP}. A context-local variable is
+used, local to the context pushed by the \c{proc} macro and popped
+by the \c{endproc} macro, so that the same argument name can be used
+in later procedures. Of course, you don't \e{have} to do that.
+
+The macro set produces code for near functions (tiny, small and
+compact-model code) by default. You can have it generate far
+functions (medium, large and huge-model code) by means of coding
+\I\c{FARCODE}\c{%define FARCODE}. This changes the kind of return
+instruction generated by \c{endproc}, and also changes the starting
+point for the argument offsets. The macro set contains no intrinsic
+dependency on whether data pointers are far or not.
+
+\c{arg} can take an optional parameter, giving the size of the
+argument. If no size is given, 2 is assumed, since it is likely that
+many function parameters will be of type \c{int}.
+
+The large-model equivalent of the above function would look like this:
+
+\c %define FARCODE
+\c
+\c proc    _farproc
+\c
+\c %$i     arg
+\c %$j     arg     4
+\c         mov     ax,[bp + %$i]
+\c         mov     bx,[bp + %$j]
+\c         mov     es,[bp + %$j + 2]
+\c         add     ax,[bx]
+\c
+\c endproc
+
+This makes use of the argument to the \c{arg} macro to define a
+parameter of size 4, because \c{j} is now a far pointer. When we
+load from \c{j}, we must load a segment and an offset.
+
+
+\H{16bp} Interfacing to \i{Borland Pascal} Programs
+
+Interfacing to Borland Pascal programs is similar in concept to
+interfacing to 16-bit C programs. The differences are:
+
+\b The leading underscore required for interfacing to C programs is
+not required for Pascal.
+
+\b The memory model is always large: functions are far, data
+pointers are far, and no data item can be more than 64K long.
+(Actually, some functions are near, but only those functions that
+are local to a Pascal unit and never called from outside it. All
+assembly functions that Pascal calls, and all Pascal functions that
+assembly routines are able to call, are far.) However, all static
+data declared in a Pascal program goes into the default data
+segment, which is the one whose segment address will be in \c{DS}
+when control is passed to your assembly code. The only things that
+do not live in the default data segment are local variables (they
+live in the stack segment) and dynamically allocated variables. All
+data \e{pointers}, however, are far.
+
+\b The function calling convention is different - described below.
+
+\b Some data types, such as strings, are stored differently.
+
+\b There are restrictions on the segment names you are allowed to
+use - Borland Pascal will ignore code or data declared in a segment
+it doesn't like the name of. The restrictions are described below.
+
+
+\S{16bpfunc} The Pascal Calling Convention
+
+\I{functions, Pascal calling convention}\I{Pascal calling
+convention}The 16-bit Pascal calling convention is as follows. In
+the following description, the words \e{caller} and \e{callee} are
+used to denote the function doing the calling and the function which
+gets called.
+
+\b The caller pushes the function's parameters on the stack, one
+after another, in normal order (left to right, so that the first
+argument specified to the function is pushed first).
+
+\b The caller then executes a far \c{CALL} instruction to pass
+control to the callee.
+
+\b The callee receives control, and typically (although this is not
+actually necessary, in functions which do not need to access their
+parameters) starts by saving the value of \c{SP} in \c{BP} so as to
+be able to use \c{BP} as a base pointer to find its parameters on
+the stack. However, the caller was probably doing this too, so part
+of the calling convention states that \c{BP} must be preserved by
+any function. Hence the callee, if it is going to set up \c{BP} as a
+\i{frame pointer}, must push the previous value first.
+
+\b The callee may then access its parameters relative to \c{BP}.
+The word at \c{[BP]} holds the previous value of \c{BP} as it was
+pushed. The next word, at \c{[BP+2]}, holds the offset part of the
+return address, and the next one at \c{[BP+4]} the segment part. The
+parameters begin at \c{[BP+6]}. The rightmost parameter of the
+function, since it was pushed last, is accessible at this offset
+from \c{BP}; the others follow, at successively greater offsets.
+
+\b The callee may also wish to decrease \c{SP} further, so as to
+allocate space on the stack for local variables, which will then be
+accessible at negative offsets from \c{BP}.
+
+\b The callee, if it wishes to return a value to the caller, should
+leave the value in \c{AL}, \c{AX} or \c{DX:AX} depending on the size
+of the value. Floating-point results are returned in \c{ST0}.
+Results of type \c{Real} (Borland's own custom floating-point data
+type, not handled directly by the FPU) are returned in \c{DX:BX:AX}.
+To return a result of type \c{String}, the caller pushes a pointer
+to a temporary string before pushing the parameters, and the callee
+places the returned string value at that location. The pointer is
+not a parameter, and should not be removed from the stack by the
+\c{RETF} instruction.
+
+\b Once the callee has finished processing, it restores \c{SP} from
+\c{BP} if it had allocated local stack space, then pops the previous
+value of \c{BP}, and returns via \c{RETF}. It uses the form of
+\c{RETF} with an immediate parameter, giving the number of bytes
+taken up by the parameters on the stack. This causes the parameters
+to be removed from the stack as a side effect of the return
+instruction.
+
+\b When the caller regains control from the callee, the function
+parameters have already been removed from the stack, so it needs to
+do nothing further.
+
+Thus, you would define a function in Pascal style, taking two
+\c{Integer}-type parameters, in the following way:
+
+\c global  myfunc
+\c
+\c myfunc: push    bp
+\c         mov     bp,sp
+\c         sub     sp,0x40         ; 64 bytes of local stack space
+\c         mov     bx,[bp+8]       ; first parameter to function
+\c         mov     bx,[bp+6]       ; second parameter to function
+\c
+\c         ; some more code
+\c
+\c         mov     sp,bp           ; undo "sub sp,0x40" above
+\c         pop     bp
+\c         retf    4               ; total size of params is 4
+
+At the other end of the process, to call a Pascal function from your
+assembly code, you would do something like this:
+
+\c extern  SomeFunc
+\c
+\c        ; and then, further down...
+\c
+\c        push   word seg mystring   ; Now push the segment, and...
+\c        push   word mystring       ; ... offset of "mystring"
+\c        push   word [myint]        ; one of my variables
+\c        call   far SomeFunc
+
+This is equivalent to the Pascal code
+
+\c procedure SomeFunc(String: PChar; Int: Integer);
+\c     SomeFunc(@mystring, myint);
+
+
+\S{16bpseg} Borland Pascal \I{segment names, Borland Pascal}Segment
+Name Restrictions
+
+Since Borland Pascal's internal unit file format is completely
+different from \c{OBJ}, it only makes a very sketchy job of actually
+reading and understanding the various information contained in a
+real \c{OBJ} file when it links that in. Therefore an object file
+intended to be linked to a Pascal program must obey a number of
+restrictions:
+
+\b Procedures and functions must be in a segment whose name is
+either \c{CODE}, \c{CSEG}, or something ending in \c{_TEXT}.
+
+\b initialized data must be in a segment whose name is either
+\c{CONST} or something ending in \c{_DATA}.
+
+\b Uninitialized data must be in a segment whose name is either
+\c{DATA}, \c{DSEG}, or something ending in \c{_BSS}.
+
+\b Any other segments in the object file are completely ignored.
+\c{GROUP} directives and segment attributes are also ignored.
+
+
+\S{16bpmacro} Using \i\c{c16.mac} With Pascal Programs
+
+The \c{c16.mac} macro package, described in \k{16cmacro}, can also
+be used to simplify writing functions to be called from Pascal
+programs, if you code \I\c{PASCAL}\c{%define PASCAL}. This
+definition ensures that functions are far (it implies
+\i\c{FARCODE}), and also causes procedure return instructions to be
+generated with an operand.
+
+Defining \c{PASCAL} does not change the code which calculates the
+argument offsets; you must declare your function's arguments in
+reverse order. For example:
+
+\c %define PASCAL
+\c
+\c proc    _pascalproc
+\c
+\c %$j     arg 4
+\c %$i     arg
+\c         mov     ax,[bp + %$i]
+\c         mov     bx,[bp + %$j]
+\c         mov     es,[bp + %$j + 2]
+\c         add     ax,[bx]
+\c
+\c endproc
+
+This defines the same routine, conceptually, as the example in
+\k{16cmacro}: it defines a function taking two arguments, an integer
+and a pointer to an integer, which returns the sum of the integer
+and the contents of the pointer. The only difference between this
+code and the large-model C version is that \c{PASCAL} is defined
+instead of \c{FARCODE}, and that the arguments are declared in
+reverse order.
+
+

@@ -1,0 +1,73 @@
+# Copyright (C) 2025 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("perfetto.gni")
+
+template("protozero_descriptor_diff") {
+  if (build_with_chromium ||
+      (perfetto_build_with_embedder && !is_perfetto_build_generator)) {
+    name = "${target_name}_gen"
+  } else {
+    name = "${target_name}"
+  }
+
+  action(name) {
+    if (host_os == "win") {
+      _host_executable_suffix = ".exe"
+    } else {
+      _host_executable_suffix = ""
+    }
+
+    binary_label = "${perfetto_root_path}/src/protozero/descriptor_diff:protozero_descriptor_diff($host_toolchain)"
+    binary_path = get_label_info(binary_label, "root_out_dir") +
+                  "/protozero_descriptor_diff" + _host_executable_suffix
+    binary_rebased_path = "./" + rebase_path(binary_path, root_build_dir)
+
+    deps = [
+      "${perfetto_root_path}/src/protozero/descriptor_diff:protozero_descriptor_diff($host_toolchain)",
+      invoker.minuend_descriptor_target,
+      invoker.subtrahend_descriptor_target,
+    ]
+    script = "${perfetto_root_path}/gn/run_binary.py"
+
+    outputs = [ "$target_gen_dir/${invoker.generate_descriptor}" ]
+
+    minuend_descriptor_file_path =
+        get_label_info(invoker.minuend_descriptor_target, "target_gen_dir") +
+        "/${invoker.minuend_descriptor_name}"
+    subtrahend_descriptor_file_path =
+        get_label_info(invoker.subtrahend_descriptor_target, "target_gen_dir") +
+        "/${invoker.subtrahend_descriptor_name}"
+
+    args = [
+      binary_rebased_path,
+      "--out",
+      rebase_path(outputs[0], root_build_dir),
+      "--minuend",
+      rebase_path(minuend_descriptor_file_path, root_build_dir),
+      "--subtrahend",
+      rebase_path(subtrahend_descriptor_file_path, root_build_dir),
+    ]
+    metadata = {
+      perfetto_action_type_for_generator = [ "protozero_descriptor_diff" ]
+      perfetto_minuend_descriptor =
+          [ get_label_info(invoker.minuend_descriptor_target,
+                           "label_no_toolchain") ]
+
+      perfetto_subtrahend_descriptor =
+          [ get_label_info(invoker.subtrahend_descriptor_target,
+                           "label_no_toolchain") ]
+    }
+  }
+}

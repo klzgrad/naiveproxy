@@ -1,0 +1,65 @@
+/*
+ * Copyright (C) 2023 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+package perfetto.protos;
+
+import "protos/perfetto/metrics/custom_options.proto";
+
+message ChromeScrollJankV3 {
+  // Total count of unique frames in the trace.
+  optional int64 trace_num_frames = 1 [(unit) = "count_biggerIsBetter"];
+  // Number of frames in the trace that had missed vsyncs.
+  optional int64 trace_num_janky_frames = 2 [(unit) = "count_smallerIsBetter"];
+  // Computed as: `100 * trace_num_janky_frames /
+  // trace_num_frames`.
+  optional double trace_scroll_jank_percentage = 3
+      [(unit) = "n%_smallerIsBetter"];
+  // Vsync interval at the time of recording the trace.
+  optional double vsync_interval_ms = 4 [(unit) = "ms_biggerIsBetter"];
+  // Per-scroll metrics.
+  message Scroll {
+    // Total count of unique frames during this scroll.
+    optional int64 num_frames = 1 [(unit) = "count_biggerIsBetter"];
+    // Number of frames during this scroll that had missed vsyncs.
+    optional int64 num_janky_frames = 2 [(unit) = "count_smallerIsBetter"];
+    // Computed as: `100 * num_janky_frames / num_frames`.
+    optional double scroll_jank_percentage = 3 [(unit) = "n%_smallerIsBetter"];
+    // Maximum `delay_since_last_frame` for janky frames during this scroll
+    // (i.e. maximum `delay_since_last_frame` from the `scroll_jank_causes`
+    // repeated field below).
+    // This is measured in units of vsync interval. For example, a value of 2
+    // means the delay was 2x the vsync interval.
+    optional double max_delay_since_last_frame = 4
+        [(unit) = "unitless_smallerIsBetter"];
+    // The primary cause and sub-cause for scroll jank, one for each jank.
+    // There are exactly `num_janky_frames` items in this field.
+    message ScrollJankCause {
+      // May be empty, if a cause is not available.
+      optional string cause = 1;
+      // May be empty, if a sub-cause is not available.
+      optional string sub_cause = 2;
+      // Number of vsyncs elapsed since the previous frame was presented: will
+      // be > 1.0 since this was a "janky" frame. For example, a value of 2
+      // means the delay was 2x the vsync interval.
+      optional double delay_since_last_frame = 3
+          [(unit) = "unitless_smallerIsBetter"];
+    }
+    repeated ScrollJankCause scroll_jank_causes = 5;
+  }
+  repeated Scroll scrolls = 5;
+}

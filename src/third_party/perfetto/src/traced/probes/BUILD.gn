@@ -1,0 +1,125 @@
+# Copyright (C) 2017 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../../gn/perfetto.gni")
+import("../../../gn/test.gni")
+
+assert(enable_perfetto_traced_probes)
+
+# The unprivileged daemon that is allowed to access tracefs (for ftrace).
+# Registers as a Producer on the traced daemon.
+executable("traced_probes") {
+  deps = [
+    "../../../:libperfetto",
+    "../../../gn:default_deps",
+    "../../../include/perfetto/ext/traced",
+  ]
+  sources = [ "main.cc" ]
+  assert_no_deps = [ "../../../gn:protobuf_lite" ]
+
+  # Abseil is only used in Perfetto via the gRPC/libprotobuf.
+  if (perfetto_build_standalone || is_perfetto_build_generator) {
+    assert_no_deps += [ "../../../buildtools:abseil_cpp" ]
+  }
+}
+
+# Contains all the implementation but not the main() entry point. This target
+# is shared both by the executable and tests.
+source_set("probes") {
+  public_deps = [ "../../../include/perfetto/ext/traced" ]
+  deps = [
+    ":probes_src",
+    "../../../gn:default_deps",
+    "../../base:version",
+    "../../tracing/ipc/producer",
+  ]
+  sources = [ "probes.cc" ]
+}
+
+source_set("probes_src") {
+  public_deps = [
+    "ftrace",
+    "ftrace:tracefs",
+  ]
+  deps = [
+    ":data_source",
+    "../../../gn:default_deps",
+    "../../../include/perfetto/ext/traced",
+    "../../../protos/perfetto/config/ftrace:cpp",
+    "../../../protos/perfetto/trace:zero",
+    "../../../protos/perfetto/trace/ps:zero",
+    "../../../src/kernel_utils:syscall_table",
+    "../../android_stats",
+    "../../base",
+    "../../tracing/core",
+    "../../tracing/ipc/producer",
+    "android_cpu_per_uid",
+    "android_game_intervention_list",
+    "android_kernel_wakelocks",
+    "android_log",
+    "android_system_property",
+    "common",
+    "filesystem",
+    "initial_display_state",
+    "metatrace",
+    "packages_list",
+    "power",
+    "ps",
+    "statsd_client",
+    "sys_stats",
+    "system_info",
+    "user_list",
+  ]
+  sources = [
+    "probes_producer.cc",
+    "probes_producer.h",
+  ]
+}
+
+# Base class for data sources in traced_probes.
+# Needs to be a separate target to avoid cyclical deps.
+source_set("data_source") {
+  deps = [
+    "../../../gn:default_deps",
+    "../../tracing/core",
+  ]
+  sources = [
+    "probes_data_source.cc",
+    "probes_data_source.h",
+  ]
+}
+
+perfetto_unittest_source_set("unittests") {
+  testonly = true
+  deps = [
+    ":probes_src",
+    "../../../gn:default_deps",
+    "../../../gn:gtest_and_gmock",
+    "../../tracing/test:test_support",
+    "android_game_intervention_list:unittests",
+    "android_log:unittests",
+    "android_system_property:unittests",
+    "common:unittests",
+    "filesystem:unittests",
+    "ftrace:unittests",
+    "initial_display_state:unittests",
+    "packages_list:unittests",
+    "power:unittests",
+    "ps:unittests",
+    "statsd_client:unittests",
+    "sys_stats:unittests",
+    "system_info:unittests",
+    "user_list:unittests",
+  ]
+}

@@ -1,0 +1,272 @@
+/*
+ * Copyright (C) 2023 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+package perfetto.protos;
+
+// Proto definition based on the Thread_v2 CSwitch class definition
+// See: https://learn.microsoft.com/en-us/windows/win32/etw/cswitch
+message CSwitchEtwEvent {
+  // New thread ID after the switch.
+  optional uint32 new_thread_id = 1;
+
+  // Previous thread ID.
+  optional uint32 old_thread_id = 2;
+
+  // Thread priority of the new thread.
+  optional sint32 new_thread_priority = 3;
+
+  // Thread priority of the previous thread.
+  optional sint32 old_thread_priority = 4;
+
+  // The index of the C-state that was last used by the processor. A value of 0
+  // represents the lightest idle state with higher values representing deeper
+  // C-states.
+  optional uint32 previous_c_state = 5;
+
+  // Wait reason for the previous thread. The ordering is important as based on
+  // the OldThreadWaitReason definition from the link above. The following are
+  // the possible values:
+  enum OldThreadWaitReason {
+    EXECUTIVE = 0;
+    FREE_PAGE = 1;
+    PAGE_IN = 2;
+    POOL_ALLOCATION = 3;
+    DELAY_EXECUTION = 4;
+    SUSPEND = 5;
+    USER_REQUEST = 6;
+    WR_EXECUTIVE = 7;
+    WR_FREE_PAGE = 8;
+    WR_PAGE_IN = 9;
+    WR_POOL_ALLOCATION = 10;
+    WR_DELAY_EXECUTION = 11;
+    WR_SUSPENDED = 12;
+    WR_USER_REQUEST = 13;
+    WR_EVENT_PAIR = 14;
+    WR_QUEUE = 15;
+    WR_LPC_RECEIVER = 16;
+    WR_LPC_REPLY = 17;
+    WR_VIRTUAL_MEMORY = 18;
+    WR_PAGE_OUT = 19;
+    WR_RENDEZ_VOUS = 20;
+    WR_KEYED_EVENT = 21;
+    WR_TERMINATED = 22;
+    WR_PROCESS_IN_SWAP = 23;
+    WR_CPU_RATE_CONTROL = 24;
+    WR_CALLOUT_STACK = 25;
+    WR_KERNEL = 26;
+    WR_RESOURCE = 27;
+    WR_PUSH_LOCK = 28;
+    WR_MUTEX = 29;
+    WR_QUANTUM_END = 30;
+    WR_DISPATCH_INT = 31;
+    WR_PREEMPTED = 32;
+    WR_YIELD_EXECUTION = 33;
+    WR_FAST_MUTEX = 34;
+    WR_GUARD_MUTEX = 35;
+    WR_RUNDOWN = 36;
+    MAXIMUM_WAIT_REASON = 37;
+  }
+
+  oneof old_thread_wait_reason_enum_or_int {
+    OldThreadWaitReason old_thread_wait_reason = 6;
+    int32 old_thread_wait_reason_int = 11;
+  }
+
+  // Wait mode for the previous thread. The ordering is important as based on
+  // the OldThreadWaitMode definition from the link above. The following are the
+  // possible values:
+  enum OldThreadWaitMode {
+    KERNEL_MODE = 0;
+    USER_MODE = 1;
+  }
+
+  oneof old_thread_wait_mode_enum_or_int {
+    OldThreadWaitMode old_thread_wait_mode = 7;
+    int32 old_thread_wait_mode_int = 12;
+  }
+
+  // State of the previous thread. The ordering is important as based on the
+  // OldThreadState definition from the link above. The following are the
+  // possible state values:
+  enum OldThreadState {
+    INITIALIZED = 0;
+    READY = 1;
+    RUNNING = 2;
+    STANDBY = 3;
+    TERMINATED = 4;
+    WAITING = 5;
+    TRANSITION = 6;
+    DEFERRED_READY = 7;
+  }
+
+  oneof old_thread_state_enum_or_int {
+    OldThreadState old_thread_state = 8;
+    sint32 old_thread_state_int = 13;
+  }
+
+  // Ideal wait time of the previous thread.
+  optional sint32 old_thread_wait_ideal_processor = 9;
+
+  // Wait time for the new thread.
+  optional uint32 new_thread_wait_time = 10;
+}
+
+// Proto definition based on the Thread_v2 CSwitch class definition
+// See: https://learn.microsoft.com/en-us/windows/win32/etw/readythread
+message ReadyThreadEtwEvent {
+  // The thread identifier of the thread being readied for execution.
+  optional uint32 t_thread_id = 1;
+
+  // The reason for the priority boost. The ordering is important as based on
+  // the AdjustReason definition from the link above.
+  enum AdjustReason {
+    IGNORE_THE_INCREMENT = 0;
+    // Apply the increment, which will decay incrementally at the end of each
+    // quantum.
+    APPLY_INCREMENT = 1;
+    // Apply the increment as a boost that will decay in its entirety at quantum
+    // (typically for priority donation).
+    APPLY_INCREMENT_BOOST = 2;
+  }
+
+  oneof adjust_reason_enum_or_int {
+    AdjustReason adjust_reason = 2;
+    int32 adjust_reason_int = 5;
+  }
+
+  //  The value by which the priority is being adjusted.
+  optional sint32 adjust_increment = 3;
+
+  enum TraceFlag {
+    TRACE_FLAG_UNSPECIFIED = 0;
+    // The thread has been readied from DPC (deferred procedure call).
+    THREAD_READIED = 0x1;
+    // The kernel stack is currently swapped out.
+    KERNEL_STACK_SWAPPED_OUT = 0x2;
+    // The process address space is swapped out.
+    PROCESS_ADDRESS_SWAPPED_OUT = 0x4;
+  }
+
+  oneof flag_enum_or_int {
+    TraceFlag flag = 4;
+    int32 flag_int = 6;
+  }
+}
+
+// Proto definition based on the type of MemInfoArgs_V1, found here and observed
+// on local traces using tracerpt:
+// https://github.com/repnz/etw-providers-docs/blob/master/Manifests-Win10-17134/Microsoft-Windows-Kernel-Memory.xml
+message MemInfoEtwEvent {
+  // Number of memory priorities on the system.
+  optional uint32 priority_levels = 1;
+
+  // Number of pages in the zero list.
+  optional uint64 zero_page_count = 2;
+
+  // Number of pages in the free list.
+  optional uint64 free_page_count = 3;
+
+  // Number of pages in the modified list.
+  optional uint64 modified_page_count = 4;
+
+  // Number of modified non-paged pool pages.
+  optional uint64 modified_no_write_page_count = 5;
+
+  // Number of bad pages.
+  optional uint64 bad_page_count = 6;
+
+  // Number of standby pages by memory priority.
+  repeated uint64 standby_page_counts = 7;
+
+  // Number of repurposed pages by memory priority.
+  repeated uint64 repurposed_page_counts = 8;
+
+  // Modified paged pages.
+  optional uint64 modified_page_count_page_file = 9;
+  // Pool page counts.
+  optional uint64 paged_pool_page_count = 10;
+  optional uint64 non_paged_pool_page_count = 11;
+
+  // Memory Descriptor List page count.
+  optional uint64 mdl_page_count = 12;
+
+  // Commit weight.
+  optional uint64 commit_page_count = 13;
+}
+
+// Proto definition based on the `FileIo_Create` class definition.
+message FileIoCreateEtwEvent {
+  optional uint64 irp_ptr = 1;
+  optional uint64 file_object = 2;
+  optional uint32 ttid = 3;
+  optional uint32 create_options = 4;
+  optional uint32 file_attributes = 5;
+  optional uint32 share_access = 6;
+  optional string open_path = 7;
+}
+
+// Proto definition based on the `FileIo_DirEnum` class definition.
+message FileIoDirEnumEtwEvent {
+  optional uint64 irp_ptr = 1;
+  optional uint64 file_object = 2;
+  optional uint64 file_key = 3;
+  optional uint32 ttid = 4;
+  optional uint32 length = 5;
+  optional uint32 info_class = 6;
+  optional uint32 file_index = 7;
+  optional string file_name = 8;
+  optional uint32 opcode = 9;
+}
+
+// Proto definition based on the `FileIo_Info` class definition.
+message FileIoInfoEtwEvent {
+  optional uint64 irp_ptr = 1;
+  optional uint64 file_object = 2;
+  optional uint64 file_key = 3;
+  optional uint64 extra_info = 4;
+  optional uint32 ttid = 5;
+  optional uint32 info_class = 6;
+  optional uint32 opcode = 7;
+}
+
+// Proto definition based on the `FileIo_ReadWrite` class definition.
+message FileIoReadWriteEtwEvent {
+  optional uint64 offset = 1;
+  optional uint64 irp_ptr = 2;
+  optional uint64 file_object = 3;
+  optional uint64 file_key = 4;
+  optional uint32 ttid = 5;
+  optional uint32 io_size = 6;
+  optional uint32 io_flags = 7;
+  optional uint32 opcode = 8;
+}
+
+// Proto definition based on the `FileIo_SimpleOp` class definition.
+message FileIoSimpleOpEtwEvent {
+  optional uint64 irp_ptr = 1;
+  optional uint64 file_object = 2;
+  optional uint64 file_key = 3;
+  optional uint32 ttid = 4;
+  optional uint32 opcode = 5;
+}
+
+// Proto definition based on the `FileIo_OpEnd` class definition.
+message FileIoOpEndEtwEvent {
+  optional uint64 irp_ptr = 1;
+  optional uint64 extra_info = 2;
+  optional uint32 nt_status = 3;
+}

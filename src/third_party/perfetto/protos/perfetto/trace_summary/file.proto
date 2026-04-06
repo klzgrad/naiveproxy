@@ -1,0 +1,78 @@
+/*
+ * Copyright (C) 2025 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+package perfetto.protos;
+
+import "protos/perfetto/perfetto_sql/structured_query.proto";
+import "protos/perfetto/trace_summary/v2_metric.proto";
+
+// Wrapper proto containing a bunch of specifications for computing summaries
+// of traces.
+//
+// This proto is largely a single wrapper around a bunch of different
+// concepts to make it easy to have self-contained config files for summarising
+// the contents of traces. See the comments on individual fields for usage of
+// this proto.
+//
+// NOTE FOR MODIFIERS: all fields of this proto *must* be non-packed, repeated
+// fields. There is an expectation that instances of this proto can be
+// concatenated together trivially without any loss of information.
+message TraceSummarySpec {
+  // The specification of a v2 trace metric.
+  //
+  // See documentation for TraceMetricV2Spec for usage of this field.
+  repeated TraceMetricV2Spec metric_spec = 1;
+
+  // Instances of structured queries whose ids can be referenced by:
+  // 1) `inner_query_id` field of any `metric_spec.query` which is useful for
+  //    sharing a single query across many different metrics.
+  // 2) computation of trace-wide metadata.
+  repeated PerfettoSqlStructuredQuery query = 2;
+
+  // A template for generating multiple v2 trace metrics.
+  //
+  // See documentation for TraceMetricV2TemplateSpec for usage of this field.
+  repeated TraceMetricV2TemplateSpec metric_template_spec = 3;
+}
+
+// Wrapper proto containing a bunch of outputs protos produced when computing
+// summaries of traces.
+//
+// See comments on `TraceSummarySpec` and on individual fields for usage of this
+// proto.
+//
+// Next id: 4
+message TraceSummary {
+  // Was the old non-bundled output format.
+  reserved 1;
+
+  // The v2 trace metrics computed for the trace in a "bundled" form.
+  //
+  // See documentation for TraceMetricV2Bundle for usage of this field.
+  repeated TraceMetricV2Bundle metric_bundles = 3;
+
+  // Metadata about the whole trace file as key value pairs. This is intended
+  // to put metadata about the trace (e.g. the device trace was collected on,
+  // the OS version) which gives context to other parts of the summary (e.g. the
+  // metrics).
+  message Metadata {
+    optional string key = 1;
+    optional string value = 2;
+  }
+  repeated Metadata metadata = 2;
+}

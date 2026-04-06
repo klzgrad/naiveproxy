@@ -1,0 +1,85 @@
+# Copyright (C) 2019 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../../gn/test.gni")
+
+assert(enable_perfetto_trace_processor_sqlite)
+
+source_set("sqlite") {
+  sources = [
+    "module_state_manager.cc",
+    "module_state_manager.h",
+    "scoped_db.h",
+    "sql_source.cc",
+    "sql_source.h",
+    "sql_stats_table.cc",
+    "sql_stats_table.h",
+    "sqlite_engine.cc",
+    "sqlite_engine.h",
+    "sqlite_utils.cc",
+    "sqlite_utils.h",
+    "stats_table.cc",
+    "stats_table.h",
+  ]
+  deps = [
+    "..:metatrace",
+    "../../../gn:default_deps",
+    "../../../gn:sqlite",
+    "../../../include/perfetto/trace_processor",
+    "../../../include/perfetto/trace_processor:basic_types",
+    "../../../protos/perfetto/trace/ftrace:zero",
+    "../../../protos/perfetto/trace_processor:zero",
+    "../../base",
+    "../containers",
+    "../importers/common",
+    "../importers/ftrace:ftrace_descriptors",
+    "../perfetto_sql/intrinsics/table_functions:interface",
+    "../storage",
+    "../types",
+    "../util:profile_builder",
+    "../util:regex",
+  ]
+  public_deps = [ "bindings" ]
+}
+
+perfetto_unittest_source_set("unittests") {
+  testonly = true
+  sources = [
+    "sql_source_unittest.cc",
+    "sqlite_utils_unittest.cc",
+  ]
+  deps = [
+    ":sqlite",
+    "../../../gn:default_deps",
+    "../../../gn:gtest_and_gmock",
+    "../../../gn:sqlite",
+    "../../../include/perfetto/trace_processor:basic_types",
+    "../../base",
+    "../../base:test_support",
+  ]
+}
+
+if (enable_perfetto_benchmarks) {
+  source_set("benchmarks") {
+    testonly = true
+    deps = [
+      ":sqlite",
+      "../../../gn:benchmark",
+      "../../../gn:default_deps",
+      "../../../gn:sqlite",
+      "../../base",
+    ]
+    sources = [ "sqlite_vtable_benchmark.cc" ]
+  }
+}

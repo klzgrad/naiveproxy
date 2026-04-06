@@ -1,0 +1,342 @@
+/*
+ * Copyright (C) 2019 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+import "protos/perfetto/trace/track_event/chrome_process_descriptor.proto";
+import "protos/perfetto/trace/track_event/chrome_thread_descriptor.proto";
+import "protos/perfetto/trace/track_event/process_descriptor.proto";
+import "protos/perfetto/trace/track_event/thread_descriptor.proto";
+import "protos/perfetto/trace/track_event/counter_descriptor.proto";
+
+package perfetto.protos;
+
+// Defines a track for TrackEvents. Slices and instant events on the same track
+// will be nested based on their timestamps, see TrackEvent::Type.
+//
+// A TrackDescriptor only needs to be emitted by one trace writer / producer and
+// is valid for the entirety of the trace. To ensure the descriptor isn't lost
+// when the ring buffer wraps, it should be reemitted whenever incremental state
+// is cleared.
+//
+// As a fallback, TrackEvents emitted without an explicit track association will
+// be associated with an implicit trace-global track (uuid = 0), see also
+// |TrackEvent::track_uuid|. It is possible but not necessary to emit a
+// TrackDescriptor for this implicit track.
+//
+// Next id: 18.
+message TrackDescriptor {
+  // Unique ID that identifies this track. This ID is global to the whole trace.
+  // Producers should ensure that it is unlikely to clash with IDs emitted by
+  // other producers. A value of 0 denotes the implicit trace-global track.
+  //
+  // For example, legacy TRACE_EVENT macros may use a hash involving the async
+  // event id + id_scope, pid, and/or tid to compute this ID.
+  optional uint64 uuid = 1;
+
+  // A parent track reference can be used to describe relationships between
+  // tracks. For example, to define an asynchronous track which is scoped to a
+  // specific process, specify the uuid for that process's process track here.
+  // Similarly, to associate a COUNTER_THREAD_TIME_NS counter track with a
+  // thread, specify the uuid for that thread's thread track here. In general,
+  // setting a parent will *nest* that track under the parent in the UI and in
+  // the trace processor data model (with the important exception noted below).
+  //
+  // If not specified, the track will be a root track, i.e. not nested under any
+  // other track.
+  //
+  // Note: if the `thread` or `process` fields are set, this value will be
+  // *ignored* as priority is given to those fields.
+  //
+  // Note: if the parent is set to a track with `thread` or `process` fields
+  // set, the track will *not* be nested under the parent in the UI and in the
+  // trace processor data model. Instead, the track will inherit the parent's
+  // thread/process association and will appear as a *sibling* of the parent.
+  // This semantic exists for back-compat reasons as the UI used to work this
+  // way for years and changing this leads to a lot of traces subtly breaking.
+  // If you want to force nesting, create *another* intermediate track to act as
+  // the parent.
+  optional uint64 parent_uuid = 5;
+
+  // Name of the track.
+  //
+  // Optional but *strongly recommended* to be specified in a `TrackDescriptor`
+  // emitted before any `TrackEvent`s on the same track.
+  //
+  // Note: any name specified here will be *ignored* for the root thread scoped
+  // tracks when `disallow_merging_with_system_tracks` is not set, as in this
+  // case, the name of the track is shared by many different data sources and so
+  // is centrally controlled by trace processor.
+  //
+  // It's strongly recommended to only emit the name for a track uuid *once*. If
+  // a descriptor *has* to be emitted multiple times (e.g. between different
+  // processes), it's recommended to ensure that the name is consistent across
+  // all TrackDescriptors with the same `uuid`.
+  //
+  // If the the above recommendation is not followed and the same uuid is
+  // emitted with different names, it is implementation defined how the final
+  // name will be chosen and may change at any time.
+  //
+  // The current implementation of trace processor chooses the name in the
+  // following way, depending on the value of the `sibling_merge_behavior`
+  // field:
+  //
+  // 1. If `sibling_merge_behavior` is set to `SIBLING_MERGE_BEHAVIOR_NONE`:
+  //   * The *last* non-null name in the whole trace according to trace order
+  //     will be used.
+  //   * If no non-null name is present in the whole trace, the trace processor
+  //     may fall back to other sources to provide a name for the track (e.g.
+  //     the first event name for slice tracks, the counter name for counter
+  //     tracks). This is implementation defined and may change at any time.
+  //
+  // 2. If `sibling_merge_behavior` is set to any other value:
+  //   * The first non-null name before the first event on the track *or on any
+  //     descendant tracks* is processed will be used. For example, consider
+  //     the following sequence of events:
+  //       ts=100: TrackDescriptor(uuid=A)
+  //       ts=200: TrackDescriptor(uuid=B, parent_uuid=A)
+  //       ts=300: TrackDescriptor(uuid=A, name="Track A")
+  //       ts=400: TrackEvent(track_uuid=B)
+  //     In this case, the name for track A will be "Track A" because the
+  //     descriptor with the name was emitted before the first event on a
+  //     descendant track (B).
+  //   * If no non-null name is present before the event is processed, the trace
+  //     processor may fall back to other sources to provide a name for the
+  //     track (e.g. the first event name for slice tracks, the counter name for
+  //     counter tracks). This is implementation defined and may change at any
+  //     time.
+  //   * Note on processing order: In the standard trace processor pipeline,
+  //     `TrackDescriptor`s are processed during a "tokenization" phase, which
+  //     occurs before any `TrackEvent`s are parsed. This means that for a given
+  //     track, all its descriptors in the trace are processed before its
+  //     events. Consequently, the "first non-null name before the first event"
+  //     will be the name from the first `TrackDescriptor` for that track in the
+  //     trace file that has a non-null name. However, in a streaming parsing
+  //     scenario, the timestamp order of descriptors and events is significant,
+  //     and a descriptor arriving after an event has been processed will not be
+  //     used to name the track.
+  oneof static_or_dynamic_name {
+    string name = 2;
+    // This field is only set by the SDK when perfetto::StaticString is
+    // provided.
+    string static_name = 10;
+    // Equivalent to name, used just to mark that the data is coming from
+    // android.os.Trace.
+    string atrace_name = 13;
+  }
+
+  // A human-readable description of the track providing more context about its
+  // data. In the UI, this is shown in a popup when the track's help button is
+  // clicked.
+  optional string description = 14;
+
+  // Associate the track with a process, making it the process-global track.
+  // There should only be one such track per process (usually for instant
+  // events; trace processor uses this fact to detect pid reuse). If you need
+  // more (e.g. for asynchronous events), create child tracks using parent_uuid.
+  //
+  // Trace processor will merge events on a process track with slice-type events
+  // from other sources (e.g. ftrace) for the same process into a single
+  // timeline view.
+  optional ProcessDescriptor process = 3;
+  optional ChromeProcessDescriptor chrome_process = 6;
+
+  // Associate the track with a thread, indicating that the track's events
+  // describe synchronous code execution on the thread. There should only be one
+  // such track per thread (trace processor uses this fact to detect tid reuse).
+  //
+  // Trace processor will merge events on a thread track with slice-type events
+  // from other sources (e.g. ftrace) for the same thread into a single timeline
+  // view.
+  optional ThreadDescriptor thread = 4;
+  optional ChromeThreadDescriptor chrome_thread = 7;
+
+  // Descriptor for a counter track. If set, the track will only support
+  // TYPE_COUNTER TrackEvents (and values provided via TrackEvent's
+  // |extra_counter_values|).
+  optional CounterDescriptor counter = 8;
+
+  // If true, forces Trace Processor to use separate tracks for track events
+  // and system events for the same thread.
+  //
+  // Track events timestamps in Chrome have microsecond resolution, while
+  // system events use nanoseconds. It results in broken event nesting when
+  // track events and system events share a track.
+  optional bool disallow_merging_with_system_tracks = 9;
+
+  // Specifies how the UI should display child tracks of this track (i.e. tracks
+  // where `parent_uuid` is specified to this track `uuid`). Note that this
+  // value is simply a *hint* to the UI: the UI is not guarnateed to respect
+  // this if it has a good reason not to do so.
+  //
+  // Note: for tracks where `thread` or `process` are set, this option is
+  // *ignored*. See `parent_uuid` for details.
+  enum ChildTracksOrdering {
+    // The default ordering, with no bearing on how the UI will visualise the
+    // tracks.
+    UNKNOWN = 0;
+
+    // Order tracks by `name` or `static_name` depending on which one has been
+    // specified.
+    LEXICOGRAPHIC = 1;
+
+    // Order tracks by the first `ts` event in a track.
+    CHRONOLOGICAL = 2;
+
+    // Order tracks by `sibling_order_rank` of child tracks. Child tracks with
+    // the lower values will be shown before tracks with higher values. Tracks
+    // with no value will be treated as having 0 rank.
+    EXPLICIT = 3;
+  }
+  optional ChildTracksOrdering child_ordering = 11;
+
+  // An opaque value which allows specifying how two sibling tracks should be
+  // ordered relative to each other: tracks with lower ranks will appear before
+  // tracks with higher ranks. An unspecified rank will be treated as a rank of
+  // 0.
+  //
+  // Note: this option is only relevant for tracks where the parent has
+  // `child_ordering` set to `EXPLICIT`. It is ignored otherwise.
+  //
+  // Note: for tracks where the parent has `thread` or `process` are set, this
+  // option is *ignored* (even if the parent's `child_ordering` is `EXPLICIT``).
+  // See `parent_uuid` for details.
+  optional int32 sibling_order_rank = 12;
+
+  // Specifies how the analysis tools should "merge" different sibling
+  // TrackEvent tracks.
+  //
+  // For two or more tracks to be merged, they must be "eligible" siblings.
+  // Eligibility is determined by the following rules:
+  // 1. All tracks must have the same parent.
+  // 2. All tracks must have the same `sibling_merge_behavior`. The only
+  //    exception is `SIBLING_MERGE_BEHAVIOR_UNSPECIFIED` which is treated as
+  //    `SIBLING_MERGE_BEHAVIOR_BY_TRACK_NAME`.
+  // 3. Depending on the behavior, the corresponding key must match (e.g. `name`
+  //    for `BY_TRACK_NAME`, `sibling_merge_key` for `BY_SIBLING_MERGE_KEY`).
+  //
+  // Specifically:
+  //   - in the UI, all tracks which are merged together will be
+  //     displayed as a single "visual" track.
+  //   - in the trace processor, all tracks which are merged together will be
+  //     "multiplexed" into n "analysis" tracks where n is the maximum number
+  //     of tracks which have an active event at the same time.
+  //
+  // When tracks are merged togther, the properties for the merged track will be
+  // chosen from the source tracks based on the following rules:
+  //   - for `sibling_order_rank`: the rank of the merged track will be the
+  //     smallest rank among the source tracks.
+  //   - for all other properties: the property taken is unspecified and can
+  //     be any value provided by one of the source tracks. This can lead to
+  //     non-deterministic behavior.
+  //      - examples of other properties include `name`, `child_ordering` etc.
+  //      - because of this, it's strongly recommended to ensure that all source
+  //        tracks have the same value for these properties.
+  //      - the trace processor will also emit an error stat if it detects
+  //        that the properties are not the same across all source tracks.
+  //
+  // Note: merging is done *recursively* so entire trees of tracks can be merged
+  // together. To make this clearer, consider an example track hierarchy (in
+  // the diagrams: "smk" refers to "sibling_merge_key", the first word on a
+  // track line, like "Updater", is its 'name' property):
+  //
+  //   Initial track hierarchy:
+  //     SystemActivity
+  //     ├── AuthService (smk: "auth_main_cluster")
+  //     │   └── LoginOp (smk: "login_v1")
+  //     ├── AuthService (smk: "auth_main_cluster")
+  //     │   └── LoginOp (smk: "login_v1")
+  //     ├── AuthService (smk: "auth_backup_cluster")
+  //     │   └── GuestOp (smk: "guest_v1")
+  //     └── UserProfileService (smk: "profile_cluster")
+  //         └── GetProfileOp (smk: "getprofile_v1")
+  //
+  // Merging outcomes:
+  //
+  // Scenario 1: Merging by `SIBLING_MERGE_BEHAVIOR_BY_SIBLING_MERGE_KEY`
+  //   - The first two "AuthService" tracks merge because they share
+  //     `smk: "auth_main_cluster"`. Their names are consistent ("AuthService"),
+  //     aligning with recommendations. The merged track is named "AuthService".
+  //   - The third "AuthService" track (with `smk: "auth_backup_cluster"`)
+  //     remains separate, as its `sibling_merge_key` is different.
+  //   - "UserProfileService" also remains separate.
+  //   - Within the merged "AuthService" (from "auth_main_cluster"):
+  //     "LoginOp" get merged as they have the same sibling merge key.
+  //
+  //   Resulting UI (when merging by SIBLING_MERGE_KEY):
+  //     SystemActivity
+  //     ├── AuthService (merged by smk: "auth_main_cluster")
+  //     │   ├── LoginOp (merged by smk: "login_v1")
+  //     ├── AuthService (smk: "auth_backup_cluster")
+  //     │   └── GuestOp (smk: "guest_v1")
+  //     └── UserProfileService (smk: "profile_cluster")
+  //         └── GetProfileOp (smk: "getprofile_v1")
+  //
+  // Scenario 2: Merging by `SIBLING_MERGE_BEHAVIOR_BY_TRACK_NAME`
+  //   - All three tracks named "AuthService" merge because they share the same
+  //     name. The merged track is named "AuthService". The `sibling_merge_key`
+  //     for this merged track would be taken from one of the source tracks
+  //     (e.g., "auth_main_cluster" or "auth_backup_cluster"), which could be
+  //     relevant if its children had key-based merge behaviors.
+  //   - "UserProfileService" remains separate due to its different name.
+  //   - Within the single merged "AuthService" track:
+  //     "LoginOp", "GuestOp" become siblings. "LoginOp" tracks gets merged as
+  //     they have the same name.
+  //
+  //   Resulting UI (when merging by SIBLING_MERGE_BEHAVIOR_BY_TRACK_NAME):
+  //     SystemActivity
+  //     ├── AuthService (merged from 3 "AuthService" tracks)
+  //     │   ├── LoginOp (smk: "login_v1")
+  //     │   └── GuestOp (smk: "guest_v1")
+  //     └── UserProfileService (smk: "profile_cluster")
+  //         └── GetProfileOp (smk: "getprofile_v1")
+  //
+  // Note: for tracks where `thread` or `process` are set, this option is
+  // *ignored*. See `parent_uuid` for details.
+  enum SiblingMergeBehavior {
+    // When unspecified or not set, defaults to
+    // `SIBLING_MERGE_BEHAVIOR_BY_TRACK_NAME`.
+    SIBLING_MERGE_BEHAVIOR_UNSPECIFIED = 0;
+
+    // Merge this track with eligible siblings which have the same `name`.
+    //
+    // This is the default behavior.option.
+    //
+    // Fun fact: this is the default beahavior for legacy reasons as the UI has
+    // worked this way for years and inherited this behavior from
+    // chrome://tracing which has worked this way for even longer
+    SIBLING_MERGE_BEHAVIOR_BY_TRACK_NAME = 1;
+
+    // Never merge this track with any siblings. Useful if if this track has a
+    // specific meaning and you want to see separately from any others.
+    SIBLING_MERGE_BEHAVIOR_NONE = 2;
+
+    // Merge this track with eligible siblings which have the same
+    // `sibling_merge_key`.
+    SIBLING_MERGE_BEHAVIOR_BY_SIBLING_MERGE_KEY = 3;
+  }
+  optional SiblingMergeBehavior sibling_merge_behavior = 15;
+
+  // An opaque value which allows specifying which tracks should be merged
+  // together.
+  //
+  // Only meaningful when `sibling_merge_behavior` is set to
+  // `SIBLING_MERGE_BEHAVIOR_BY_SIBLING_MERGE_KEY`.
+  oneof sibling_merge_key_field {
+    string sibling_merge_key = 16;
+    uint64 sibling_merge_key_int = 17;
+  }
+}

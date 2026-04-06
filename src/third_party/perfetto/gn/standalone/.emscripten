@@ -1,0 +1,39 @@
+# Copyright (C) 2021 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# This is the init script that is passed to `emcc --em-config=.emscripten`
+# (Wasm toolchain). It sets vars to locate the various emsdk / llvm dirs.
+
+import os
+import sys
+from platform import system
+
+# We cannot use __file__ here.
+this_file = os.getenv('EM_CONFIG')
+if this_file is None:
+  sys.stderr.write('Could not find EM_CONFIG in .emscripten\n')
+  sys.exit(1)
+
+root_dir = os.path.dirname(os.path.dirname(os.path.dirname(this_file)))
+buildools_os = 'mac' if system().lower() == 'darwin' else 'linux64'
+node_path = os.path.join(root_dir, 'buildtools', buildools_os, 'nodejs')
+emsdk_path = os.path.join(root_dir, 'buildtools', buildools_os, 'emsdk')
+
+# Exported vars.
+NODE_JS = os.path.join(node_path, 'bin', 'node')
+LLVM_ROOT = os.path.join(emsdk_path, 'bin')
+BINARYEN_ROOT = emsdk_path
+EMSCRIPTEN_ROOT = os.path.join(emsdk_path, 'emscripten')
+COMPILER_ENGINE = NODE_JS
+JS_ENGINES = [NODE_JS]

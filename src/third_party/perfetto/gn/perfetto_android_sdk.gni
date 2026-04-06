@@ -1,0 +1,160 @@
+# Copyright (C) 2025 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("perfetto.gni")
+
+# Actions defined in this file are used to generate Android.bp and Bazel
+# targets, they don't produce any output during the GN build process.
+
+template("perfetto_android_jni_library") {
+  _vars_to_forward = [
+    "sources",
+    "deps",
+    "binary_name",
+    "bazel_linkopts",
+    "testonly",
+    "visibility",
+  ]
+  shared_library(target_name) {
+    forward_variables_from(invoker, _vars_to_forward)
+    metadata = {
+      perfetto_custom_target_type = [ "perfetto_android_jni_library" ]
+      perfetto_argument_binary_name = [ binary_name ]
+      if (defined(bazel_linkopts)) {
+        perfetto_bazel_argument_linkopts = [ bazel_linkopts ]
+      }
+    }
+  }
+}
+
+template("perfetto_android_library") {
+  _vars_to_forward = [
+    "sources",
+    "deps",
+    "manifest",
+    "android_bp_java_target_name_suffix",
+    "android_bp_copy_java_target_name_suffix",
+    "android_bp_copy_java_target_jarjar",
+    "testonly",
+    "visibility",
+  ]
+  action(target_name) {
+    forward_variables_from(invoker, _vars_to_forward)
+    out_file_name = target_name + "_stub.txt"
+    out_path = "$target_gen_dir/" + out_file_name
+    rebased_out_path =
+        rebase_path(target_gen_dir, root_build_dir) + "/" + out_file_name
+    script = "$perfetto_root_path/tools/touch_file.py"
+    args = [
+      "--output",
+      rebased_out_path,
+    ]
+    outputs = [ out_path ]
+    metadata = {
+      perfetto_action_type_for_generator = [ "perfetto_android_library" ]
+      if (defined(manifest)) {
+        perfetto_android_manifest = [ get_path_info(manifest, "abspath") ]
+      }
+      if (defined(android_bp_java_target_name_suffix)) {
+        perfetto_android_library_android_bp_java_target_name_suffix =
+            [ android_bp_java_target_name_suffix ]
+      }
+      if (defined(android_bp_copy_java_target_name_suffix)) {
+        perfetto_android_library_android_bp_copy_java_target_name_suffix =
+            [ android_bp_copy_java_target_name_suffix ]
+        perfetto_android_library_android_bp_copy_java_target_jarjar =
+            [ get_path_info(android_bp_copy_java_target_jarjar, "abspath") ]
+      }
+    }
+  }
+}
+
+template("perfetto_android_app") {
+  _vars_to_forward = [
+    "sources",
+    "deps",
+    "manifest",
+    "resource_files_glob",
+    "testonly",
+    "visibility",
+  ]
+  action(target_name) {
+    forward_variables_from(invoker, _vars_to_forward)
+    out_file_name = target_name + "_stub.txt"
+    out_path = "$target_gen_dir/" + out_file_name
+    rebased_out_path =
+        rebase_path(target_gen_dir, root_build_dir) + "/" + out_file_name
+    script = "$perfetto_root_path/tools/touch_file.py"
+    args = [
+      "--output",
+      rebased_out_path,
+    ]
+    outputs = [ out_path ]
+    metadata = {
+      perfetto_action_type_for_generator = [ "perfetto_android_app" ]
+      perfetto_android_manifest = [ get_path_info(manifest, "abspath") ]
+      if (defined(resource_files_glob)) {
+        perfetto_android_resource_files_glob =
+            [ get_path_info(resource_files_glob, "abspath") ]
+      }
+    }
+  }
+}
+
+template("perfetto_android_instrumentation_test") {
+  _vars_to_forward = [
+    "app",
+    "test_app",
+    "android_bp_test_manifest",
+    "android_bp_test_config",
+    "testonly",
+    "visibility",
+  ]
+  action(target_name) {
+    forward_variables_from(invoker, _vars_to_forward)
+    out_file_name = target_name + "_stub.txt"
+    out_path = "$target_gen_dir/" + out_file_name
+    rebased_out_path =
+        rebase_path(target_gen_dir, root_build_dir) + "/" + out_file_name
+    script = "$perfetto_root_path/tools/touch_file.py"
+    args = [
+      "--output",
+      rebased_out_path,
+    ]
+
+    # Build generators ignore this 'deps' variable and read metada instead.
+    # We create this variable to tell GN that this test depends on two android
+    # app targets and to maintain build graph connectivity.
+    deps = [
+      app,
+      test_app,
+    ]
+    outputs = [ out_path ]
+    metadata = {
+      perfetto_action_type_for_generator =
+          [ "perfetto_android_instrumentation_test" ]
+      perfetto_android_a_i_t_app = [ get_label_info(app, "label_no_toolchain") ]
+      perfetto_android_a_i_t_test_app =
+          [ get_label_info(test_app, "label_no_toolchain") ]
+      if (defined(android_bp_test_manifest)) {
+        perfetto_android_a_i_t_android_bp_test_manifest =
+            [ get_path_info(android_bp_test_manifest, "abspath") ]
+      }
+      if (defined(android_bp_test_config)) {
+        perfetto_android_a_i_t_android_bp_test_config =
+            [ get_path_info(android_bp_test_config, "abspath") ]
+      }
+    }
+  }
+}

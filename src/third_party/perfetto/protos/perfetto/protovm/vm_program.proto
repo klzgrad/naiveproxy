@@ -1,0 +1,128 @@
+/*
+ * Copyright (C) 2025 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+package perfetto.protos;
+
+message VmProgram {
+  optional uint32 version = 1;
+  repeated VmInstruction instructions = 2;
+}
+
+message VmInstruction {
+  oneof operation {
+    VmOpSelect select = 1;
+    VmOpRegLoad reg_load = 2;
+    VmOpMerge merge = 3;
+    VmOpSet set = 4;
+    VmOpDel del = 5;
+  }
+
+  enum AbortLevel {
+    // Skip current instruction but execute following ones
+    SKIP_CURRENT_INSTRUCTION = 1;
+    // Skip current instruction as well as following ones (default)
+    SKIP_CURRENT_INSTRUCTION_AND_BREAK_OUTER = 2;
+    // Abort whole program
+    ABORT = 3;
+  };
+  optional AbortLevel abort_level = 6;
+
+  // Sub-instructions executed if the current instruction succeeds
+  repeated VmInstruction nested_instructions = 7;
+}
+
+message VmOpSelect {
+  // Enum SRC|DST|BOTH. Default=SRC.
+  optional VmCursorEnum cursor = 1;
+  repeated PathComponent relative_path = 2;
+
+  // Creates the submessage if doesn't exist in the DST cursor
+  // (think of mkdir -p). Only valid when cursor=DST|BOTH.
+  optional bool create_if_not_exist = 3;
+
+  // A path component is either: (1) a field id to descend into (common case);
+  // (2) an array index (for repeated fields); (3) a map lookup operation (for
+  // repeated fields, where we snoop a sub-field as a map key)
+  message PathComponent {
+    oneof field {
+      uint32 field_id = 1;
+      uint32 array_index = 2;
+
+      // The ID of the field in the repeated submessage that we
+      // use as a key (e.g. LayerState.layer_id). When setting this
+      // register_to_match must also be set, to tell what's the
+      // expected value of the key we are looking up.
+      uint32 map_key_field_id = 3;
+    }
+
+    // When we are selecting a leaf field, tell what's the field type
+    // to disambiguate integer types. Using uint64 by default will likely
+    // do the right thing in 99% cases (so probably we don't need to impl
+    // this until much later if somebody does a map with a fixed64 key)
+    // enum ProtoFieldType field_type = 4;  // bool | int32 | fixed32 | ...
+
+    // Only valid when using field_id. This makes select have foreach
+    // semantics. This means that the body of nested_instructions is
+    // executed several times, once per each repeated submessage.
+    optional bool is_repeated = 5;
+
+    // Only valid when using map_key_field_id. This defines which
+    // register (R1..R32) should be used to match the key of the dict
+    // in a map lookup operation.
+    // In other words:
+    // foreach msg in repeated message {
+    //   if msg[map_key_field_id] == R[register_to_match] {
+    //      break;  // Lookup succeeded, PathComponent resolves here.
+    //   }
+    // }
+    optional uint32 register_to_match = 6;
+
+    // Only valid when using field_id and is_repeated=true. When iterating
+    // over repeated fields, stores the current iteration index into the
+    // the register R1..R32 defined below. This can be used to do complex
+    // operations like "find the entry in the array that has width==100,
+    // remember its offset in the SRC array and overwrite the matching
+    // i-th element in the DST array. We will probably never implement
+    // this but it's here for completeness.
+    optional uint32 store_foreach_index_into_register = 7;
+  }
+}
+
+message VmOpRegLoad {
+  // SRC(default) | DST.
+  optional VmCursorEnum cursor = 1;
+  // 1=R1, 2=R2... 32=R32
+  optional uint32 dst_register = 2;
+}
+
+// Merges SRC into DST. Both need to point to a message (not a field).
+message VmOpMerge {}
+
+// Copies SRC into DST. If a message, replaces the DST node, discarding any
+// pre-existing field.
+message VmOpSet {}
+
+// Delete the field or message pointed by DST.
+message VmOpDel {}
+
+enum VmCursorEnum {
+  VM_CURSOR_UNSPECIFIED = 0;
+  VM_CURSOR_SRC = 1;
+  VM_CURSOR_DST = 2;
+  VM_CURSOR_BOTH = 3;
+}

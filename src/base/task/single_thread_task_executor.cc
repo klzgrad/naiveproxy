@@ -1,0 +1,58 @@
+// Copyright 2019 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "base/task/single_thread_task_executor.h"
+
+#include "base/message_loop/message_pump.h"
+#include "base/message_loop/message_pump_type.h"
+#include "base/task/sequence_manager/sequence_manager.h"
+#include "base/task/sequence_manager/sequence_manager_impl.h"
+#include "build/build_config.h"
+
+namespace base {
+
+SingleThreadTaskExecutor::SingleThreadTaskExecutor(MessagePumpType type,
+                                                   bool is_main_thread)
+    : SingleThreadTaskExecutor(type,
+                               MessagePump::Create(type),
+                               is_main_thread) {
+  DCHECK_NE(type, MessagePumpType::CUSTOM);
+}
+
+SingleThreadTaskExecutor::SingleThreadTaskExecutor(
+    std::unique_ptr<MessagePump> pump,
+    bool is_main_thread)
+    : SingleThreadTaskExecutor(MessagePumpType::CUSTOM,
+                               std::move(pump),
+                               is_main_thread) {}
+
+SingleThreadTaskExecutor::SingleThreadTaskExecutor(
+    MessagePumpType type,
+    std::unique_ptr<MessagePump> pump,
+    bool is_main_thread)
+    : sequence_manager_(sequence_manager::CreateUnboundSequenceManager(
+          sequence_manager::SequenceManager::Settings::Builder()
+              .SetMessagePumpType(type)
+              .SetIsMainThread(is_main_thread)
+              .Build())),
+      default_task_queue_(
+          sequence_manager_->CreateTaskQueue(sequence_manager::TaskQueue::Spec(
+              sequence_manager::QueueName::DEFAULT_TQ))),
+      type_(type) {
+  sequence_manager_->SetDefaultTaskRunner(task_runner());
+  sequence_manager_->BindToMessagePump(std::move(pump));
+}
+
+SingleThreadTaskExecutor::~SingleThreadTaskExecutor() = default;
+
+const scoped_refptr<SingleThreadTaskRunner>&
+SingleThreadTaskExecutor::task_runner() const {
+  return default_task_queue_->task_runner();
+}
+
+void SingleThreadTaskExecutor::SetWorkBatchSize(int work_batch_size) {
+  sequence_manager_->SetWorkBatchSize(work_batch_size);
+}
+
+}  // namespace base

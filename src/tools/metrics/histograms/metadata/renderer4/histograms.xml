@@ -1,0 +1,243 @@
+<!--
+Copyright 2020 The Chromium Authors
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
+
+<!--
+This file is used to generate a comprehensive list of Renderer4 histograms
+along with a detailed description for each histogram.
+
+For best practices on writing histogram descriptions, see
+https://chromium.googlesource.com/chromium/src.git/+/HEAD/tools/metrics/histograms/README.md
+
+Please follow the instructions in the OWNERS file in this directory to find a
+reviewer. If no OWNERS file exists, please consider signing up at
+go/reviewing-metrics (Googlers only), as all subdirectories are expected to
+have an OWNERS file. As a last resort you can send the CL to
+chromium-metrics-reviews@google.com.
+-->
+
+<histogram-configuration>
+
+<histograms>
+
+<variants name="RasterTaskTypeGpu">
+  <variant name=".Gpu" summary="This metric is for only gpu raster."/>
+  <variant name=".Oop" summary="This metric is for only oop raster."/>
+</variants>
+
+<histogram name="Renderer4.Browser.RasterTaskTotalDuration{RasterTaskTypeGpu}"
+    units="microseconds" expires_after="2023-09-10">
+  <owner>khushalsagar@chromium.org</owner>
+  <owner>chrome-gpu-metric-alerts@google.com</owner>
+  <improvement direction="LOWER_IS_BETTER"/>
+  <summary>
+    Time spent completing all work for a compositor rasterization task. This
+    includes the time in the renderer process for sending GL or paint commands
+    to the GPU process and the time for flushing these commands to the driver.
+
+    WARNING: This metric is only reported for clients with high resolution
+    clocks, which means this will be biased to a portion of the population on
+    windows. {RasterTaskTypeGpu}
+  </summary>
+</histogram>
+
+<histogram name="Renderer4.GpuImageDecodeState" enum="GpuImageUsageState"
+    expires_after="2024-05-19">
+  <owner>vmpstr@chromium.org</owner>
+  <owner>thiabaud@google.com</owner>
+  <summary>
+    Gpu image decode usage statistics. Images are decoded and locked prior to
+    upload; this indicates how that decode is used during tile management.
+    Warning: this histogram was expired from 2021-08-09 to 2022-05-20; data may
+    be missing.
+  </summary>
+</histogram>
+
+<histogram name="Renderer4.GpuImageDecodeState.CachePeakUsagePercent"
+    units="units" expires_after="2023-11-12">
+  <owner>sashamcintosh@chromium.org</owner>
+  <owner>vmpstr@chromium.org</owner>
+  <owner>thiabaud@google.com</owner>
+  <summary>
+    The current number of bytes locked by the GpuImageDecodeCache compared to
+    the maximum allowed number of bytes to lock. This value is recorded every
+    time the tile manager assigns GPU memory to tiles. Warning: this histogram
+    was expired from 2021-08-09 to 2022-05-20; data may be missing.
+  </summary>
+</histogram>
+
+<histogram name="Renderer4.GpuImageDecodeState.FirstLockWasted{OutOfRaster}"
+    enum="BooleanWasted" expires_after="2024-06-02">
+  <owner>vmpstr@chromium.org</owner>
+  <owner>thiabaud@google.com</owner>
+  <summary>
+    Indication whether the first lock of an image decode was wasted (image was
+    not used). Images are decoded and locked prior to raster; this indicates
+    whether the decode was used or not during the first lock. Warning: this
+    histogram was expired from 2021-06-06 to 2022-05-20; data may be missing.
+    {OutOfRaster}
+  </summary>
+  <token key="OutOfRaster">
+    <variant name=""/>
+    <variant name=".OutOfRaster"
+        summary="Task was not performed as part of a raster task."/>
+  </token>
+</histogram>
+
+<histogram name="Renderer4.GpuImageUploadState" enum="GpuImageUsageState"
+    expires_after="2024-04-28">
+  <owner>khushalsagar@chromium.org</owner>
+  <owner>vmpstr@chromium.org</owner>
+  <owner>thiabaud@google.com</owner>
+  <summary>
+    Gpu image upload usage statistics. Images are uploaded and locked prior to
+    use; this indicates how that upload is used during tile management. Warning:
+    this histogram was expired from 2021-06-06 to 2022-05-20; data may be
+    missing.
+  </summary>
+</histogram>
+
+<histogram name="Renderer4.GpuImageUploadState.FirstLockWasted"
+    enum="BooleanWasted" expires_after="2026-04-05">
+  <owner>vmpstr@chromium.org</owner>
+  <owner>thiabaud@google.com</owner>
+  <summary>
+    Indication whether the first lock of an image upload was wasted (image was
+    not used). Images are uploaded and locked prior to raster; this indicates
+    whether the upload was used or not during the first lock. Warning: this
+    histogram was expired from M77 to 2022-05-20, and 2022-12-31 to 2023-01-09,
+    and 2023-12-31 to 2024-01-30; data may be missing.
+  </summary>
+</histogram>
+
+<histogram name="Renderer4.GpuRasterizationEnabled" enum="BooleanEnabled"
+    expires_after="2026-07-05">
+  <owner>jonross@chromium.org</owner>
+  <owner>chrome-gpu-metric-alerts@chromium.org</owner>
+  <summary>
+    Whether gpu rasterization is enabled (checked once after the page is painted
+    for the first time).
+  </summary>
+</histogram>
+
+<histogram
+    name="Renderer4.ImageDecodeTaskDurationUs{ImageOrTaskType}.{DecodeType}"
+    units="microseconds" expires_after="2026-08-30">
+  <owner>cblume@chromium.org</owner>
+  <owner>vmpstr@chromium.org</owner>
+  <owner>sashamcintosh@chromium.org</owner>
+  <improvement direction="LOWER_IS_BETTER"/>
+  <summary>
+    This metric records the duration of an image decode for the raster path in
+    the compositor. It is recorded every time we decode an image. It is suffixed
+    by the type of rasterization we're in (either Gpu or Software). The
+    rasterization suffix is optionally prefixed by the image type (WebP, Jpeg,
+    etc.) or OutOfRaster.
+
+    Warning: Before version M78 this metric may include reports from clients
+    with low-resolution clocks (i.e. on Windows, ref.
+    |TimeTicks::IsHighResolution()|). Such reports will cause this metric to
+    have an abnormal distribution.
+  </summary>
+  <token key="ImageOrTaskType">
+<!-- Most variants below mimic the `cc::ScopedImageTask::ImageType` enum
+     but the empty variant and `OutOfRaster` mimic `cc::ScopedImageDecodeTask::TaskType`
+    -->
+
+    <variant name=""/>
+    <variant name=".Avif"/>
+    <variant name=".Bmp"/>
+    <variant name=".Gif"/>
+    <variant name=".Ico"/>
+    <variant name=".Jpeg"/>
+    <variant name=".Jxl"/>
+    <variant name=".Other"/>
+    <variant name=".OutOfRaster"/>
+    <variant name=".Png"/>
+    <variant name=".WebP"/>
+  </token>
+  <token key="DecodeType">
+<!-- Variants below mimic `cc::ScopedImageDecodeTask::DecodeType` -->
+
+    <variant name="Gpu"/>
+    <variant name="Software"/>
+  </token>
+</histogram>
+
+<histogram name="Renderer4.MainThreadGestureScrollReason2"
+    enum="MainThreadScrollingReason2" expires_after="2026-07-26">
+  <owner>flackr@chromium.org</owner>
+  <owner>pdr@chromium.org</owner>
+  <owner>input-dev@chromium.org</owner>
+  <summary>
+    Ideally we'd always scroll on the impl thread, but there are a variety of
+    situations where we need to scroll on main. We should try to drive these
+    down. For every gesture, we record whether the scroll occurred on the impl
+    thread (&quot;Not scrolling on main (no reason)&quot;), or the main thread
+    (&quot;Scrolling on main (any reason)&quot;) along with the reasons. There
+    can be multiple main-thread reasons for each scroll, so the percentage of a
+    reason shown in the UMA page is not the percentage of gesture scrolls with
+    the reason in all gesture scrolls. The actual percentage of gesture scrolls
+    with a reason would be count(the reason) / (count(&quot;Not scrolling on
+    main (no reason)&quot; + count(&quot;Scrolling on main (any reason)&quot;)).
+  </summary>
+</histogram>
+
+<histogram name="Renderer4.MainThreadWheelScrollReason2"
+    enum="MainThreadScrollingReason2" expires_after="2026-07-26">
+  <owner>flackr@chromium.org</owner>
+  <owner>pdr@chromium.org</owner>
+  <owner>input-dev@chromium.org</owner>
+  <summary>
+    Ideally we'd always scroll on the impl thread, but there are a variety of
+    situations where we need to scroll on main. We should try to drive these
+    down. For every wheel tick, we record whether the scroll occurred on the
+    impl thread (&quot;Not scrolling on main (no reason)&quot;), or the main
+    thread (&quot;Scrolling on main (any reason)&quot;) along with the reasons.
+    There can be multiple main-thread reasons for each wheel tick, so the
+    percentage of a reason shown in the UMA page is not the percentage of wheel
+    scrolls with the reason in all wheel scrolls. The actual percentage of wheel
+    scrolls with a reason would be count(the reason) / (count(&quot;Not
+    scrolling on main (no reason)&quot; + count(&quot;Scrolling on main (any
+    reason)&quot;)).
+  </summary>
+</histogram>
+
+<histogram name="Renderer4.Renderer.RasterTaskTotalDuration{RasterTaskTypeGpu}"
+    units="microseconds" expires_after="2026-08-16">
+  <owner>khushalsagar@chromium.org</owner>
+  <owner>chrome-gpu-metric-alerts@google.com</owner>
+  <improvement direction="LOWER_IS_BETTER"/>
+  <summary>
+    Time spent completing all work for a compositor rasterization task. This
+    includes the time in the renderer process for sending GL or paint commands
+    to the GPU process and the time for flushing these commands to the driver.
+
+    WARNING: This metric is only reported for clients with high resolution
+    clocks, which means this will be biased to a portion of the population on
+    windows. {RasterTaskTypeGpu}
+  </summary>
+</histogram>
+
+<histogram name="Renderer4.ScrollingThread.{ScrollSourceDevice}"
+    enum="ScrollingThreadStatus" expires_after="2026-07-05">
+  <owner>bokan@chromium.org</owner>
+  <owner>input-dev@chromium.org</owner>
+  <summary>
+    For each scroll gesture (i.e. at GestureScrollBegin), records whether the
+    scroll is: handled unblocked on the compositor thread, handled on the
+    compositor thread but blocked on main thread event listeners, or being
+    handled on the main thread. Broken down by scroll device.
+    {ScrollSourceDevice}
+  </summary>
+  <token key="ScrollSourceDevice">
+    <variant name="Touch" summary="Touch"/>
+    <variant name="Wheel" summary="Wheel"/>
+  </token>
+</histogram>
+
+</histograms>
+
+</histogram-configuration>

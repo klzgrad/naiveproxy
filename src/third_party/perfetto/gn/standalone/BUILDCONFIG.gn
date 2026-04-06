@@ -1,0 +1,129 @@
+# Copyright (C) 2017 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+declare_args() {
+  is_debug = true
+  is_system_compiler = false
+  is_lto = false
+
+  # Currently QNX is only supported via their gcc-compatible compiler.
+  is_clang = target_os != "qnx"
+
+  # This is defined here because it's needed below for determining the value of
+  # |is_cross_compiling|.
+  target_triplet = ""
+}
+
+# Platform detection
+if (target_os == "") {
+  target_os = host_os
+}
+if (current_os == "") {
+  current_os = target_os
+}
+
+is_android = current_os == "android"
+is_chromeos = current_os == "chromeos"
+is_linux = current_os == "linux"
+is_linux_host = host_os == "linux"
+is_mac = current_os == "mac"
+is_mac_host = host_os == "mac"
+is_win = current_os == "win"
+is_win_host = host_os == "win"
+is_qnx = current_os == "qnx"
+is_freebsd = current_os == "freebsd"
+is_freebsd_host = host_os == "freebsd"
+
+# Building with Windows/Fuchsia/nacl is currently only supported in the Chromium
+# tree so always set this to false.
+is_fuchsia = false
+is_nacl = false
+
+if (target_cpu == "") {
+  target_cpu = host_cpu
+  if (is_android) {
+    target_cpu = "arm"
+  }
+}
+if (current_cpu == "") {
+  current_cpu = target_cpu
+}
+
+declare_args() {
+  # the ossfuzz sanitizer overrides this to true. In that config the
+  # host/target cpu and arch are identical, but we want to build only the
+  # targets with the sanitizer/fuzzer flags
+  is_cross_compiling =
+      target_cpu != host_cpu || target_os != host_os || target_triplet != ""
+}
+default_configs = [
+  "//gn/standalone:default",
+  "//gn/standalone:extra_warnings",
+  "//gn/standalone:no_exceptions",
+  "//gn/standalone:rtti_cflags",
+  "//gn/standalone:visibility_hidden",
+  "//gn/standalone/libc++:config",
+  "//gn/standalone/sanitizers:sanitizers_cflags",
+  "//gn/standalone:c++17",
+]
+
+if (is_debug) {
+  default_configs += [ "//gn/standalone:debug_noopt" ]
+} else {
+  default_configs += [ "//gn/standalone:release" ]
+}
+
+if (is_win) {
+  default_configs += [ "//gn/standalone:win32_lean_and_mean" ]
+}
+
+set_defaults("source_set") {
+  configs = default_configs
+}
+
+set_defaults("static_library") {
+  configs = default_configs
+}
+
+# Realistically the only shared_library that we build right now is libc++.so
+# when use_custom_libcxx=true (on Linux). Hence don't add a dependency on
+# libc++ itself on these targets.
+set_defaults("shared_library") {
+  configs = default_configs
+  configs += [ "//gn/standalone:shared_library" ]
+
+  # note: the following is not a nested config to be removable.
+  configs += [ "//gn/standalone:android_liblog" ]
+}
+
+set_defaults("executable") {
+  configs = default_configs
+  configs += [ "//gn/standalone:executable" ]
+
+  # note: the following is not a nested config to be removable.
+  configs += [ "//gn/standalone:android_liblog" ]
+}
+
+if (is_win) {
+  _default_toolchain = "//gn/standalone/toolchain:msvc"
+} else {
+  _default_toolchain = "//gn/standalone/toolchain:gcc_like"
+}
+set_default_toolchain(_default_toolchain)
+
+if (is_cross_compiling) {
+  host_toolchain = "//gn/standalone/toolchain:gcc_like_host"
+} else {
+  host_toolchain = _default_toolchain
+}

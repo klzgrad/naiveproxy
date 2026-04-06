@@ -1,0 +1,196 @@
+\C{macropkg} \i{Standard Macro Packages}
+
+The \i\c{%use} directive (see \k{use}) includes one of the standard
+macro packages included with the NASM distribution and compiled into
+the NASM binary.  It operates like the \c{%include} directive (see
+\k{include}), but the included contents is provided by NASM itself.
+
+The names of standard macro packages are case insensitive and can be
+quoted or not.
+
+As of version 2.15, NASM has \c{%ifusable} and \c{%ifusing} directives to help
+the user understand whether an individual package available in this version of
+NASM (\c{%ifusable}) or a particular package already loaded (\c{%ifusing}).
+
+
+\H{pkg_altreg} \i\c{altreg}: \i{Alternate Register Names}
+
+The \c{altreg} standard macro package provides alternate register
+names.  It provides numeric register names for all registers (not just
+\c{R8}-\c{R15}), the Intel-defined aliases \c{R8L}-\c{R15L} for the
+low bytes of register (as opposed to the NASM/AMD standard names
+\c{R8B}-\c{R15B}), and the names \c{R0H}-\c{R3H} (by analogy with
+\c{R0L}-\c{R3L}) for \c{AH}, \c{CH}, \c{DH}, and \c{BH}.
+
+Example use:
+
+\c %use altreg
+\c
+\c proc:
+\c       mov r0l,r3h                    ; mov al,bh
+\c       ret
+
+See also \k{reg64}.
+
+
+\H{pkg_smartalign} \i\c{smartalign}\I{align, smart}: Smart \c{ALIGN} Macro
+
+The \c{smartalign} standard macro package provides for an \i\c{ALIGN}
+macro which is more powerful than the default (and
+backwards-compatible) one (see \k{align}).  When the \c{smartalign}
+package is enabled, when \c{ALIGN} is used without a second argument,
+NASM will generate a sequence of instructions more efficient than a
+series of \c{NOP}.  Furthermore, if the padding exceeds a specific
+threshold, then NASM will generate a jump over the entire padding
+sequence.
+
+The specific instructions generated can be controlled with the
+new \i\c{ALIGNMODE} macro.  This macro takes two parameters: one mode,
+and an optional jump threshold override. If (for any reason) you need
+to turn off the jump completely just set jump threshold value to -1
+(or set it to \c{nojmp}). The following modes are possible:
+
+\b \c{generic}: Works on all x86 CPUs and should have reasonable
+performance.  The default jump threshold is 8.  This is the
+default.
+
+\b \c{nop}: Pad out with \c{NOP} instructions.  The only difference
+compared to the standard \c{ALIGN} macro is that NASM can still jump
+over a large padding area.  The default jump threshold is 16.
+
+\b \c{k7}: Optimize for the AMD K7 (Athlon/Althon XP).  These
+instructions should still work on all x86 CPUs.  The default jump
+threshold is 16.
+
+\b \c{k8}: Optimize for the AMD K8 (Opteron/Althon 64).  These
+instructions should still work on all x86 CPUs.  The default jump
+threshold is 16.
+
+\b \c{p6}: Optimize for Intel CPUs.  This uses the long \c{NOP}
+instructions first introduced in Pentium Pro.  This is incompatible
+with all CPUs of family 5 or lower, as well as some VIA CPUs and
+several virtualization solutions.  The default jump threshold is 16.
+
+The macro \i\c{__?ALIGNMODE?__} is defined to contain the current
+alignment mode.  A number of other macros beginning with \c{__?ALIGN_}
+are used internally by this macro package.
+
+
+\H{pkg_fp} \i\c\{fp}: Floating-point macros
+
+This packages contains the following floating-point convenience macros:
+
+\c %define Inf             __?Infinity?__
+\c %define NaN             __?QNaN?__
+\c %define QNaN            __?QNaN?__
+\c %define SNaN            __?SNaN?__
+\c
+\c %define float8(x)       __?float8?__(x)
+\c %define float16(x)      __?float16?__(x)
+\c %define bfloat16(x)     __?bfloat16?__(x)
+\c %define float32(x)      __?float32?__(x)
+\c %define float64(x)      __?float64?__(x)
+\c %define float80m(x)     __?float80m?__(x)
+\c %define float80e(x)     __?float80e?__(x)
+\c %define float128l(x)    __?float128l?__(x)
+\c %define float128h(x)    __?float128h?__(x)
+
+It also defines the a multi-line macro \i\c{bf16} that can be used
+in a similar way to the \c{D}\e{x} directives for the other
+floating-point numbers:
+
+\c      bf16 -3.1415, NaN, 2000.0, +Inf
+
+
+\H{pkg_ifunc} \i\c{ifunc}: \i{Integer functions}
+
+This package contains a set of macros which implement integer
+functions.  These are actually implemented as special operators, but
+are most conveniently accessed via this macro package.
+
+The macros provided are:
+
+\S{ilog2} \i{Integer logarithms}
+
+These functions calculate the integer logarithm base 2 of their
+argument, considered as an unsigned integer.  The only differences
+between the functions is their respective behavior if the argument
+provided is not a power of two.
+
+The function \i\c{ilog2e()} (alias \i\c{ilog2()}) generates an error if
+the argument is not a power of two.
+
+The function \i\c{ilog2f()} rounds the argument down to the nearest
+power of two; if the argument is zero it returns zero.
+
+The function \i\c{ilog2c()} rounds the argument up to the nearest
+power of two.
+
+The functions \i\c{ilog2fw()} (alias \i\c{ilog2w()}) and
+\i\c{ilog2cw()} generate a warning if the argument is not a power of
+two, but otherwise behaves like \c{ilog2f()} and \c{ilog2c()},
+respectively.
+
+\H{pkg_masm} \i\c{masm}: \i{MASM compatibility}
+
+Since version 2.15, NASM has a MASM compatibility package with minimal
+functionality, as intended to be used primarily with machine-generated code.
+It does not include any "programmer-friendly" shortcuts, nor does it in any way
+support ASSUME, symbol typing, or MASM-style structures.
+
+To enable the package, use the directive:
+
+\c{%use masm}
+
+Currently, the MASM compatibility package emulates:
+
+\b The \c{FLAT} and \c{OFFSET} keywords are recognized and ignored.
+
+\b The \c{PTR} keyword signifies a memory reference, as if the
+argument had been put in square brackets:
+
+\c      mov eax,[foo]               ; memory reference
+\c      mov eax,dword ptr foo       ; memory reference
+\c      mov eax,dowrd ptr flat:foo  ; memory reference
+\c      mov eax,offset foo          ; address
+\c      mov eax,foo                 ; address (ambiguous syntax in MASM)
+
+\b The \c{SEGMENT} ... \c{ENDS} syntax:
+
+\c    segname SEGMENT
+\c        ...
+\c    segname ENDS
+
+\b The \c{PROC} ... \c{ENDP} syntax:
+
+\c    procname PROC [FAR]
+\c         ...
+\c    procname ENDP
+
+\> \c{PROC} will also define \c{RET} as a macro expanding to either
+\c{RETF} if \c{FAR} is specified and \c{RETN} otherwise. Any keyword
+after \c{PROC} other than \c{FAR} is ignored.
+
+\b The \c{TBYTE} keyword as an alias for \c{TWORD} (see \k{qsother}).
+
+\b The \c{END} directive is ignored.
+
+\b In 64-bit mode relative addressing is the default (\c{DEFAULT REL},
+see \k{REL & ABS}).
+
+In addition, NASM now natively supports, regardless of whether this
+package is used or not:
+
+\b \c{?} and \c{DUP} syntax for the \c{DB} etc data declaration
+directives (see \k{db}).
+
+\b \c{displacement[base+index]} syntax for memory operations, instead
+of \c{[base+index+displacement]}.
+
+\b \c{seg:[addr]} instead of \c{[seg:addr]} syntax.
+
+\b A pure offset can be given to \c{LEA} without square brackets:
+
+\c      lea rax,[foo]               ; standard syntax
+\c      lea rax,foo                 ; also accepted
+

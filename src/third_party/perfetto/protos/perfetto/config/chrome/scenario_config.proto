@@ -1,0 +1,134 @@
+/*
+ * Copyright (C) 2023 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+package perfetto.protos;
+
+import "protos/perfetto/config/trace_config.proto";
+
+// Rule that triggers scenario events (e.g. start, stop).
+message TriggerRule {
+  // Rule unique name.
+  optional string name = 1;
+
+  // A value between 0 and 1 which encodes the probability this rule is
+  // triggered.
+  optional float trigger_chance = 2;
+
+  // Additional delay *after* the trigger below. This is mostly useful
+  // to trace beyond a triggered event in upload rules. Other triggers
+  // can still be serviced during this period.
+  optional uint64 delay_ms = 3;
+
+  // Delay *before* which the rule is activated. Trigger events during this
+  // period are ignored by this rule. This is mostly useful to trace for a
+  // minimum duration before watching trigger events.
+  optional uint64 activation_delay_ms = 8;
+
+  // Triggers when a value within the specified bounds [min_value,
+  // max_value] is emitted into a Chrome histogram.
+  message HistogramTrigger {
+    optional string histogram_name = 1;
+    optional int64 min_value = 2;
+    optional int64 max_value = 3;
+  }
+  // Triggers on a repeating interval, every `period_ms` milliseconds if
+  // `randomized` is false, and at random time within a `period_ms` window
+  // otherwise, thus ticking with an average period of `period_ms` milliseconds.
+  message RepeatingInterval {
+    optional uint64 period_ms = 1;
+    optional bool randomized = 2;
+  }
+  oneof trigger {
+    // Triggers when the associated named trigger is manually emitted in Chrome
+    // client code.
+    string manual_trigger_name = 4;
+    HistogramTrigger histogram = 5;
+    RepeatingInterval repeating_interval = 6;
+  }
+}
+
+// Chrome field tracing defines a set of scenarios, each associated with
+// specific tracing configs, and nested scenarios that can cover interesting
+// tracing regions within a parent scenario. Both scenarios and nested scenarios
+// are enrolled by clients based on a set of start and stop rules that
+// delimitate a meaningful tracing interval, usually covering a user journey or
+// a guardian metric (e.g. FirstContentfulPaint). Collected traces may be saved
+// and uploaded based on upload rules. Scenario enrollment and trace uploads may
+// also be affected by client side scenario and upload limits.
+
+// Start rules from all scenarios in the config are observed by default (when no
+// scenario is active). Once enrolled in a specific scenario, other scenarios
+// are ignored until the active one is exited. Start rules for nested scenarios
+// are only observed once the parent scenario becomes active.
+
+message NestedScenarioConfig {
+  // Nested scenario name, unique within the parent scenario.
+  optional string scenario_name = 1;
+
+  // When triggered, this scenario becomes active. This activates `upload_rules`
+  // and `stop_rules`.
+  repeated TriggerRule start_rules = 2;
+  // When triggered, exits the scenario. This reverts back to the parent
+  // scenario. All nested scenarios within the parent scenario will be observed
+  // again.
+  repeated TriggerRule stop_rules = 3;
+  // When triggered, exits both this scenario and the parent scenario, stops the
+  // tracing session, and attempts to upload the trace. All scenarios are
+  // observed again.
+  repeated TriggerRule upload_rules = 4;
+}
+
+message ScenarioConfig {
+  // Scenario name, unique within the whole field tracing config.
+  optional string scenario_name = 1;
+
+  // Short scenario description, displayed in Chrome internal UI.
+  optional string scenario_description = 9;
+
+  // When triggered, this scenario becomes active. Initializes a tracing session
+  // and starts recording data sources. This activates `upload_rules` and
+  // `stop_rules`.
+  repeated TriggerRule start_rules = 2;
+  // When triggered, exits the scenario. This stops the tracing session and
+  // discards the trace. All scenarios will be observed again.
+  repeated TriggerRule stop_rules = 3;
+  // When triggered, exits the scenario, stops the tracing session, and attempts
+  // to upload the trace. All scenarios will be observed again.
+  repeated TriggerRule upload_rules = 4;
+  // When triggered, this scenario becomes active. Initializes a tracing
+  // session, without recording data sources, and waits for a `start_rules` or
+  // to enter a `nested_scenarios`, which would start recording. This also
+  // activates `stop_rules`.
+  repeated TriggerRule setup_rules = 5;
+
+  optional TraceConfig trace_config = 6;
+
+  repeated NestedScenarioConfig nested_scenarios = 7;
+
+  // When set to true, this scenario initiates a tracing session using the
+  // system backend instead of the default in-browser custom backend.
+  optional bool use_system_backend = 8;
+}
+
+message ChromeFieldTracingConfig {
+  repeated ScenarioConfig scenarios = 1;
+}
+
+message TracingTriggerRulesConfig {
+  repeated TriggerRule rules = 1;
+}

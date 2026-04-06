@@ -1,0 +1,201 @@
+# Copyright 2013 The Chromium Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/compute_inputs_for_analyze.gni")
+import("//build/config/gclient_args.gni")
+import("//build/config/sysroot.gni")
+import("//build/toolchain/rbe.gni")
+
+# Defines a config specifying the result of running pkg-config for the given
+# packages. Put the package names you want to query in the "packages" variable
+# inside the template invocation.
+#
+# You can also add defines via the "defines" variable. This can be useful to
+# add this to the config to pass defines that the library expects to get by
+# users of its headers.
+#
+# Example:
+#   pkg_config("mything") {
+#     packages = [ "mything1", "mything2" ]
+#     defines = [ "ENABLE_AWESOME" ]
+#   }
+#
+# You can also use "extra args" to filter out results (see pkg-config.py):
+#   extra_args = [ "-v, "foo" ]
+# To ignore libs and ldflags (only cflags/defines will be set, which is useful
+# when doing manual dynamic linking), set:
+#   ignore_libs = true
+
+declare_args() {
+  # A pkg-config wrapper to call instead of trying to find and call the right
+  # pkg-config directly. Wrappers like this are common in cross-compilation
+  # environments.
+  # Leaving it blank defaults to searching PATH for 'pkg-config' and relying on
+  # the sysroot mechanism to find the right .pc files.
+  pkg_config = ""
+
+  # A optional pkg-config wrapper to use for tools built on the host.
+  host_pkg_config = ""
+
+  # CrOS systemroots place pkgconfig files at <systemroot>/usr/share/pkgconfig
+  # and one of <systemroot>/usr/lib/pkgconfig or <systemroot>/usr/lib64/pkgconfig
+  # depending on whether the systemroot is for a 32 or 64 bit architecture.
+  #
+  # When build under GYP, CrOS board builds specify the 'system_libdir' variable
+  # as part of the GYP_DEFINES provided by the CrOS emerge build or simple
+  # chrome build scheme. This variable permits controlling this for GN builds
+  # in similar fashion by setting the `system_libdir` variable in the build's
+  # args.gn file to 'lib' or 'lib64' as appropriate for the target architecture.
+  system_libdir = "lib"
+}
+
+pkg_config_script = "//build/config/linux/pkg-config.py"
+
+# Define the args we pass to the pkg-config script for other build files that
+# need to invoke it manually.
+pkg_config_args = []
+
+common_pkg_config_args = []
+
+# Chrome OS uses custom pkg_config wrappers that require absolute paths as inputs.
+# See https://chromium-review.googlesource.com/c/chromium/src/+/6506002
+_pkg_config_requires_abs_path =
+    pkg_config != "" ||
+    (current_toolchain == host_toolchain && host_pkg_config != "")
+
+# Chrome-adjacent repos might be using different sysroot versions (e.g. ANGLE).
+_enable_cache =
+    !_pkg_config_requires_abs_path && defined(build_with_chromium) &&
+    build_with_chromium && sysroot != ""
+
+if (sysroot != "") {
+  if (_pkg_config_requires_abs_path) {
+    _rebased_sysroot = rebase_path(sysroot)
+  } else {
+    _rebased_sysroot = rebase_path(sysroot, root_build_dir)
+  }
+  if (_enable_cache) {
+    _cached_results = read_file("cached_results.scope", "scope")
+    _cached_results = _cached_results.data
+  }
+
+  # Pass the sysroot if we're using one (it requires the CPU arch also).
+  common_pkg_config_args += [
+    "-s",
+    _rebased_sysroot,
+    "-a",
+    current_cpu,
+  ]
+}
+
+if (pkg_config != "") {
+  pkg_config_args += [
+    "-p",
+    pkg_config,
+  ]
+}
+
+# Only use the custom libdir when building with the target sysroot.
+if (target_sysroot != "" && sysroot == target_sysroot) {
+  pkg_config_args += [
+    "--system_libdir",
+    system_libdir,
+  ]
+}
+
+if (host_pkg_config != "") {
+  host_pkg_config_args = [
+    "-p",
+    host_pkg_config,
+  ]
+} else {
+  host_pkg_config_args = pkg_config_args
+}
+
+template("pkg_config") {
+  assert(defined(invoker.packages),
+         "Variable |packages| must be defined to be a list in pkg_config.")
+  config(target_name) {
+    if (current_toolchain == host_toolchain) {
+      _cache_args = host_pkg_config_args + invoker.packages
+    } else {
+      _cache_args = pkg_config_args + invoker.packages
+    }
+    if (defined(invoker.extra_args)) {
+      _cache_args += invoker.extra_args
+    }
+
+    # exec_script() is slow, so cache results.
+    if (_enable_cache) {
+      foreach(_entry, _cached_results) {
+        if (_rebased_sysroot == _entry.sysroot) {
+          foreach(_subentry, _entry.entries) {
+            if (_subentry.args == _cache_args) {
+              pkgresult = _subentry.pkgresult
+            }
+          }
+
+          # Do not expect cache hits when:
+          #  * No entries exist for the sysroot.
+          #  * It's a package outside of the core ones in //build/config/linux
+          _expected_cache_hit =
+              filter_include([ get_path_info(".", "abspath") ],
+                             [ "//build/config/linux/*" ]) != []
+          not_needed([ "_expected_cache_hit" ])
+        }
+      }
+    }
+
+    if (!defined(pkgresult)) {
+      _script_args = common_pkg_config_args + _cache_args
+      pkgresult = exec_script(pkg_config_script, _script_args, "json")
+      if (defined(_expected_cache_hit) && _expected_cache_hit) {
+        print("sysroot=$_rebased_sysroot")
+        print("      {")
+        print("        args = $_cache_args")
+        print("        pkgresult = $pkgresult")
+        print("      },")
+        assert(
+            false,
+            "Non-cached pkg_config query. Please update //build/config/linux/cached_results.scope with the above.")
+      }
+    } else if (compute_inputs_for_analyze) {
+      # Generally, only bots add this arg. Use it to ensure cache is not stale.
+      _script_args = common_pkg_config_args + _cache_args
+      _expected_pkgresult = exec_script(pkg_config_script, _script_args, "json")
+      if (pkgresult != _expected_pkgresult) {
+        print("sysroot=$_rebased_sysroot")
+        print("      {")
+        print("        args = $_cache_args")
+        print("        pkgresult = $_expected_pkgresult")
+        print("      },")
+        assert(
+            false,
+            "Outdated pkg_config query result detected. Please update //build/config/linux/cached_results.scope with the above.")
+      }
+    }
+    cflags = pkgresult[1]
+
+    foreach(_path, pkgresult[0]) {
+      if (_pkg_config_requires_abs_path && (use_sysroot || use_remoteexec)) {
+        _path = rebase_path(_path, root_build_dir)
+      }
+
+      # We want the system include paths to use -isystem instead of -I to
+      # suppress warnings in those headers.
+      cflags += [ "-isystem$_path" ]
+    }
+
+    if (!defined(invoker.ignore_libs) || !invoker.ignore_libs) {
+      libs = pkgresult[2]
+      lib_dirs = pkgresult[3]
+    }
+
+    forward_variables_from(invoker,
+                           [
+                             "defines",
+                             "visibility",
+                           ])
+  }
+}

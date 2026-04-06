@@ -1,0 +1,144 @@
+// Copyright 2025 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#ifndef BASE_TRACE_EVENT_MEASURED_MEMORY_DUMP_PROVIDER_INFO_H_
+#define BASE_TRACE_EVENT_MEASURED_MEMORY_DUMP_PROVIDER_INFO_H_
+
+#include <optional>
+#include <string_view>
+
+#include "base/base_export.h"
+#include "base/memory/scoped_refptr.h"
+#include "base/time/time.h"
+#include "base/timer/elapsed_timer.h"
+#include "base/trace_event/memory_dump_request_args.h"
+
+namespace base::trace_event {
+
+struct MemoryDumpProviderInfo;
+
+// MemoryDumpManager owns a long-lived list of MemoryDumpProviderInfo objects,
+// which each wrap a registered MemoryDumpProvider and add metadata. When a dump
+// starts, it copies each MemoryDumpProviderInfo into a short-lived list held in
+// MemoryDumpManager::ProcessMemoryDumpAsyncState, which is the list of
+// providers to invoke during that specific memory dump.
+//
+// MeasuredMemoryDumpProviderInfo wraps the copied MemoryDumpProviderInfo with
+// more metadata about the performance of that provider during the dump, for
+// metrics. It's separate from MemoryDumpProviderInfo because this metadata is
+// specific to the dump in progress, while MemoryDumpProviderInfo holds
+// long-lived metadata.
+//
+// The MeasuredMemoryDumpProviderInfo wrapping a MemoryDumpProviderInfo instance
+// is destroyed when that instance is discarded (because it's finished running,
+// because MemoryDumpManager decides it shouldn't or can't run, or because it's
+// still queued when the browser shuts down). At this point the destructor logs
+// all the tracked metrics.
+class BASE_EXPORT MeasuredMemoryDumpProviderInfo {
+ public:
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+  //
+  // LINT.IfChange(MemoryDumpProviderStatus)
+  enum class Status {
+    // The provider is in the MemoryDumpManager::ProcessMemoryDumpAsyncState
+    // queue, and hasn't started to be processed yet. If this status is logged,
+    // the provider was still in the queue when MemoryDumpManager was destroyed.
+    kQueued = 0,
+    // The provider is at the front of the
+    // MemoryDumpManager::ProcessMemoryDumpAsyncState queue. A task has been
+    // posted to start processing the provider on another sequence. If this
+    // status is logged, the posted task was dropped without running.
+    kPosted = 1,
+    // The provider is being skipped because it needs to run on another sequence
+    // but the PostTask call failed.
+    kFailedToPost = 2,
+    // The provider is being skipped because the memory dump is in background
+    // mode, and this provider is not allowed to run in the background.
+    kIgnoredInBackground = 3,
+    // The provider is being skipped because it's disabled.
+    kIgnoredDisabled = 4,
+    // The provider finished running OnMemoryDump and returned success.
+    kDumpSucceeded = 5,
+    // The provider finished running OnMemoryDump and returned failure.
+    kDumpFailed = 6,
+    kMaxValue = kDumpFailed,
+  };
+  // LINT.ThenChange(//tools/metrics/histograms/metadata/memory/enums.xml:MemoryDumpProviderStatus)
+
+  // Default constructor for containers.
+  MeasuredMemoryDumpProviderInfo();
+
+  MeasuredMemoryDumpProviderInfo(
+      scoped_refptr<MemoryDumpProviderInfo> provider_info,
+      MemoryDumpRequestArgs request_args);
+
+  // Logs all metrics for the wrapped MemoryDumpProvider.
+  ~MeasuredMemoryDumpProviderInfo();
+
+  // Move-only.
+  MeasuredMemoryDumpProviderInfo(const MeasuredMemoryDumpProviderInfo&) =
+      delete;
+  MeasuredMemoryDumpProviderInfo& operator=(
+      const MeasuredMemoryDumpProviderInfo&) = delete;
+  MeasuredMemoryDumpProviderInfo(MeasuredMemoryDumpProviderInfo&&);
+  MeasuredMemoryDumpProviderInfo& operator=(MeasuredMemoryDumpProviderInfo&&);
+
+  // Returns the wrapped MemoryDumpProviderInfo, which in turn wraps a
+  // MemoryDumpProvider.
+  MemoryDumpProviderInfo* provider_info() { return provider_info_.get(); }
+  const MemoryDumpProviderInfo* provider_info() const {
+    return provider_info_.get();
+  }
+
+  // Returns the args for the CreateProcessDump() call that started this dump.
+  const MemoryDumpRequestArgs& request_args() const { return request_args_; }
+
+  // Sets the number of providers that are queued to run after this one. This
+  // must be called before deletion.
+  void set_num_following_providers(size_t num_following_providers) {
+    num_following_providers_ = num_following_providers;
+  }
+
+  // Updates the current status of the provider. The status begins as kQueued,
+  // and MemoryDumpManager should update it whenever it moves the
+  // MemoryDumpProviderInfo to a new state.
+  void SetStatus(Status status);
+
+  // Logs Memory.DumpProvider.MemoryDumpTime.* histograms for this provider.
+  void LogMemoryDumpTimeHistograms(base::TimeDelta time) const;
+
+  // Logs Memory.DumpProvider.Count.* histograms for the provider named
+  // `provider_name`.
+  static void LogProviderCountHistograms(
+      std::string_view provider_name,
+      MemoryDumpLevelOfDetail level_of_detail,
+      size_t count);
+
+  // Returns a string to use in histogram variants for `level_of_detail`.
+  static std::string_view LevelOfDetailString(
+      MemoryDumpLevelOfDetail level_of_detail);
+
+ private:
+  scoped_refptr<MemoryDumpProviderInfo> provider_info_;
+  MemoryDumpRequestArgs request_args_{};
+
+  std::optional<size_t> num_following_providers_;
+  Status status_ = Status::kQueued;
+
+  // Measures the time between the MemoryDumpProvider being placed into the
+  // queue when a memory dump starts, and the MeasuredMemoryDumpProviderInfo
+  // being destroyed. This includes the time the MemoryDumpProvider spent in the
+  // queue (while other providers were running), and the time the provider was
+  // running (if `status_` is kDumpSucceeded or kDumpFailed).
+  base::ElapsedLiveTimer elapsed_timer_;
+
+  // Measures the time it takes for a MemoryDumpProvider that's posted to
+  // execute on another thread to finish.
+  std::optional<base::ElapsedLiveTimer> post_task_timer_;
+};
+
+}  // namespace base::trace_event
+
+#endif  // BASE_TRACE_EVENT_MEASURED_MEMORY_DUMP_PROVIDER_INFO_H_

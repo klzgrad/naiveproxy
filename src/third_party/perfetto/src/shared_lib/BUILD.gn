@@ -1,0 +1,60 @@
+# Copyright (C) 2022 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../gn/perfetto.gni")
+
+source_set("for_testing") {
+  deps = [
+    "../../gn:default_deps",
+    "../../include/perfetto/public",
+  ]
+  sources = [ "reset_for_testing.h" ]
+  defines = [ "PERFETTO_SHLIB_SDK_IMPLEMENTATION" ]
+}
+
+source_set("shared_lib") {
+  deps = [
+    ":for_testing",
+    "../../gn:default_deps",
+    "../../include/perfetto/protozero",
+    "../../include/perfetto/public",
+    "../base",
+    "../tracing:client_api",
+    "track_event",
+  ]
+  sources = [
+    "data_source.cc",
+    "heap_buffer.cc",
+    "pb_decoder.cc",
+    "producer.cc",
+    "stream_writer.cc",
+    "stream_writer.h",
+    "thread_utils.cc",
+    "tracing_session.cc",
+  ]
+  defines = [ "PERFETTO_SHLIB_SDK_IMPLEMENTATION" ]
+
+  # Abseil is only used in Perfetto via the gRPC/libprotobuf.
+  if (perfetto_build_standalone || is_perfetto_build_generator) {
+    assert_no_deps = [ "../../buildtools:abseil_cpp" ]
+  }
+}
+
+shared_library("libperfetto_c") {
+  deps = [
+    ":shared_lib",
+    "../../gn:default_deps",
+  ]
+  public_deps = [ "../../include/perfetto/public" ]
+}

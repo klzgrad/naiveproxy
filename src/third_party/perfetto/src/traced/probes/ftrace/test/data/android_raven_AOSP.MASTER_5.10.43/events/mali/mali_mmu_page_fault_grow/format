@@ -1,0 +1,15 @@
+name: mali_mmu_page_fault_grow
+ID: 1233
+format:
+	field:unsigned short common_type;	offset:0;	size:2;	signed:0;
+	field:unsigned char common_flags;	offset:2;	size:1;	signed:0;
+	field:unsigned char common_preempt_count;	offset:3;	size:1;	signed:0;
+	field:int common_pid;	offset:4;	size:4;	signed:1;
+
+	field:u64 start_addr;	offset:8;	size:8;	signed:0;
+	field:u64 fault_addr;	offset:16;	size:8;	signed:0;
+	field:u64 fault_extra_addr;	offset:24;	size:8;	signed:0;
+	field:size_t new_pages;	offset:32;	size:8;	signed:0;
+	field:u32 status;	offset:40;	size:4;	signed:0;
+
+print fmt: "start=0x%llx fault_addr=0x%llx fault_extra_addr=0x%llx new_pages=%zu raw_fault_status=0x%x decoded_faultstatus=%s exception_type=0x%x,%s%u access_type=0x%x,%s source_id=0x%x", REC->start_addr, REC->fault_addr, REC->fault_extra_addr, REC->new_pages, REC->status, (((REC->status) & (1u << 10)) ? "DECODER_FAULT" : "SLAVE_FAULT"), ((REC->status) & 0xFFu), (!((((REC->status) & 0xFFu) >= 0xC0 && ((REC->status) & 0xFFu) <= 0xEF) && (!(((REC->status) & 0xFFu) >= 0xC5 && ((REC->status) & 0xFFu) <= 0xC6)) && (!(((REC->status) & 0xFFu) >= 0xCC && ((REC->status) & 0xFFu) <= 0xCF)) && (!(((REC->status) & 0xFFu) >= 0xD4 && ((REC->status) & 0xFFu) <= 0xD7)) && (!(((REC->status) & 0xFFu) >= 0xDC && ((REC->status) & 0xFFu) <= 0xDF))) ? "UNKNOWN,level=" : __print_symbolic(((((REC->status) & 0xFFu)) & ~3u), {0xC0, "TRANSLATION_FAULT_" }, {0xC4, "TRANSLATION_FAULT(_7==_IDENTITY)_" }, {0xC8, "PERMISSION_FAULT_" }, {0xD0, "TRANSTAB_BUS_FAULT_" }, {0xD8, "ACCESS_FLAG_" }, {0xE0, "ADDRESS_SIZE_FAULT_IN" }, {0xE4, "ADDRESS_SIZE_FAULT_OUT" }, {0xE8, "MEMORY_ATTRIBUTES_FAULT_" }, {0xEC, "MEMORY_ATTRIBUTES_NONCACHEABLE_" })), (((((((REC->status) & 0xFFu)) & ~0x3u) == 0xC4) ? 4 : 0) + ((((REC->status) & 0xFFu)) & 0x3u)), ((REC->status) & (0x3 << 8)) >> 8, __print_symbolic(((REC->status) & (0x3 << 8)), {(0x0), "ATOMIC" }, {(0x1), "EXECUTE"}, {(0x2), "READ" }, {(0x3), "WRITE" }), REC->status >> 16

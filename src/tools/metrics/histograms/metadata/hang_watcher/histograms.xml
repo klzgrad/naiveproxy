@@ -1,0 +1,185 @@
+<!--
+Copyright 2020 The Chromium Authors
+Use of this source code is governed by a BSD-style license that can be
+found in the LICENSE file.
+-->
+
+<!--
+This file is used to generate a comprehensive list of HangWatcher histograms
+along with a detailed description for each histogram.
+
+For best practices on writing histogram descriptions, see
+https://chromium.googlesource.com/chromium/src.git/+/HEAD/tools/metrics/histograms/README.md
+
+Please follow the instructions in the OWNERS file in this directory to find a
+reviewer. If no OWNERS file exists, please consider signing up at
+go/reviewing-metrics (Googlers only), as all subdirectories are expected to
+have an OWNERS file. As a last resort you can send the CL to
+chromium-metrics-reviews@google.com.
+-->
+
+<histogram-configuration>
+
+<histograms>
+
+<variants name="BrowserProcessAndThreadType">
+  <variant name="BrowserProcess.IOThread"
+      summary="the Browser process IO-Thread"/>
+  <variant name="BrowserProcess.ThreadPool"
+      summary="a WorkerPool Thread the Browser process"/>
+  <variant name="BrowserProcess.UIThread"
+      summary="the Browser process UI-Thread"/>
+</variants>
+
+<variants name="LifetimePhase">
+  <variant name="Normal" summary="normal browser runtime"/>
+  <variant name="Shutdown" summary="shutdown"/>
+</variants>
+
+<variants name="MaybeBestEffort">
+  <variant name=""
+      summary="Sampled while running in a normal priority process for the
+               entire sample."/>
+  <variant name=".BestEffort"
+      summary="Sampled while running at Process::Priority::kBestEffort."/>
+</variants>
+
+<variants name="NonBrowserProcessAndThreadType">
+  <variant name="GpuProcess.CompositorThread"
+      summary="the Compositor Thread of the GPU process"/>
+  <variant name="GpuProcess.IOThread"
+      summary="the IO-Thread of the GPU process"/>
+  <variant name="GpuProcess.MainThread"
+      summary="the Main Thread of the GPU process"/>
+  <variant name="RendererProcess.CompositorThread"
+      summary="the Compositor Thread of a Renderer process"/>
+  <variant name="RendererProcess.IOThread"
+      summary="the IO-Thread of a Renderer process"/>
+  <variant name="RendererProcess.MainThread"
+      summary="the Main Thread of a Renderer process"/>
+  <variant name="UtilityProcess.IOThread"
+      summary="the IO-Thread of a Utility process"/>
+  <variant name="UtilityProcess.MainThread"
+      summary="the Main Thread of a Utility process"/>
+</variants>
+
+<variants name="ProcessType">
+  <variant name="BrowserProcess"/>
+  <variant name="GpuProcess"/>
+  <variant name="RendererProcess"/>
+  <variant name="UtilityProcess"/>
+</variants>
+
+<variants name="ThreadSetType">
+  <variant name="Any" summary="any"/>
+  <variant name="AnyCritical" summary="any non ThreadPool"/>
+</variants>
+
+<histogram name="HangWatcher.IsThreadHung.{BrowserProcessAndThreadType}"
+    enum="BooleanHung" expires_after="M127">
+  <owner>olivierli@chromium.org</owner>
+  <owner>catan-team@chromium.org</owner>
+  <summary>
+    Every 10 seconds, a boolean is recorded to this histogram to indicate
+    whether {BrowserProcessAndThreadType} was hung. The thread is hung if the
+    current work unit started running more than 10 seconds ago and this was not
+    labeled as &quot;working as intended&quot; by InvalidateActiveExpectations()
+    (Prior to 2021-07-09 with IgnoreHangsInScope). Recording is skipped if the
+    hang watcher detects an irregular heartbeat (e.g. when the machine sleeps).
+
+    Warning: Starting with 104.0.5112.79 hang counts have gone way up on macOS
+    which is due to additional coverage added and not necessarily to
+    regressions. See: crrev.com/c/3035824
+
+    Deprecated. For Chrome M127 and higher, look at
+    HangWatcher.IsThreadHung.&lt;process&gt;.&lt;phase&gt; instead.
+  </summary>
+  <token key="BrowserProcessAndThreadType"
+      variants="BrowserProcessAndThreadType"/>
+</histogram>
+
+<histogram
+    name="HangWatcher.IsThreadHung.{BrowserProcessAndThreadType}.{LifetimePhase}"
+    enum="BooleanHung" expires_after="never">
+<!-- expires-never: Staple top-level metric for chrome-catan@. -->
+
+  <owner>olivierli@chromium.org</owner>
+  <owner>catan-team@chromium.org</owner>
+  <summary>
+    Every 10 seconds, a boolean is recorded to this histogram to indicate
+    whether {BrowserProcessAndThreadType} was hung during {LifetimePhase}. The
+    thread is hung if the current work unit started running more than 10 seconds
+    ago and this was not labeled as &quot;working as intended&quot; by
+    InvalidateActiveExpectations(). Recording is skipped if the hang watcher
+    detects an irregular heartbeat (e.g. when the machine sleeps).
+  </summary>
+  <token key="BrowserProcessAndThreadType"
+      variants="BrowserProcessAndThreadType"/>
+  <token key="LifetimePhase" variants="LifetimePhase"/>
+</histogram>
+
+<histogram
+    name="HangWatcher.IsThreadHung.{NonBrowserProcessAndThreadType}{MaybeBestEffort}"
+    enum="BooleanHung" expires_after="never">
+<!-- expires-never: Staple top-level metric for chrome-catan@. -->
+
+  <owner>olivierli@chromium.org</owner>
+  <owner>catan-team@chromium.org</owner>
+  <summary>
+    Every 10 seconds, a boolean is recorded to this histogram to indicate
+    whether {NonBrowserProcessAndThreadType} was hung. The thread is hung if the
+    current work unit started running more than 10 seconds ago and this was not
+    labeled as &quot;working as intended&quot; by InvalidateActiveExpectations()
+    (Prior to 2021-07-09 with IgnoreHangsInScope). Recording is skipped if the
+    hang watcher detects an irregular heartbeat (e.g. when the machine sleeps).
+
+    Warning: Starting with 104.0.5112.79 hang counts have gone way up on macOS
+    which is due to additional coverage added and not necessarily to
+    regressions. See: crrev.com/c/3035824
+  </summary>
+  <token key="NonBrowserProcessAndThreadType"
+      variants="NonBrowserProcessAndThreadType"/>
+  <token key="MaybeBestEffort" variants="MaybeBestEffort"/>
+</histogram>
+
+<histogram name="HangWatcher.IsThreadHung.{ThreadSetType}" enum="BooleanHung"
+    expires_after="never">
+<!-- expires-never: Staple top-level metric for chrome-catan@. -->
+
+  <owner>olivierli@chromium.org</owner>
+  <owner>catan-team@chromium.org</owner>
+  <summary>
+    Every 10 seconds, a boolean is recorded to this histogram to indicate
+    whether {ThreadSetType} thread was hung. A thread is hung if the current
+    work unit started running more than 10 seconds ago and this was not labeled
+    as &quot;working as intended&quot; by InvalidateActiveExpectations().
+    Recording is skipped if the hang watcher detects an irregular heartbeat
+    (e.g. when the machine sleeps).
+  </summary>
+  <token key="ThreadSetType" variants="ThreadSetType"/>
+</histogram>
+
+<histogram name="HangWatcher.{ProcessType}.UncoveredStartupTime" units="ms"
+    expires_after="2026-07-19">
+  <owner>olivierli@chromium.org</owner>
+  <owner>catan-team@chromium.org</owner>
+  <summary>
+    Because HangWatcher start is delayed until the sandbox is initialized on
+    Linux and ChromeOS, this measures the delta between the time HangWatcher
+    would have started in an unsandboxed process and the time the HangWatcher
+    actually started. The metric is emitted in the process type's main function
+    (e.g. RendererMain, UtilityMain) right after the sandbox is engaged and
+    right before HangWatcher is started.
+
+    This will be used to evaluate whether hangs are missed during startup
+    because of this delay.
+
+    Warning: this histogram was expired from 2023-12-22 to 2025-07-04; data may
+    be missing.
+  </summary>
+  <token key="ProcessType" variants="ProcessType"/>
+</histogram>
+
+</histograms>
+
+</histogram-configuration>

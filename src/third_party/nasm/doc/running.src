@@ -1,0 +1,811 @@
+\C{running} Running NASM
+
+\H{syntax} NASM \i{Command-Line} Syntax
+
+To assemble a file, you issue a command of the form
+
+\c nasm -f <format> <filename> [-o <output>]
+
+For example,
+
+\c nasm -f elf myfile.asm
+
+will assemble \c{myfile.asm} into an ELF object file \c{myfile.o}. And
+
+\c nasm -f bin myfile.asm -o myfile.com
+
+will assemble \c{myfile.asm} into a raw binary file \c{myfile.com}.
+
+To produce a listing file, with the hex codes output from NASM
+displayed on the left of the original sources, use the \c{-l} option
+to give a listing file name, for example:
+
+\c nasm -f coff myfile.asm -l myfile.lst
+
+To get further usage instructions from NASM, try typing
+
+\c nasm -h
+
+The option \c{--help} is an alias for the \c{-h} option.
+
+If you use Linux but aren't sure whether your system is \c{a.out}
+or ELF, type
+
+\c file nasm
+
+(in the directory in which you put the NASM binary when you
+installed it). If it says something like
+
+\c nasm: ELF 32-bit LSB executable i386 (386 and up) Version 1
+
+then your system is \c{ELF}, and you should use the option \c{-f elf}
+when you want NASM to produce Linux object files. If it says
+
+\c nasm: Linux/i386 demand-paged executable (QMAGIC)
+
+or something similar, your system is \c{a.out}, and you should use
+\c{-f aout} instead (Linux \c{a.out} systems have long been obsolete,
+and are rare these days.)
+
+Like Unix compilers and assemblers, NASM is silent unless it
+goes wrong: you won't see any output at all, unless it gives error
+messages.
+
+
+\S{opt-o} The \i\c{-o} Option: Output File Name
+
+NASM will normally choose the name of your output file for you;
+precisely how it does this is dependent on the object file format.
+For Microsoft object file formats (\c{obj}, \c{win32} and \c{win64}),
+it will remove the \c{.asm} \i{extension} (or whatever extension you
+like to use - NASM doesn't care) from your source file name and
+substitute \c{.obj}. For Unix object file formats (\c{aout}, \c{as86},
+\c{coff}, \c{elf32}, \c{elf64}, \c{elfx32}, \c{ieee}, \c{macho32} and
+\c{macho64}) it will substitute \c{.o}. For \c{dbg}, \c{ith}
+and \c{srec}, it will use \c{.dbg}, \c{.ith} and \c{.srec},
+respectively, and for the \c{bin} format it will simply remove the
+extension, so that \c{myfile.asm} produces the output file \c{myfile}.
+
+If the output file already exists, NASM will overwrite it, unless it
+has the same name as the input file, in which case it will give a
+warning and use \i\c{nasm.out} as the output file name instead.
+
+For situations in which this behaviour is unacceptable, NASM
+provides the \c{-o} command-line option, which allows you to specify
+your desired output file name. You invoke \c{-o} by following it
+with the name you wish for the output file, either with or without
+an intervening space. For example:
+
+\c nasm -f bin program.asm -o program.com
+\c nasm -f bin driver.asm -odriver.sys
+
+Note that this is a small o, and is different from a capital O , which
+is used to specify the number of optimization passes required. See \k{opt-O}.
+
+
+\S{opt-f} The \i\c{-f} Option: \i{Output File Format}
+
+If you do not supply the \c{-f} option to NASM, it will choose an
+output file format for you itself. In the distribution versions of
+NASM, the default is always \i\c{bin}; if you've compiled your own
+copy of NASM, you can redefine \i\c{OF_DEFAULT} at compile time and
+choose what you want the default to be.
+
+Like \c{-o}, the intervening space between \c{-f} and the output
+file format is optional; so \c{-f elf} and \c{-felf} are both valid.
+
+A complete list of the available output file formats can be given by
+issuing the command \i\c{nasm -h}.
+
+
+\S{opt-l} The \i\c{-l} Option: Generating a \i{Listing File}
+
+If you supply the \c{-l} option to NASM, followed (with the usual
+optional space) by a file name, NASM will generate a
+\i{source-listing file} for you, in which addresses and generated
+code are listed on the left, and the actual source code, with
+expansions of multi-line macros (except those which specifically
+request no expansion in source listings: see \k{nolist}) on the
+right. For example:
+
+\c nasm -f elf myfile.asm -l myfile.lst
+
+If a list file is selected, you may turn off listing for a
+section of your source with \c{[list -]}, and turn it back on
+with \c{[list +]}, (the default, obviously). There is no "user
+form" (without the brackets). This can be used to list only
+sections of interest, avoiding excessively long listings.
+
+\S{opt-L} The \i\c{-L} Option: Additional or Modified Listing Info
+
+Use this option to specify listing output details.
+
+Supported options are:
+
+\b \c{-Lb} show builtin macro packages (standard and \c{%use})
+
+\b \c{-Ld} show byte and repeat counts in decimal, not hex
+
+\b \c{-Le} show the preprocessed input
+
+\b \c{-Lf} ignore \c{.nolist} and force listing output
+
+\b \c{-Lm} show multi-line macro calls with expanded parameters
+
+\b \c{-Lp} output a list file in every pass, in case of errors
+
+\b \c{-Ls} show all single-line macro definitions
+
+\b \c{-Lw} flush the output after every line (very slow, mainly useful
+to debug NASM crashes)
+
+\b \c{-L+} enable \e{all} listing options except \c{-Lw} (very verbose)
+
+These options can be enabled or disabled at runtime using the
+\c{%pragma list options} directive:
+
+\c %pragma list options [+|-]flags...
+
+For example, to turn on the \c{d} and \c{m} flags but disable the
+\c{s} flag:
+
+\c %pragma list options +dm -s
+
+For forward compatility reasons, an undefined flag will be
+ignored. Thus, a new flag introduced in a newer version of NASM can be
+specified without breaking older versions. Listing flags will always
+be a single alphanumeric character and are case sensitive.
+
+\S{opt-M} The \i\c{-M} Option: Generate \i{Makefile Dependencies}
+
+This option can be used to generate makefile dependencies on stdout.
+This can be redirected to a file for further processing. For example:
+
+\c nasm -M myfile.asm > myfile.dep
+
+
+\S{opt-MG} The \i\c{-MG} Option: Generate \i{Makefile Dependencies}
+
+This option can be used to generate makefile dependencies on stdout.
+This differs from the \c{-M} option in that if a nonexisting file is
+encountered, it is assumed to be a generated file and is added to the
+dependency list without a prefix.
+
+
+\S{opt-MF} The \i\c\{-MF} Option: Set Makefile Dependency File
+
+This option can be used with the \c{-M} or \c{-MG} options to send the
+output to a file, rather than to stdout.  For example:
+
+\c nasm -M -MF myfile.dep myfile.asm
+
+
+\S{opt-MD} The \i\c{-MD} Option: Assemble and Generate Dependencies
+
+The \c{-MD} option acts as the combination of the \c{-M} and \c{-MF}
+options (i.e. a filename has to be specified.)  However, unlike the
+\c{-M} or \c{-MG} options, \c{-MD} does \e{not} inhibit the normal
+operation of the assembler.  Use this to automatically generate
+updated dependencies with every assembly session.  For example:
+
+\c nasm -f elf -o myfile.o -MD myfile.dep myfile.asm
+
+If the argument after \c{-MD} is an option rather than a filename,
+then the output filename is the first applicable one of:
+
+\b the filename set in the \c{-MF} option;
+
+\b the output filename from the \c{-o} option with \c{.d} appended;
+
+\b the input filename with the extension set to \c{.d}.
+
+
+\S{opt-MT} The \i\c{-MT} Option: Dependency Target Name
+
+The \c{-MT} option can be used to override the default name of the
+dependency target.  This is normally the same as the output filename,
+specified by the \c{-o} option.
+
+
+\S{opt-MQ} The \i\c{-MQ} Option: Dependency Target Name (Quoted)
+
+The \c{-MQ} option acts as the \c{-MT} option, except it tries to
+quote characters that have special meaning in Makefile syntax.  This
+is not foolproof, as not all characters with special meaning are
+quotable in \c{make}.  The default output (if no \c{-MT} or \c{-MQ} option
+is specified) is automatically quoted.
+
+
+\S{opt-MP} The \i\c{-MP} Option: Emit Phony Makefile Targets
+
+When used with any of the dependency generation options, the \c{-MP}
+option causes NASM to emit a phony target without dependencies for
+each header file.  This prevents \c{make} from complaining if a header
+file has been removed.
+
+
+\S{opt-MW} The \i\c{-MW} Option: Watcom \c{make} quoting style
+
+This option causes NASM to attempt to quote dependencies according to
+Watcom \c{make} conventions rather than POSIX \c{make} conventions (also used
+by most other \c{make} variants.)  This quotes \c{#} as \c{$#} rather than
+\c{\\#}, uses \c{&} rather than \c{\\} for continuation lines, and
+encloses filenames containing whitespace in double quotes.
+
+
+\S{opt-F} The \i\c{-F} Option: \i{Debug Information Format}
+
+This option is used to select the format of the debug information
+emitted into the output file, to be used by a debugger (or \e{will}
+be). Prior to version 2.03.01, the use of this switch did \e{not} enable
+output of the selected debug info format.  Use \c{-g}, see \k{opt-g},
+to enable output.  Versions 2.03.01 and later automatically enable \c{-g}
+if \c{-F} is specified.
+
+A complete list of the available debug file formats for an output
+format can be seen by issuing the command \c{nasm -h}.  Not
+all output formats currently support debugging output.
+
+This should not be confused with the \c{-f dbg} output format option,
+see \k{dbgfmt}.
+
+
+\S{opt-g} The \i\c{-g} Option: Enabling \i{Debug Information}.
+
+This option can be used to generate debugging information in the specified
+format. See \k{opt-F}. Using \c{-g} without \c{-F} results in emitting
+debug info in the default format, if any, for the selected output format.
+If no debug information is currently implemented in the selected output
+format, \c{-g} is \e{silently ignored}.
+
+
+\S{opt-X} The \i\c{-X} Option: Selecting an \i{Error Reporting Format}
+
+This option can be used to select an error reporting format for any
+error messages that might be produced by NASM.
+
+Currently, two error reporting formats may be selected.  They are
+the \c{-Xvc} option and the \c{-Xgnu} option.  The GNU format is
+the default and looks like this:
+
+\c filename.asm:65: error: specific error message
+
+where \c{filename.asm} is the name of the source file in which the
+error was detected, \c{65} is the source file line number on which
+the error was detected, \c{error} is the severity of the error (this
+could be \c{warning}), and \c{specific error message} is a more
+detailed text message which should help pinpoint the exact problem.
+
+The other format, specified by \c{-Xvc} is the style used by Microsoft
+Visual C++ and some other programs.  It looks like this:
+
+\c filename.asm(65) : error: specific error message
+
+where the only difference is that the line number is in parentheses
+instead of being delimited by colons.
+
+See also the \c{Visual C++} output format, \k{win32fmt}.
+
+\S{opt-Z} The \i\c{-Z} Option: Send Errors to a File
+
+Under \I{DOS}\c{MS-DOS} it can be difficult (though there are ways) to
+redirect the standard-error output of a program to a file. Since
+NASM usually produces its warning and \i{error messages} on
+\i\c{stderr}, this can make it hard to capture the errors if (for
+example) you want to load them into an editor.
+
+NASM therefore provides the \c{-Z} option, taking a filename argument
+which causes errors to be sent to the specified files rather than
+standard error. Therefore you can \I{redirecting errors}redirect
+the errors into a file by typing
+
+\c nasm -Z myfile.err -f obj myfile.asm
+
+In earlier versions of NASM, this option was called \c{-E}, but it was
+changed since \c{-E} is an option conventionally used for
+preprocessing only, with disastrous results.  See \k{opt-E}.
+
+\S{opt-s} The \i\c{-s} Option: Send Errors to \i\c{stdout}
+
+The \c{-s} option redirects \i{error messages} to \c{stdout} rather
+than \c{stderr}, so it can be redirected under \I{DOS}\c{MS-DOS}. To
+assemble the file \c{myfile.asm} and pipe its output to the \c{more}
+program, you can type:
+
+\c nasm -s -f obj myfile.asm | more
+
+See also the \c{-Z} option, \k{opt-Z}.
+
+
+\S{opt-i} The \i\c{-i}\I\c{-I} Option: Include File Search Directories
+
+When NASM sees the \i\c{%include} or \i\c{%pathsearch} directive in a
+source file (see \k{include}, \k{pathsearch} or \k{incbin}), it will
+search for the given file not only in the current directory, but also
+in any directories specified on the command line by the use of the
+\c{-i} option. Therefore you can include files from a \i{macro
+library}, for example, by typing
+
+\c nasm -ic:\macrolib\ -f obj myfile.asm
+
+(As usual, a space between \c{-i} and the path name is allowed, and
+optional).
+
+Prior NASM 2.14 a path provided in the option has been considered as
+a verbatim copy and providing a path separator been up to a caller.
+One could implicitly concatenate a search path together with a filename.
+Still this was rather a trick than something useful. Now the trailing
+path separator is made to always present, thus \c{-ifoo} will be
+considered as the \c{-ifoo/} directory.
+
+If you want to define a \e{standard} \i{include search path},
+similar to \c{/usr/include} on Unix systems, you should place one or
+more \c{-i} directives in the \c{NASMENV} environment variable (see
+\k{nasmenv}).
+
+For Makefile compatibility with many C compilers, this option can also
+be specified as \c{-I}.
+
+
+\S{opt-p} The \i\c{-p}\I\c{-P} Option: \I{pre-including files}Pre-Include a File
+
+\I\c{%include}NASM allows you to specify files to be
+\e{pre-included} into your source file, by the use of the \c{-p}
+option. So running
+
+\c nasm myfile.asm -p myinc.inc
+
+is equivalent to running \c{nasm myfile.asm} and placing the
+directive \c{%include "myinc.inc"} at the start of the file.
+
+\c{--include} option is also accepted.
+
+For consistency with the \c{-I}, \c{-D} and \c{-U} options, this
+option can also be specified as \c{-P}.
+
+
+
+\S{opt-d} The \i\c{-d}\I\c{-D} Option: \I{pre-defining macros}Pre-Define a Macro
+
+\I\c{%define}Just as the \c{-p} option gives an alternative to placing
+\c{%include} directives at the start of a source file, the \c{-d}
+option gives an alternative to placing a \c{%define} directive. You
+could code
+
+\c nasm myfile.asm -dFOO=100
+
+as an alternative to placing the directive
+
+\c %define FOO 100
+
+at the start of the file. You can miss off the macro value, as well:
+the option \c{-dFOO} is equivalent to coding \c{%define FOO}. This
+form of the directive may be useful for selecting \i{assembly-time
+options} which are then tested using \c{%ifdef}, for example
+\c{-dDEBUG}.
+
+For Makefile compatibility with many C compilers, this option can also
+be specified as \c{-D}.
+
+
+\S{opt-u} The \i\c{-u}\I\c{-U} Option: \I{Undefining macros}Undefine a Macro
+
+\I\c{%undef}The \c{-u} option undefines a macro that would otherwise
+have been pre-defined, either automatically or by a \c{-p} or \c{-d}
+option specified earlier on the command lines.
+
+For example, the following command line:
+
+\c nasm myfile.asm -dFOO=100 -uFOO
+
+would result in \c{FOO} \e{not} being a predefined macro in the
+program. This is useful to override options specified at a different
+point in a Makefile.
+
+For Makefile compatibility with many C compilers, this option can also
+be specified as \c{-U}.
+
+
+\S{opt-E} The \i\c{-E}\I{-e} Option: Preprocess Only
+
+NASM allows the \i{preprocessor} to be run on its own, up to a
+point. Using the \c{-E} option (which requires no arguments) will
+cause NASM to preprocess its input file, expand all the macro
+references, remove all the comments and preprocessor directives, and
+print the resulting file on standard output (or save it to a file,
+if the \c{-o} option is also used).
+
+This option cannot be applied to programs which require the
+preprocessor to evaluate \I{preprocessor expressions}\i{expressions}
+which depend on the values of symbols: so code such as
+
+\c %assign tablesize ($-tablestart)
+
+will cause an error in \i{preprocess-only mode}.
+
+For compatibility with older version of NASM, this option can also be
+written \c{-e}.  \c{-E} in older versions of NASM was the equivalent
+of the current \c{-Z} option, \k{opt-Z}.
+
+\S{opt-a} The \i\c{-a} Option: Suppress Preprocessing
+
+If NASM is being used as the back end to a compiler, it might be
+desirable to \I{suppressing preprocessing}suppress preprocessing
+completely and assume the compiler has already done it, to save time
+and increase compilation speeds. The \c{-a} option, requiring no
+argument, instructs NASM to replace its powerful \i{preprocessor}
+with a \i{stub preprocessor} which does nothing.
+
+
+\S{opt-O} The \i\c{-O} Option: \i{Multipass Optimization}
+
+Using the \c{-O} option, you can tell NASM to carry out different
+levels of optimization. Multiple flags can be specified after the
+\c{-O} options, some of which can be combined in a single option,
+e.g. \c{-Oxv}.
+
+\b \c{-O0}: No optimization. All operands take their long forms,
+        if a short form is not specified, except conditional jumps.
+        This is intended to match NASM 0.98 behavior.
+
+\b \c{-O1}: Minimal optimization. As above, but immediate operands
+        which will fit in a signed byte are optimized,
+        unless the long form is specified.  Conditional jumps default
+        to the long form unless otherwise specified.
+
+\b \c{-Ox} (where \c{x} is the actual letter \c{x}): Multipass optimization.
+        Minimize branch offsets and signed immediate bytes,
+        overriding size specification unless the \c{strict} keyword
+        has been used (see \k{strict}).  For compatibility with earlier
+        releases, the letter \c{x} may also be any number greater than
+        one. This number has no effect on the actual number of passes.
+
+\b \c{-Ov}: At the end of assembly, print the number of passes
+        actually executed.
+
+The \c{-Ox} mode is recommended for most uses, and is the default
+since NASM 2.09. \e{Any other mode will generate worse quality
+output.} Use \c{-O0} or \c{-O1} only if you need the finer
+programmer-level control of output and \c{strict} is not suitable for
+your use case.
+
+Note that this is a capital \c{O}, and is different from a small \c{o}, which
+is used to specify the output file name. See \k{opt-o}.
+
+
+\S{opt-t} The \i\c{-t} Option: \i{TASM} Compatibility Mode
+
+NASM includes a limited form of compatibility with Borland's TASM.
+When NASM's \c{-t} option is used, the following changes are made:
+
+\b local labels may be prefixed with \c{@@} instead of \c{.}
+
+\b size override is supported within brackets. In TASM compatible mode,
+a size override inside square brackets changes the size of the operand,
+and not the address type of the operand as it does in NASM syntax. E.g.
+\c{mov eax,[DWORD val]} is valid syntax in TASM compatibility mode.
+Note that you lose the ability to override the default address type for
+the instruction.
+
+\b unprefixed forms of some directives supported (\c{arg}, \c{elif},
+\c{else}, \c{endif}, \c{if}, \c{ifdef}, \c{ifdifi}, \c{ifndef},
+\c{include}, \c{local})
+
+\S{opt-w} The \i\c{-w} and \i\c{-W} Options: Enable or Disable Assembly \i{Warnings}
+
+NASM can observe many conditions during the course of assembly which
+are worth mentioning to the user, but not a sufficiently severe
+error to justify NASM refusing to generate an output file. These
+conditions are reported like errors, but come up with the word
+`warning' before the message. Warnings do not prevent NASM from
+generating an output file and returning a success status to the
+operating system.
+
+Some conditions are even less severe than that: they are only
+sometimes worth mentioning to the user. Therefore NASM supports the
+\c{-w} command-line option, which enables or disables certain
+classes of assembly warning. Such warning classes are described by a
+name, for example \c{label-orphan}; you can enable warnings of
+this class by the command-line option \c{-w+label-orphan} and
+disable it by \c{-w-label-orphan}.
+
+Since version 2.15, NASM has group aliases for all prefixed warnings,
+so they can be used to enable or disable all warnings in the group.
+For example, -w+float enables all warnings with names starting with float-*.
+
+Since version 2.00, NASM has also supported the \c{gcc}-like syntax
+\c{-Wwarning-class} and \c{-Wno-warning-class} instead of
+\c{-w+warning-class} and \c{-w-warning-class}, respectively; both
+syntaxes work identically.
+
+The option \c{-w+error} or \i\c{-Werror} can be used to treat warnings
+as errors.  This can be controlled on a per warning class basis
+(\c{-w+error=}\e{warning-class} or \c{-Werror=}\e{warning-class});
+if no \e{warning-class} is specified NASM treats it as
+\c{-w+error=all}; the same applies to \c{-w-error} or
+\i\c{-Wno-error},
+of course.
+
+In addition, you can control warnings in the source code itself, using
+the \i\c{[WARNING]} directive.  See \k{asmdir-warning}.
+
+See \k{warnings} for the complete list of warning classes.
+
+\S{opt-v} The \i\c{-v} Option: Display \i{Version} Info
+
+Typing \c{NASM -v} will display the version of NASM which you are using,
+and the date on which it was compiled.
+
+You will need the version number if you report a bug.
+
+For command-line compatibility with Yasm, the form \i\c{--v} is also
+accepted for this option starting in NASM version 2.11.05.
+
+
+\S{opt-pfix} The \i\c{--(g|l)prefix}, \i\c{--(g|l)postfix} Options.
+
+The \c{--(g)prefix} options prepend the given argument
+to all \c{extern}, \c{common}, \c{static}, and \c{global} symbols, and the
+\c{--lprefix} option prepends to all other symbols. Similarly,
+\c{--(g)postfix} and \c{--lpostfix} options append
+the argument in the exactly same way as the \c{--xxprefix} options does.
+
+Running this:
+
+\c nasm -f macho --gprefix _
+
+is equivalent to place the directive with \c{%pragma macho gprefix _}
+at the start of the file (\k{mangling}). It will prepend the underscore
+to all global and external variables, as C requires it in some, but not all,
+system calling conventions.
+
+\S{opt-pragma} The \i\c{--pragma} Option
+
+NASM accepts an argument as \c{%pragma} option, which is like placing
+a \c{%pragma} preprocess statement at the beginning of the source.
+Running this:
+
+\c nasm -f macho --pragma "macho gprefix _"
+
+is equivalent to the example in \k{opt-pfix}. See \k{pragma}.
+
+
+\S{opt-before} The \i\c{--before} Option
+
+A preprocess statement can be accepted with this option. The example
+shown in \k{opt-pragma} is the same as running this:
+
+\c nasm -f macho --before "%pragma macho gprefix _"
+
+
+\S{opt-limit} The \i\c{--limit-X} Option
+
+This option allows user to setup various maximum values after which
+NASM will terminate with a fatal error rather than consume arbitrary
+amount of compute time. Each limit can be set to a positive number or
+\c{unlimited}.
+
+\b\c{--limit-passes}: Number of maximum allowed passes. Default is
+\c{unlimited}.
+
+\b\c{--limit-stalled-passes}: Maximum number of allowed unfinished
+passes. Default is 1000.
+
+\b\c{--limit-macro-levels}: Define maximum depth of macro expansion
+(in preprocess). Default is 10000
+
+\b\c{--limit-macro-tokens}: Maximum number of tokens processed during
+single-line macro expansion. Default is 10000000.
+
+\b\c{--limit-mmacros}: Maximum number of multi-line macros processed
+before returning to the top-level input. Default is 100000.
+
+\b\c{--limit-rep}: Maximum number of allowed preprocessor loop, defined
+under \c{%rep}. Default is 1000000.
+
+\b\c{--limit-eval}: This number sets the boundary condition of allowed
+expression length. Default is 8192 on most systems.
+
+\b\c{--limit-lines}: Total number of source lines allowed to be
+processed. Default is 2000000000.
+
+For example, set the maximum line count to 1000:
+
+\c nasm --limit-lines 1000
+
+Limits can also be set via the directive \c{%pragma limit}, for
+example:
+
+\c %pragma limit lines 1000
+
+
+\S{opt-keep-all} The \i\c{--keep-all} Option
+
+This option prevents NASM from deleting any output files even if an
+error happens.
+
+\S{opt-no-line} The \i\c{--no-line} Option
+
+If this option is given, all \i\c{%line} directives in the source code
+are ignored. This can be useful for debugging already preprocessed
+code. See \k{line}.
+
+\S{opt-reproducible} The \i\c{--reproducible} Option
+
+If this option is given, NASM will not emit information that is
+inherently dependent on the NASM version or different from run to run
+(such as timestamps) into the output file.
+
+
+\S{nasmenv} The \i\c{NASMENV} \i{Environment} Variable
+
+If you define an environment variable called \c{NASMENV}, the program
+will interpret it as a list of extra command-line options, which are
+processed before the real command line. You can use this to define
+standard search directories for include files, by putting \c{-i}
+options in the \c{NASMENV} variable.
+
+The value of the variable is split up at white space, so that the
+value \c{-s -ic:\\nasmlib\\} will be treated as two separate options.
+However, that means that the value \c{-dNAME="my name"} won't do
+what you might want, because it will be split at the space and the
+NASM command-line processing will get confused by the two
+nonsensical words \c{-dNAME="my} and \c{name"}.
+
+To get round this, NASM provides a feature whereby, if you begin the
+\c{NASMENV} environment variable with some character that isn't a minus
+sign, then NASM will treat this character as the \i{separator
+character} for options. So setting the \c{NASMENV} variable to the
+value \c{!-s!-ic:\\nasmlib\\} is equivalent to setting it to \c{-s
+-ic:\\nasmlib\\}, but \c{!-dNAME="my name"} will work.
+
+This environment variable was previously called \c{NASM}. This was
+changed with version 0.98.31.
+
+
+\H{qstart} \i{Quick Start} for \i{MASM} Users
+
+If you're used to writing programs with MASM, or with \i{TASM} in
+MASM-compatible (non-Ideal) mode, or with \i\c{a86}, this section
+attempts to outline the major differences between MASM's syntax and
+NASM's. If you're not already used to MASM, it's probably worth
+skipping this section.
+
+
+\S{qscs} NASM Is \I{case sensitivity}Case-Sensitive
+
+One simple difference is that NASM is case-sensitive. It makes a
+difference whether you call your label \c{foo}, \c{Foo} or \c{FOO}.
+If you're assembling to \c{DOS} or \c{OS/2} \c{.OBJ} files, you can
+invoke the \i\c{UPPERCASE} directive (documented in \k{objfmt}) to
+ensure that all symbols exported to other code modules are forced
+to be upper case; but even then, \e{within} a single module, NASM
+will distinguish between labels differing only in case.
+
+
+\S{qsbrackets} NASM Requires \i{Square Brackets} For \i{Memory References}
+
+NASM was designed with simplicity of syntax in mind. One of the
+\i{design goals} of NASM is that it should be possible, as far as is
+practical, for the user to look at a single line of NASM code
+and tell what opcode is generated by it. You can't do this in MASM:
+if you declare, for example,
+
+\c foo     equ     1
+\c bar     dw      2
+
+then the two lines of code
+
+\c         mov     ax,foo
+\c         mov     ax,bar
+
+generate completely different opcodes, despite having
+identical-looking syntaxes.
+
+NASM avoids this undesirable situation by having a much simpler
+syntax for memory references. The rule is simply that any access to
+the \e{contents} of a memory location requires square brackets
+around the address, and any access to the \e{address} of a variable
+doesn't. So an instruction of the form \c{mov ax,foo} will
+\e{always} refer to a compile-time constant, whether it's an \c{EQU}
+or the address of a variable; and to access the \e{contents} of the
+variable \c{bar}, you must code \c{mov ax,[bar]}.
+
+This also means that NASM has no need for MASM's \i\c{OFFSET}
+keyword, since the MASM code \c{mov ax,offset bar} means exactly the
+same thing as NASM's \c{mov ax,bar}. If you're trying to get
+large amounts of MASM code to assemble sensibly under NASM, you
+can always code \c{%idefine offset} to make the preprocessor treat
+the \c{OFFSET} keyword as a no-op.
+
+This issue is even more confusing in \i\c{a86}, where declaring a
+label with a trailing colon defines it to be a `label' as opposed to
+a `variable' and causes \c{a86} to adopt NASM-style semantics; so in
+\c{a86}, \c{mov ax,var} has different behaviour depending on whether
+\c{var} was declared as \c{var: dw 0} (a label) or \c{var dw 0} (a
+word-size variable). NASM is very simple by comparison:
+\e{everything} is a label.
+
+NASM, in the interests of simplicity, also does not support the
+\i{hybrid syntaxes} supported by MASM and its clones, such as
+\c{mov ax,table[bx]}, where a memory reference is denoted by one
+portion outside square brackets and another portion inside. The
+correct syntax for the above is \c{mov ax,[table+bx]}. Likewise,
+\c{mov ax,es:[di]} is wrong and \c{mov ax,[es:di]} is right.
+
+
+\S{qstypes} NASM Doesn't Store \i{Variable Types}
+
+NASM, by design, chooses not to remember the types of variables you
+declare. Whereas MASM will remember, on seeing \c{var dw 0}, that
+you declared \c{var} as a word-size variable, and will then be able
+to fill in the \i{ambiguity} in the size of the instruction \c{mov
+var,2}, NASM will deliberately remember nothing about the symbol
+\c{var} except where it begins, and so you must explicitly code
+\c{mov word [var],2}.
+
+For this reason, NASM doesn't support the \c{LODS}, \c{MOVS},
+\c{STOS}, \c{SCAS}, \c{CMPS}, \c{INS}, or \c{OUTS} instructions,
+but only supports the forms such as \c{LODSB}, \c{MOVSW}, and
+\c{SCASD}, which explicitly specify the size of the components of
+the strings being manipulated.
+
+
+\S{qsassume} NASM Doesn't \i\c{ASSUME}
+
+As part of NASM's drive for simplicity, it also does not support the
+\c{ASSUME} directive. NASM will not keep track of what values you
+choose to put in your segment registers, and will never
+\e{automatically} generate a \i{segment override} prefix.
+
+
+\S{qsmodel} NASM Doesn't Support \i{Memory Models}
+
+NASM also does not have any directives to support different 16-bit
+memory models. The programmer has to keep track of which functions
+are supposed to be called with a \i{far call} and which with a
+\i{near call}, and is responsible for putting the correct form of
+\c{RET} instruction (\c{RETN} or \c{RETF}; NASM accepts \c{RET}
+itself as an alternate form for \c{RETN}); in addition, the
+programmer is responsible for coding CALL FAR instructions where
+necessary when calling \e{external} functions, and must also keep
+track of which external variable definitions are far and which are
+near.
+
+
+\S{qsfpu} \i{Floating-Point} Differences
+
+NASM uses different names to refer to floating-point registers from
+MASM: where MASM would call them \c{ST(0)}, \c{ST(1)} and so on, and
+\i\c{a86} would call them simply \c{0}, \c{1} and so on, NASM
+chooses to call them \c{st0}, \c{st1} etc.
+
+As of version 0.96, NASM now treats the instructions with
+\i{`nowait'} forms in the same way as MASM-compatible assemblers.
+The idiosyncratic treatment employed by 0.95 and earlier was based
+on a misunderstanding by the authors.
+
+
+\S{qsother} Other Differences
+
+For historical reasons, NASM uses the keyword \i\c{TWORD} where MASM
+and compatible assemblers use \i\c{TBYTE}.
+
+Historically, NASM does not declare \i{uninitialized storage} in the
+same way as MASM: where a MASM programmer might use \c{stack db 64 dup
+(?)}, NASM requires \c{stack resb 64}, intended to be read as `reserve
+64 bytes'. For a limited amount of compatibility, since NASM treats
+\c{?} as a valid character in symbol names, you can code \c{? equ 0}
+and then writing \c{dw ?} will at least do something vaguely useful.
+
+As of NASM 2.15, the MASM syntax is also supported.
+
+In addition to all of this, macros and directives work completely
+differently to MASM. See \k{preproc} and \k{directive} for further
+details.
+
+\S{masm-compat} MASM compatibility package
+
+See \k{pkg_masm}.
+
+
