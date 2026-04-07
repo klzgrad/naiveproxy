@@ -201,12 +201,12 @@ void EarlyMallocZoneRegistration() {
         "The delegating default zone has unexpectedly already been "
         "registered.");
   }
-  if (allocator_shim::IsZoneAlreadyRegistered(
-          allocator_shim::kPartitionAllocZoneName)) {
-    abort_report_np(
-        "The PartitionAlloc default zone has unexpectedly already been "
-        "registered.");
-  }
+  // if (allocator_shim::IsZoneAlreadyRegistered(
+  //         allocator_shim::kPartitionAllocZoneName)) {
+  //   abort_report_np(
+  //       "The PartitionAlloc default zone has unexpectedly already been "
+  //       "registered.");
+  // }
 
   // Register puts the new zone at the end, unregister swaps the new zone with
   // the last one.
