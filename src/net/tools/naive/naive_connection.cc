@@ -274,14 +274,15 @@ int NaiveConnection::DoConnectServer() {
     return ERR_ADDRESS_INVALID;
   }
 
-  LOG(INFO) << "Connection " << id_ << " to " << origin.ToString();
+  LOG(INFO) << "Connection " << id_ << " to " << origin.ToString() << " via "
+            << proxy_info_.ToDebugString();
 
   // Ignores socket limit set by socket pool for this type of socket.
   return InitSocketHandleForHttpRequest(
       std::move(endpoint), LOAD_IGNORE_LIMITS, MAXIMUM_PRIORITY, session_,
-      proxy_info_, {}, PRIVACY_MODE_DISABLED,
-      network_anonymization_key_, SecureDnsPolicy::kDisable, SocketTag(),
-      net_log_, server_socket_handle_.get(), io_callback_,
+      proxy_info_, {}, PRIVACY_MODE_DISABLED, network_anonymization_key_,
+      SecureDnsPolicy::kDisable, SocketTag(), net_log_,
+      server_socket_handle_.get(), io_callback_,
       ClientSocketPool::ProxyAuthCallback());
 }
 
