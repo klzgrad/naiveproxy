@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/memory/scoped_refptr.h"
 #include "base/types/expected.h"
 #include "base/types/optional_ref.h"
 #include "net/base/completion_once_callback.h"
@@ -14,6 +15,8 @@
 #include "net/base/net_export.h"
 #include "net/base/network_anonymization_key.h"
 #include "net/base/proxy_chain.h"
+#include "net/http/http_request_headers.h"
+#include "net/http/http_response_headers.h"
 #include "net/proxy_resolution/proxy_retry_info.h"
 
 class GURL;
@@ -117,6 +120,17 @@ class NET_EXPORT ProxyDelegate {
   virtual void OnStreamCreationAttempted(const ProxyChain& proxy_chain,
                                          base::TimeDelta duration,
                                          base::optional_ref<int> net_error) {}
+
+  virtual void OnBeforePreambleRequest(const ProxyChain& proxy_chain,
+                                       size_t proxy_index,
+                                       size_t preamble_index,
+                                       HttpRequestHeaders& headers) const {}
+
+  virtual void OnPreambleHeadersReceived(
+      const ProxyChain& proxy_chain,
+      size_t proxy_index,
+      size_t preamble_index,
+      scoped_refptr<HttpResponseHeaders> response_headers) {}
 };
 
 }  // namespace net
