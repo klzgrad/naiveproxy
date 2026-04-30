@@ -58,6 +58,15 @@ SpdyProxyClientSocket::SpdyProxyClientSocket(
       source_dependency_(source_net_log.source()) {
   request_.method = "CONNECT";
   request_.url = GURL("https://" + endpoint.ToString());
+  if (endpoint.host() == "preamble") {
+    preamble_index_ = endpoint.port();
+    CHECK(!proxy_chain.is_direct());
+    CHECK_EQ(proxy_chain_index, proxy_chain.length() - 1);
+    const ProxyServer& proxy_server =
+        proxy_chain.GetProxyServer(proxy_chain_index);
+    CHECK(proxy_server.is_secure_http_like());
+    request_.url = GURL("https://" + proxy_server.host_port_pair().ToString());
+  }
   net_log_.BeginEventReferencingSource(NetLogEventType::SOCKET_ALIVE,
                                        source_net_log.source());
   net_log_.AddEventReferencingSource(
@@ -437,6 +446,12 @@ int SpdyProxyClientSocket::DoCalculateHeaders() {
   }
 
   if (proxy_delegate_) {
+    if (preamble_index_.has_value()) {
+      proxy_delegate_->OnBeforePreambleRequest(proxy_chain_, proxy_chain_index_,
+                                               *preamble_index_,
+                                               proxy_delegate_headers_);
+      return OK;
+    }
     ASSIGN_OR_RETURN(
         proxy_delegate_headers_,
         proxy_delegate_->OnBeforeTunnelRequest(
@@ -464,6 +479,32 @@ int SpdyProxyClientSocket::DoCalculateHeadersComplete(int result) {
     proxy_delegate_headers_.RemoveHeader("fastopen");
     use_fastopen_ = true;
   }
+  if (preamble_index_.has_value()) {
+    authorization_headers_.Clear();
+    std::optional<std::string_view> method =
+        proxy_delegate_headers_.GetHeaderView("_method");
+    if (method.has_value()) {
+      request_.method = *method;
+      proxy_delegate_headers_.RemoveHeader("_method");
+    } else {
+      LOG(ERROR) << "Missing preamble method";
+      return ERR_INVALID_ARGUMENT;
+    }
+    std::optional<std::string_view> path =
+        proxy_delegate_headers_.GetHeaderView("_path");
+    if (path.has_value()) {
+      if (*path == "/" || path->ends_with(".css")) {
+        spdy_stream_->SetPriority(HIGHEST);
+      } else if (path->ends_with(".js")) {
+        spdy_stream_->SetPriority(LOW);
+      }
+      request_.url = request_.url.Resolve(*path);
+      proxy_delegate_headers_.RemoveHeader("_path");
+    } else {
+      LOG(ERROR) << "Missing preamble path";
+      return ERR_INVALID_ARGUMENT;
+    }
+  }
   request_.extra_headers.MergeFrom(proxy_delegate_headers_);
   return result;
 }
@@ -483,6 +524,10 @@ int SpdyProxyClientSocket::DoSendRequest() {
   CreateSpdyHeadersFromHttpRequest(request_, std::nullopt,
                                    request_.extra_headers, &headers);
 
+  if (preamble_index_.has_value()) {
+    return spdy_stream_->SendRequestHeaders(std::move(headers),
+                                            NO_MORE_DATA_TO_SEND);
+  }
   return spdy_stream_->SendRequestHeaders(std::move(headers),
                                           MORE_DATA_TO_SEND);
 }
@@ -526,6 +571,11 @@ int SpdyProxyClientSocket::DoProcessResponseHeaders() {
   next_state_ = STATE_PROCESS_RESPONSE_HEADERS_COMPLETE;
 
   if (proxy_delegate_) {
+    if (preamble_index_.has_value()) {
+      proxy_delegate_->OnPreambleHeadersReceived(
+          proxy_chain_, proxy_chain_index_, *preamble_index_, response_.headers);
+      return OK;
+    }
     return proxy_delegate_->OnTunnelHeadersReceived(
         proxy_chain_, proxy_chain_index_, *response_.headers,
         base::BindOnce(&SpdyProxyClientSocket::OnIOComplete,
@@ -546,6 +596,11 @@ int SpdyProxyClientSocket::DoProcessResponseHeadersComplete(int result) {
 }
 
 int SpdyProxyClientSocket::DoProcessResponseCode() {
+  if (preamble_index_.has_value()) {
+    // Ignores any response failures during preamble
+    next_state_ = STATE_OPEN;
+    return OK;
+  }
   switch (response_.headers->response_code()) {
     case 200:  // OK
       next_state_ = STATE_OPEN;

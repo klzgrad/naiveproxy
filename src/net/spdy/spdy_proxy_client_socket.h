@@ -201,6 +201,7 @@ class NET_EXPORT_PRIVATE SpdyProxyClientSocket : public ProxyClientSocket,
   bool was_ever_used_ = false;
 
   bool use_fastopen_ = false;
+  std::optional<size_t> preamble_index_;
   bool read_headers_pending_ = false;
 
   const NetLogWithSource net_log_;
