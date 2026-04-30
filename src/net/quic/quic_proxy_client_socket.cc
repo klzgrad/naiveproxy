@@ -53,6 +53,15 @@ QuicProxyClientSocket::QuicProxyClientSocket(
 
   request_.method = "CONNECT";
   request_.url = GURL("https://" + endpoint.ToString());
+  if (endpoint.host() == "preamble") {
+    preamble_index_ = endpoint.port();
+    CHECK(!proxy_chain.is_direct());
+    CHECK_EQ(proxy_chain_index, proxy_chain.length() - 1);
+    const ProxyServer& proxy_server =
+        proxy_chain.GetProxyServer(proxy_chain_index);
+    CHECK(proxy_server.is_secure_http_like());
+    request_.url = GURL("https://" + proxy_server.host_port_pair().ToString());
+  }
 
   net_log_.BeginEventReferencingSource(NetLogEventType::SOCKET_ALIVE,
                                        net_log_.source());
@@ -376,6 +385,12 @@ int QuicProxyClientSocket::DoCalculateHeaders() {
   }
 
   if (proxy_delegate_) {
+    if (preamble_index_.has_value()) {
+      proxy_delegate_->OnBeforePreambleRequest(proxy_chain_, proxy_chain_index_,
+                                               *preamble_index_,
+                                               proxy_delegate_headers_);
+      return OK;
+    }
     ASSIGN_OR_RETURN(
         proxy_delegate_headers_,
         proxy_delegate_->OnBeforeTunnelRequest(
@@ -404,6 +419,36 @@ int QuicProxyClientSocket::DoCalculateHeadersComplete(int result) {
     // TODO(klzgrad): look into why Fast Open does not work.
     use_fastopen_ = true;
   }
+  if (preamble_index_.has_value()) {
+    authorization_headers_.Clear();
+    std::optional<std::string_view> method =
+        proxy_delegate_headers_.GetHeaderView("_method");
+    if (method.has_value()) {
+      request_.method = *method;
+      proxy_delegate_headers_.RemoveHeader("_method");
+    } else {
+      LOG(ERROR) << "Missing preamble method";
+      return ERR_INVALID_ARGUMENT;
+    }
+    std::optional<std::string_view> path =
+        proxy_delegate_headers_.GetHeaderView("_path");
+    if (path.has_value()) {
+      RequestPriority priority = LOWEST;
+      if (*path == "/" || path->ends_with(".css")) {
+        priority = HIGHEST;
+      } else if (path->ends_with(".js")) {
+        priority = LOW;
+      }
+      uint8_t urgency = ConvertRequestPriorityToQuicPriority(priority);
+      stream_->SetPriority(quic::QuicStreamPriority(
+          quic::HttpStreamPriority{urgency, kDefaultPriorityIncremental}));
+      request_.url = request_.url.Resolve(*path);
+      proxy_delegate_headers_.RemoveHeader("_path");
+    } else {
+      LOG(ERROR) << "Missing preamble path";
+      return ERR_INVALID_ARGUMENT;
+    }
+  }
   request_.extra_headers.MergeFrom(proxy_delegate_headers_);
   return result;
 }
@@ -423,6 +468,9 @@ int QuicProxyClientSocket::DoSendRequest() {
   CreateSpdyHeadersFromHttpRequest(request_, std::nullopt,
                                    request_.extra_headers, &headers);
 
+  if (preamble_index_.has_value()) {
+    return stream_->WriteHeaders(std::move(headers), true, nullptr);
+  }
   return stream_->WriteHeaders(std::move(headers), false, nullptr);
 }
 
@@ -482,6 +530,11 @@ int QuicProxyClientSocket::DoProcessResponseHeaders() {
   next_state_ = STATE_PROCESS_RESPONSE_HEADERS_COMPLETE;
 
   if (proxy_delegate_) {
+    if (preamble_index_.has_value()) {
+      proxy_delegate_->OnPreambleHeadersReceived(
+          proxy_chain_, proxy_chain_index_, *preamble_index_, response_.headers);
+      return OK;
+    }
     return proxy_delegate_->OnTunnelHeadersReceived(
         proxy_chain_, proxy_chain_index_, *response_.headers,
         base::BindOnce(&QuicProxyClientSocket::OnIOComplete,
@@ -502,6 +555,11 @@ int QuicProxyClientSocket::DoProcessResponseHeadersComplete(int result) {
 }
 
 int QuicProxyClientSocket::DoProcessResponseCode() {
+  if (preamble_index_.has_value()) {
+    // Ignores any response failures during preamble
+    next_state_ = STATE_CONNECT_COMPLETE;
+    return OK;
+  }
   switch (response_.headers->response_code()) {
     case 200:  // OK
       next_state_ = STATE_CONNECT_COMPLETE;

@@ -168,6 +168,7 @@ class NET_EXPORT_PRIVATE QuicProxyClientSocket : public ProxyClientSocket {
   LoadTimingInfo::ConnectTiming connect_timing_;
 
   bool use_fastopen_;
+  std::optional<size_t> preamble_index_;
   bool read_headers_pending_;
 
   const NetLogWithSource net_log_;
