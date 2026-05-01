@@ -42,7 +42,7 @@ Example Caddyfile (replace `user` and `pass` accordingly):
 {
   order forward_proxy before file_server
   log {
-    exclude http.log.error  # Avoid logging user activity
+    exclude http.log.error # Avoid logging user activity
   }
 }
 :443, example.com {
