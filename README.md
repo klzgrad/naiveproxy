@@ -41,9 +41,13 @@ Example Caddyfile (replace `user` and `pass` accordingly):
 ```
 {
   order forward_proxy before file_server
+  log {
+    exclude http.log.error  # Avoid logging user activity
+  }
 }
 :443, example.com {
   tls me@example.com
+  encode
   forward_proxy {
     basic_auth user pass
     hide_ip
