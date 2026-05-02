@@ -7,7 +7,7 @@ The following traffic attacks are mitigated by using Chromium's network stack:
 * Website fingerprinting / traffic classification: mitigated by [traffic multiplexing in HTTP/2](https://arxiv.org/abs/1707.00641) and parroting preambles.
 * [TLS parameter fingerprinting](https://arxiv.org/abs/1607.01639): defeated by reusing [Chrome's network stack](https://www.chromium.org/developers/design-documents/network-stack).
 * [Active probing](https://ensa.fi/active-probing/): defeated by *application fronting*, i.e. hiding proxy servers behind a commonly used frontend server with application-layer routing.
-* Length-based traffic analysis: mitigated by length padding.
+* Length-based traffic analysis: mitigated by padding and fragmentation.
 
 ## Architecture
 
