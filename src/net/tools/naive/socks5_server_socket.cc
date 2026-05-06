@@ -9,6 +9,7 @@
 
 #include "net/tools/naive/socks5_server_socket.h"
 
+#include <cstdint>
 #include <cstring>
 #include <utility>
 
@@ -433,15 +434,16 @@ int Socks5ServerSocket::DoAuthReadComplete(int result) {
                                      "version", buffer_[0]);
       return ERR_SOCKS_CONNECTION_FAILED;
     }
-    int username_len = buffer_[1];
+    int username_len = static_cast<uint8_t>(buffer_[1]);
     read_header_size_ += username_len + 1;
     next_state_ = STATE_AUTH_READ;
     return OK;
   }
 
   if (buffer_.size() == read_header_size_) {
-    int username_len = buffer_[1];
-    int password_len = buffer_[kAuthReadHeaderSize + username_len];
+    int username_len = static_cast<uint8_t>(buffer_[1]);
+    int password_len =
+        static_cast<uint8_t>(buffer_[kAuthReadHeaderSize + username_len]);
     size_t password_offset = kAuthReadHeaderSize + username_len + 1;
     if (buffer_.size() == password_offset && password_len != 0) {
       read_header_size_ += password_len;

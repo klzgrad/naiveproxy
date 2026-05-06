@@ -363,8 +363,7 @@ int HttpProxyServerSocket::DoHeaderReadComplete(int result) {
     std::optional<std::string> proxy_auth;
     proxy_auth = headers.GetHeader(HttpRequestHeaders::kProxyAuthorization);
     if (proxy_auth != basic_auth_) {
-      LOG(WARNING) << "Invalid Proxy-Authorization: "
-                   << proxy_auth.value_or("");
+      LOG(WARNING) << "Invalid Proxy-Authorization";
       return ERR_INVALID_ARGUMENT;
     }
   }
