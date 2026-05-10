@@ -49,9 +49,7 @@ HttpProxyServerSocket::HttpProxyServerSocket(
     PaddingType* negotiated_client_padding,
     const NetworkTrafficAnnotationTag& traffic_annotation,
     const std::vector<PaddingType>& supported_padding_types)
-    : io_callback_(base::BindRepeating(&HttpProxyServerSocket::OnIOComplete,
-                                       base::Unretained(this))),
-      transport_(std::move(transport_socket)),
+    : transport_(std::move(transport_socket)),
       negotiated_client_padding_(negotiated_client_padding),
       next_state_(STATE_NONE),
       completed_handshake_(false),
@@ -64,6 +62,8 @@ HttpProxyServerSocket::HttpProxyServerSocket(
     basic_auth_ =
         std::string("Basic ").append(base::Base64Encode(user + ":" + pass));
   }
+  io_callback_ = base::BindRepeating(&HttpProxyServerSocket::OnIOComplete,
+                                     weak_ptr_factory_.GetWeakPtr());
 }
 
 HttpProxyServerSocket::~HttpProxyServerSocket() {
@@ -169,7 +169,7 @@ int HttpProxyServerSocket::Read(IOBuffer* buf,
   int rv = transport_->Read(
       buf, buf_len,
       base::BindOnce(&HttpProxyServerSocket::OnReadWriteComplete,
-                     base::Unretained(this), std::move(callback)));
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
   if (rv > 0) {
     was_ever_used_ = true;
   }
@@ -191,7 +191,7 @@ int HttpProxyServerSocket::Write(
   int rv = transport_->Write(
       buf, buf_len,
       base::BindOnce(&HttpProxyServerSocket::OnReadWriteComplete,
-                     base::Unretained(this), std::move(callback)),
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)),
       traffic_annotation);
   if (rv > 0) {
     was_ever_used_ = true;

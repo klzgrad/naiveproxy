@@ -50,9 +50,7 @@ Socks5ServerSocket::Socks5ServerSocket(
     const std::string& user,
     const std::string& pass,
     const NetworkTrafficAnnotationTag& traffic_annotation)
-    : io_callback_(base::BindRepeating(&Socks5ServerSocket::OnIOComplete,
-                                       base::Unretained(this))),
-      transport_(std::move(transport_socket)),
+    : transport_(std::move(transport_socket)),
       next_state_(STATE_NONE),
       completed_handshake_(false),
       bytes_sent_(0),
@@ -60,7 +58,10 @@ Socks5ServerSocket::Socks5ServerSocket(
       user_(user),
       pass_(pass),
       net_log_(transport_->NetLog()),
-      traffic_annotation_(traffic_annotation) {}
+      traffic_annotation_(traffic_annotation) {
+  io_callback_ = base::BindRepeating(&Socks5ServerSocket::OnIOComplete,
+                                     weak_ptr_factory_.GetWeakPtr());
+}
 
 Socks5ServerSocket::~Socks5ServerSocket() {
   Disconnect();
@@ -155,7 +156,7 @@ int Socks5ServerSocket::Read(IOBuffer* buf,
   int rv = transport_->Read(
       buf, buf_len,
       base::BindOnce(&Socks5ServerSocket::OnReadWriteComplete,
-                     base::Unretained(this), std::move(callback)));
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
   if (rv > 0) {
     was_ever_used_ = true;
   }
@@ -177,7 +178,7 @@ int Socks5ServerSocket::Write(
   int rv = transport_->Write(
       buf, buf_len,
       base::BindOnce(&Socks5ServerSocket::OnReadWriteComplete,
-                     base::Unretained(this), std::move(callback)),
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)),
       traffic_annotation);
   if (rv > 0) {
     was_ever_used_ = true;

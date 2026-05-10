@@ -210,8 +210,8 @@ void PreambleGetter::AddHeaders(const std::string& path,
   }
 }
 
-int PreambleGetter::Start(size_t preamble_index,
-                          CompletionOnceCallback callback,
+int PreambleGetter::Start(CompletionOnceCallback callback,
+                          size_t preamble_index,
                           bool log_url) {
   CHECK_LT(preamble_index, requests_.size());
   Request& req = *requests_[preamble_index];
@@ -369,12 +369,14 @@ std::vector<std::string_view> ExtractLinkAndScriptURLs(std::string_view html) {
   size_t pos = 0;
   while (pos < html.size()) {
     size_t lt = html.find('<', pos);
-    if (lt == std::string_view::npos)
+    if (lt == std::string_view::npos) {
       break;
+    }
 
     size_t gt = html.find('>', lt);
-    if (gt == std::string_view::npos)
+    if (gt == std::string_view::npos) {
       break;
+    }
 
     std::string_view tag = base::TrimWhitespaceASCII(
         html.substr(lt + 1, gt - lt - 1), base::TRIM_LEADING);
@@ -391,8 +393,9 @@ std::vector<std::string_view> ExtractLinkAndScriptURLs(std::string_view html) {
     size_t i = 0;
 
     while (i < tag.size()) {
-      while (i < tag.size() && base::IsAsciiWhitespace(tag[i]))
+      while (i < tag.size() && base::IsAsciiWhitespace(tag[i])) {
         ++i;
+      }
 
       size_t name_start = i;
       while (i < tag.size() && !base::IsAsciiWhitespace(tag[i]) &&
@@ -448,16 +451,20 @@ int PreambleGetter::DoReadComplete(size_t preamble_index, int result) {
   CHECK_LT(preamble_index, requests_.size());
   Request& req = *requests_[preamble_index];
 
-  std::string_view new_data(req.read_buffer->data(), static_cast<size_t>(result));
+  std::string_view new_data(req.read_buffer->data(),
+                            static_cast<size_t>(result));
   req.last_content.append(new_data);
-  std::vector<std::string_view> links = ExtractLinkAndScriptURLs(req.last_content);
+  std::vector<std::string_view> links =
+      ExtractLinkAndScriptURLs(req.last_content);
   for (std::string_view link : links) {
     GURL gurl = root_.Resolve(link);
-    if (!gurl.is_valid())
+    if (!gurl.is_valid()) {
       continue;
+    }
     if (gurl.host() != proxy_server_->GetHost() ||
-        gurl.EffectiveIntPort() != proxy_server_->GetPort())
+        gurl.EffectiveIntPort() != proxy_server_->GetPort()) {
       continue;
+    }
 
     std::string_view path = gurl.PathForRequestPiece();
     bool added = false;
@@ -467,8 +474,9 @@ int PreambleGetter::DoReadComplete(size_t preamble_index, int result) {
         break;
       }
     }
-    if (added)
+    if (added) {
       continue;
+    }
     std::string filename = gurl.ExtractFileName();
     std::string ext;
     auto pos = filename.find_last_of('.');
@@ -484,12 +492,13 @@ int PreambleGetter::DoReadComplete(size_t preamble_index, int result) {
         break;
       }
     }
-    if (!ext_ok)
+    if (!ext_ok) {
       continue;
+    }
     requests_.push_back(std::make_unique<Request>());
     requests_.back()->path = path;
     requests_.back()->ext = ext;
-    (void)Start(requests_.size() - 1, {});
+    (void)Start({}, requests_.size() - 1);
   }
   req.last_content = new_data;
   req.next_state = STATE_READ;
@@ -497,10 +506,11 @@ int PreambleGetter::DoReadComplete(size_t preamble_index, int result) {
 }
 
 void PreambleGetter::StartOne() {
-  if (requests_.empty())
+  if (requests_.empty()) {
     return;
+  }
   int index = base::RandIntInclusive(0, requests_.size() - 1);
-  (void)Start(index, {}, /*log_url=*/false);
+  (void)Start({}, index, /*log_url=*/false);
 }
 
 NaiveProxyDelegate* PreambleGetter::naive_proxy_delegate() const {

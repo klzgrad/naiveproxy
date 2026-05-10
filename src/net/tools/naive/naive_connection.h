@@ -99,7 +99,7 @@ class NaiveConnection {
   const ProxyInfo& proxy_info_;
   RedirectResolver* resolver_;
   HttpNetworkSession* session_;
-  const NetworkAnonymizationKey& network_anonymization_key_;
+  NetworkAnonymizationKey network_anonymization_key_;
   const NetLogWithSource& net_log_;
 
   CompletionRepeatingCallback io_callback_;

@@ -56,9 +56,10 @@ RedirectResolver::~RedirectResolver() = default;
 
 void RedirectResolver::DoRead() {
   for (;;) {
-    int rv = socket_->RecvFrom(
-        buffer_.get(), kUdpReadBufferSize, &recv_address_,
-        base::BindOnce(&RedirectResolver::OnRecv, base::Unretained(this)));
+    int rv =
+        socket_->RecvFrom(buffer_.get(), kUdpReadBufferSize, &recv_address_,
+                          base::BindOnce(&RedirectResolver::OnRecv,
+                                         weak_ptr_factory_.GetWeakPtr()));
     if (rv == ERR_IO_PENDING) {
       return;
     }
@@ -221,9 +222,9 @@ int RedirectResolver::HandleReadResult(int result) {
   }
   buffer_->first(size).copy_from(response.io_buffer()->span());
 
-  return socket_->SendTo(
-      buffer_.get(), size, recv_address_,
-      base::BindOnce(&RedirectResolver::OnSend, base::Unretained(this)));
+  return socket_->SendTo(buffer_.get(), size, recv_address_,
+                         base::BindOnce(&RedirectResolver::OnSend,
+                                        weak_ptr_factory_.GetWeakPtr()));
 }
 
 bool RedirectResolver::IsInResolvedRange(const IPAddress& address) const {

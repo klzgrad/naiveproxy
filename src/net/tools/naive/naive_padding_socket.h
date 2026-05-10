@@ -98,6 +98,8 @@ class NaivePaddingSocket {
   scoped_refptr<DrainableIOBuffer> write_buf_;
 
   NaivePaddingFramer framer_;
+
+  base::WeakPtrFactory<NaivePaddingSocket> weak_ptr_factory_{this};
 };
 
 }  // namespace net

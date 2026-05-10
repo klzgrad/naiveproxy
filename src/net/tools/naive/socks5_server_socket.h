@@ -159,6 +159,8 @@ class Socks5ServerSocket : public StreamSocket {
 
   // Traffic annotation for socket control.
   const NetworkTrafficAnnotationTag& traffic_annotation_;
+
+  base::WeakPtrFactory<Socks5ServerSocket> weak_ptr_factory_{this};
 };
 
 }  // namespace net

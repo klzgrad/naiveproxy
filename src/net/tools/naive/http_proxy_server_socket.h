@@ -128,6 +128,8 @@ class HttpProxyServerSocket : public StreamSocket {
   const NetworkTrafficAnnotationTag& traffic_annotation_;
 
   std::vector<PaddingType> supported_padding_types_;
+
+  base::WeakPtrFactory<HttpProxyServerSocket> weak_ptr_factory_{this};
 };
 
 }  // namespace net

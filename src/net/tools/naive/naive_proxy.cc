@@ -32,6 +32,9 @@ namespace {
 constexpr base::TimeDelta kIdleCheckPeriod = base::Minutes(1);
 }  // namespace
 
+NaiveProxy::Tunnel::Tunnel() = default;
+NaiveProxy::Tunnel::~Tunnel() = default;
+
 NaiveProxy::NaiveProxy(std::unique_ptr<ServerSocket> listen_socket,
                        ClientProtocol protocol,
                        const std::string& listen_user,
@@ -54,7 +57,9 @@ NaiveProxy::NaiveProxy(std::unique_ptr<ServerSocket> listen_socket,
       session_(session),
       net_log_(
           NetLogWithSource::Make(session->net_log(), NetLogSourceType::NONE)),
-      last_id_(0),
+      next_id_(0),
+      next_state_(State::kAccept),
+      tunnels_(concurrency),
       traffic_annotation_(traffic_annotation),
       supported_padding_types_(supported_padding_types) {
   const auto& proxy_config = static_cast<ConfiguredProxyResolutionService*>(
@@ -68,17 +73,14 @@ NaiveProxy::NaiveProxy(std::unique_ptr<ServerSocket> listen_socket,
   proxy_info_.set_traffic_annotation(
       net::MutableNetworkTrafficAnnotationTag(traffic_annotation_));
 
-  for (int i = 0; i < concurrency_; i++) {
-    tunnel_ids_.push_back(
-        TunnelId{NetworkAnonymizationKey::CreateTransient(), {}});
-  }
-
   DCHECK(listen_socket_);
   // Start accepting connections in next run loop in case when delegate is not
   // ready to get callbacks.
+  io_callback_ = base::BindRepeating(&NaiveProxy::OnIOComplete,
+                                     weak_ptr_factory_.GetWeakPtr());
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE, base::BindOnce(&NaiveProxy::DoAcceptLoop,
-                                weak_ptr_factory_.GetWeakPtr()));
+      FROM_HERE, base::BindOnce(&NaiveProxy::OnIOComplete,
+                                weak_ptr_factory_.GetWeakPtr(), OK));
 
   cleanup_timer_.Start(FROM_HERE, kIdleCheckPeriod, this,
                        &NaiveProxy::CleanUpIdleConnections);
@@ -86,69 +88,105 @@ NaiveProxy::NaiveProxy(std::unique_ptr<ServerSocket> listen_socket,
 
 NaiveProxy::~NaiveProxy() = default;
 
-void NaiveProxy::DoAcceptLoop() {
-  int result;
-  accept_loop_needs_restart_ = false;
+void NaiveProxy::OnIOComplete(int result) {
+  DCHECK_NE(next_state_, State::kNone);
+  int rv = DoLoop(result);
+  if (rv != ERR_IO_PENDING) {
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(&NaiveProxy::OnIOComplete,
+                                  weak_ptr_factory_.GetWeakPtr(), OK));
+  }
+}
+
+int NaiveProxy::DoLoop(int last_io_result) {
+  DCHECK_NE(next_state_, State::kNone);
+  int rv = last_io_result;
   do {
-    result = listen_socket_->Accept(
-        &accepted_socket_, base::BindOnce(&NaiveProxy::OnAcceptComplete,
-                                          weak_ptr_factory_.GetWeakPtr()));
-    if (result == ERR_IO_PENDING) {
-      accept_loop_needs_restart_ = true;
-      return;
+    State state = next_state_;
+    next_state_ = State::kNone;
+    switch (state) {
+      case State::kAccept:
+        DCHECK_EQ(OK, rv);
+        rv = DoAccept();
+        break;
+      case State::kAcceptComplete:
+        rv = DoAcceptComplete(rv);
+        break;
+      case State::kPreamble:
+        DCHECK_EQ(OK, rv);
+        rv = DoPreamble();
+        break;
+      case State::kPreambleComplete:
+        rv = DoPreambleComplete(rv);
+        break;
+      case State::kConnect:
+        DCHECK_EQ(OK, rv);
+        rv = DoConnect();
+        break;
+      default:
+        rv = ERR_UNEXPECTED;
+        break;
     }
-    OnAcceptComplete(result);
-  } while (result == OK);
+  } while (rv != ERR_IO_PENDING && next_state_ != State::kNone);
+  return rv;
 }
 
-void NaiveProxy::OnAcceptComplete(int result) {
+int NaiveProxy::DoAccept() {
+  next_state_ = State::kAcceptComplete;
+  return listen_socket_->Accept(&accepted_socket_, io_callback_);
+}
+
+int NaiveProxy::DoAcceptComplete(int result) {
   if (result != OK) {
+    next_state_ = State::kAccept;
     LOG(ERROR) << "Accept error: " << ErrorToShortString(result);
-    return;
+    // This accept error is ignored to start the next accept.
+    return OK;
   }
 
-  TunnelId& tunnel_id = tunnel_ids_[last_id_ % concurrency_];
+  Tunnel& tunnel = tunnels_[next_id_ % concurrency_];
   base::TimeTicks now = base::TimeTicks::Now();
-  if (tunnel_id.deadline.is_null()) {
-    tunnel_id.deadline = now + tunnel_timeout_;
-  } else if (now > tunnel_id.deadline) {
-    tunnel_id.key = NetworkAnonymizationKey::CreateTransient();
-    tunnel_id.deadline = now + tunnel_timeout_;
-  }
-
-  if (WillCreateSession()) {
-    url_getter_ = std::make_unique<PreambleGetter>(proxy_info_, session_,
-                                                   current_nak(), net_log_);
-    int rv =
-        url_getter_->Start(0, base::BindOnce(&NaiveProxy::OnPreambleComplete,
-                                             weak_ptr_factory_.GetWeakPtr()));
-    if (rv != ERR_IO_PENDING) {
-      OnPreambleComplete(rv);
-    }
+  if (tunnel.deadline.is_null()) {
+    tunnel.deadline = now + tunnel_timeout_;
+    next_state_ = State::kPreamble;
+  } else if (now > tunnel.deadline) {
+    tunnel.nak = NetworkAnonymizationKey::CreateTransient();
+    tunnel.deadline = now + tunnel_timeout_;
+    tunnel.url_getter.reset();
+    next_state_ = State::kPreamble;
   } else {
-    if (url_getter_ != nullptr) {
-      url_getter_->StartOne();
-    }
-    DoConnect();
-    if (accept_loop_needs_restart_) {
-      DoAcceptLoop();
-    }
+    DCHECK(tunnel.url_getter != nullptr);
+    tunnel.url_getter->StartOne();
+    next_state_ = State::kConnect;
   }
+  return OK;
 }
 
-void NaiveProxy::OnPreambleComplete(int result) {
+// Possible exit states: State::kAccept, State::kPreambleComplete
+int NaiveProxy::DoPreamble() {
+  Tunnel& tunnel = tunnels_[next_id_ % concurrency_];
+  DCHECK(WillCreateSession(tunnel.nak));
+  tunnel.url_getter = std::make_unique<PreambleGetter>(proxy_info_, session_,
+                                                       tunnel.nak, net_log_);
+  next_state_ = State::kPreambleComplete;
+  return tunnel.url_getter->Start(io_callback_);
+}
+
+int NaiveProxy::DoPreambleComplete(int result) {
   if (result != OK) {
     LOG(WARNING) << "Preamble error: " << ErrorToShortString(result);
+    // Preamble error doesn't prevent Connect().
   }
-  DoConnect();
-  if (accept_loop_needs_restart_) {
-    DoAcceptLoop();
-  }
+  next_state_ = State::kConnect;
+  return OK;
 }
 
-void NaiveProxy::DoConnect() {
+int NaiveProxy::DoConnect() {
   auto negotiated_client_padding =
       std::make_unique<PaddingType>(PaddingType::kNone);
+
+  // Once accepted_socket_ is moved, the next Accept can start.
+  next_state_ = State::kAccept;
 
   std::unique_ptr<StreamSocket> socket;
   if (protocol_ == ClientProtocol::kSocks5) {
@@ -156,8 +194,6 @@ void NaiveProxy::DoConnect() {
                                                   listen_user_, listen_pass_,
                                                   traffic_annotation_);
   } else if (protocol_ == ClientProtocol::kHttp) {
-    negotiated_client_padding =
-        std::make_unique<PaddingType>(PaddingType::kNone);
     socket = std::make_unique<HttpProxyServerSocket>(
         std::move(accepted_socket_), listen_user_, listen_pass_,
         negotiated_client_padding.get(), traffic_annotation_,
@@ -165,25 +201,28 @@ void NaiveProxy::DoConnect() {
   } else if (protocol_ == ClientProtocol::kRedir) {
     socket = std::move(accepted_socket_);
   } else {
-    return;
+    return OK;
   }
 
+  const Tunnel& tunnel = tunnels_[next_id_ % concurrency_];
   auto connection_ptr = std::make_unique<NaiveConnection>(
-      last_id_, protocol_, std::move(negotiated_client_padding), proxy_info_,
-      resolver_, session_, current_nak(), net_log_, std::move(socket),
+      next_id_, protocol_, std::move(negotiated_client_padding), proxy_info_,
+      resolver_, session_, tunnel.nak, net_log_, std::move(socket),
       traffic_annotation_);
   auto* connection = connection_ptr.get();
   connection_by_id_[connection->id()] = std::move(connection_ptr);
 
-  ++last_id_;
+  ++next_id_;
 
   int result = connection->Connect(
       base::BindOnce(&NaiveProxy::OnConnectComplete,
                      weak_ptr_factory_.GetWeakPtr(), connection->id()));
   if (result == ERR_IO_PENDING) {
-    return;
+    // Connect result doesn't prevent the next Accept
+    return OK;
   }
   HandleConnectResult(connection, result);
+  return OK;
 }
 
 void NaiveProxy::OnConnectComplete(unsigned int connection_id, int result) {
@@ -250,11 +289,6 @@ NaiveConnection* NaiveProxy::FindConnection(unsigned int connection_id) {
   return it->second.get();
 }
 
-const NetworkAnonymizationKey& NaiveProxy::current_nak() const {
-  int tunnel_session_id = last_id_ % concurrency_;
-  return tunnel_ids_[tunnel_session_id].key;
-}
-
 NaiveProxyDelegate* NaiveProxy::naive_proxy_delegate() const {
   auto* proxy_delegate =
       static_cast<NaiveProxyDelegate*>(session_->context().proxy_delegate);
@@ -262,18 +296,20 @@ NaiveProxyDelegate* NaiveProxy::naive_proxy_delegate() const {
   return proxy_delegate;
 }
 
-bool NaiveProxy::WillCreateSession() const {
-  if (proxy_info_.is_direct())
+bool NaiveProxy::WillCreateSession(const NetworkAnonymizationKey& nak) const {
+  if (proxy_info_.is_direct()) {
     return false;
+  }
   // Simulates HttpProxyConnectJob::CreateSpdySessionKey()
   const ProxyChain& proxy_chain = proxy_info_.proxy_chain();
   auto [last_proxy_partial_chain, last_proxy_server] = proxy_chain.SplitLast();
-  if (!last_proxy_server.is_secure_http_like())
+  if (!last_proxy_server.is_secure_http_like()) {
     return false;
+  }
   const auto& last_proxy_host_port_pair = last_proxy_server.host_port_pair();
   SpdySessionKey key(last_proxy_host_port_pair, PRIVACY_MODE_DISABLED,
                      last_proxy_partial_chain, SessionUsage::kProxy,
-                     SocketTag(), current_nak(), SecureDnsPolicy::kDisable,
+                     SocketTag(), nak, SecureDnsPolicy::kDisable,
                      /*disable_cert_verification_network_fetches=*/true);
   return !session_->spdy_session_pool()->FindAvailableSession(
       key, /*enable_ip_based_pooling_for_h2=*/false,

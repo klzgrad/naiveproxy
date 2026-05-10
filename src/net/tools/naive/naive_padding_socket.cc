@@ -62,7 +62,7 @@ int NaivePaddingSocket::ReadNoPadding(IOBuffer* buf,
   int rv = transport_socket_->Read(
       buf, buf_len,
       base::BindOnce(&NaivePaddingSocket::OnReadNoPaddingComplete,
-                     base::Unretained(this), std::move(callback)));
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
   return rv;
 }
 
@@ -127,7 +127,7 @@ int NaivePaddingSocket::ReadPaddingV1Payload() {
     int rv = transport_socket_->Read(
         read_buf_.get(), read_user_buf_len_,
         base::BindOnce(&NaivePaddingSocket::OnReadPaddingV1Complete,
-                       base::Unretained(this)));
+                       weak_ptr_factory_.GetWeakPtr()));
     if (rv <= 0) {
       return rv;
     }
@@ -169,7 +169,7 @@ int NaivePaddingSocket::WriteNoPadding(
   return transport_socket_->Write(
       buf, buf_len,
       base::BindOnce(&NaivePaddingSocket::OnWriteNoPaddingComplete,
-                     base::Unretained(this), std::move(callback),
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback),
                      traffic_annotation),
       traffic_annotation);
 }
@@ -259,7 +259,7 @@ int NaivePaddingSocket::WritePaddingV1Drain(
     int rv = transport_socket_->Write(
         write_buf_.get(), remaining,
         base::BindOnce(&NaivePaddingSocket::OnWritePaddingV1Complete,
-                       base::Unretained(this), traffic_annotation),
+                       weak_ptr_factory_.GetWeakPtr(), traffic_annotation),
         traffic_annotation);
     if (rv <= 0) {
       return rv;
