@@ -72,6 +72,11 @@ NaiveProxy::NaiveProxy(std::unique_ptr<ServerSocket> listen_socket,
   proxy_info_.UseProxyList(proxy_list);
   proxy_info_.set_traffic_annotation(
       net::MutableNetworkTrafficAnnotationTag(traffic_annotation_));
+  if (!proxy_info_.is_direct()) {
+    const ProxyChain& proxy_chain = proxy_info_.proxy_chain();
+    std::tie(last_proxy_partial_chain_, last_proxy_server_) =
+        proxy_chain.SplitLast();
+  }
 
   DCHECK(listen_socket_);
   // Start accepting connections in next run loop in case when delegate is not
@@ -146,17 +151,21 @@ int NaiveProxy::DoAcceptComplete(int result) {
 
   Tunnel& tunnel = tunnels_[next_id_ % concurrency_];
   base::TimeTicks now = base::TimeTicks::Now();
-  if (tunnel.deadline.is_null()) {
-    tunnel.deadline = now + tunnel_timeout_;
-    next_state_ = State::kPreamble;
-  } else if (now > tunnel.deadline) {
-    tunnel.nak = NetworkAnonymizationKey::CreateTransient();
-    tunnel.deadline = now + tunnel_timeout_;
-    tunnel.url_getter.reset();
-    next_state_ = State::kPreamble;
+  if (IsSessionCapable()) {
+    if (tunnel.deadline.is_null()) {
+      tunnel.deadline = now + tunnel_timeout_;
+      next_state_ = State::kPreamble;
+    } else if (now > tunnel.deadline) {
+      tunnel.nak = NetworkAnonymizationKey::CreateTransient();
+      tunnel.deadline = now + tunnel_timeout_;
+      tunnel.url_getter.reset();
+      next_state_ = State::kPreamble;
+    } else {
+      DCHECK(tunnel.url_getter != nullptr);
+      tunnel.url_getter->StartOne();
+      next_state_ = State::kConnect;
+    }
   } else {
-    DCHECK(tunnel.url_getter != nullptr);
-    tunnel.url_getter->StartOne();
     next_state_ = State::kConnect;
   }
   return OK;
@@ -296,24 +305,38 @@ NaiveProxyDelegate* NaiveProxy::naive_proxy_delegate() const {
   return proxy_delegate;
 }
 
-bool NaiveProxy::WillCreateSession(const NetworkAnonymizationKey& nak) const {
+bool NaiveProxy::IsSessionCapable() const {
   if (proxy_info_.is_direct()) {
     return false;
   }
-  // Simulates HttpProxyConnectJob::CreateSpdySessionKey()
-  const ProxyChain& proxy_chain = proxy_info_.proxy_chain();
-  auto [last_proxy_partial_chain, last_proxy_server] = proxy_chain.SplitLast();
-  if (!last_proxy_server.is_secure_http_like()) {
-    return false;
+  // TODO(klzgrad): HTTP/1 https proxy will fail
+  return last_proxy_server_.is_secure_http_like();
+}
+
+bool NaiveProxy::WillCreateSession(const NetworkAnonymizationKey& nak) const {
+  if (last_proxy_server_.is_https()) {
+    SpdySessionKey key(last_proxy_server_.host_port_pair(),
+                       PRIVACY_MODE_DISABLED, last_proxy_partial_chain_,
+                       SessionUsage::kProxy, SocketTag(), nak,
+                       SecureDnsPolicy::kDisable,
+                       /*disable_cert_verification_network_fetches=*/true);
+    return !session_->spdy_session_pool()->FindAvailableSession(
+        key, /*enable_ip_based_pooling_for_h2=*/false,
+        /*is_websocket=*/false, net_log_);
   }
-  const auto& last_proxy_host_port_pair = last_proxy_server.host_port_pair();
-  SpdySessionKey key(last_proxy_host_port_pair, PRIVACY_MODE_DISABLED,
-                     last_proxy_partial_chain, SessionUsage::kProxy,
-                     SocketTag(), nak, SecureDnsPolicy::kDisable,
-                     /*disable_cert_verification_network_fetches=*/true);
-  return !session_->spdy_session_pool()->FindAvailableSession(
-      key, /*enable_ip_based_pooling_for_h2=*/false,
-      /*is_websocket=*/false, net_log_);
+  if (last_proxy_server_.is_quic()) {
+    QuicSessionKey key(
+        last_proxy_server_.host_port_pair(), PRIVACY_MODE_DISABLED,
+        last_proxy_partial_chain_, SessionUsage::kProxy, SocketTag(), nak,
+        SecureDnsPolicy::kDisable, /*require_dns_https_alpn=*/false,
+        /*disable_cert_verification_network_fetches=*/true);
+    url::SchemeHostPort destination("https", last_proxy_server_.GetHost(),
+                                    last_proxy_server_.GetPort(),
+                                    url::SchemeHostPort::ALREADY_CANONICALIZED);
+    return !session_->quic_session_pool()->CanUseExistingSession(key,
+                                                                 destination);
+  }
+  return false;
 }
 
 void NaiveProxy::CleanUpIdleConnections() {

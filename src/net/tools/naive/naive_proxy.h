@@ -85,6 +85,7 @@ class NaiveProxy {
 
   NaiveConnection* FindConnection(unsigned int connection_id);
   NaiveProxyDelegate* naive_proxy_delegate() const;
+  bool IsSessionCapable() const;
   bool WillCreateSession(const NetworkAnonymizationKey& nak) const;
   void CleanUpIdleConnections();
 
@@ -96,6 +97,8 @@ class NaiveProxy {
   base::TimeDelta tunnel_timeout_;
   base::TimeDelta idle_timeout_;
   ProxyInfo proxy_info_;
+  ProxyChain last_proxy_partial_chain_;
+  ProxyServer last_proxy_server_;
   RedirectResolver* resolver_;
   HttpNetworkSession* session_;
   NetLogWithSource net_log_;
