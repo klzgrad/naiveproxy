@@ -16,7 +16,6 @@ else
   flags="
     is_official_build=true
     is_chrome_branded=true
-    dcheck_always_on=true
     exclude_unwind_tables=true
     enable_resource_allowlist_generation=false
     chrome_pgo_phase=2
