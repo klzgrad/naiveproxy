@@ -281,9 +281,19 @@ void QuicProxyClientSocket::OnIOComplete(int result) {
   DCHECK_NE(STATE_DISCONNECTED, next_state_);
   int rv = DoLoop(result);
   if (rv != ERR_IO_PENDING) {
-    // Connect() finished (successfully or unsuccessfully).
-    DCHECK(!connect_callback_.is_null());
-    std::move(connect_callback_).Run(rv);
+    if (!connect_callback_.is_null()) {
+      // Connect() finished (successfully or unsuccessfully).
+      std::move(connect_callback_).Run(rv);
+      return;
+    }
+
+    DCHECK(use_fastopen_);
+    read_headers_pending_ = false;
+    next_state_ = STATE_DISCONNECTED;
+    if (!read_callback_.is_null()) {
+      read_buf_ = nullptr;
+      std::move(read_callback_).Run(rv);
+    }
   }
 }
 
@@ -340,12 +350,17 @@ int QuicProxyClientSocket::DoLoop(int last_io_result) {
         if (use_fastopen_ && read_headers_pending_) {
           read_headers_pending_ = false;
           if (rv < 0) {
-            // read_callback_ will be called with this error and be reset.
-            // Further data after that will be ignored.
+            // If a Read() is pending, OnIOComplete() will report this error to
+            // that callback. Otherwise keep the completed Connect() quiet and
+            // leave the socket disconnected for any future operations.
             next_state_ = STATE_DISCONNECTED;
+            if (read_callback_.is_null())
+              rv = ERR_IO_PENDING;
+          } else {
+            // Prevents calling connect_callback_ after Fast Open Connect()
+            // already completed synchronously.
+            rv = ERR_IO_PENDING;
           }
-          // Prevents calling connect_callback_.
-          rv = ERR_IO_PENDING;
         }
         break;
       default:
