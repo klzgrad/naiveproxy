@@ -1,0 +1,88 @@
+/*
+ * Copyright (C) 2026 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+package perfetto.protos;
+
+// Android aconfig flags (aflags).
+// This message captures a snapshot of the state of aconfig flags on the device.
+// Keep in sync with:
+// http://ac/packages/modules/ConfigInfrastructure/aflags/proto/aflags.proto
+message AndroidAflags {
+  // Whether a flag can be modified at runtime.
+  enum FlagPermission {
+    FLAG_PERMISSION_UNSPECIFIED = 0;
+    FLAG_PERMISSION_READ_ONLY = 1;
+    FLAG_PERMISSION_READ_WRITE = 2;
+  }
+
+  // The source of the current flag value.
+  enum ValuePickedFrom {
+    VALUE_PICKED_FROM_UNSPECIFIED = 0;
+    // The value is the build-time default.
+    VALUE_PICKED_FROM_DEFAULT = 1;
+    // The value comes from a server-side override.
+    VALUE_PICKED_FROM_SERVER = 2;
+    // The value comes from a local override on the device.
+    VALUE_PICKED_FROM_LOCAL = 3;
+  }
+
+  // The underlying storage mechanism for the flag.
+  enum FlagStorageBackend {
+    FLAG_STORAGE_BACKEND_UNSPECIFIED = 0;
+    FLAG_STORAGE_BACKEND_NONE = 1;
+    FLAG_STORAGE_BACKEND_ACONFIGD = 2;
+    FLAG_STORAGE_BACKEND_DEVICE_CONFIG = 3;
+  }
+
+  // The value type of the flag.
+  enum FlagType {
+    // Flag type unspecified. This flag type means the flag is an old version
+    // boolean flag or unknown newer type.
+    FLAG_TYPE_UNSPECIFIED = 0;
+    FLAG_TYPE_BOOLEAN = 1;
+    FLAG_TYPE_INTEGER = 2;
+  }
+
+  // Representation of an aconfig flag and its metadata.
+  message Flag {
+    optional string flag_namespace = 1;
+    optional string name = 2;
+    // The aconfig package (e.g. "com.android.foo"). These are system-level
+    // identifiers and not privacy-impacting.
+    optional string pkg = 3;
+    // The container where the flag lives (e.g. "system", "vendor", or mainline
+    // module name).
+    optional string container = 4;
+    // The flag value as a string to support different future data types.
+    optional string value = 5;
+    // The value that will be applied after the next reboot, if different from
+    // the current value.
+    optional string staged_value = 6;
+    optional FlagPermission permission = 7;
+    optional ValuePickedFrom value_picked_from = 8;
+    optional FlagStorageBackend storage_backend = 9;
+    optional FlagType type = 10;
+  }
+
+  // A collection of flags.
+  repeated Flag flags = 1;
+
+  // A human-readable error logged if aflags processing fails.
+  // This is a perfetto specific field used to help debugging.
+  optional string error = 2;
+}

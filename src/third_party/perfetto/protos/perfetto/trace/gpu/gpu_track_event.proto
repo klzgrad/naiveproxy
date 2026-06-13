@@ -1,0 +1,51 @@
+// Copyright (C) 2026 The Android Open Source Project
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto2";
+
+package perfetto.protos;
+
+import public "protos/perfetto/trace/track_event/track_event.proto";
+
+// GPU API type for tagging track events.
+// Values intentionally match InternedGraphicsContext.Api in
+// gpu_render_stage_event.proto.
+enum GpuApi {
+  GPU_API_UNDEFINED = 0;
+  GPU_API_OPEN_GL = 1;
+  GPU_API_VULKAN = 2;
+  GPU_API_OPEN_CL = 3;
+  GPU_API_CUDA = 4;
+  GPU_API_HIP = 5;
+}
+
+// Correlates a track event with GPU render stage events.
+message GpuCorrelation {
+  // Event IDs of GpuRenderStageEvents that this track event submitted.
+  repeated uint64 render_stage_submission_event_ids = 1;
+
+  // Event IDs of GpuRenderStageEvents that this track event waited on
+  // to complete.
+  repeated uint64 render_stage_wait_event_ids = 2;
+}
+
+message GpuTrackEvent {
+  extend TrackEvent {
+    // Correlates this track event with GPU render stage events.
+    optional GpuCorrelation gpu_correlation = 3000;
+
+    // GPU API that this track event represents a call to.
+    optional GpuApi gpu_api = 3001;
+  }
+}

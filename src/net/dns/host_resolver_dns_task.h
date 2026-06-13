@@ -1,0 +1,309 @@
+// Copyright 2024 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#ifndef NET_DNS_HOST_RESOLVER_DNS_TASK_H_
+#define NET_DNS_HOST_RESOLVER_DNS_TASK_H_
+
+#include <initializer_list>
+#include <memory>
+#include <optional>
+#include <set>
+#include <variant>
+#include <vector>
+
+#include "base/containers/circular_deque.h"
+#include "base/containers/unique_ptr_adapters.h"
+#include "base/memory/raw_ptr.h"
+#include "base/memory/safe_ref.h"
+#include "base/memory/weak_ptr.h"
+#include "base/numerics/safe_conversions.h"
+#include "base/time/time.h"
+#include "base/timer/timer.h"
+#include "base/values.h"
+#include "net/base/ip_endpoint.h"
+#include "net/base/net_export.h"
+#include "net/base/request_priority.h"
+#include "net/dns/dns_transaction.h"
+#include "net/dns/host_resolver.h"
+#include "net/dns/httpssvc_metrics.h"
+#include "net/dns/public/secure_dns_mode.h"
+#include "net/dns/resolve_context.h"
+#include "net/log/net_log_with_source.h"
+
+namespace net {
+
+class DnsClient;
+class DnsResponse;
+class HostResolverInternalResult;
+class HostResolverInternalErrorResult;
+
+// Resolves the hostname using DnsTransaction, which is a full implementation of
+// a DNS stub resolver. One DnsTransaction is created for each resolution
+// needed, which for AF_UNSPEC resolutions includes both A and AAAA. The
+// transactions are scheduled separately and started separately.
+class NET_EXPORT_PRIVATE HostResolverDnsTask final {
+ public:
+  using Results = std::set<std::unique_ptr<HostResolverInternalResult>>;
+  using ResultRefs = std::set<const HostResolverInternalResult*>;
+
+  // Represents a single transaction results.
+  struct NET_EXPORT_PRIVATE SingleTransactionResults {
+    SingleTransactionResults(DnsQueryType query_type, ResultRefs results);
+    ~SingleTransactionResults();
+
+    SingleTransactionResults(SingleTransactionResults&&);
+    SingleTransactionResults& operator=(SingleTransactionResults&&);
+
+    SingleTransactionResults(const SingleTransactionResults&) = delete;
+    SingleTransactionResults& operator=(const SingleTransactionResults&) =
+        delete;
+
+    DnsQueryType query_type;
+    ResultRefs results;
+  };
+
+  class Delegate {
+   public:
+    virtual void OnDnsTaskComplete(
+        base::TimeTicks start_time,
+        bool allow_fallback,
+        Results results,
+        DnsTransactionFactory::AttemptMode attempt_mode) = 0;
+
+    // Called when one transaction completes successfully, or one more
+    // transactions get cancelled, but only if more transactions are
+    // needed. If no more transactions are needed, expect `OnDnsTaskComplete()`
+    // to be called instead. `single_transaction_results` is passed only when
+    // one transaction completes successfully.
+    virtual void OnIntermediateTransactionsComplete(
+        std::optional<SingleTransactionResults> single_transaction_results) = 0;
+
+    virtual RequestPriority priority() const = 0;
+
+    virtual bool IsHappyEyeballsV3Enabled() const = 0;
+
+    virtual void AddTransactionTimeQueued(base::TimeDelta time_queued) = 0;
+
+   protected:
+    Delegate() = default;
+    virtual ~Delegate() = default;
+  };
+
+  HostResolverDnsTask(DnsClient* client,
+                      HostResolver::Host host,
+                      NetworkAnonymizationKey anonymization_key,
+                      DnsQueryTypeSet query_types,
+                      ResolveContext* resolve_context,
+                      DnsTransactionFactory::AttemptMode attempt_mode,
+                      SecureDnsMode secure_dns_mode,
+                      Delegate* delegate,
+                      const NetLogWithSource& job_net_log,
+                      const base::TickClock* tick_clock,
+                      bool fallback_available,
+                      const HostResolver::HttpsSvcbOptions& https_svcb_options);
+  ~HostResolverDnsTask();
+
+  HostResolverDnsTask(const HostResolverDnsTask&) = delete;
+  HostResolverDnsTask& operator=(const HostResolverDnsTask&) = delete;
+
+  int num_additional_transactions_needed() const {
+    return base::checked_cast<int>(transactions_needed_.size());
+  }
+
+  int num_transactions_in_progress() const {
+    return base::checked_cast<int>(transactions_in_progress_.size());
+  }
+
+  bool secure() const {
+    switch (attempt_mode_) {
+      case DnsTransactionFactory::AttemptMode::kHttp:
+        return true;
+      case DnsTransactionFactory::AttemptMode::kClassic:
+      case DnsTransactionFactory::AttemptMode::kPlatform:
+        return false;
+    }
+  }
+
+  bool https_disabled() const { return https_disabled_; }
+
+  void StartNextTransaction();
+
+  // Returns the DoH resolution details (such as connection protocol and
+  // session source) for this task, if DoH was used. Returns std::nullopt
+  // otherwise. If multiple transactions (e.g., A, AAAA, HTTPS) are executed
+  // concurrently, this retains the details from the first successfully
+  // completed DoH transaction to prevent overwriting.
+  std::optional<DohResolutionDetails> GetDohResolutionDetails() const {
+    return doh_details_;
+  }
+
+  base::WeakPtr<HostResolverDnsTask> AsWeakPtr() {
+    return weak_ptr_factory_.GetWeakPtr();
+  }
+
+  // There are some complex circumstances when some in-progress transactions
+  // may be cancelled without cancelling the entire task. This trigger allows
+  // testing that logic can correctly respond to being cancelled, regardless of
+  // the reason for the cancellation.
+  void CancelInProgressTransactionsForTest();
+
+ private:
+  enum class TransactionErrorBehavior {
+    // Errors lead to task fallback (immediately unless another pending/started
+    // transaction has the `kFatalOrEmpty` behavior).
+    kFallback,
+
+    // Transaction errors are treated as if a NOERROR response were received,
+    // allowing task success if other transactions complete successfully.
+    kSynthesizeEmpty,
+
+    // Transaction errors are potentially fatal (determined by
+    // `OnTransactionComplete` and often its helper
+    // `IsFatalTransactionFailure()`) for the entire Job and may disallow
+    // fallback. Otherwise, same as `kSynthesizeEmpty`.
+    // TODO(crbug.com/40203587): Implement the fatality behavior.
+    kFatalOrEmpty,
+  };
+
+  struct TransactionInfo {
+    explicit TransactionInfo(DnsQueryType type,
+                             TransactionErrorBehavior error_behavior =
+                                 TransactionErrorBehavior::kFallback);
+    ~TransactionInfo();
+
+    DnsQueryType type;
+    TransactionErrorBehavior error_behavior;
+    std::unique_ptr<DnsTransaction> transaction;
+    base::WeakPtrFactory<TransactionInfo> weak_ptr_factory{this};
+  };
+
+  base::DictValue NetLogDnsTaskCreationParams();
+
+  base::DictValue NetLogDnsTaskTimeoutParams();
+
+  DnsQueryTypeSet MaybeDisableAdditionalQueries(DnsQueryTypeSet types);
+
+  void PushTransactionsNeeded(DnsQueryTypeSet query_types);
+
+  void CreateAndStartTransaction(
+      std::unique_ptr<TransactionInfo> transaction_info);
+
+  void OnTimeout();
+
+  // Called on completion of a `DnsTransaction`, but not necessarily completion
+  // of all work for the individual transaction in this task (see
+  // `OnTransactionsFinished()`).
+  //
+  // Takes the TransactionInfo reference as a WeakPtr only for added safety and
+  // conformity with similar code. Not expected to actually be possible for this
+  // callback to be called after cancellation of a transaction and deletion of
+  // the TransactionInfo because the info itself owns the DnsTransaction, which
+  // cancels the async call on destruction.
+  void OnDnsTransactionComplete(
+      base::WeakPtr<TransactionInfo> transaction_info_ptr,
+      uint16_t request_port,
+      int net_error,
+      const DnsResponse* response);
+
+  bool IsFatalTransactionFailure(int transaction_error,
+                                 const TransactionInfo& transaction_info,
+                                 const DnsResponse* response);
+
+  void SortTransactionAndHandleResults(
+      std::unique_ptr<TransactionInfo> transaction_info,
+      Results transaction_results);
+  void OnTransactionSorted(base::WeakPtr<TransactionInfo> transaction_info_ptr,
+                           Results transaction_results,
+                           bool success,
+                           std::vector<IPEndPoint> sorted);
+  void HandleTransactionResults(
+      std::unique_ptr<TransactionInfo> transaction_info,
+      Results transaction_results);
+
+  void OnTransactionsFinished(
+      std::optional<SingleTransactionResults> single_transaction_results);
+
+  void OnSortComplete(base::TimeTicks sort_start_time,
+                      Results results,
+                      bool secure,
+                      bool success,
+                      std::vector<IPEndPoint> sorted);
+
+  bool AnyPotentiallyFatalTransactionsRemain();
+
+  void CancelNonFatalTransactions();
+
+  void OnFailure(int net_error,
+                 bool allow_fallback,
+                 const Results* base_results = nullptr);
+  void OnDeferredFailure(bool allow_fallback = true);
+
+  void OnSuccess(Results results);
+
+  // Returns whether any transactions left to finish are of a transaction type
+  // in `types`. Used for logging and starting the timeout timer (see
+  // MaybeStartTimeoutTimer()).
+  bool AnyOfTypeTransactionsRemain(
+      std::initializer_list<DnsQueryType> types) const;
+
+  void MaybeStartTimeoutTimer();
+
+  bool ShouldTriggerHttpToHttpsUpgrade(const Results& results);
+
+  const raw_ptr<DnsClient> client_;
+
+  HostResolver::Host host_;
+  NetworkAnonymizationKey anonymization_key_;
+
+  base::SafeRef<ResolveContext> resolve_context_;
+
+  const DnsTransactionFactory::AttemptMode attempt_mode_;
+  const SecureDnsMode secure_dns_mode_;
+
+  // The listener to the results of this DnsTask.
+  const raw_ptr<Delegate> delegate_;
+  const NetLogWithSource net_log_;
+
+  bool any_transaction_started_ = false;
+  base::circular_deque<std::unique_ptr<TransactionInfo>> transactions_needed_;
+  // Active transactions have iterators pointing to their entry in this set, so
+  // individual entries should not be modified or removed until completion or
+  // cancellation of the transaction.
+  std::set<std::unique_ptr<TransactionInfo>, base::UniquePtrComparator>
+      transactions_in_progress_;
+
+  // For histograms.
+  base::TimeTicks a_record_end_time_;
+  base::TimeTicks aaaa_record_end_time_;
+
+  Results saved_results_;
+  std::unique_ptr<HostResolverInternalErrorResult> deferred_failure_;
+
+  const raw_ptr<const base::TickClock> tick_clock_;
+  base::TimeTicks task_start_time_;
+
+  std::optional<HttpssvcMetrics> httpssvc_metrics_;
+
+  // Timer for task timeout. Generally started after completion of address
+  // transactions to allow aborting experimental or supplemental transactions.
+  base::OneShotTimer timeout_timer_;
+
+  // If true, there are still significant fallback options available if this
+  // task completes unsuccessfully. Used as a signal that underlying
+  // transactions should timeout more quickly.
+  bool fallback_available_;
+
+  const HostResolver::HttpsSvcbOptions https_svcb_options_;
+
+  // Set to true when HTTPS query is disabled.
+  bool https_disabled_ = false;
+
+  std::optional<DohResolutionDetails> doh_details_;
+
+  base::WeakPtrFactory<HostResolverDnsTask> weak_ptr_factory_{this};
+};
+
+}  // namespace net
+
+#endif  // NET_DNS_HOST_RESOLVER_DNS_TASK_H_

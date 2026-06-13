@@ -1,0 +1,164 @@
+@SET_MAKE@
+
+.SUFFIXES: .bin .bin16 .bin32 .bin64 .o .o64 .aout .aoutb .obj .obj64 \
+	   .mo32 .mo64 .dbg .i .od .ox .ith .srec .exe .lst \
+	   .asm .pl
+
+# Binary suffixes
+O		= @OBJEXT@
+X		= @EXEEXT@
+A		= @LIBEXT@
+
+NASM	= ../nasm$(X)
+NDISASM	= ../ndisasm$(X)
+OMFDUMP = ../misc/omfdump$(X)
+LISTOPT = -L+
+NASMOPT = -DSRC -Ox -I../misc $(LISTOPT) $(OPT)
+PERL	= perl
+TESTS	= $(wildcard *.asm)
+RM_F	= rm -f
+RM_RF	= rm -rf
+
+.PHONY: tools nasm ndisasm ffmpegtest x264test dav1dtest intel-ipsec-mbtest isa-ltest isa-l_cryptotest
+tools:
+	$(MAKE) -C .. all
+
+nasm ndisasm:
+	$(MAKE) -C .. $(@F)
+
+$(NASM) $(NDISASM):
+	$(MAKE) -C .. $(@F)
+
+ffmpegtest:
+	bash projtest.sh '$(NASM)' $@
+
+x264test:
+	bash projtest.sh '$(NASM)' $@
+
+dav1dtest:
+	bash projtest.sh '$(NASM)' $@
+
+intel-ipsec-mbtest:
+	bash projtest.sh '$(NASM)' $@
+
+isa-ltest:
+	bash projtest.sh '$(NASM)' $@
+
+isa-l_cryptotest:
+	bash projtest.sh '$(NASM)' $@
+
+%.bin: %.asm $(NASM)
+	$(NASM) $(NASMOPT) -f bin -o $@ -MD $@.dep -l $@.lst $<
+
+%.bin16: %.asm $(NASM)
+	$(NASM) --bits 16 $(NASMOPT) -f bin -o $@ -MD $@.dep -l $@.lst $<
+
+%.bin32: %.asm $(NASM)
+	$(NASM) --bits 32 $(NASMOPT) -f bin -o $@ -MD $@.dep -l $@.lst $<
+
+%.bin64: %.asm $(NASM)
+	$(NASM) --bits 64 $(NASMOPT) -f bin -o $@ -MD $@.dep -l $@.lst $<
+
+%.ith: %.asm $(NASM)
+	$(NASM) $(NASMOPT) -f ith -o $@ -MD $@.dep -l $@.lst $<
+
+%.srec: %.asm $(NASM)
+	$(NASM) $(NASMOPT) -f srec -o $@ -MD $@.dep -l $@.lst $<
+
+%.o: %.asm $(NASM)
+	$(NASM) $(NASMOPT) -f elf32 -gdwarf -o $@ -MD $@.dep -l $@.lst $<
+
+%.ox: %.asm $(NASM)
+	$(NASM) $(NASMOPT) -f elfx32 -gdwarf -o $@ -MD $@.dep -l $@.lst $<
+
+%.o64: %.asm $(NASM)
+	$(NASM) $(NASMOPT) -f elf64 -gdwarf -o $@ -MD $@.dep -l $@.lst $<
+
+%.aout: %.asm $(NASM)
+	$(NASM) $(NASMOPT) -f aout -o $@ -MD $@.dep -l $@.lst $<
+
+%.aoutb: %.asm $(NASM)
+	$(NASM) $(NASMOPT) -f aoutb -o $@ -MD $@.dep -l $@.lst $<
+
+%.obj: %.asm $(NASM)
+	$(NASM) $(NASMOPT) -f obj -gborland -o $@ -MD $@.dep -l $@.lst $<
+
+%.rdf: %.asm $(NASM)
+	$(NASM) $(NASMOPT) -f rdf -o $@ -MD $@.dep -l $@.lst $<
+
+%.od: %.obj $(OMFDUMP)
+	$(OMFDUMP) $< > $@
+
+%.coff: %.asm $(NASM)
+	$(NASM) $(NASMOPT) -f coff -o $@ -MD $@.dep -l $@.lst $<
+
+%.win32: %.asm $(NASM)
+	$(NASM) $(NASMOPT) -f win32 -gcv8 -o $@ -MD $@.dep -l $@.lst $<
+
+%.win64: %.asm $(NASM)
+	$(NASM) $(NASMOPT) -f win64 -gcv8 -o $@ -MD $@.dep -l $@.lst $<
+
+%.mo32: %.asm $(NASM)
+	$(NASM) $(NASMOPT) -f macho32 -gdwarf -o $@ -MD $@.dep -l $@.lst $<
+
+%.mo64: %.asm $(NASM)
+	$(NASM) $(NASMOPT) -f macho64 -gdwarf -o $@ -MD $@.dep -l $@.lst $<
+
+%.dbg: %.asm $(NASM)
+	$(NASM) $(NASMOPT) -f dbg -gdebug -o $@ -MD $@.dep -l $@.lst $<
+
+%.asm: %.pl
+	$(PERL) $< > $@
+
+%.i: %.asm $(NASM)
+	$(NASM) $(NASMOPT) -E -o $@ -MD $@.dep $<
+
+all:
+
+golden: performtest.pl $(TESTS)
+	$(PERL) performtest.pl --golden --nasm='$(NASM)' $(TESTS)
+
+test:	performtest.pl $(NASM) $(TESTS)
+	$(PERL) performtest.pl --nasm='$(NASM)' $(TESTS)
+
+diff:	performtest.pl $(NASM) $(TESTS)
+	$(PERL) performtest.pl --diff --nasm='$(NASM)' $(TESTS)
+
+clean:
+	$(RM_F) *.com *.o *.o64 *.aout *.obj *.win32 *.win64 *.exe *.lst *.bin
+	$(RM_F) *.bin *.bin16 *.bin32 *.bin64
+	$(RM_F) *.dbg *.coff *.ith *.srec *.mo32 *.mo64 *.i *.dep *.rdf
+	$(RM_F) *.aoutb
+	$(RM_RF) testresults
+	$(RM_F) elftest elftest64
+	$(RM_RF) ffmpegtest x264test dav1dtest
+	$(RM_RF) intel-ipsec-mbtest isa-ltest isa-l_cryptotest
+
+spotless: clean
+	$(RM_RF) golden
+
+#
+# Test for ELF32 shared libraries; assumes an x86 Linux system
+#
+elfso.o: elfso.asm $(NASM)
+	$(NASM) $(NASMOPT) -f elf32 -F stabs -o $@ -MD $@.dep -l $@.lst $<
+
+elfso.so: elfso.o
+	$(LD) -m elf_i386 -shared -o $@ -MD $@.dep $<
+
+elftest: elftest.c elfso.so
+	$(CC) -g -m32 -o $@ -MD $@.dep $^
+	-env LD_LIBRARY_PATH=.:$$LD_LIBRARY_PATH ./elftest
+
+#
+# Test for ELF64 shared libraries; assumes an x86-64 Linux system
+#
+elf64so.o: elf64so.asm $(NASM)
+	$(NASM) $(NASMOPT) -f elf64 -F dwarf -o $@ -MD $@.dep -l $@.lst $<
+
+elf64so.so: elf64so.o
+	$(LD) -shared -o $@ -MD $@.dep $<
+
+elftest64: elftest64.c elf64so.so
+	$(CC) -g -o $@ -MD $@.dep $^
+	-env LD_LIBRARY_PATH=.:$$LD_LIBRARY_PATH ./elftest64

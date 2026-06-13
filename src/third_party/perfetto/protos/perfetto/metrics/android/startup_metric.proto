@@ -1,0 +1,488 @@
+/*
+ * Copyright (C) 2019 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+package perfetto.protos;
+
+import "protos/perfetto/metrics/android/process_metadata.proto";
+
+// Android app startup metrics.
+message AndroidStartupMetric {
+  // A simplified view of the task state durations for a thread
+  // and a span of time.
+  message TaskStateBreakdown {
+    optional int64 running_dur_ns = 1;
+    optional int64 runnable_dur_ns = 2;
+    optional int64 uninterruptible_sleep_dur_ns = 3;
+    optional int64 interruptible_sleep_dur_ns = 4;
+    optional int64 uninterruptible_io_sleep_dur_ns = 5;
+    optional int64 uninterruptible_non_io_sleep_dur_ns = 6;
+  }
+
+  message McyclesByCoreType {
+    optional int64 little = 1;
+    optional int64 big = 2;
+    optional int64 bigger = 3;
+    optional int64 unknown = 4;
+  }
+
+  message Slice {
+    optional int64 dur_ns = 1;
+    optional double dur_ms = 2;
+  }
+
+  // Timing information spanning the intent received by the
+  // activity manager to the first frame drawn.
+  // Next id: 38
+  message ToFirstFrame {
+    // The duration between the intent received and first frame.
+    optional int64 dur_ns = 1;
+    optional double dur_ms = 17;
+
+    // Breakdown of time to first frame by task state for the main thread of
+    // the process starting up.
+    optional TaskStateBreakdown main_thread_by_task_state = 2;
+
+    // The mcycles taken by this startup across all CPUs (broken down by core
+    // type).
+    optional McyclesByCoreType mcycles_by_core_type = 26;
+
+    // In this timespan, how many processes (apart from the main activity) were
+    // spawned.
+    optional uint32 other_processes_spawned_count = 3;
+
+    // Total time spent in activity manager between the initial intent
+    // and the end of the activity starter.
+    optional Slice time_activity_manager = 4;
+
+    // The following slices follow the typical steps post-fork.
+    optional Slice time_activity_thread_main = 5;
+    optional Slice time_bind_application = 6;
+    optional Slice time_activity_start = 7;
+    optional Slice time_activity_resume = 8;
+    optional Slice time_activity_restart = 21;
+    optional Slice time_choreographer = 9;
+    optional Slice time_inflate = 22;
+    optional Slice time_get_resources = 23;
+
+    // If we are starting a new process, record the duration from the
+    // intent being received to the time we call the zygote.
+    optional Slice time_before_start_process = 10;
+
+    // The actual duration of the process start (based on the zygote slice).
+    optional Slice time_during_start_process = 11;
+
+    // The duration from launch to first running state thread of startup
+    // process.
+    optional Slice time_to_running_state = 35;
+
+    optional Slice to_post_fork = 18;
+    optional Slice to_activity_thread_main = 19;
+    optional Slice to_bind_application = 20;
+
+    optional Slice time_post_fork = 16;
+
+    // Total time on class initialization during app startup.
+    optional Slice time_class_initialization = 36;
+    // The total time spent on opening dex files.
+    optional Slice time_dex_open = 24;
+    // Total time spent verifying classes during app startup.
+    optional Slice time_verify_class = 25;
+
+    // Number of methods that were compiled by JIT during app startup.
+    optional uint32 jit_compiled_methods = 27;
+
+    // Number of class initializations during app startup.
+    optional uint32 class_initialization_count = 37;
+
+    // Time spent running CPU on jit thread pool.
+    optional Slice time_jit_thread_pool_on_cpu = 28;
+
+    // Time spent on garbage collection.
+    optional Slice time_gc_total = 29;
+    optional Slice time_gc_on_cpu = 30;
+
+    // Time spent in lock contention on the main thread of the process being
+    // started up. This includes *all* types of lock contention not just monitor
+    // contention.
+    optional Slice time_lock_contention_thread_main = 31;
+
+    // Time spent in monitor lock contention on the main thread of the
+    // process being started up. This will be a subset of the time counted by
+    // |time_lock_contention_thread_main|.
+    optional Slice time_monitor_contention_thread_main = 32;
+
+    // Time spent in opening dex files on the main thread of the process
+    // being started up.
+    optional Slice time_dex_open_thread_main = 33;
+
+    // Time spent in dlopening .so files on the main thread of the process
+    // being started up.
+    optional Slice time_dlopen_thread_main = 34;
+
+    // Removed: was other_process_to_activity_cpu_ratio.
+    reserved 12;
+
+    // Removed: was uint32 versions of to_post_fork, to_activity_thread_main and
+    // to_bind_application.
+    reserved 13, 14, 15;
+  }
+
+  // Metrics about startup which were developed by looking at experiments using
+  // high-speed cameras (HSC).
+  message HscMetrics {
+    // The duration of the full "startup" as defined by HSC tests.
+    optional Slice full_startup = 1;
+  }
+
+  message Activity {
+    optional string name = 1;
+    optional string method = 2;
+    optional int64 ts_method_start = 4;
+
+    // Field 3 contained Slice with a sum of durations for matching slices.
+    reserved 3;
+  }
+
+  message BinderTransaction {
+    optional Slice duration = 1;
+    optional string thread = 2;
+    optional string destination_thread = 3;
+    optional string destination_process = 4;
+    // From
+    // https://cs.android.com/android/platform/superproject/main/+/main:external/perfetto/protos/perfetto/trace/ftrace/binder.proto;l=15;drc=7b6a788162a30802f4c9d8d7a30a54e25edd30f1
+    optional string flags = 5;
+    // From
+    // https://cs.android.com/android/platform/superproject/main/+/main:external/perfetto/protos/perfetto/trace/ftrace/binder.proto;l=14;drc=7b6a788162a30802f4c9d8d7a30a54e25edd30f1
+    optional string code = 6;
+    // From
+    // https://cs.android.com/android/platform/superproject/main/+/main:external/perfetto/protos/perfetto/trace/ftrace/binder.proto;l=37;drc=7b6a788162a30802f4c9d8d7a30a54e25edd30f1
+    optional int64 data_size = 7;
+  }
+
+  // Metrics with information about the status of odex files and the outcome
+  // of the loading process.
+  // Multiple files might be loaded for a single startup. Platform might also
+  // decide to discard an odex file and instead load a fallback, for example
+  // in case the OS or apk were updated.
+  message OptimizationStatus {
+    optional string odex_status = 1;
+    optional string compilation_filter = 2;
+    optional string compilation_reason = 3;
+    optional string location = 4;
+    optional string summary = 5;
+  }
+
+  // Contains the name and duration of class verification occurred during
+  // the startup.
+  message VerifyClass {
+    optional string name = 1;
+    optional int64 dur_ns = 2;
+  }
+
+  // Contains timestamps of important events which occurred during the
+  // startup.
+  message EventTimestamps {
+    optional int64 intent_received = 1;
+    optional int64 first_frame = 2;
+  }
+
+  // Contains information about the state of a system during the app startup.
+  // Useful to put the startup in context.
+  message SystemState {
+    // Whether the dex2oat64 process was running concurrent to the startup.
+    // Deprecated as of 10/2022.
+    optional bool dex2oat_running = 1 [deprecated = true];
+
+    // Whether the installd process was running concurrent to the startup.
+    // Deprecated as of 10/2022.
+    optional bool installd_running = 2 [deprecated = true];
+
+    // The number of broadcasts dispatched by the system during the app
+    // launch.
+    optional int64 broadcast_dispatched_count = 3;
+
+    // The number of broadcasts received by an app or the system during the
+    // app launch. Note that multiple packages can be subscribed to the same
+    // broadcast so a single dsipatch can cause multiple packages to receive
+    // and process a broadcast.
+    optional int64 broadcast_received_count = 4;
+
+    // The most active (i.e. consuming the most mcycles) processes during the
+    // app launch excluding the process(es) being launched.
+    // Note: the exact number of returned is an implementation detail and
+    // will likely change over time.
+    repeated string most_active_non_launch_processes = 5;
+
+    // Duration the installd process was running concurrent to the startup.
+    optional int64 installd_dur_ns = 6;
+    // Duration the dex2oat64 process was running concurrent to the startup.
+    optional int64 dex2oat_dur_ns = 7;
+  }
+
+  // Contains detailed information for slow startup causes.
+  message SlowStartReasonDetailed {
+    optional string reason = 1;
+    optional string details = 2;
+  }
+
+  // Contains information for slow startup causes.
+  // Next id: 11.
+  message SlowStartReason {
+    // Points to reason description and solution.
+    enum ReasonId {
+      REASON_ID_UNSPECIFIED = 0;
+      NO_BASELINE_OR_CLOUD_PROFILES = 1;
+      RUN_FROM_APK = 2;
+      UNLOCK_RUNNING = 3;
+      APP_IN_DEBUGGABLE_MODE = 4;
+      GC_ACTIVITY = 5;
+      DEX2OAT_RUNNING = 6;
+      INSTALLD_RUNNING = 7;
+      MAIN_THREAD_TIME_SPENT_IN_RUNNABLE = 8;
+      MAIN_THREAD_TIME_SPENT_IN_INTERRUPTIBLE_SLEEP = 9;
+      MAIN_THREAD_TIME_SPENT_IN_BLOCKING_IO = 10;
+      MAIN_THREAD_TIME_SPENT_IN_OPEN_DEX_FILES_FROM_OAT = 11;
+      TIME_SPENT_IN_BIND_APPLICATION = 12;
+      TIME_SPENT_IN_VIEW_INFLATION = 13;
+      TIME_SPENT_IN_RESOURCES_MANAGER_GET_RESOURCES = 14;
+      TIME_SPENT_VERIFYING_CLASSES = 15;
+      POTENTIAL_CPU_CONTENTION_WITH_ANOTHER_PROCESS = 16;
+      JIT_ACTIVITY = 17;
+      MAIN_THREAD_LOCK_CONTENTION = 18;
+      MAIN_THREAD_MONITOR_CONTENTION = 19;
+      JIT_COMPILED_METHODS = 20;
+      BROADCAST_DISPATCHED_COUNT = 21;
+      BROADCAST_RECEIVED_COUNT = 22;
+      STARTUP_RUNNING_CONCURRENT = 23;
+      MAIN_THREAD_BINDER_TRANSCATIONS_BLOCKED = 24;
+    }
+    optional ReasonId reason_id = 1;
+
+    // Brief description for human readability.
+    optional string reason = 2;
+
+    // Severity level for a reason.
+    enum SeverityLevel {
+      SEVERITY_UNSPECIFIED = 0;
+      ERROR = 1;
+      WARNING = 2;
+      INFO = 3;
+    }
+    optional SeverityLevel severity = 10;
+
+    // Expected value (inherited from threshold definition).
+    optional ThresholdValue expected_value = 3;
+
+    // Actual value, can be used to decide severity level.
+    optional ActualValue actual_value = 4;
+
+    // Launch duration
+    optional int64 launch_dur = 5;
+
+    // Sum of durations of slices and thread states in trace_slices_or_threads.
+    // Can be used to decide if a couple of top slices or threads caused the
+    // issue.
+    optional int64 duration = 6;
+
+    // Information of a subset of slice and thread sections to focused on,
+    // sorted by the duration in descending order.
+    // By checking out the top slices/threads, developers can identify specific
+    // slices or threads for further investigation.
+    optional TraceSliceSectionInfo trace_slice_sections = 7;
+    optional TraceThreadSectionInfo trace_thread_sections = 8;
+
+    // Details specific for a reason.
+    optional string additional_info = 9;
+  }
+
+  message ThresholdValue {
+    // Expected value. 1 for true and 0 for false for booleans.
+    optional int64 value = 1;
+
+    // Expected value unit. Enum, e.g. "ns", "%"
+    enum ThresholdUnit {
+      THRESHOLD_UNIT_UNSPECIFIED = 0;
+      NS = 1;
+      PERCENTAGE = 2;
+      TRUE_OR_FALSE = 3;
+      COUNT = 4;
+    }
+    optional ThresholdUnit unit = 2;
+
+    // For numeric threshold values only. When higher_expected is true,
+    // an app startup is considered performant if actual value is higher
+    // than the threshold.
+    optional bool higher_expected = 3;
+  }
+
+  message ActualValue {
+    // Actual value. 1 for true and 0 for false for booleans.
+    optional int64 value = 1;
+
+    // Actual duration for percentage thresholds only.
+    // E.g. if the threashold is 20% and the launch_duration is 1000ms,
+    // then the actual duration is more than 200ms.
+    optional int64 dur = 2;
+  }
+
+  // Contains information for a section of a slice.
+  message TraceSliceSection {
+    optional int64 start_timestamp = 1;
+
+    optional int64 end_timestamp = 2;
+
+    optional uint32 slice_id = 3;
+
+    optional string slice_name = 4;
+
+    optional uint32 process_pid = 5;
+
+    optional uint32 thread_tid = 6;
+  }
+
+  // Information for the SliceSections
+  message TraceSliceSectionInfo {
+    repeated TraceSliceSection slice_section = 1;
+    optional int64 start_timestamp = 2;
+    optional int64 end_timestamp = 3;
+  }
+
+  // Contains information for a section of a thread.
+  message TraceThreadSection {
+    optional int64 start_timestamp = 1;
+
+    optional int64 end_timestamp = 2;
+
+    // Deprecated as of 09/2024
+    optional uint32 thread_utid = 3;
+
+    optional string thread_name = 4;
+
+    optional uint32 process_pid = 5;
+
+    optional uint32 thread_tid = 6;
+  }
+
+  // Information for the ThreadSections
+  message TraceThreadSectionInfo {
+    repeated TraceThreadSection thread_section = 1;
+    optional int64 start_timestamp = 2;
+    optional int64 end_timestamp = 3;
+  }
+
+  // Next id: 26
+  message Startup {
+    // Random id uniquely identifying an app startup in this trace.
+    optional uint32 startup_id = 1;
+
+    // Startup type (cold / warm / hot)
+    optional string startup_type = 16;
+
+    // Number of CPUs the device has
+    optional uint32 cpu_count = 25;
+
+    // Name of the package launched
+    optional string package_name = 2;
+
+    // Name of the process launched
+    optional string process_name = 3;
+
+    // Details about the activities launched
+    repeated Activity activities = 11;
+
+    // Details about slow binder transactions during the startup. The definition
+    // of a slow transaction is an implementation detail.
+    repeated BinderTransaction long_binder_transactions = 14;
+
+    // Did we ask the zygote for a new process
+    optional bool zygote_new_process = 4;
+
+    // Number of processes hosting the activity involved in the launch.
+    // This will usually be 1. If it is 0, it is indicative of a data / process
+    // error. If > 1, the process died during startup and the system respawned
+    // it.
+    optional uint32 activity_hosting_process_count = 6;
+
+    // Time it takes to display the first frame of the app`s UI.
+    // Details:
+    // https://developer.android.com/topic/performance/vitals/launch-time#time-initial
+    optional int64 time_to_initial_display = 22;
+
+    // Time to full display (TTFD) is the time ittakes for an app to become
+    // interactive for the user.
+    // Datails:
+    // https://developer.android.com/topic/performance/vitals/launch-time#time-full
+    optional int64 time_to_full_display = 23;
+
+    // Contains timestamps of important events which happened during
+    // the startup.
+    optional EventTimestamps event_timestamps = 13;
+
+    // Timing information spanning the intent received by the
+    // activity manager to the first frame drawn.
+    optional ToFirstFrame to_first_frame = 5;
+
+    // Details about the process (uid, version, etc)
+    optional AndroidProcessMetadata process = 7;
+
+    // Metrics about startup which were developed by looking at experiments
+    // using high-speed cameras (HSC).
+    optional HscMetrics hsc = 8;
+
+    // The time taken in the startup from intent received to the start time
+    // of the reportFullyDrawn slice. This should be longer than the time to
+    // first frame as the application decides this after it starts rendering.
+    optional Slice report_fully_drawn = 9;
+
+    // Contains information about the status of odex files.
+    repeated OptimizationStatus optimization_status = 12;
+
+    // Contains information about the class verification.
+    repeated VerifyClass verify_class = 19;
+
+    // Contains the dlopen file names.
+    repeated string dlopen_file = 20;
+
+    // Package name of startups running concurrent to the launch.
+    repeated string startup_concurrent_to_launch = 18;
+
+    // Contains information about the state of the rest of the system during the
+    // startup. This is useful for getting context about why a startup might
+    // be slow beyond just what the app is doing.
+    optional SystemState system_state = 15;
+
+    // A list of identified potential causes for slow startup.
+    // Optional.
+    repeated string slow_start_reason = 17;
+
+    // Same as slow_start_reason, but with more detailed information, obsolete.
+    repeated SlowStartReasonDetailed slow_start_reason_detailed = 21;
+
+    // Similar to slow_start_reason_detailed, but with much more comprehensive
+    // info. such as expected threshold, actual value and threads/slices to
+    // inspect. slow_start_reason will be obsolete once
+    // slow_start_reason_with_details is completed since
+    // slow_start_reason_with_details contains all the data in slow_start_reason
+    // and more.
+    repeated SlowStartReason slow_start_reason_with_details = 24;
+
+    reserved 10;
+  }
+
+  repeated Startup startup = 1;
+}

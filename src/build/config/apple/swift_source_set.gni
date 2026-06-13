@@ -1,0 +1,281 @@
+# Copyright 2021 The Chromium Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/toolchain/apple/toolchain.gni")
+if (build_with_chromium) {
+  import("//tools/json_data_generator/json_data_generator.gni")
+}
+
+if (enable_swift_cxx_interop) {
+  assert(build_with_chromium,
+         "build_with_chromium must be true to use enable_swift_cxx_interop")
+
+  # Template that defines swift dependencies on C++, used to generate
+  # clang modulemaps for swift_source_set targets.
+  #
+  # Arguments
+  #
+  #   public_deps:
+  #       (optional) Array of strings, list of source_set targets that define
+  #       symbols that will be imported by upstream swift_source_set targets.
+  #   sources:
+  #       Array of strings, list of C++ header files to be imported.
+  template("swift_cxx_import") {
+    assert(defined(invoker.sources))
+    assert(
+        !defined(invoker.deps),
+        "swift_cxx_import shouldn't have 'deps'. Use public_deps for C++ source_set dependencies.")
+
+    _shim_path = "${target_gen_dir}/${target_name}.h"
+    _shim_content = []
+    _shim_content += [
+      "// Generated shim header for swift_cxx_import target ${target_name}",
+      "#pragma once",
+    ]
+    foreach(header, invoker.sources) {
+      _header_path = rebase_path(header, "//")
+      _shim_content += [ "#include \"${_header_path}\"" ]
+    }
+
+    # Generate a shim header file.
+    _shim_target = "${target_name}__shim"
+    generated_file(_shim_target) {
+      outputs = [ _shim_path ]
+      contents = _shim_content
+    }
+
+    if (defined(invoker.apinotes)) {
+      _apinotes = [ invoker.apinotes ]
+    } else {
+      _apinotes = []
+    }
+
+    group(target_name) {
+      forward_variables_from(invoker, "*", [ "modules" ])
+      deps = [ ":${_shim_target}" ]
+      metadata = {
+        swift_cxx_sources = [ rebase_path(_shim_path, "") ]
+        swift_cxx_apinotes = _apinotes
+      }
+    }
+  }
+
+  # Internal template used by swift_source_set.
+  #
+  # Template that groups several swift_cxx_import targets under a parent module.
+  # This is a workaround that allows the swift compiler to import multiple
+  # modules that define the same symbols due to the inclusion of common
+  # headers.
+  #
+  # Arguments
+  #
+  #     public_deps:
+  #         array of strings, list of child swift_cxx_import targets to be
+  #         added to the group.
+  template("_swift_cxx_import_group") {
+    _modulemap_and_apinotes_dir = "${target_gen_dir}/${target_name}"
+    _sources_data_path = "${_modulemap_and_apinotes_dir}/sources.json"
+    _modulemap_path = "${_modulemap_and_apinotes_dir}/cxx_imports.modulemap"
+    _apinotes_data_path = "${_modulemap_and_apinotes_dir}/apinotes_data.json"
+
+    # The swift compiler requires the apinotes file to be named after the module
+    # it applies to, which is why we can't use snake_case here
+    _apinotes_path = "${_modulemap_and_apinotes_dir}/CxxImports.apinotes"
+
+    _parent_target = target_name
+    _sources_data_target = "${target_name}__sources_data"
+    _modulemap_target = "${target_name}__modulemap"
+    _modulemap_config = "${target_name}__config"
+    _apinotes_data_target = "${target_name}__apinotes_data"
+    _apinotes_target = "${target_name}__apinotes"
+
+    generated_file(_sources_data_target) {
+      forward_variables_from(invoker,
+                             [
+                               "testonly",
+                               "deps",
+                               "public_deps",
+                             ])
+      outputs = [ _sources_data_path ]
+      data_keys = [ "swift_cxx_sources" ]
+      output_conversion = "json"
+      visibility = [ ":${_modulemap_target}" ]
+    }
+
+    config(_modulemap_config) {
+      swiftflags = [ "-Xcc=-fmodule-map-file=" +
+                     rebase_path(_modulemap_path, root_build_dir) ]
+    }
+
+    # Generate a the group modulemap file
+    json_data_generator(_modulemap_target) {
+      forward_variables_from(invoker, [ "testonly" ])
+      deps = [ ":${_sources_data_target}" ]
+      sources = [ _sources_data_path ]
+
+      # We need to use a per-target subdirectory because json_data_generator
+      # uses an output file name that is named after the template file, which
+      # can cause file name conflicts if there are several
+      # _swift_cxx_import_group targets in the same directory.
+      output_dir = _modulemap_and_apinotes_dir
+      templates = [ "//build/config/apple/cxx_imports.modulemap.jinja" ]
+
+      visibility = [ ":${_parent_target}" ]
+    }
+
+    generated_file(_apinotes_data_target) {
+      forward_variables_from(invoker,
+                             [
+                               "testonly",
+                               "deps",
+                               "public_deps",
+                             ])
+      outputs = [ _apinotes_data_path ]
+      data_keys = [ "swift_cxx_apinotes" ]
+      output_conversion = "json"
+      visibility = [ ":${_apinotes_target}" ]
+    }
+
+    action(_apinotes_target) {
+      forward_variables_from(invoker, [ "testonly" ])
+      _output = rebase_path(_apinotes_path, root_build_dir)
+      _input = rebase_path(_apinotes_data_path, root_build_dir)
+      deps = [ ":${_apinotes_data_target}" ]
+      args = [
+        "--input",
+        _input,
+        "--output",
+        _output,
+      ]
+      inputs = [ _apinotes_data_path ]
+      outputs = [ _apinotes_path ]
+      script = "//build/config/apple/cxx_imports_apinotes.py"
+      visibility = [ ":${_parent_target}" ]
+    }
+
+    group(_parent_target) {
+      forward_variables_from(invoker,
+                             TESTONLY_AND_VISIBILITY + [ "public_deps" ])
+
+      # We use a public deps on the modulemap target so that the
+      # swift_source_set target that depends on this group will inherit the
+      # public deps from upstream swift_cxx_import targets, which may include
+      # C++ source set dependencies that implement imported symbols, which
+      # the swift_source_set need to link against.
+      if (!defined(public_deps)) {
+        public_deps = []
+      }
+      public_deps += [ ":${_modulemap_target}" ]
+
+      if (!defined(deps)) {
+        deps = []
+      }
+      deps += [ ":${_apinotes_target}" ]
+
+      # Any swift_source_set target with a direct deps on this modulemap will
+      # inherit the config that sets the swift compiler flags to import the
+      # group modulemap.
+      public_configs = [
+        ":${_modulemap_config}",
+        "//build/config/ios:swift_cxx_interop",
+      ]
+    }
+  }
+}  # if (enable_swift_cxx_interop)
+
+# Defines a template for Swift source files. The default module_name
+# of the target is the entire target label (without the leading //)
+# with all "/" and ":" replaced with "_".
+#
+# Arguments
+#
+#   generate_intents
+#       (optional) boolean, if true, intents definition in the source code
+#       will be parsed when generating the final application (if it enable
+#       the extraction of intents metadata), defaults to false.
+#   module_name
+#       (optional) string, name of this build target's top level swift module.
+#       If not specified, a module name will be generated based on the target's
+#       names
+#   cxx_import_deps
+#       (optional) array swift_cxx_import targets to depend on.
+#
+template("swift_source_set") {
+  _generate_intents = false
+  if (defined(invoker.generate_intents)) {
+    _generate_intents = invoker.generate_intents
+  }
+
+  _target_name = target_name
+  not_needed([ "_target_name" ])
+
+  if (defined(invoker.cxx_import_deps)) {
+    _cxx_imports_target = "${target_name}__cxx_import_deps"
+    assert(enable_swift_cxx_interop,
+           "enable_swift_cxx_interop must be true to use cxx_import_deps")
+    _swift_cxx_import_group(_cxx_imports_target) {
+      forward_variables_from(invoker, [ "testonly" ])
+      public_deps = invoker.cxx_import_deps
+      visibility = [ ":${_target_name}" ]
+    }
+  }
+
+  source_set(target_name) {
+    forward_variables_from(invoker,
+                           "*",
+                           TESTONLY_AND_VISIBILITY + [ "cxx_import_deps" ])
+    forward_variables_from(invoker, TESTONLY_AND_VISIBILITY)
+    if (!defined(module_name)) {
+      _target_label = get_label_info(":$_target_name", "label_no_toolchain")
+
+      # Strip the // from the beginning of the label.
+      _target_label = string_replace(_target_label, "//", "", 1)
+      module_name =
+          string_replace(string_replace(_target_label, "/", "_"), ":", "_")
+    }
+
+    # If generate_intents is true, write file $target_name.module_info.json
+    # with information about the module used by extract_metadata.py script.
+    if (_generate_intents) {
+      _output_path = "$target_out_dir/$target_name"
+      _swift_files = sources
+      _const_files = []
+      if (swift_whole_module_optimization) {
+        _const_files += [ "$_output_path/$module_name.swiftconstvalues" ]
+      } else {
+        foreach(_source, sources) {
+          _const_files += [ "$_output_path/" + get_path_info(_source, "name") +
+                            ".swiftconstvalues" ]
+        }
+      }
+
+      _module_info = {
+        module_name = module_name
+        swift_files = rebase_path(_swift_files, root_build_dir)
+        const_files = rebase_path(_const_files, root_build_dir)
+      }
+
+      # Write the information for the module using `write_file(...)`.
+      write_file("$_output_path.module_info.json", _module_info, "json")
+    }
+
+    if (defined(_cxx_imports_target)) {
+      if (!defined(deps)) {
+        deps = []
+      }
+      deps += [ ":${_cxx_imports_target}" ]
+    }
+
+    # C++ and obj-C++ targets with a direct dependency on a swift_source_set
+    # need to be able to indirectly include headers from the SDK.
+    if (!defined(public_configs)) {
+      public_configs = []
+    }
+    public_configs += [ "//build/config/ios:swift_cxx_interop_includes" ]
+  }
+}
+
+set_defaults("swift_source_set") {
+  configs = default_compiler_configs
+}

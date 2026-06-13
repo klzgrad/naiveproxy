@@ -1,0 +1,154 @@
+# Copyright 2022 The Chromium Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/clang/clang.gni")
+import("//build/config/rust.gni")
+import("//build/config/sysroot.gni")
+import("//build/rust/rust_bindgen_generator.gni")
+import("//build/rust/rust_static_library.gni")
+
+if (is_win) {
+  import("//build/toolchain/win/win_toolchain_data.gni")
+}
+
+_bindgen_path = "${rust_bindgen_root}/bin/bindgen"
+if (host_os == "win") {
+  _bindgen_path = "${_bindgen_path}.exe"
+}
+
+# On Windows, the libclang.dll is beside the bindgen.exe, otherwise it is in
+# ../lib.
+_libclang_path = rust_bindgen_root
+if (!use_chromium_rust_toolchain &&
+    (current_cpu == "ppc64" || current_cpu == "s390x")) {
+  _libclang_path = rust_sysroot_absolute + "/lib64"
+} else if (host_os == "win") {
+  _libclang_path += "/bin"
+} else {
+  _libclang_path += "/lib"
+}
+
+# Template to build Rust/C bindings with bindgen.
+#
+# This template expands to a rust_static_library that exports the
+# bindings generated from bindgen at the root of the library.
+#
+# Parameters:
+#
+# header:
+#   The .h file to generate bindings for.
+#
+# deps: (optional)
+#   C targets on which the headers depend in order to build successfully.
+#
+# configs: (optional)
+#   C compilation targets determine the correct list of -D and -I flags based
+#   on their dependencies and any configs applied. The same applies here. Set
+#   any configs here as if this were a C target.
+#
+# cpp: (optional)
+#   Use C++ mode to consume the header instead of C mode (the default).
+#
+# bindgen_flags: (optional)
+#   The additional bindgen flags which are passed to the executable. A `--` will
+#   be prepended to each flag. So use `bindgen_flags = [ "foo" ]` to pass
+#   `--foo` to bindgen.
+#
+# wrap_static_fns: (optional)
+#   If set to true, enables binding `static` and `static inline` functions in
+#   the header. Setting this causes the template to emit a source_set target
+#   named "${target_name}_static_fns", which must be incorporated into the
+#   build. Additionally, `get_target_outputs` will return both the Rust file and
+#   a generated C file, but callers can rely on the Rust file being first.
+#
+# crate_name: (optional)
+#   If set, then specified the name of the auto-generated crate, so that it
+#   doesn't need to be imported using `chromium::import!` macro.  This should
+#   be used sparingly - typically only in low-level, foundational libraries
+#   that cannot depend on Chromium prelude (such as `//build/rust/allocator`).
+#
+# For a small, self-contained example please see:
+# * C header: //build/rust/tests/bindgen_test
+# * C++ header: //build/rust/tests/bindgen_cpp_test
+template("rust_bindgen") {
+  _rust_bindgen_generator_target_name = target_name + "_generator"
+
+  _wrap_static_fns = false
+  if (defined(invoker.wrap_static_fns) && invoker.wrap_static_fns) {
+    _wrap_static_fns = true
+  }
+  if (defined(invoker.crate_name)) {
+    _crate_name = invoker.crate_name
+  }
+  rust_bindgen_generator(_rust_bindgen_generator_target_name) {
+    forward_variables_from(invoker,
+                           "*",
+                           [
+                                 "library_name",
+                                 "output_name",
+                               ] + TESTONLY_AND_VISIBILITY)
+
+    if (defined(invoker.testonly)) {
+      testonly = invoker.testonly
+    }
+
+    # This will allow the rust_static_library to depend on the
+    # `rust_bindgen_generator` through visibility.
+    library_name = target_name
+
+    # We know the library that is going to consume this rust_bindgen and we're
+    # sure that only a single bindgen is there. So rename the bindings to avoid
+    # passing envflags. envflags are usually problematic for Cronet as Soong
+    # does not support it (b/181221467).
+    #
+    # Because of the above, we can hard-code "bindings" name in:
+    # * `output_name` (below)
+    # * `_output_bindings_rs` (above)
+    # * `mod bindings;` (in `//build/rust/bindings.rs`)
+    output_name = "bindings"
+  }
+
+  # Calculate `_generated_bindings_rs`.
+  _bindgen_outputs = get_target_outputs(":$_rust_bindgen_generator_target_name")
+  _bindgen_rs_outputs = filter_include(_bindgen_outputs, [ "*.rs" ])
+  assert(len(_bindgen_rs_outputs) == 1)
+  _generated_bindings_rs = _bindgen_rs_outputs[0]
+
+  rust_static_library(target_name) {
+    forward_variables_from(invoker, TESTONLY_AND_VISIBILITY + [ "crate_name" ])
+
+    if (defined(_crate_name)) {
+      crate_name = _crate_name
+    }
+    crate_root = _generated_bindings_rs
+    sources = [ crate_root ]
+    allow_unsafe = true
+
+    deps = [ ":$_rust_bindgen_generator_target_name" ]
+    if (defined(invoker.deps)) {
+      deps += invoker.deps
+    }
+    if (_wrap_static_fns) {
+      # Add a dependency on the static_fns library for simplicity if
+      # it's declared.
+      deps += [ ":${_rust_bindgen_generator_target_name}_static_fns" ]
+    }
+
+    rustflags = [
+      # Don't warn about unused code in the generated bindings.
+      "-Adead_code",
+
+      # Don't warn about C/C++-style names.
+      "-Anon_snake_case",
+      "-Anon_camel_case_types",
+      "-Anon_upper_case_globals",
+    ]
+
+    # The generated crate doesn't need these dependencies.
+    # And avoiding them avoids dependency cycles.
+    no_allocator_crate = true
+    no_chromium_prelude = true
+    no_clippy = true
+  }
+}

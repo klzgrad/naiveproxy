@@ -1,0 +1,54 @@
+# Copyright (C) 2019 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../../../gn/proto_library.gni")
+
+perfetto_proto_library("@TYPE@") {
+  deps = [ "../../common:@TYPE@" ]
+  sources = [
+    "gpu_counter_event.proto",
+    "gpu_log.proto",
+    "gpu_mem_event.proto",
+    "gpu_render_stage_event.proto",
+    "vulkan_api_event.proto",
+    "vulkan_memory_event.proto",
+  ]
+}
+
+# GPU track_event extensions
+perfetto_proto_library("gpu_track_event_@TYPE@") {
+  sources = [ "gpu_track_event.proto" ]
+  public_deps = [ "../track_event:@TYPE@" ]
+  generator_visibility = [ "../../../../src/trace_processor/importers/proto:gen_cc_gpu_track_event_descriptor" ]
+  generate_descriptor = "gpu_track_event.descriptor"
+  descriptor_root_source = "gpu_track_event.proto"
+
+  # This is the descriptor for an extension. It shouldn't include the descriptor
+  # for the base message as well.
+  exclude_imports = true
+}
+
+# GPU interned_data extensions
+perfetto_proto_library("gpu_interned_data_@TYPE@") {
+  sources = [ "gpu_interned_data.proto" ]
+  deps = [ ":@TYPE@" ]
+  public_deps = [ "../interned_data:@TYPE@" ]
+  generator_visibility = [ "../../../../src/trace_processor/importers/proto:gen_cc_gpu_interned_data_descriptor" ]
+  generate_descriptor = "gpu_interned_data.descriptor"
+  descriptor_root_source = "gpu_interned_data.proto"
+
+  # This is the descriptor for an extension. It shouldn't include the descriptor
+  # for the base message as well.
+  exclude_imports = true
+}

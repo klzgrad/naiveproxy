@@ -1,0 +1,72 @@
+/*
+ * Copyright (C) 2019 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+package perfetto.protos;
+
+import "protos/perfetto/common/gpu_counter_descriptor.proto";
+
+// Events for emitting information about GPU counters.
+//
+// There are two "modes" to use these protos:
+//   1) Using GpuCounterDescriptor. This is the simplest way to use this proto
+//      but has the limitation that counter ids are*global* so must only be
+//      emitted by a single producer or requires coordination between different
+//      producers. This is the mechanism which *must* be used by Android OEMS
+//      to be complaint with CDD/CTS tests.
+//   2) Using InternedGpuCounterDescriptor. This is generally recommended for
+//      more complex use-cases involving multiple producers, multiple GPUs etc.
+message GpuCounterEvent {
+  // The specification for the GPU counters. Gives them information like the
+  // name of the counter, unit etc.
+  oneof desc {
+    // Must be specified on first trace packet of each session if using mode 1.
+    // (e.g. if you're an Android GPU vendor).
+    GpuCounterDescriptor counter_descriptor = 1;
+
+    // ID to a InternedGpuCounterDescriptor in InternedData. Must be specified
+    // on first trace packet of the trusted sequence if using mode 2.
+    uint64 counter_descriptor_iid = 4;
+  }
+
+  message GpuCounter {
+    // required. Identifier for counter.
+    optional uint32 counter_id = 1;
+
+    // required. Value of the counter.
+    oneof value {
+      int64 int_value = 2;
+      double double_value = 3;
+    }
+  }
+  repeated GpuCounter counters = 2;
+
+  // Identifier for GPU in a multi-gpu device.
+  //
+  // If `counter_descriptor_iid` is specified, the `gpu_id` in
+  // `InternedGpuCounterDescriptor` takes precedence over this field.
+  optional int32 gpu_id = 3;
+}
+
+// Interned GPU counter descriptor for sequence-scoped counter specs.
+message InternedGpuCounterDescriptor {
+  optional uint64 iid = 1;
+  optional GpuCounterDescriptor counter_descriptor = 2;
+
+  // optional. Identifier for GPU in a multi-gpu device.
+  optional int32 gpu_id = 3;
+}

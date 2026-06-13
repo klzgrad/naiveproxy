@@ -1,0 +1,56 @@
+;; SPDX-License-Identifier: BSD-2-Clause
+;; Copyright 2019-2025 The NASM Authors - All Rights Reserved
+
+;;
+;; masm.mac
+;;
+;; Very limited MASM compatibility package; intended to be used
+;; primarily with machine-generated code. It does not include any
+;; "programmer friendly" shortcuts, nor does it in any way support
+;; ASSUME, symbol typing, or MASM-style structures.
+;;
+
+USE: masm
+
+%unimacro segment 1+
+
+%imacro segment 0-1+.nolist
+  %define __?SECT?__ [segment %00 %1]
+	__?SECT?__
+%endmacro
+
+%imacro ends 0+.nolist
+  %null ends %00
+%endmacro
+
+%imacro proc 0-*.nolist
+  %rep %0
+    %ifidni %1,far
+      %idefine ret retf
+    %else
+      %idefine ret retn
+    %endif
+    %rotate 1
+  %endrep
+%endmacro
+
+%imacro endp 0.nolist
+  %null endp %00
+  %undef ret
+%endmacro
+
+%ifndef st
+  %idefine st(x) st %+ x
+%endif
+
+%idefine ptr __?masm_ptr?__
+%idefine flat __?masm_flat?__	; is %idefine really correct here?
+%idefine offset
+
+%imacro end 0+.nolist
+	; Nothing
+%endmacro
+
+%idefine tbyte tword
+
+	default rel

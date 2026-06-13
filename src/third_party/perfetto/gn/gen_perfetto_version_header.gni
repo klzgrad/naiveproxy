@@ -1,0 +1,61 @@
+# Copyright (C) 2020 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# This action generates a perfetto_version.gen.h which exposes some
+# PERFETTO_VERSION_xxx() macros that contains the git revision and release
+# number from the CHANGELOG.
+# This template is used only in two places: in //base (for C++ code) and in
+# //ui. This teamplate exists only to keep the logic consistent and avoid that
+# base's and ui's logic diverge.
+
+import("perfetto.gni")
+
+_ver_script = "${perfetto_root_path}tools/write_version_header.py"
+_has_git = false
+if (perfetto_enable_git_rev_version_header) {
+  _has_git = "1" == exec_script(_ver_script, [ "--check_git" ], "trim string")
+}
+
+template("gen_perfetto_version_header") {
+  action(target_name) {
+    script = _ver_script
+    changelog = "${perfetto_root_path}CHANGELOG"
+    inputs = [ changelog ]
+    outputs = []
+    args = []
+    if (_has_git) {
+      inputs += [ "${perfetto_root_path}.git/HEAD" ]
+    }
+
+    if (defined(invoker.cpp_out)) {
+      args += [
+        "--changelog",
+        rebase_path(changelog, root_build_dir),
+        "--cpp_out",
+        rebase_path(invoker.cpp_out, root_build_dir),
+      ]
+      outputs += [ invoker.cpp_out ]
+    }
+    if (defined(invoker.ts_out)) {
+      args += [
+        "--ts_out",
+        rebase_path(invoker.ts_out, root_build_dir),
+      ]
+      outputs += [ invoker.ts_out ]
+    }
+    if (!_has_git) {
+      args += [ "--no_git" ]
+    }
+  }
+}

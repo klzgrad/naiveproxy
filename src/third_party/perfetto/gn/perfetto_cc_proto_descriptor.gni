@@ -1,0 +1,67 @@
+# Copyright (C) 2021 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("perfetto.gni")
+import("perfetto_cpp_blob_header.gni")
+
+# Thin wrapper around perfetto_cpp_blob_header that emits a
+# {descriptor_name}.h header containing the bytes of a proto descriptor file
+# (file produced by protoc, or a path on disk) as a constexpr std::array.
+#
+# The C++ symbol name is derived from the descriptor file basename: e.g.
+# 'test_messages.descriptor' produces a `kTestMessagesDescriptor` array.
+template("perfetto_cc_proto_descriptor") {
+  is_target = defined(invoker.descriptor_target)
+  is_path = defined(invoker.descriptor_path)
+
+  # You must define exactly one of:
+  # descriptor_target
+  # descriptor_path
+  assert((is_target || is_path) && !(is_target && is_path))
+
+  if (is_target) {
+    descriptor_file_path =
+        get_label_info(invoker.descriptor_target, "target_gen_dir") +
+        "/${invoker.descriptor_name}"
+    if (build_with_chromium ||
+        (perfetto_build_with_embedder && !is_perfetto_build_generator)) {
+      _deps = [ "${invoker.descriptor_target}_gen" ]
+    } else {
+      _deps = [ invoker.descriptor_target ]
+    }
+  } else {
+    descriptor_file_path = invoker.descriptor_path
+    _deps = []
+  }
+
+  _namespace = "perfetto"
+  if (defined(invoker.namespace)) {
+    _namespace = invoker.namespace
+  }
+
+  perfetto_cpp_blob_header(target_name) {
+    forward_variables_from(invoker, [ "testonly" ])
+    script = "$perfetto_root_path/python/tools/cpp_blob_emitter.py"
+    sources = [ descriptor_file_path ]
+    generated_header = "${target_gen_dir}/${invoker.descriptor_name}.h"
+    pass_gen_dir = true
+    extra_args = [
+      "--namespace",
+      _namespace,
+      "--symbol-suffix",
+      "Descriptor",
+    ]
+    deps = _deps
+  }
+}

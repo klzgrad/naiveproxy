@@ -1,0 +1,173 @@
+// Copyright 2012 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "components/embedder_support/android/util/input_stream.h"
+
+#include "base/android/jni_android.h"
+#include "base/compiler_specific.h"
+#include "base/feature_list.h"
+#include "base/metrics/field_trial_params.h"
+#include "base/metrics/histogram_functions.h"
+// Disable "Warnings treated as errors" for input_stream_jni as it's a Java
+// system class and we have to generate C++ hooks for all methods in the class
+// even if they're unused.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
+#pragma GCC diagnostic pop
+#include "net/base/io_buffer.h"
+
+// Must come after all headers that specialize FromJniType() / ToJniType().
+#include "components/embedder_support/android/util_jni/InputStreamUtil_jni.h"
+
+using base::android::AttachCurrentThread;
+using base::android::ClearException;
+using base::android::JavaRef;
+
+namespace embedder_support {
+
+namespace {
+
+// This should be the same as InputStramUtil.EXCEPTION_THROWN_STATUS.
+const int kExceptionThrownStatusCode = -2;
+}  // namespace
+
+// Experiment to control the size of the intermediate buffer used to copy from
+// Java's InputStream into C++'s net::IOBuffer.
+BASE_FEATURE(kEnableCustomInputStreamBufferSize,
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Effectively the maximum number of bytes that will be copied during a JNI call
+// to Java_InputStreamUtil_read.
+const base::FeatureParam<int> kBufferSize{&kEnableCustomInputStreamBufferSize,
+                                          "BufferSize", 4096};
+
+// static
+int InputStream::GetIntermediateBufferSize() {
+  return kBufferSize.Get();
+}
+
+// TODO: Use unsafe version for all Java_InputStream methods in this file
+// once BUG 157880 is fixed and implement graceful exception handling.
+
+InputStream::InputStream() = default;
+
+InputStream::InputStream(const JavaRef<jobject>& stream) : jobject_(stream) {
+  DCHECK(stream);
+}
+
+InputStream::~InputStream() {
+  base::UmaHistogramCounts10000("Android.InputStream.TotalRead.SizeKB",
+                                total_bytes_read_ / 1024);
+  if (!total_transfer_time_.is_zero()) {
+    base::UmaHistogramTimes("Android.InputStream.TotalTransferTime",
+                            total_transfer_time_);
+  }
+  if (!total_java_read_time_.is_zero()) {
+    base::UmaHistogramTimes("Android.InputStream.TotalJavaReadTime",
+                            total_java_read_time_);
+  }
+  if (!total_get_byte_array_region_time_.is_zero()) {
+    base::UmaHistogramTimes("Android.InputStream.TotalGetByteArrayRegionTime",
+                            total_get_byte_array_region_time_);
+  }
+  if (!last_get_byte_array_region_time_.is_zero()) {
+    base::UmaHistogramTimes("Android.InputStream.LastGetByteArrayRegionTime",
+                            last_get_byte_array_region_time_);
+  }
+
+  JNIEnv* env = AttachCurrentThread();
+  if (jobject_.obj())
+    Java_InputStreamUtil_close(env, jobject_);
+}
+
+bool InputStream::BytesAvailable(int* bytes_available) const {
+  JNIEnv* env = AttachCurrentThread();
+  int bytes = Java_InputStreamUtil_available(env, jobject_);
+  if (bytes == kExceptionThrownStatusCode)
+    return false;
+  *bytes_available = bytes;
+  return true;
+}
+
+bool InputStream::Skip(int64_t n, int64_t* bytes_skipped) {
+  JNIEnv* env = AttachCurrentThread();
+  int bytes = Java_InputStreamUtil_skip(env, jobject_, n);
+  if (bytes < 0)
+    return false;
+  if (bytes > n)
+    return false;
+  *bytes_skipped = bytes;
+  return true;
+}
+
+bool InputStream::Read(net::IOBuffer* dest, int length, int* bytes_read) {
+  JNIEnv* env = AttachCurrentThread();
+  if (!buffer_.obj()) {
+    // Allocate transfer buffer.
+    auto temp =
+        jni_zero::AdoptRef(env, env->NewByteArray(GetIntermediateBufferSize()));
+    buffer_.Reset(temp);
+    if (ClearException(env))
+      return false;
+  }
+
+  int remaining_length = length;
+  char* dest_write_ptr = dest->data();
+  *bytes_read = 0;
+
+  base::TimeTicks read_start = base::TimeTicks::Now();
+
+  while (remaining_length > 0) {
+    const int max_transfer_length =
+        std::min(remaining_length, GetIntermediateBufferSize());
+    base::TimeTicks java_read_start = base::TimeTicks::Now();
+    const int transfer_length = Java_InputStreamUtil_read(
+        env, jobject_, buffer_, 0, max_transfer_length);
+    total_java_read_time_ += base::TimeTicks::Now() - java_read_start;
+    if (transfer_length == kExceptionThrownStatusCode)
+      return false;
+
+    if (transfer_length < 0)  // EOF
+      break;
+
+    // Note: it is possible, yet unlikely, that the Java InputStream returns
+    // a transfer_length == 0 from time to time. In such cases we just continue
+    // the read until we get either valid data or reach EOF.
+    if (transfer_length == 0)
+      continue;
+
+    DCHECK_GE(max_transfer_length, transfer_length);
+    DCHECK_GE(env->GetArrayLength(buffer_.obj()), transfer_length);
+
+    // This check is to prevent a malicious InputStream implementation from
+    // overrunning the |dest| buffer.
+    if (transfer_length > max_transfer_length)
+      return false;
+
+    // Copy the data over to the provided C++ IOBuffer.
+    DCHECK_GE(remaining_length, transfer_length);
+    base::TimeTicks get_byte_array_start = base::TimeTicks::Now();
+    env->GetByteArrayRegion(buffer_.obj(), 0, transfer_length,
+                            reinterpret_cast<int8_t*>(dest_write_ptr));
+    last_get_byte_array_region_time_ =
+        base::TimeTicks::Now() - get_byte_array_start;
+    total_get_byte_array_region_time_ += last_get_byte_array_region_time_;
+    if (ClearException(env))
+      return false;
+
+    remaining_length -= transfer_length;
+    UNSAFE_TODO(dest_write_ptr += transfer_length);
+  }
+  // bytes_read can be strictly less than the req. length if EOF is encountered.
+  DCHECK_GE(remaining_length, 0);
+  DCHECK_LE(remaining_length, length);
+  *bytes_read = length - remaining_length;
+  total_bytes_read_ += *bytes_read;
+  total_transfer_time_ += base::TimeTicks::Now() - read_start;
+  return true;
+}
+
+}  // namespace embedder_support
+
+DEFINE_JNI(InputStreamUtil)

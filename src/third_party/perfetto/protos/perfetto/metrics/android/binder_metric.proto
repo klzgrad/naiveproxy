@@ -1,0 +1,99 @@
+/*
+ * Copyright (C) 2022 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+package perfetto.protos;
+
+// This metric provides the following:
+// 1. Per-process Binder statistics for traces with binder_driver enabled.
+//    Specifically, transactions are categorized and counted
+// 2. Unaggregated binder txn durations with per-txn aggregated thread state and
+// blocked function
+//    durations
+message AndroidBinderMetric {
+  message PerProcessBreakdown {
+    optional string process_name = 1;
+    optional uint32 pid = 2;
+    optional string slice_name = 3;
+    optional uint32 count = 4;
+  }
+
+  // Next field id: 31
+  message UnaggregatedTxnBreakdown {
+    // General
+    optional string aidl_name = 1;
+    optional int64 aidl_ts = 22;
+    optional int64 aidl_dur = 23;
+    optional bool is_sync = 21;
+    // Client
+    // Removed: was binder_txn_id
+    reserved 2;
+    optional string client_process = 3;
+    optional string client_thread = 4;
+    optional bool is_main_thread = 5;
+    optional int64 client_ts = 6;
+    optional int64 client_dur = 7;
+    optional int64 client_monotonic_dur = 28;
+    optional int64 client_oom_score = 19;
+    optional int64 client_package_version_code = 24;
+    optional bool is_client_package_debuggable = 25;
+    // Server
+    // Removed: was binder_reply_id
+    reserved 8;
+    optional string server_process = 9;
+    optional string server_thread = 10;
+    optional int64 server_ts = 11;
+    optional int64 server_dur = 12;
+    optional int64 server_monotonic_dur = 29;
+    optional int64 server_oom_score = 20;
+    optional int64 server_package_version_code = 26;
+    optional bool is_server_package_debuggable = 27;
+    // Aggregations
+    repeated ThreadStateBreakdown thread_states = 13;
+    repeated BlockedFunctionBreakdown blocked_functions = 14;
+    repeated LogicalReasonBreakdown logical_reasons = 31;
+
+    optional uint32 client_tid = 15;
+    optional uint32 server_tid = 16;
+
+    optional uint32 client_pid = 17;
+    optional uint32 server_pid = 18;
+  }
+
+  message ThreadStateBreakdown {
+    optional string thread_state_type = 1;
+    optional string thread_state = 2;
+    optional int64 thread_state_dur = 3;
+    optional int64 thread_state_count = 4;
+  }
+
+  message BlockedFunctionBreakdown {
+    optional string thread_state_type = 1;
+    optional string blocked_function = 2;
+    optional int64 blocked_function_dur = 3;
+    optional int64 blocked_function_count = 4;
+  }
+
+  message LogicalReasonBreakdown {
+    optional string thread_state_type = 1;
+    optional string reason = 2;
+    optional int64 reason_dur = 3;
+  }
+
+  repeated PerProcessBreakdown process_breakdown = 1;
+  repeated UnaggregatedTxnBreakdown unaggregated_txn_breakdown = 2;
+}

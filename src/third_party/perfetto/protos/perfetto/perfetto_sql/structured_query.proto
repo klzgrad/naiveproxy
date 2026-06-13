@@ -1,0 +1,906 @@
+/*
+ * Copyright (C) 2025 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+package perfetto.protos;
+
+// Represents a PerfettoSQL query as a protobuf.
+//
+// SQL is amazing for writing interactive queries and human readability and
+// development but it is really bad for machine readability. Specifically, given
+// an SQL query, it's very hard to figure out what the author "intended" from
+// that as the same query can be written in countless different ways. This
+// makes building automated tools which take SQL and represent the data flow
+// visually very difficult to build.
+//
+// The goal of this proto is *not* in any way to replace SQL. In fact that's
+// an explicit *non-goal*. Instead, the idea here is this proto encodes it is a
+// very restricted, well-defined subset of the functionality of SQL that we see
+// a lot of usage of when writing PerfettoSQL queries.
+//
+// Basically, trace analysis has a lot of common "patterns" when it comes to
+// writing queries and this proto aims to have a central place codifying those
+// so all Perfetto tooling can share a common interchange format. Specifically,
+// unlike SQL which is quite optimized for human readability, this proto is more
+// designed for easy machine consumption with a secondary goal to still be
+// pretty easy for humans to read/write/modify in small doses. Note that it
+// *will* be verbose to deal with complex instances of this proto.
+//
+// It will always be easy to go from this proto to PerfettoSQL: trace processor
+// exposes APIs for this. It's also easy to bring SQL directly into the proto
+// world through use of the `Sql` source (see below).
+message PerfettoSqlStructuredQuery {
+  // A table or view acting as the source of the query, possibly living in a
+  // PerfettoSQL module.
+  message Table {
+    // The name of the table or view to query. Required.
+    optional string table_name = 1;
+
+    // The name of the columns of this table which will be used by this query.
+    // Required.
+    //
+    // Note: specifying this field is *mandatory* at all times. In the future,
+    // this may become option for public tables in the standard library.
+    repeated string column_names = 3;
+
+    // DEPRECATED: Use PerfettoSqlStructuredQuery.referenced_modules instead.
+    optional string module_name = 2 [deprecated = true];
+  }
+
+  // A set of slices which will act as the source for the query. This is
+  // basically equivalent to doing a query on the "slice" table (+ the
+  // appropriate joins) followed by a filter on various columns.
+  //
+  // This message exists for *pure* human convinience as we expect this pattern
+  // to be very commonly used by users.
+  //
+  // Produces a source with the schema
+  // (id, ts, dur, slice_name, thread_name, process_name, track_name).
+  message SimpleSlices {
+    // Glob for the name of the slices. Optional.
+    optional string slice_name_glob = 1;
+
+    // Glob for the thread name of the slices. Optional.
+    optional string thread_name_glob = 2;
+
+    // Glob for the process name of the slices. Optional.
+    optional string process_name_glob = 3;
+
+    // Glob for the track name of the slices. Optional.
+    optional string track_name_glob = 4;
+  }
+
+  // An arbitrary SQL query to use as the source for the query.
+  message Sql {
+    // A dependency on another structured query. This allows for building
+    // complex queries by composing them from other structured queries.
+    message Dependency {
+      // The alias for this dependency. This is a string that can be used in
+      // the SQL query to refer to the result of this dependency. The SQL
+      // query can then use this alias as if it were a table. Can be referred to
+      // in Sql by using `${alias}`.
+      // E.g: `SELECT ts, dur AS duration FROM $my_slice_table.`
+      // Required.
+      optional string alias = 1;
+      // The structured query for this dependency. Required.
+      optional PerfettoSqlStructuredQuery query = 2;
+    }
+
+    // The SQL string. Required.
+    //
+    // `sql` can contain multiple, semi-colon separated statements but must
+    // adhere to the following principles:
+    // 1) Only the final statement can return results (i.e. be a `SELECT`
+    // statement): every other statement must be a statement returning no output
+    // (e.g. INCLUDE PERFETTO MODULE, CREATE PERFETTO TABLE etc.).
+    // 2) The final statement *must* be a valid `SELECT` statement returning
+    // results with at least one column.
+    optional string sql = 1;
+
+    // The name of columns which will be returned by the SQL. Optional.
+    repeated string column_names = 2;
+
+    // A list of dependencies for this SQL query. Optional.
+    repeated Dependency dependencies = 4;
+
+    // DEPRECATED, as `sql` field supports multi-statement queries.
+    //
+    // SQL string that has to be run before running the SQL.
+    // Supports multi statement queries. Optional.
+    optional string preamble = 3 [deprecated = true];
+  }
+
+  // Performs a "time-based" intersection of data from `base` with multiple
+  // sets of intervals.
+  //
+  // Examples:
+  // The best way to understand this operator is through example usecases
+  //  1) Compute the CPU usage during some CUJs:
+  //    * `base` points to a query contain CPU scheduling data.
+  //    * `interval_intersect` points to a query containing the CUJ boundaries.
+  //  2) Compute the memory usage of a process during an app startup
+  //    * `base` points to a query contain the memory usage of that process over
+  //      time.
+  //    * `interval_intersect` points to a structued query containing the app
+  //      startups.
+  //  3) Compute dropped frames during an layout while scrolling
+  //    * `base` points to a strucuted query containing the dropped frames
+  //      over time.
+  //    * `interval_intersect` points to two structured queries: the first
+  //      containing the layout intervals, the second containing the scroll
+  //      intervals.
+  //
+  // Schema:
+  //  1) Every query in `interval_intersect` must have both `ts` and
+  //     `dur` columns. It must also have an `id` column: this is necessary
+  //     because of the current implementation; this may be relaxed in the
+  //     future.
+  //    * Both `ts` and `dur` columns. In this case, the `base` interval
+  //      must overlap with one interval from each of `interval_intersect`
+  //      to be included.
+  //    * `ts` column without `dur` column. In this case, the `base`
+  //      timestamp must lie *between* one interval from each of
+  //      `interval_intersect` to be included.
+  //  3) The query in `base` must also have an `id` column: this is necessary
+  //     because of the current implementation; this may be relaxed in the
+  //     future.
+  //
+  // Handling of `dur`:
+  // The `dur` column is treated specially. It is changed to have the amount of
+  // time for which intervals in `base` overlaps with all structured queries in
+  // `interval_intersect`.
+  //
+  // Overlap with multiple intervals:
+  // If one row in `base` overlaps with *multiple* sets of intervals from each
+  // query in `interval_intersect`, then *multiple* rows will be
+  // produced, one for each sets of overlaps.
+  //
+  // Example in ASCII art:
+  //   base:       [-----------]     [--------]
+  //   ii1 :                [-----------]
+  //   ii2 :      [---------------] [-----]
+  // output:                [--]     [--]
+  //
+  // Output Schema:
+  // The output contains columns from all input queries with numeric suffixes
+  // to disambiguate:
+  //  - The intersected `ts` and `dur` (without suffix) represent the actual
+  //    overlap interval
+  //  - Columns from `base` get a `_0` suffix (e.g., `id_0`, `ts_0`, `dur_0`)
+  //  - Columns from each query in `interval_intersect` get `_1`, `_2`, etc.
+  //    suffixes (e.g., `id_1`, `ts_1`, `dur_1` from first interval query)
+  //  - The `id`, `ts`, and `dur` columns are explicitly aliased with suffixes
+  //    for unambiguous access
+  //  - Partition columns (if any) are included without suffixes for easy
+  //    access
+  // Accessing other duplicated columns (i.e., non `id`, `ts`, `dur`) is an
+  // undefined behavior. It is recommended to alias such columns in the input
+  // queries to avoid ambiguity.
+  message IntervalIntersect {
+    // The base query
+    optional PerfettoSqlStructuredQuery base = 1;
+    repeated PerfettoSqlStructuredQuery interval_intersect = 2;
+
+    // Optional list of partition columns to use for the interval intersection.
+    // These columns must exist in all queries (base and interval_intersect).
+    // They cannot be "id", "ts", or "dur" as these are reserved.
+    repeated string partition_columns = 3;
+  }
+
+  // Filters intervals from `base` to only those that overlap with intervals
+  // from `intervals`. Unlike IntervalIntersect which is more general-purpose
+  // and returns columns from all sources with suffixes, FilterToIntervals
+  // is specifically designed for the common use case of filtering intervals
+  // while preserving the original schema of base table.
+  //
+  // Examples:
+  //  1) Filter CPU slices to only those during app startup:
+  //    * `base` points to the CPU scheduling data.
+  //    * `intervals` points to the app startup boundaries.
+  //  2) Filter memory allocations during specific user interactions:
+  //    * `base` points to memory allocation events.
+  //    * `intervals` points to user interaction time windows.
+  //
+  // Schema:
+  //  1) The query in `base` must have `id`, `ts`, and `dur` columns.
+  //  2) The query in `intervals` must have `ts` and `dur` columns.
+  //
+  //
+  // Output Schema:
+  // The output preserves the exact same columns as `base`, but:
+  //  - Rows are filtered to only those that overlap with `intervals`
+  //  - If `clip_to_intervals` is true (default), `ts` and `dur` represent
+  //    the actual overlap period (clipped to the interval boundaries).
+  //    When using explicit select_columns that include "ts" or "dur", the
+  //    original values are also returned as `original_ts` and `original_dur`.
+  //  - If `clip_to_intervals` is false, `ts` and `dur` retain their original
+  //    values from `base`
+  //
+  // Interval merging:
+  // Overlapping intervals in the `intervals` set are automatically merged
+  // before filtering. This ensures that a base row spanning multiple
+  // overlapping filter intervals produces only one output row per merged
+  // interval, not multiple duplicate rows.
+  //
+  // Example in ASCII art - interval merging:
+  //   base:          [--A--]
+  //   intervals:   [----]
+  //                   [----]      (two intervals that overlap each other)
+  //   merged:      [-------]      (merged into one)
+  //   output:         [--A--]     (one row, not two)
+  //
+  // Multiple non-overlapping intervals:
+  // If a base row overlaps with multiple non-overlapping intervals (after
+  // merging), multiple output rows will be produced, one for each.
+  //
+  // Example in ASCII art (with clip_to_intervals = true):
+  //   base:       [-----------]     [--------]
+  //   intervals:           [-----------]
+  //   output:              [--]     [--]
+  //
+  // Example in ASCII art (with clip_to_intervals = false):
+  //   base:       [-----------]     [--------]
+  //   intervals:           [-----------]
+  //   output:     [-----------]     [--------]
+  //   (same ts/dur as base, but only rows that had overlap)
+  message ExperimentalFilterToIntervals {
+    // The base query containing intervals to filter. Must have `id`, `ts` and
+    // `dur` columns. Required.
+    optional PerfettoSqlStructuredQuery base = 1;
+
+    // The query containing the time intervals to filter to. Must have `ts` and
+    // `dur` columns. Required.
+    optional PerfettoSqlStructuredQuery intervals = 2;
+
+    // Optional list of partition columns to use for the interval filtering.
+    // These columns must exist in both queries (base and intervals).
+    // They cannot be "id", "ts", or "dur" as these are reserved.
+    // Note: When merging overlapping intervals, only the first partition
+    // column is used. Multiple partition columns are supported for the
+    // intersection operation but not for the merge step.
+    repeated string partition_columns = 3;
+
+    // When true (default), the output ts and dur represent the actual overlap
+    // period (clipped to interval boundaries). When false, the original ts
+    // and dur from base are preserved.
+    optional bool clip_to_intervals = 4;
+
+    // Optional list of columns to select from the base query in the result.
+    // If empty or not specified, all columns from base are selected.
+    // If specified, only the listed columns are selected from base.
+    // When clip_to_intervals is true, ts and dur are automatically prepended
+    // to represent the clipped interval. If select_columns explicitly includes
+    // "ts" or "dur", the original values from base are also returned as
+    // "original_ts" and "original_dur" to preserve access to the unclipped
+    // timestamps.
+    repeated string select_columns = 5;
+  }
+
+  // DON'T USE. EXPERIMENTAL.
+  // A single-row source representing a time range interval.
+  //
+  // This is useful for representing a selected time range that can be used
+  // with interval_intersect or other operations that need to filter data
+  // to a specific time window.
+  //
+  // Produces a source with the schema (id, ts, dur) where:
+  //   - id is always 0 (single row)
+  //   - ts is the start timestamp
+  //   - dur is the duration
+  message ExperimentalTimeRange {
+    // The mode of the time range.
+    enum Mode {
+      // Static mode: ts and dur are fixed values and must be provided.
+      STATIC = 0;
+      // Dynamic mode: ts and dur are derived from trace bounds at runtime.
+      // If ts is not set, trace_start() is used.
+      // If dur is not set, trace_dur() is used.
+      DYNAMIC = 1;
+    }
+
+    // The mode of this time range. Required.
+    // - STATIC: ts and dur must be set.
+    // - MODE_DYNAMIC: ts and dur are optional (defaults to trace bounds).
+    optional Mode mode = 1;
+
+    // The start timestamp in nanoseconds.
+    // Required for STATIC, optional for DYNAMIC.
+    // If not set in DYNAMIC, the backend will use trace_start().
+    optional int64 ts = 2;
+
+    // The duration in nanoseconds.
+    // Required for STATIC, optional for DYNAMIC.
+    // If not set in DYNAMIC, the backend will use trace_dur().
+    optional int64 dur = 3;
+  }
+
+  // DON'T USE. EXPERIMENTAL.
+  message ExperimentalJoin {
+    message EqualityColumns {
+      // The name of the column in the left query. Required.
+      optional string left_column = 1;
+      // The name of the column in the right query. Required.
+      optional string right_column = 2;
+    }
+
+    message FreeformCondition {
+      // The alias of the left query in the join. Required.
+      optional string left_query_alias = 1;
+      // The alias of the right query in the join. Required.
+      optional string right_query_alias = 2;
+      // The SQL expression representing the join condition, using left and
+      // right query aliases. Required.
+      optional string sql_expression = 3;
+    }
+    // The type of join to perform.
+    enum Type {
+      // Standard SQL INNER JOIN. A row is produced only if the join condition
+      // is met in both the left and right queries.
+      INNER = 0;
+      // Standard SQL LEFT JOIN. All rows from the left query are included,
+      // with matching rows from the right query. If there is no match, the
+      // columns from the right query will be NULL.
+      LEFT = 1;
+    }
+
+    // The type of join. Required.
+    optional Type type = 1;
+    // The "left" query in the join. Required.
+    optional PerfettoSqlStructuredQuery left_query = 2;
+    // The "right" query in the join. Required.
+    optional PerfettoSqlStructuredQuery right_query = 3;
+
+    // The condition for the join. One of the following is required.
+    oneof condition {
+      // Columns from both queries which must be equal for the join.
+      EqualityColumns equality_columns = 4;
+      // A freeform SQL expression representing the join condition.
+      FreeformCondition freeform_condition = 5;
+    }
+  }
+
+  // DON'T USE. EXPERIMENTAL.
+  // Performs a SQL UNION or UNION ALL operation on multiple queries.
+  //
+  // Examples:
+  //  1) Combine slices from different sources:
+  //    * queries contains multiple structured queries, each returning slices
+  //      from different tables or with different filters.
+  //    * use_union_all = false to remove duplicate rows.
+  //  2) Aggregate events from multiple processes:
+  //    * queries contains structured queries for events from different
+  //      processes.
+  //    * use_union_all = true to keep all events even if there are duplicates.
+  //
+  // Schema Requirements:
+  //  IMPORTANT: All queries MUST have the same set of columns.
+  //  - All queries must have the same number of columns
+  //  - Column names must match exactly (after applying aliases)
+  //  - Columns can be in any order - the order from the first query will be
+  //    used in the result
+  //  - If select_columns is specified, the validation is performed at query
+  //    generation time. Otherwise, validation happens at SQL execution time.
+  //
+  // The generator will return an error if queries have mismatched columns
+  // when explicit select_columns are specified.
+  message ExperimentalUnion {
+    // The queries to union together. At least two queries are required.
+    repeated PerfettoSqlStructuredQuery queries = 1;
+
+    // Whether to use UNION ALL (true) or UNION (false).
+    // UNION removes duplicate rows, UNION ALL keeps all rows.
+    // Default is false (UNION without duplicates).
+    optional bool use_union_all = 2;
+  }
+
+  // DON'T USE. EXPERIMENTAL.
+  // Adds columns from an input query to a core query using a join condition.
+  //
+  // This operation returns all columns from the core query plus specified
+  // columns from the input query, joined using a condition similar to
+  // ExperimentalJoin.
+  //
+  // Examples:
+  //  1) Add process name to slices:
+  //    * core_query contains slice data (id, ts, dur, name)
+  //    * input_query contains process data (id, name, pid)
+  //    * input_columns = ["name"] (aliased appropriately)
+  //    * equality_columns matches process id
+  //  2) Enrich counter data with additional metadata:
+  //    * core_query contains counter values
+  //    * input_query contains metadata table
+  //    * input_columns specifies which metadata columns to add
+  //
+  // Schema:
+  //  1) The input_columns list must contain at least one column name.
+  //  2) All column names in input_columns must exist in the input_query result.
+  //  3) One of equality_columns or freeform_condition must be specified.
+  message ExperimentalAddColumns {
+    // The core query. All columns from this query will be returned. Required.
+    optional PerfettoSqlStructuredQuery core_query = 1;
+
+    // The input query. Source of additional columns. Required.
+    optional PerfettoSqlStructuredQuery input_query = 2;
+
+    // List of columns to add from the input query. At least one required.
+    // Each SelectColumn specifies the column name and optional alias for
+    // renaming.
+    repeated SelectColumn input_columns = 3;
+
+    // The condition for the join. One of the following is required.
+    oneof condition {
+      // Columns from both queries which must be equal for the join.
+      // Reuses the EqualityColumns message from ExperimentalJoin, where
+      // left_column refers to core_query and right_column refers to
+      // input_query.
+      ExperimentalJoin.EqualityColumns equality_columns = 4;
+
+      // A freeform SQL expression representing the join condition.
+      // Reuses the FreeformCondition message from ExperimentalJoin, where
+      // left_query_alias refers to core_query and right_query_alias refers
+      // to input_query.
+      ExperimentalJoin.FreeformCondition freeform_condition = 5;
+    }
+  }
+
+  // DON'T USE. EXPERIMENTAL.
+  // Creates slices (rows with ts and dur) by pairing start and end timestamps
+  // from two separate queries.
+  //
+  // For each start timestamp, this operation finds the first end timestamp that
+  // comes after it and creates a slice with:
+  //   - ts = start timestamp
+  //   - dur = end timestamp - start timestamp
+  //
+  // Examples:
+  //  1) Create slices from lock acquire/release events:
+  //    * starts_query contains lock acquire events with timestamp
+  //    * ends_query contains lock release events with timestamp
+  //    * starts_ts_column = "ts", ends_ts_column = "ts"
+  //  2) Create slices from begin/end markers:
+  //    * starts_query filters for events where type = 'BEGIN'
+  //    * ends_query filters for events where type = 'END'
+  //
+  // Schema:
+  //  1) starts_query must have the column specified in starts_ts_column
+  //  2) ends_query must have the column specified in ends_ts_column
+  //  3) Both timestamp columns must contain integer timestamps
+  //  4) Output schema: (ts, dur) where:
+  //     - ts is the start timestamp
+  //     - dur is the duration (end - start)
+  //
+  // Matching Behavior:
+  //  - Each start is paired with the first end that comes after it
+  //  - Starts with no matching end are excluded from the output
+  //  - Ends with no matching start are ignored
+  //  - If multiple starts occur before an end, each is paired with that end
+  message ExperimentalCreateSlices {
+    // The query containing start timestamps. Required.
+    optional PerfettoSqlStructuredQuery starts_query = 1;
+
+    // The query containing end timestamps. Required.
+    optional PerfettoSqlStructuredQuery ends_query = 2;
+
+    // The column name in starts_query containing the timestamp.
+    // Optional, defaults to "ts".
+    optional string starts_ts_column = 3;
+
+    // The column name in ends_query containing the timestamp.
+    // Optional, defaults to "ts".
+    optional string ends_ts_column = 4;
+  }
+
+  // DON'T USE. EXPERIMENTAL.
+  // Converts counter-style data (with timestamps but no durations) into
+  // interval-style data by computing the duration to the next event using
+  // the counter_leading_intervals! macro.
+  //
+  // This is useful for working with counter data (e.g., CPU frequency,
+  // battery level) that needs to be used with interval-based operations
+  // like IntervalIntersect.
+  //
+  // Examples:
+  //  1) Convert CPU frequency counter data to intervals:
+  //    * input_query contains counter data with (id, ts, track_id, value)
+  //    * Output will have (id, ts, dur, track_id, value, next_value,
+  //    delta_value)
+  //  2) Prepare battery counter for interval intersection:
+  //    * input_query contains battery level samples over time
+  //    * Output can be used with IntervalIntersect to analyze battery during
+  //    events
+  //
+  // Schema Requirements:
+  //  1) input_query MUST have columns: id, ts, track_id, value
+  //  2) input_query MUST NOT have a dur column (this operation creates it)
+  //
+  // Output Schema:
+  //  The output contains all columns from input plus:
+  //  - dur: DURATION - time until the next event (computed)
+  //  - next_value: DOUBLE - value at the next timestamp
+  //  - delta_value: DOUBLE - change from the previous value
+  //
+  // The operation uses counter_leading_intervals! internally, which means:
+  //  - Intervals are forward-looking (value holds until next change)
+  //  - The final value holds until trace_end()
+  //  - Events are automatically sorted by timestamp
+  message ExperimentalCounterIntervals {
+    // The query containing counter data. Must have (id, ts, track_id, value)
+    // columns and must NOT have a dur column. Required.
+    optional PerfettoSqlStructuredQuery input_query = 1;
+  }
+
+  // DON'T USE. EXPERIMENTAL.
+  // Filters rows from `base` to only those where `base_column` has a value
+  // that exists in `match_column` from `match_values`. This is essentially
+  // a semi-join operation.
+  //
+  // Examples:
+  //  1) Filter slices to only those belonging to specific threads:
+  //    * `base` points to slices data with a utid column.
+  //    * `match_values` points to a query selecting specific thread utids.
+  //    * `base_column` = "utid", `match_column` = "utid"
+  //  2) Filter counter data to specific track IDs:
+  //    * `base` points to counter data.
+  //    * `match_values` points to a query with track IDs of interest.
+  //    * `base_column` = "track_id", `match_column` = "id"
+  //
+  // Schema:
+  //  1) The query in `base` must have a column named `base_column`.
+  //  2) The query in `match_values` must have a column named `match_column`.
+  //
+  // Output Schema:
+  // The output preserves the exact same columns as `base`, filtered to only
+  // rows where `base_column` value exists in `match_values.match_column`.
+  message ExperimentalFilterIn {
+    // The base query containing rows to filter. Required.
+    optional PerfettoSqlStructuredQuery base = 1;
+
+    // The query containing values to match against. Required.
+    optional PerfettoSqlStructuredQuery match_values = 2;
+
+    // The column name in the base query to filter on. Required.
+    optional string base_column = 3;
+
+    // The column name in the match_values query to match against. Required.
+    optional string match_column = 4;
+  }
+
+  // An opaque id field for the query. The convention is to use underscores
+  // and lower case (foo_bar) but this is not enforced. Optional in the general
+  // case but strongly recommended for good error messages. Required in cases
+  // where this query is used as a "shared" query.
+  optional string id = 1;
+
+  // The names of any modules required for functions used in expressions.
+  // Optional.
+  repeated string referenced_modules = 11;
+
+  // Represents the "source" of the query which will be translared to an SQL
+  // "FROM" clause. One of the following is required.
+  oneof source {
+    // Source is an SQL table, possible in a PerfettoSQL module.
+    Table table = 2;
+
+    // Source is an arbitrary snippet of SQL.
+    Sql sql = 3;
+
+    // Source is a simple set of slices.
+    SimpleSlices simple_slices = 4;
+
+    // Source is a nested query. Useful for aliasing columns,
+    // filtering etc.
+    PerfettoSqlStructuredQuery inner_query = 5;
+
+    // Source is a nested query with the given id which should be
+    // looked up in some external data structure.
+    //
+    // This field is quite special and cannot be used in all StructuredQuery
+    // contexts. It exists to share some common structured queries between many
+    // other structured queries and is only available in contexts where this is
+    // supported.
+    //
+    // Contexts where this is supported that we are aware of:
+    // 1) Trace-Based Metrics v2
+    //
+    // Please see the documentation of the embedding system for more context.
+    string inner_query_id = 6;
+
+    // Source is an interval intersect operation. See IntervalIntersect
+    // documentation for more information.
+    IntervalIntersect interval_intersect = 7;
+
+    // DON'T USE. EXPERIMENTAL.
+    ExperimentalJoin experimental_join = 100;
+
+    // DON'T USE. EXPERIMENTAL.
+    ExperimentalUnion experimental_union = 101;
+
+    // DON'T USE. EXPERIMENTAL.
+    ExperimentalAddColumns experimental_add_columns = 102;
+
+    // DON'T USE. EXPERIMENTAL.
+    ExperimentalCreateSlices experimental_create_slices = 104;
+
+    // DON'T USE. EXPERIMENTAL.
+    ExperimentalTimeRange experimental_time_range = 105;
+
+    // DON'T USE. EXPERIMENTAL.
+    // Source is a filter-to-intervals operation. See
+    // ExperimentalFilterToIntervals documentation for more information.
+    ExperimentalFilterToIntervals experimental_filter_to_intervals = 106;
+
+    // DON'T USE. EXPERIMENTAL.
+    // Source is a counter-to-intervals operation. See
+    // ExperimentalCounterIntervals documentation for more information.
+    ExperimentalCounterIntervals experimental_counter_intervals = 107;
+
+    // DON'T USE. EXPERIMENTAL.
+    // Source is a filter-in operation (semi-join). See
+    // ExperimentalFilterIn documentation for more information.
+    ExperimentalFilterIn experimental_filter_in = 108;
+  }
+
+  // Evaluation order of operations:
+  // The fields below are evaluated in a specific order following SQL semantics.
+  // The logical evaluation order is:
+  //   1. FROM (source) - determine the source data
+  //   2. WHERE (filters) - filter rows from the source
+  //   3. GROUP BY (group_by) - group rows and compute aggregations
+  //   4. SELECT (select_columns) - select and transform columns
+  //   5. ORDER BY (order_by) - sort the result set
+  //   6. LIMIT/OFFSET (limit, offset) - restrict the number of rows returned
+  //
+  // This follows the standard SQL evaluation order as defined in the SQL
+  // standard (ISO/IEC 9075). For more details, see:
+  // https://www.sqlite.org/lang_select.html
+
+  // Represents a single filter on a column.
+  message Filter {
+    // The column name to be filtered. Required.
+    optional string column_name = 1;
+
+    // The operator to use to perform filtering. Required.
+    enum Operator {
+      UNKNOWN = 0;
+      EQUAL = 1;
+      NOT_EQUAL = 2;
+      LESS_THAN = 3;
+      LESS_THAN_EQUAL = 4;
+      GREATER_THAN = 5;
+      GREATER_THAN_EQUAL = 6;
+      IS_NULL = 8;
+      IS_NOT_NULL = 9;
+
+      // Unix GLOB. Only makes sense for string columns.
+      GLOB = 7;
+    }
+    optional Operator op = 2;
+
+    // The RHS for filtering. All values specified here will be ORed together
+    // allowing easy IN and GLOB IN filtering. If operation is different than
+    // IS_NULL or IS_NOT_NULL, at least one of these fields must be non-empty.
+    // Only the first non-empty field will be considered.
+    repeated string string_rhs = 3;
+    repeated double double_rhs = 4;
+    repeated int64 int64_rhs = 5;
+  }
+
+  // A set of filters which are ANDed together. Optional, can be empty.
+  repeated Filter filters = 8;
+
+  // Represents a GROUP BY + aggregation operation in SQL. Optional.
+  message GroupBy {
+    // The column names to group by. At least one column is required.
+    repeated string column_names = 1;
+
+    // The list of aggregations to perform.
+    message Aggregate {
+      enum Op {
+        UNSPECIFIED = 0;
+
+        // If no column_name is specified, this is a COUNT(*).
+        COUNT = 1;
+
+        // Requires a column_name to be specified.
+        SUM = 2;
+        MIN = 3;
+        MAX = 4;
+        MEAN = 5;
+        MEDIAN = 6;
+        DURATION_WEIGHTED_MEAN = 7;
+        COUNT_DISTINCT = 9;
+
+        // Requires a column_name and a percentile to be specified.
+        PERCENTILE = 8;
+
+        // Custom SQL expression. Requires custom_sql_expression to be
+        // specified. Does not require column_name.
+        CUSTOM = 10;
+      }
+
+      // The name of the column to aggregate. Not required for COUNT or
+      // CUSTOM.
+      optional string column_name = 1;
+
+      // Required.
+      optional Op op = 2;
+
+      // Optional.
+      optional string result_column_name = 3;
+
+      // The percentile to compute when `op` is `PERCENTILE`. Must be between 0
+      // and 100.
+      optional double percentile = 4;
+
+      // The custom SQL expression to use when `op` is `CUSTOM`.
+      // Example: "SUM(dur * priority) / SUM(dur)" for a weighted average.
+      optional string custom_sql_expression = 5;
+    }
+    repeated Aggregate aggregates = 2;
+  }
+  optional GroupBy group_by = 9;
+
+  // Represents the selection of columns from the source. Maps to a SELECT
+  // operation. Optional.
+  //
+  // Depending on whether `group_by` was specified the columns available from
+  // the source will be different:
+  // * if `group_by` is specified, all the columns in `group_by.column_names`
+  //   and `group_by.aggregates.result_column_name` are available.
+  // * if `group_by` is not specified, all columns in the source are eligible.
+  //
+  // If this is *not* specified, all columns from the source will be output.
+  message SelectColumn {
+    // The column name or a SQL expression for a computed column.
+    optional string column_name_or_expression = 3;
+
+    // The new name of the column.
+    // If `column_name_or_expression` is a simple column, this is an optional
+    // alias. If `column_name_or_expression` is an expression, this field is
+    // the required name for the new transformed column.
+    optional string alias = 2;
+
+    // DEPRECATED, use `column_name_or_expression` instead.
+    // The name of the column from the source.
+    optional string column_name = 1 [deprecated = true];
+  }
+  repeated SelectColumn select_columns = 10;
+
+  // Represents an ORDER BY operation in SQL. Optional.
+  message OrderBy {
+    // The direction of the sort.
+    enum Direction {
+      UNSPECIFIED = 0;
+      ASC = 1;
+      DESC = 2;
+    }
+
+    // A single ordering specification.
+    message OrderingSpec {
+      // The column name to sort by. Required.
+      optional string column_name = 1;
+
+      // The direction to sort. Defaults to ASC if not specified.
+      optional Direction direction = 2;
+    }
+
+    // The list of ordering specifications. At least one is required.
+    // The order is significant: the first spec is the primary sort key,
+    // subsequent specs are used to break ties.
+    repeated OrderingSpec ordering_specs = 1;
+  }
+  optional OrderBy order_by = 14;
+
+  // Limit the number of rows returned by the query. Maps to SQL LIMIT clause.
+  // Optional.
+  optional int64 limit = 12;
+
+  // Skip a number of rows in the result. Maps to SQL OFFSET clause.
+  // Optional. Requires `limit` to be specified (OFFSET without LIMIT returns
+  // zero rows in SQLite).
+  optional int64 offset = 13;
+
+  // =========================================================================
+  // EXPERIMENTAL FEATURES - DON'T USE
+  // =========================================================================
+
+  // DON'T USE. EXPERIMENTAL.
+  // Groups multiple filters, nested groups, and SQL expressions with a logical
+  // operator. Used for both top-level and nested filter expressions.
+  //
+  // Examples:
+  //
+  // 1. Single filter (trivial case):
+  //    experimental_filter_group: {
+  //      op: AND
+  //      filters: { column_name: "name" op: EQUAL string_rhs: "foo" }
+  //    }
+  //    Generates: WHERE name = 'foo'
+  //
+  // 2. Multiple filters ANDed:
+  //    experimental_filter_group: {
+  //      op: AND
+  //      filters: { column_name: "name" op: EQUAL string_rhs: "foo" }
+  //      filters: { column_name: "dur" op: GREATER_THAN int64_rhs: 1000 }
+  //    }
+  //    Generates: WHERE name = 'foo' AND dur > 1000
+  //
+  // 3. Multiple filters ORed:
+  //    experimental_filter_group: {
+  //      op: OR
+  //      filters: { column_name: "name" op: EQUAL string_rhs: "foo" }
+  //      filters: { column_name: "name" op: EQUAL string_rhs: "bar" }
+  //    }
+  //    Generates: WHERE name = 'foo' OR name = 'bar'
+  //
+  // 4. Complex nested expression (A OR B) AND (C OR D):
+  //    experimental_filter_group: {
+  //      op: AND
+  //      groups: {
+  //        op: OR
+  //        filters: { column_name: "name" op: EQUAL string_rhs: "foo" }
+  //        filters: { column_name: "name" op: EQUAL string_rhs: "bar" }
+  //      }
+  //      groups: {
+  //        op: OR
+  //        filters: { column_name: "dur" op: GREATER_THAN int64_rhs: 1000 }
+  //        filters: { column_name: "dur" op: LESS_THAN int64_rhs: 100 }
+  //      }
+  //    }
+  //    Generates: WHERE (name = 'foo' OR name = 'bar') AND (dur > 1000 OR dur <
+  //    100)
+  //
+  // 5. Mixing filters, groups, and SQL expressions:
+  //    experimental_filter_group: {
+  //      op: OR
+  //      filters: { column_name: "name" op: EQUAL string_rhs: "foo" }
+  //      sql_expressions: "LENGTH(name) > 10"
+  //      groups: {
+  //        op: AND
+  //        filters: { column_name: "dur" op: GREATER_THAN int64_rhs: 1000 }
+  //        filters: { column_name: "ts" op: LESS_THAN int64_rhs: 5000 }
+  //      }
+  //    }
+  //    Generates: WHERE name = 'foo' OR LENGTH(name) > 10 OR (dur > 1000 AND ts
+  //    < 5000)
+  message ExperimentalFilterGroup {
+    enum Operator {
+      UNSPECIFIED = 0;
+      AND = 1;
+      OR = 2;
+    }
+
+    // The operator to combine all filters, groups, and SQL expressions.
+    // Required.
+    optional Operator op = 1;
+
+    // Simple filter conditions (e.g., column = value). Optional.
+    repeated Filter filters = 2;
+
+    // Nested filter groups (allows arbitrary nesting). Optional.
+    repeated ExperimentalFilterGroup groups = 3;
+
+    // Arbitrary SQL expressions (e.g., "LENGTH(name) > 10").
+    // Use with caution as this bypasses type safety. Optional.
+    repeated string sql_expressions = 4;
+  }
+
+  // DON'T USE. EXPERIMENTAL.
+  // Advanced filtering with support for OR and nested groups.
+  // If specified, takes precedence over `filters` field. Optional.
+  optional ExperimentalFilterGroup experimental_filter_group = 103;
+}

@@ -1,0 +1,126 @@
+# Copyright (C) 2026 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../../../gn/perfetto.gni")
+import("../../../../gn/perfetto_cpp_blob_header.gni")
+
+assert(enable_perfetto_trace_processor_sqlite)
+
+# Per (device, curve_type) CSVs. Each curve_type's compressed blob is the
+# union of the rows in every device folder for that curve type.
+_cpu_1d_csvs = [
+  "data/MT6897/cpu_1d.csv",
+  "data/SXR2230P/cpu_1d.csv",
+  "data/Tensor/cpu_1d.csv",
+  "data/Tensor_G4/cpu_1d.csv",
+  "data/Tensor_G5/cpu_1d.csv",
+  "data/monaco/cpu_1d.csv",
+  "data/neo/cpu_1d.csv",
+]
+
+_cpu_2d_csvs = [
+  "data/MT6897/cpu_2d.csv",
+  "data/SXR2230P/cpu_2d.csv",
+  "data/Tensor/cpu_2d.csv",
+  "data/Tensor_G4/cpu_2d.csv",
+  "data/Tensor_G5/cpu_2d.csv",
+]
+
+_gpu_csvs = [
+  "data/Tensor/gpu.csv",
+  "data/Tensor_G5/gpu.csv",
+]
+
+_l3_csvs = [
+  "data/Tensor/l3.csv",
+  "data/Tensor_G4/l3.csv",
+  "data/Tensor_G5/l3.csv",
+]
+
+_tpu_csvs = [ "data/Tensor_G5/tpu.csv" ]
+
+_curve_blob_targets = []
+
+template("_wattson_curve_blob") {
+  perfetto_cpp_blob_header(target_name) {
+    script = "gen_wattson_curves.py"
+    sources = invoker.sources
+    generated_header = "${target_gen_dir}/${invoker.curve_type}_curves.h"
+    pass_gen_dir = true
+    extra_args = [
+      "--namespace",
+      "perfetto::trace_processor::wattson",
+      "--curve-type",
+      invoker.curve_type,
+    ]
+  }
+}
+
+_wattson_curve_blob("gen_cpu_1d_curves") {
+  curve_type = "cpu_1d"
+  sources = _cpu_1d_csvs
+}
+
+_wattson_curve_blob("gen_cpu_2d_curves") {
+  curve_type = "cpu_2d"
+  sources = _cpu_2d_csvs
+}
+
+_wattson_curve_blob("gen_gpu_curves") {
+  curve_type = "gpu"
+  sources = _gpu_csvs
+}
+
+_wattson_curve_blob("gen_l3_curves") {
+  curve_type = "l3"
+  sources = _l3_csvs
+}
+
+_wattson_curve_blob("gen_tpu_curves") {
+  curve_type = "tpu"
+  sources = _tpu_csvs
+}
+
+source_set("wattson") {
+  sources = [
+    "plugin.cc",
+    "table_function.cc",
+    "table_function.h",
+  ]
+  deps = [
+    ":gen_cpu_1d_curves",
+    ":gen_cpu_2d_curves",
+    ":gen_gpu_curves",
+    ":gen_l3_curves",
+    ":gen_tpu_curves",
+    "../../../../gn:default_deps",
+    "../../../../include/perfetto/trace_processor:basic_types",
+    "../../../base",
+    "../../containers",
+    "../../core/dataframe",
+    "../../core/plugin",
+    "../../perfetto_sql/intrinsics/table_functions",
+    "../../storage",
+    "../../types",
+    "../../util:gzip",
+  ]
+
+  # plugin.cc self-registers through a global static initializer, which the
+  # linker drops when this target is consumed as a static archive. Generators
+  # translate this metadata into `alwayslink = True` (Bazel) and
+  # `whole_static_libs` (Soong).
+  metadata = {
+    perfetto_force_alwayslink = [ true ]
+  }
+}

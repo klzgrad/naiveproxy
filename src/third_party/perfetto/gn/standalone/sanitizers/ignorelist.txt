@@ -1,0 +1,15 @@
+# The rules in this file are only applied at compile time.
+[memory]
+
+# MSan's readlink/fstat interceptors do not correctly mark the output buffer
+# as initialised on newer glibc, so any code that consumes the result trips
+# spurious use-of-uninitialized-value warnings. SQLite hits this throughout
+# its VFS layer (unixFullPathname, verifyDbFile, fileHasMoved, ...), so we
+# just ignore the whole amalgamation; it's upstream code we don't own.
+src:*sqlite3.c
+
+# Same problem, in libprotobuf's DiskSourceTree::OpenDiskFile -> fstat().
+fun:*OpenDiskFile*
+
+# Same problem, in libunwindstack's MemoryFileAtOffset::Init -> fstat().
+fun:_ZN11unwindstack18MemoryFileAtOffset4InitERKNSt4__Cr12basic_stringIcNS1_11char_traitsIcEENS1_9allocatorIcEEEEmm

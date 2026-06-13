@@ -1,0 +1,263 @@
+node PerfettoArgDef {
+  arg_name: index Name
+  arg_type: inline SyntaqliteTextSpan
+  is_variadic: inline Bool
+
+  semantic { column_def(name: arg_name, type: arg_type) }
+
+  fmt {
+    child(arg_name) " " span(arg_type)
+    if_flag(is_variadic) { "..." }
+  }
+}
+
+list PerfettoArgDefList {
+  PerfettoArgDef
+  fmt { for_each(sep: "," line) { child(_item) } }
+}
+
+node PerfettoMacroArg {
+  arg_name: inline SyntaqliteTextSpan
+  arg_type: inline SyntaqliteTextSpan
+
+  fmt {
+    span(arg_name) " " span(arg_type)
+  }
+}
+
+list PerfettoMacroArgList {
+  PerfettoMacroArg
+  fmt { for_each(sep: "," line) { child(_item) } }
+}
+
+node PerfettoIndexedColumn {
+  column_name: inline SyntaqliteTextSpan
+
+  fmt { span(column_name) }
+}
+
+list PerfettoIndexedColumnList {
+  PerfettoIndexedColumn
+  fmt { for_each(sep: "," line) { child(_item) } }
+}
+
+enum PerfettoReturnKind { SCALAR TABLE }
+
+node PerfettoReturnType {
+  kind: inline PerfettoReturnKind
+  scalar_type: inline SyntaqliteTextSpan
+  table_columns: index PerfettoArgDefList
+
+  semantic { return_spec(table_columns: table_columns) }
+
+  fmt {
+    switch(kind) {
+      SCALAR { span(scalar_type) }
+      TABLE  {
+        group {
+          "TABLE("
+          nest {
+            softline
+            child(table_columns)
+          }
+          softline ")"
+        }
+      }
+    }
+  }
+}
+
+node PerfettoTableImpl {
+  name: inline SyntaqliteTextSpan
+
+  fmt { span(name) }
+}
+
+node CreatePerfettoTableStmt {
+  table_name: inline SyntaqliteTextSpan
+  or_replace: inline Bool
+  table_impl: index PerfettoTableImpl
+  schema: index PerfettoArgDefList
+  select: index Select
+  select_span: inline SyntaqliteTextSpan
+
+  semantic { define_table(name: table_name, columns: schema, select: select) }
+
+  fmt {
+    group {
+      "CREATE"
+      if_flag(or_replace) { " OR REPLACE" }
+      " PERFETTO TABLE " span(table_name)
+      if_set(table_impl) {
+        " USING "
+        child(table_impl)
+      }
+      if_set(schema) {
+        "("
+        nest {
+          softline
+          child(schema)
+        }
+        softline ")"
+      }
+      if_set(select) { line "AS" }
+    }
+    if_set(select) { hardline child(select) }
+  }
+}
+
+node CreatePerfettoViewStmt {
+  view_name: inline SyntaqliteTextSpan
+  or_replace: inline Bool
+  schema: index PerfettoArgDefList
+  select: index Select
+  select_span: inline SyntaqliteTextSpan
+
+  semantic { define_view(name: view_name, columns: schema, select: select) }
+
+  fmt {
+    group {
+      "CREATE"
+      if_flag(or_replace) { " OR REPLACE" }
+      " PERFETTO VIEW " span(view_name)
+      if_set(schema) {
+        "("
+        nest {
+          softline
+          child(schema)
+        }
+        softline ")"
+      }
+      line "AS"
+    }
+    hardline child(select)
+  }
+}
+
+node CreatePerfettoFunctionStmt {
+  function_name: inline SyntaqliteTextSpan
+  or_replace: inline Bool
+  args: index PerfettoArgDefList
+  return_type: index PerfettoReturnType
+  select: index Select
+  select_span: inline SyntaqliteTextSpan
+
+  semantic { define_function(name: function_name, args: args, return_type: return_type, select: select) }
+
+  fmt {
+    group {
+      "CREATE"
+      if_flag(or_replace) { " OR REPLACE" }
+      " PERFETTO FUNCTION " span(function_name)
+      "("
+      if_set(args) {
+        nest {
+          softline
+          child(args)
+        }
+        softline
+      }
+      ")"
+    }
+    hardline "RETURNS " child(return_type)
+    hardline "AS"
+    hardline child(select)
+  }
+}
+
+node CreatePerfettoDelegatingFunctionStmt {
+  function_name: inline SyntaqliteTextSpan
+  or_replace: inline Bool
+  args: index PerfettoArgDefList
+  return_type: index PerfettoReturnType
+  delegate_to: inline SyntaqliteTextSpan
+
+  fmt {
+    group {
+      "CREATE"
+      if_flag(or_replace) { " OR REPLACE" }
+      " PERFETTO FUNCTION " span(function_name)
+      "("
+      if_set(args) {
+        nest {
+          softline
+          child(args)
+        }
+        softline
+      }
+      ")"
+    }
+    hardline "RETURNS " child(return_type)
+    hardline "DELEGATES TO " span(delegate_to)
+  }
+}
+
+node CreatePerfettoIndexStmt {
+  index_name: inline SyntaqliteTextSpan
+  or_replace: inline Bool
+  table_name: inline SyntaqliteTextSpan
+  columns: index PerfettoIndexedColumnList
+
+  fmt {
+    group {
+      "CREATE"
+      if_flag(or_replace) { " OR REPLACE" }
+      " PERFETTO INDEX " span(index_name)
+      " ON " span(table_name)
+      "("
+      nest {
+        softline
+        child(columns)
+      }
+      softline ")"
+    }
+  }
+}
+
+node CreatePerfettoMacroStmt {
+  macro_name: inline SyntaqliteTextSpan
+  or_replace: inline Bool
+  return_type: inline SyntaqliteTextSpan
+  body: inline SyntaqliteTextSpan
+  args: index PerfettoMacroArgList
+
+  macro_def(name: macro_name, body: body, args: args, arg_name: arg_name)
+
+  fmt {
+    group {
+      "CREATE"
+      if_flag(or_replace) { " OR REPLACE" }
+      " PERFETTO MACRO " span(macro_name)
+      "("
+      if_set(args) {
+        nest {
+          softline
+          child(args)
+        }
+        softline
+      }
+      ")"
+    }
+    hardline "RETURNS " span(return_type)
+    hardline "AS " span(body)
+  }
+}
+
+node IncludePerfettoModuleStmt {
+  module_name: inline SyntaqliteTextSpan
+
+  semantic { import(module: module_name) }
+
+  fmt {
+    "INCLUDE PERFETTO MODULE " span(module_name)
+  }
+}
+
+node DropPerfettoIndexStmt {
+  index_name: inline SyntaqliteTextSpan
+  table_name: inline SyntaqliteTextSpan
+
+  fmt {
+    "DROP PERFETTO INDEX " span(index_name) " ON " span(table_name)
+  }
+}

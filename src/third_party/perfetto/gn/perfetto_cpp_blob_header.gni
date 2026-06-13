@@ -1,0 +1,81 @@
+# Copyright (C) 2026 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("perfetto.gni")
+
+# Runs a Python script that emits a C++ header containing a
+# `constexpr std::array<uint8_t, N>` blob (typically by calling
+# `python/tools/cpp_blob_emitter.py`).
+#
+# The script is invoked as:
+#   python3 <script> --output <output_header> \
+#                    [--gen-dir <gen_dir>] \
+#                    [<extra_args>...] \
+#                    <inputs...>
+#
+# Required invoker args:
+#   script: path to the Python script (relative to the GN file).
+#   sources: list of input files passed to the script after the flags.
+#   generated_header: path to the .h file the script writes (typically
+#                     under $target_gen_dir).
+# Optional invoker args:
+#   pass_gen_dir: if true, prepends `--gen-dir <gen_dir>` to the script's
+#                 args. For ninja, the value is rebase_path(root_gen_dir).
+#                 For Bazel/Soong, the GN→Bazel and GN→Android.bp
+#                 translators automatically substitute the rebased path
+#                 with `$(GENDIR)` / `$(genDir)` placeholders.
+#   extra_args: extra args inserted between the --gen-dir block and the
+#               input files.
+#   deps: extra GN deps.
+template("perfetto_cpp_blob_header") {
+  assert(defined(invoker.script), "script must be defined")
+  assert(defined(invoker.sources), "sources must be defined")
+  assert(defined(invoker.generated_header), "generated_header must be defined")
+
+  config("${target_name}_config") {
+    include_dirs = [ "${root_gen_dir}/${perfetto_root_path}" ]
+  }
+
+  action(target_name) {
+    forward_variables_from(invoker, [ "testonly" ])
+    script = invoker.script
+    inputs = invoker.sources
+    outputs = [ invoker.generated_header ]
+
+    args = [
+      "--output",
+      rebase_path(invoker.generated_header, root_build_dir),
+    ]
+    if (defined(invoker.pass_gen_dir) && invoker.pass_gen_dir) {
+      args += [
+        "--gen-dir",
+        rebase_path(root_gen_dir, root_build_dir),
+      ]
+    }
+    if (defined(invoker.extra_args)) {
+      args += invoker.extra_args
+    }
+    foreach(src, invoker.sources) {
+      args += [ rebase_path(src, root_build_dir) ]
+    }
+
+    if (defined(invoker.deps)) {
+      deps = invoker.deps
+    }
+    public_configs = [ ":${target_name}_config" ]
+    metadata = {
+      perfetto_action_type_for_generator = [ "cpp_blob_header" ]
+    }
+  }
+}

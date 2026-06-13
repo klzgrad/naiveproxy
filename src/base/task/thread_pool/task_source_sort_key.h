@@ -1,0 +1,55 @@
+// Copyright 2016 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#ifndef BASE_TASK_THREAD_POOL_TASK_SOURCE_SORT_KEY_H_
+#define BASE_TASK_THREAD_POOL_TASK_SOURCE_SORT_KEY_H_
+
+#include "base/base_export.h"
+#include "base/task/task_traits.h"
+#include "base/task/thread_type.h"
+#include "base/time/time.h"
+
+namespace base::internal {
+
+// An immutable but assignable representation of the priority of a Sequence.
+class BASE_EXPORT TaskSourceSortKey final {
+ public:
+  constexpr TaskSourceSortKey() = default;
+  constexpr TaskSourceSortKey(ThreadType thread_type,
+                              TimeTicks ready_time,
+                              uint8_t worker_count = 0)
+      : thread_type_(thread_type),
+        worker_count_(worker_count),
+        ready_time_(ready_time) {}
+
+  ThreadType thread_type() const { return thread_type_; }
+  uint8_t worker_count() const { return worker_count_; }
+  TimeTicks ready_time() const { return ready_time_; }
+
+  // Used for a max-heap.
+  bool operator<(const TaskSourceSortKey& other) const;
+
+  friend bool operator==(const TaskSourceSortKey&,
+                         const TaskSourceSortKey&) = default;
+
+ private:
+  // The private section allows this class to keep its immutable property while
+  // being copy-assignable (i.e. instead of making its members const).
+
+  // Highest task thread_type in the sequence at the time this sort key was
+  // created.
+  ThreadType thread_type_;
+
+  // Number of workers running the task source, used as secondary sort key
+  // prioritizing task sources with fewer workers.
+  uint8_t worker_count_;
+
+  // Time since the task source has been ready to run upcoming work, used as
+  // secondary sort key after |worker_count| prioritizing older task sources.
+  TimeTicks ready_time_;
+};
+
+}  // namespace base::internal
+
+#endif  // BASE_TASK_THREAD_POOL_TASK_SOURCE_SORT_KEY_H_

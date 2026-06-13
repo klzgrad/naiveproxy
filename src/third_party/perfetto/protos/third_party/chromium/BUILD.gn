@@ -1,0 +1,37 @@
+# Copyright (C) 2025 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../../gn/perfetto.gni")
+import("../../../gn/proto_library.gni")
+import("../../../gn/protozero_descriptor_diff.gni")
+import("sources.gni")
+
+perfetto_proto_library("@TYPE@") {
+  sources = chrome_track_event_sources
+  public_deps = [ "../../perfetto/trace/track_event:@TYPE@" ]
+
+  generate_descriptor = "chrome_track_event.descriptor"
+  generator_visibility = [ "../../../src/trace_processor/importers/proto:gen_cc_chrome_track_event_descriptor" ]
+  descriptor_root_source = chrome_track_event_descriptor_source
+}
+
+protozero_descriptor_diff("extension_descriptor") {
+  minuend_descriptor_target = ":descriptor"
+  minuend_descriptor_name = "chrome_track_event.descriptor"
+
+  subtrahend_descriptor_target = "../../perfetto/trace:descriptor"
+  subtrahend_descriptor_name = "trace.descriptor"
+
+  generate_descriptor = "chrome_track_event_extension.descriptor"
+}

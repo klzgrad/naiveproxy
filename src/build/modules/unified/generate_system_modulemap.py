@@ -1,0 +1,463 @@
+#!/usr/bin/env python3
+# Copyright 2026 The Chromium Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+"""Dynamically generates a modulemap for a sysroot + libcxx + clang."""
+
+import argparse
+import dataclasses
+import io
+import itertools
+import os
+import pathlib
+import re
+import shlex
+import shutil
+import sys
+import subprocess
+import tempfile
+from typing import Tuple, List
+
+_HEADER_RE = re.compile(r'(?:(private)\s+)?(?:(textual)\s+)?header\s+"([^"]+)"')
+_SIMPLE_HEADER_RE = re.compile(r'(\bheader\s+")([^"]+)(")')
+_REQUIRES_RE = re.compile(r'^\s*requires\s+(.*)')
+_STRIP_PREFIX = re.compile(
+    r'^usr/include/(?:(?:x86_64|i386|arm|arm64)-(?:linux|cros)-gnu/)?')
+# Maps GN CPU arg to LLVM CPU arg
+_CPU_ARG = {
+    'x64': 'x86_64',
+    'arm64': 'arm64',
+    'arm': 'arm',
+    'x86': 'i386',
+}
+_DEBUG_SOURCE = '/tmp/debug_generate_system_modulemap.cc'
+_DEBUG_SCRIPT = pathlib.Path('/tmp/debug_generate_system_modulemap.sh')
+
+# Pre-C++23, libc++'s stdatomic.h includes the builtin stdatomic.h
+# But since then, it does not, and thus _Builtin_stdatomic is inaccessible.
+# This tool correctly says not to include the sysroot's stdatomic.h, but it is
+# used by the inaccessible _Builtin_stdatomic module, so we need to manually
+# remove it so it compiles.
+_STRIP = re.compile(r'\nmodule _Builtin_stdatomic \[system\] \{.*?\}\n',
+                    re.MULTILINE | re.DOTALL)
+
+
+# Path.absolute() only exists in python 3.11, gmacs still have python3.9
+# Similar to Path.resolve() but doesn't follow symlinks.
+def _absolute(p: pathlib.Path) -> pathlib.Path:
+  return pathlib.Path(os.path.abspath(p))
+
+
+# We consider sysroot headers to be, by default, private.
+# If we defaulted to public, a header included transitively in one configuration
+# but not another, or one that is no longer depended on by libc++ / elsewhere in
+# the sysroot would be removed from the modulemap.
+# This would definitely break builds with the layering check enabled, and has
+# the potential for extremely confusing errors without it.
+#
+# Thus, this is a list of *every* sysroot file directly included by chromium to
+# be precompiled.
+def parse_allowlist():
+  path = pathlib.Path(__file__).parent / '../../include_sysroot_allowlist.txt'
+  lines = [
+      line.strip() for line in path.read_text().split('\n')
+      if line and not line.startswith('#')
+  ]
+  force_textual = {}
+  allowlist = {}
+  last_path = None
+  for line in lines:
+    path, *attrs = line.split(", ")
+    if last_path is not None and path <= last_path:
+      raise ValueError(
+          f"Allowlist is not sorted. {path} should be before {last_path}")
+    last_path = path
+
+    textual = None
+    lazy = None
+    for attr in attrs:
+      if attr == 'textual':
+        textual = 'True'
+      elif attr.startswith('textual='):
+        textual = attr[8:]
+      elif attr == 'lazy':
+        lazy = 'True'
+      elif attr.startswith('lazy='):
+        lazy = attr[5:]
+      else:
+        raise ValueError(
+            f"Unknown attribute {repr(attr)} in allowlist for {path}")
+    allowlist[path] = lazy
+    if textual is not None:
+      force_textual[path] = textual
+
+  return allowlist, force_textual
+
+
+_HEADERS, _FORCE_TEXTUAL = parse_allowlist()
+
+# Disabled headers are present in modulemaps, but we should assume that they are
+# unable to be used (note that this inherently means they must be textual).
+_DISABLED_HEADERS = {
+    'mm3dnow.h',  # Deprecated
+}
+
+
+def _requires_met(require: str, os: str, cpu: str) -> bool:
+  """Returns whether a modulemap requires condition is met."""
+  invert = require.startswith('!')
+  require = require.lstrip('!')
+
+  met = False
+  if require == 'altivec':
+    # Triggered by -maltivec. Not used in chromium.
+    met = False
+  elif require == 'arm':
+    met = cpu == 'arm' or cpu == 'arm64'
+  elif require == 'arm64':
+    met = cpu == 'arm64'
+  elif require == 'freestanding':
+    # Chromium is never freestanding.
+    met = False
+  elif require == 'gnuinlineasm':
+    # Enabled by default unless -fno-gnu-inline-asm set.
+    met = True
+  elif require == 'opencl':
+    # Not used in chromium.
+    met = False
+  elif require == 'systemz':
+    met = cpu == 's390x'
+  elif require == 'x86':
+    met = cpu in ['x86', 'x64']
+  elif require == 'windows':
+    met = os == 'win'
+  elif require == 'neon':
+    # Required for 64-bit arm, unsure about 32-bit
+    met = cpu == 'arm64'
+  elif require == 'sve':
+    # Assume chrome doesn't use SVE
+    met = False
+  else:
+    raise NotImplementedError(f'Unknown require: {require}')
+
+  return not met if invert else met
+
+
+@dataclasses.dataclass(order=True)
+class Header:
+  """Represents a header file declaring its properties in a modulemap."""
+  path: pathlib.Path
+  private: bool
+  textual: bool
+  requires: list[str] = dataclasses.field(default_factory=list)
+
+
+def parse_modulemap(
+    modulemap_path: pathlib.Path) -> Tuple[pathlib.Path, List[Header]]:
+  """Parses a modulemap file into headers.
+
+  Args:
+    modulemap_path: Path to the modulemap file.
+
+  Returns:
+    A tuple of (include_dir, headers relative to that directory).
+  """
+  matches = []
+  # A stack of modules, each with their own requirements.
+  requires_stack = []
+
+  with open(modulemap_path) as f:
+    for line in f:
+      if '{' in line:
+        requires_stack.append([])
+
+      m_req = _REQUIRES_RE.search(line)
+      if m_req:
+        req_str = m_req.group(1).split('//')[0].strip()
+        reqs = [r.strip() for r in req_str.split(',') if r.strip()]
+        requires_stack[-1].extend(reqs)
+
+      m = _HEADER_RE.search(line)
+      if m:
+        matches.append((
+            m.group(3),
+            bool(m.group(1)),
+            bool(m.group(2)),
+            itertools.chain(*requires_stack),
+        ))
+
+      if '}' in line:
+        requires_stack.pop()
+
+  assert not requires_stack
+  common_prefix = os.path.commonpath([m[0] for m in matches])
+  include_dir = _absolute(modulemap_path.parent / common_prefix)
+
+  headers = []
+  for rel, is_private, is_textual, reqs in matches:
+    path = pathlib.Path(rel[len(common_prefix):].lstrip('/'))
+    # libc++ uses __ prefixes instead of private headers.
+    is_private |= any(part.startswith('__') for part in path.parts)
+    headers.append(
+        Header(
+            path=path,
+            private=is_private,
+            textual=is_textual,
+            requires=list(reqs),
+        ))
+  return include_dir, headers
+
+
+def calculate_transitive_headers(clang_args: list[str],
+                                 include_dirs: List[Tuple[pathlib.Path,
+                                                          List[Header]]],
+                                 sysroot: pathlib.Path,
+                                 extra_public_headers: list[str],
+                                 target_os: str,
+                                 target_cpu: str,
+                                 debug: bool = False) -> List[Header]:
+  """Runs Clang to discover transitive dependencies from the provided headers.
+
+  Returns a list of all headers discovered that are part of the sysroot.
+  """
+  sysroot = _absolute(sysroot)
+  context = {
+      'is_linux': target_os == 'linux',
+      'is_android': target_os == 'android',
+      'is_ios': target_os == 'ios',
+      'is_mac': target_os == 'mac',
+      'is_apple': target_os == 'mac' or target_os == 'ios',
+      'is_fuchsia': target_os == 'fuchsia',
+      'is_win': target_os == 'win',
+  }
+  with tempfile.TemporaryDirectory() as tmpdir:
+    tmpdir_path = pathlib.Path(tmpdir)
+    source_file = tmpdir_path / 'dummy.cpp'
+    dep_file = tmpdir_path / 'dummy.d'
+    input_headers = {source_file.absolute()}
+
+    with open(source_file, 'w') as f:
+      for include_dir, headers in include_dirs:
+        for h in headers:
+          if not h.private and str(h.path) not in _DISABLED_HEADERS:
+            if all(_requires_met(r, target_os, target_cpu) for r in h.requires):
+              f.write(f'#include <{h.path}>\n')
+          input_headers.add(include_dir / h.path)
+      for h, lazy in extra_public_headers.items():
+        # Intentionally do this so that headers such as android/* just do
+        # nothing on non-android platforms instead of erroring out.
+        if lazy is None or not eval(lazy, context):
+          f.write(f'#if __has_include(<{h}>)\n')
+          f.write(f'#include <{h}>\n')
+          f.write(f'#endif\n')
+
+    cmd = clang_args + [
+        # We only need to preprocess for performance reasons, and don't even
+        # care about the preprocessed output.
+        '-E',
+        str(source_file),
+        '-o',
+        '/dev/null',
+        # This is what we really care about. Just which headers were in the
+        # transitive includes of a given header.
+        '-MD',
+        '-MF',
+        str(dep_file),
+    ]
+
+    if debug:
+      shutil.copyfile(source_file, _DEBUG_SOURCE)
+      replacements = {
+          str(source_file): _DEBUG_SOURCE,
+          str(dep_file): _DEBUG_SOURCE + ".o.d"
+      }
+      debug_cmd = [replacements.get(arg, arg) for arg in cmd]
+
+      _DEBUG_SCRIPT.write_text(f"""#!/bin/bash
+cd "{os.getcwd()}"
+{shlex.join(debug_cmd)}
+""")
+      _DEBUG_SCRIPT.chmod(0o755)
+      print(f"Saved debug script to {_DEBUG_SCRIPT}")
+      sys.exit(0)
+
+    ps = subprocess.run(cmd, check=False)
+    if ps.returncode != 0:
+      print(
+          f"Suggestion: Run `cd {os.getcwd()} && {shlex.join(sys.argv)} --debug` to debug"
+      )
+      sys.exit(ps.returncode)
+
+    dep_content = dep_file.read_text().replace('\\\n', '')
+    deps = dep_content.split(': ', 1)[1].split()
+
+    extra_public_headers = set(extra_public_headers)
+    headers = []
+    for dep in deps:
+      full = _absolute(dep)
+      if full in input_headers:
+        # We don't need to add this to the modulemap ourselves.
+        continue
+
+      try:
+        rel = str(full.relative_to(sysroot))
+        rel = _STRIP_PREFIX.sub('', rel)
+        short = rel if full.is_relative_to(sysroot) else full.name
+        private = short not in extra_public_headers
+        if short in _FORCE_TEXTUAL:
+          textual = eval(_FORCE_TEXTUAL[rel], context)
+        else:
+          textual = 'bits' in pathlib.Path(rel).parts
+      except ValueError:
+        # relative_to raises ValueError if it's outside the sysroot
+        # It must be incorrectly missing from the modulemap.
+        private = full.name not in extra_public_headers
+        # This has the same effect as it being missing from the modulemap.
+        textual = True
+      headers.append(Header(path=full, private=private, textual=textual))
+
+    return headers
+
+
+def combine_modulemaps(out: pathlib.Path, modulemaps: list[pathlib.Path],
+                       headers: List[Header], module_name: str) -> str:
+  """Generates the combined modulemap output string from dependencies."""
+  custom_header_prefix = os.path.relpath('../../buildtools/third_party/libc++',
+                                         out.parent)
+
+  with io.StringIO() as s:
+    modules = {'system': 1}
+    s.write(f'module "{module_name}" [system] {{\n')
+    for mm in modulemaps:
+      prefix = os.path.relpath(mm.parent, out.parent)
+
+      def rebase_path(p: str) -> str:
+        if p == '__assertion_handler':
+          return f'{custom_header_prefix}/__assertion_handler'
+        return os.path.normpath(os.path.join(prefix, p))
+
+      mm_content = _SIMPLE_HEADER_RE.sub(
+          lambda m: f'{m.group(1)}{rebase_path(m.group(2))}{m.group(3)}',
+          mm.read_text())
+      mm_content = mm_content.replace(
+          '@LIBCXX_CONFIG_SITE_MODULE_ENTRY@ // generated via CMake',
+          f'textual header "{custom_header_prefix}/__config_site"')
+      s.write(_STRIP.sub('', mm_content))
+      s.write('\n')
+
+    for header in headers:
+      header.path = pathlib.Path(os.path.relpath(header.path, out.parent))
+    # Sort by path for determinism.
+    headers.sort()
+
+    for header in headers:
+      if header.private and header.textual:
+        # Private textual headers are semantically equivalent of not being in
+        # the modulemap, so we can just ignore them.
+        continue
+      private = 'private ' if header.private else ''
+      textual = 'textual ' if header.textual else ''
+      # The module name of submodules is arbitrary and doesn't matter.
+      # Only the root module's name matters.
+      if header.path.name in modules:
+        modules[header.path.name] += 1
+        # We've already seen a file with the same name, so rename the module
+        # name to avoid naming conflicts.
+        module_name = f'{header.path.name}_{modules[header.path.name]}'
+      else:
+        modules[header.path.name] = 1
+        module_name = header.path.name
+      s.write(f'module "{module_name}" {{\n')
+      s.write(f'  {private}{textual}header "{header.path}"\n')
+      s.write('  export *\n')
+      s.write('}\n')
+
+    s.write('}\n')
+    return s.getvalue()
+
+
+def main(args):
+  """Executes the modulemap generation pipeline."""
+  clang_cpu = _CPU_ARG[args.cpu]
+  if args.os == 'android':
+    # The real triple is x86_64-linux-android29, for example, but it appears
+    # to work fine without the version number, and this way we don't have to
+    # keep updating it.
+    target = f'{clang_cpu}-linux-android'
+  elif args.os == 'fuchsia':
+    target = f'{clang_cpu}-unknown-fuchsia'
+  elif args.os == "mac":
+    target = f'{clang_cpu}-apple-macos'
+  elif args.os == "ios":
+    target = f'{clang_cpu}-apple-ios'
+  else:
+    target = f'{clang_cpu}-unknown-{args.os}-gnu'
+  deps = calculate_transitive_headers(
+      clang_args=[
+          str(args.clang),
+          # Some files are only read with optimization flags enabled.
+          '-O2',
+          '-D_FORTIFY_SOURCE=3',
+          # Target architecture is required for preprocessor to define built-in
+          # target-specific macros (e.g., __x86_64__).
+          f'--target={target}',
+          f'--sysroot={args.sysroot}',
+          # Ensure we're using the right libc++
+          '-nostdinc++',
+          '-I../../third_party/libc++/src/include',
+          '-I../../third_party/libc++abi/src/include',
+          '-I../../buildtools/third_party/libc++',
+          # Libc++ feature/hardening macros required by libc++ headers.
+          '-D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_EXTENSIVE',
+          '-D_LIBCPP_BUILDING_LIBRARY',
+          '-std=c++23',
+          # Ensures that paths to compiler builtin headers are kept relative
+          # rather than being resolved to absolute/canonical symlinked paths.
+          '-no-canonical-prefixes',
+      ],
+      include_dirs=[parse_modulemap(mm) for mm in args.modulemap],
+      sysroot=args.sysroot,
+      extra_public_headers=_HEADERS,
+      target_os=args.os,
+      target_cpu=args.cpu,
+      debug=args.debug,
+  )
+
+  out_str = combine_modulemaps(out=args.output,
+                               modulemaps=args.modulemap,
+                               headers=deps,
+                               module_name=args.module_name)
+  args.output.write_text(out_str)
+
+
+if __name__ == '__main__':
+  parser = argparse.ArgumentParser(
+      description='Generate a system modulemap using clang to discover deps')
+  parser.add_argument('--clang',
+                      type=pathlib.Path,
+                      required=True,
+                      help='Path to the Clang compiler binary.')
+  parser.add_argument('--sysroot',
+                      type=pathlib.Path,
+                      required=True,
+                      help='Path to the sysroot directory.')
+  parser.add_argument('--output',
+                      type=pathlib.Path,
+                      required=True,
+                      help='Path where the merged modulemap will be written.')
+  parser.add_argument('--module-name', required=True, help='Name of the module')
+  parser.add_argument(
+      '--modulemap',
+      action='append',
+      type=pathlib.Path,
+      required=True,
+      help='Path to a modulemap to merge. Can be specified multiple times.')
+  parser.add_argument('--os', required=True, help="GN's $target_os variable")
+  parser.add_argument('--cpu', required=True, help="GN's $target_cpu variable")
+  parser.add_argument(
+      '--debug',
+      action='store_true',
+      help=(
+          f'Instead of compiling, generate a bash script {str(_DEBUG_SCRIPT)} '
+          'that attempts to compile'))
+  main(parser.parse_args())
