@@ -3,6 +3,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <algorithm>
 #include <cstdlib>
 #include <iostream>
 #include <limits>
@@ -71,6 +72,7 @@
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_builder.h"
+#include "third_party/boringssl/src/include/openssl/ssl.h"
 #include "url/gurl.h"
 #include "url/scheme_host_port.h"
 #include "url/url_util.h"
@@ -252,6 +254,12 @@ std::unique_ptr<URLRequestContext> BuildURLRequestContext(
     struct NoPostQuantum : public SSLConfigService {
       SSLContextConfig GetSSLContextConfig() override {
         SSLContextConfig config;
+        std::erase_if(
+            config.supported_named_groups, [](const SSLNamedGroupInfo& g) {
+              return g.group_id == SSL_GROUP_X25519_MLKEM768 ||
+                     g.group_id == SSL_GROUP_X25519_KYBER768_DRAFT00 ||
+                     g.group_id == SSL_GROUP_MLKEM1024;
+            });
         return config;
       }
 
