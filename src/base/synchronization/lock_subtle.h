@@ -68,7 +68,6 @@ static inline void YieldProcessor() {
   // See also https://sourceware.org/pipermail/libc-alpha/2024-June/157737.html
   __asm__ __volatile__(".insn i 0x0f, 0, x0, x0, 0x010");
 #else
-#error "Unsupported architecture for YieldProcessor()"
 #endif  // ARCH
 }
 
