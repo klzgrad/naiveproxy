@@ -20,7 +20,7 @@ chromepid=$!
 
 sleep 10
 kill $chromepid
-rm -rf "$tempir"
+rm -rf "$tempdir"
 
 wait $tsharkpid
 sudo chmod +r /tmp/direct.pcapng
