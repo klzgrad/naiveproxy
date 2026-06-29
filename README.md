@@ -59,7 +59,27 @@ Example Caddyfile (replace `user` and `pass` accordingly):
   }
 }
 ```
-`:443` must appear first for this Caddyfile to work. See Caddyfile [docs](https://caddyserver.com/docs/caddyfile/directives/tls) for customizing TLS certificates. For more advanced usage consider using [JSON for Caddy 2's config](https://caddyserver.com/docs/json/).
+`:443` must appear first for this Caddyfile to work.
+
+> **Warning: do not use `example.com:443` (a hostname) as the site address.**
+>
+> When a hostname (e.g. `example.com:443` or `example.com`) is used as the site
+> address, Caddy inserts an implicit **host matcher** that only accepts requests
+> whose `Host` header / TLS SNI matches that hostname. However, when a client
+> uses NaiveProxy as a forward proxy, the HTTP `CONNECT` request it sends carries
+> the **target site's** hostname (e.g. `www.google.com:443`), not your proxy
+> server's hostname. The host matcher then rejects the `CONNECT` request before
+> it ever reaches `forward_proxy`, so the client receives `200 OK` with
+> `Content-Length: 0` (or the connection is closed immediately) and no traffic
+> flows. The naive client logs `negotiated padding type: None` (see #639).
+>
+> Using `:443` (no hostname) removes the host matcher, so all `CONNECT` requests
+> reach `forward_proxy` and are authenticated/handled correctly. If you need
+> multiple hostnames on the same port, put `:443` first and use separate
+> `forward_proxy` blocks (the host matcher approach does not work with
+> `forward_proxy`, see #639, #809).
+
+See Caddyfile [docs](https://caddyserver.com/docs/caddyfile/directives/tls) for customizing TLS certificates. For more advanced usage consider using [JSON for Caddy 2's config](https://caddyserver.com/docs/json/).
 
 Run with the Caddyfile:
 ```
