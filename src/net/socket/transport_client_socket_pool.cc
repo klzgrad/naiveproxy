@@ -1599,6 +1599,9 @@ void TransportClientSocketPool::Group::OnNeedsProxyAuth(
 
 void TransportClientSocketPool::Group::StartBackupJobTimer(
     const GroupId& group_id) {
+  // Preamble is not an actual request for new socket.
+  if (group_id.destination().host() == "preamble")
+    return;
   // Only allow one timer to run at a time.
   if (BackupJobTimerIsRunning())
     return;
