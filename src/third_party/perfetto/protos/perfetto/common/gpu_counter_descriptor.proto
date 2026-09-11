@@ -1,0 +1,196 @@
+/*
+ * Copyright (C) 2019 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+package perfetto.protos;
+
+// Description of GPU counters.
+// This message is sent by a GPU counter producer to specify the counters
+// available in the hardware.
+message GpuCounterDescriptor {
+  // Logical groups for a counter.  This is used in the UI to present the
+  // related counters together.
+  enum GpuCounterGroup {
+    UNCLASSIFIED = 0;
+    SYSTEM = 1;
+    VERTICES = 2;
+    FRAGMENTS = 3;
+    PRIMITIVES = 4;
+    // Includes counters relating to caching and bandwidth.
+    MEMORY = 5;
+    COMPUTE = 6;
+    RAY_TRACING = 7;
+  }
+
+  message GpuCounterSpec {
+    optional uint32 counter_id = 1;
+    optional string name = 2;
+    optional string description = 3;
+    // MeasureUnit unit (deprecated)
+    reserved 4;
+    oneof peak_value {
+      int64 int_peak_value = 5;
+      double double_peak_value = 6;
+    }
+    repeated MeasureUnit numerator_units = 7;
+    repeated MeasureUnit denominator_units = 8;
+    optional bool select_by_default = 9;
+    repeated GpuCounterGroup groups = 10;
+
+    // Direction of the time interval that each emitted sample applies to.
+    // A GPU counter is sampled at discrete timestamps, but its value really
+    // represents a measurement over some interval around that timestamp
+    // (e.g. average GPU utilization over the sampling window). This field
+    // tells trace processor on which side of the timestamp that interval
+    // lies, which controls where the value is drawn in the UI.
+    //
+    // Example: samples at t=10, 20, 30 with values 5, 7, 0.
+    //   BACKWARDS_LOOKING: 5 covers (-inf, 10], 7 covers (10, 20], 0 covers
+    //     (20, 30]; the UI draws 7 between t=10 and t=20.
+    //   FORWARDS_LOOKING:  5 covers [10, 20), 7 covers [20, 30), 0 covers
+    //     [30, +inf); the UI draws 5 between t=10 and t=20.
+    enum ValueDirection {
+      // Treated as BACKWARDS_LOOKING (the historical default).
+      VALUE_DIRECTION_UNSPECIFIED = 0;
+      // The value applies to the interval ending at this event's timestamp.
+      // This is the convention used by AGI and most existing GPU producers,
+      // where a sample reports what happened during the window leading up
+      // to the timestamp.
+      VALUE_DIRECTION_BACKWARDS_LOOKING = 1;
+      // The value applies to the interval starting at this event's
+      // timestamp, matching standard Perfetto counters. Producers that emit
+      // explicit zero samples to denote "no activity from here on" should
+      // use this so the zero is not back-propagated over earlier non-zero
+      // samples (https://github.com/google/perfetto/issues/5683).
+      VALUE_DIRECTION_FORWARDS_LOOKING = 2;
+    }
+    optional ValueDirection value_direction = 11;
+  }
+  repeated GpuCounterSpec specs = 1;
+
+  // Allow producer to group counters into block to represent counter islands.
+  // A capacity may be specified to indicate the number of counters that can be
+  // enable simultaneously in that block.
+  message GpuCounterBlock {
+    // required. Unique ID for the counter group.
+    optional uint32 block_id = 1;
+    // optional. Number of counters supported by the block. No limit if unset.
+    optional uint32 block_capacity = 2;
+    // optional. Name of block.
+    optional string name = 3;
+    // optional. Description for the block.
+    optional string description = 4;
+    // list of counters that are part of the block.
+    repeated uint32 counter_ids = 5;
+  }
+  repeated GpuCounterBlock blocks = 2;
+
+  // Allow producer to define custom counter groups. Unlike the fixed
+  // GpuCounterGroup enum (which provides broad categories), these groups
+  // let the producer define hardware-specific groupings that the UI uses
+  // to organize counter tracks. Can also be used to provide display names
+  // and descriptions for the fixed GpuCounterGroup enum values by setting
+  // group_id to the enum value.
+  message GpuCounterGroupSpec {
+    // required. Unique ID for this group within the descriptor.
+    optional uint32 group_id = 1;
+    // optional. Display name for the group.
+    optional string name = 2;
+    // optional. Description of the group.
+    optional string description = 3;
+    // Counters that belong directly to this group (by counter_id).
+    repeated uint32 counter_ids = 4;
+  }
+  repeated GpuCounterGroupSpec counter_groups = 6;
+
+  // optional.  Minimum sampling period supported by the producer in
+  // nanoseconds.
+  optional uint64 min_sampling_period_ns = 3;
+
+  // optional.  Maximum sampling period supported by the producer in
+  // nanoseconds.
+  optional uint64 max_sampling_period_ns = 4;
+
+  // optional.  The producer supports counter sampling by instrumenting the
+  // command buffer.
+  optional bool supports_instrumented_sampling = 5;
+
+  // optional.  The producer supports selecting counters by name via
+  // GpuCounterConfig.counter_names. Not all producers support this; Android
+  // GPU producers typically do not.
+  optional bool supports_counter_names = 7;
+
+  // optional.  The producer supports glob patterns in
+  // GpuCounterConfig.counter_names for matching multiple counters by name.
+  optional bool supports_counter_name_globs = 8;
+
+  // next id: 41
+  enum MeasureUnit {
+    NONE = 0;
+
+    BIT = 1;
+    KILOBIT = 2;
+    MEGABIT = 3;
+    GIGABIT = 4;
+    TERABIT = 5;
+    PETABIT = 6;
+
+    BYTE = 7;
+    KILOBYTE = 8;
+    MEGABYTE = 9;
+    GIGABYTE = 10;
+    TERABYTE = 11;
+    PETABYTE = 12;
+
+    HERTZ = 13;
+    KILOHERTZ = 14;
+    MEGAHERTZ = 15;
+    GIGAHERTZ = 16;
+    TERAHERTZ = 17;
+    PETAHERTZ = 18;
+
+    NANOSECOND = 19;
+    MICROSECOND = 20;
+    MILLISECOND = 21;
+    SECOND = 22;
+    MINUTE = 23;
+    HOUR = 24;
+
+    VERTEX = 25;
+    PIXEL = 26;
+    TRIANGLE = 27;
+    PRIMITIVE = 38;
+    FRAGMENT = 39;
+
+    MILLIWATT = 28;
+    WATT = 29;
+    KILOWATT = 30;
+
+    JOULE = 31;
+    VOLT = 32;
+    AMPERE = 33;
+
+    CELSIUS = 34;
+    FAHRENHEIT = 35;
+    KELVIN = 36;
+
+    // Values should be out of 100.
+    PERCENT = 37;
+
+    INSTRUCTION = 40;
+  }
+}

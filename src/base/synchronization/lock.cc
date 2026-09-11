@@ -1,0 +1,183 @@
+// Copyright 2011 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// This file is used for debugging assertion support.  The Lock class
+// is functionally a wrapper around the LockImpl class, so the only
+// real intelligence in the class is in the debugging logic.
+
+#include "base/synchronization/lock.h"
+
+#include <cstdint>
+
+#include "base/feature_list.h"
+#include "base/features.h"
+#include "base/synchronization/lock_metrics_recorder_tags.h"
+
+#if DCHECK_IS_ON()
+#include <array>
+
+#include "base/check_op.h"
+#include "base/synchronization/lock_subtle.h"
+#include "base/threading/platform_thread.h"
+#endif  // DCHECK_IS_ON()
+
+namespace base {
+namespace {
+
+constexpr LockMetricTag g_base_lock_tag("BaseLock");
+constexpr LockMetricTagList g_base_lock_tag_list{g_base_lock_tag};
+
+#if DCHECK_IS_ON()
+// List of locks held by a thread.
+//
+// As of May 2024, no more than 5 locks were held simultaneously by a thread in
+// a test browsing session or while running the CQ (% locks acquired in unit
+// tests "WaitSetTest.NoStarvation" and
+// "MessagePipeTest.DataPipeConsumerHandlePingPong"). An array of size 10 is
+// therefore considered sufficient to track all locks held by a thread. A
+// dynamic-size array (e.g. owned by a `ThreadLocalOwnedPointer`) would require
+// handling reentrancy issues with allocator shims that use `base::Lock`.
+constexpr size_t kHeldLocksCapacity = 10;
+thread_local std::array<uintptr_t, kHeldLocksCapacity>
+    g_tracked_locks_held_by_thread;
+
+// Number of non-nullptr elements in `g_tracked_locks_held_by_thread`.
+thread_local size_t g_num_tracked_locks_held_by_thread = 0;
+#endif  // DCHECK_IS_ON()
+
+#if BUILDFLAG(IS_POSIX)
+int GetBaseLockSpinCount() {
+#if defined(ARCH_CPU_X86_FAMILY)
+  return base::features::kSpinCountX86.Get();
+#elif defined(ARCH_CPU_ARM_FAMILY)
+  return base::features::kSpinCountArm.Get();
+#else
+  return 0;
+#endif  // defined(ARCH_CPU_X86_FAMILY)
+}
+#endif  // BUILDFLAG(IS_POSIX)
+
+}  // namespace
+
+// static
+const LockMetricTag& Lock::GetBaseLockMetricTag() {
+  return g_base_lock_tag;
+}
+
+// static
+const LockMetricTagList& Lock::GetBaseLockMetricTagList() {
+  return g_base_lock_tag_list;
+}
+
+#if DCHECK_IS_ON()
+Lock::~Lock() {
+  DCHECK(owning_thread_ref_.is_null());
+}
+
+void Lock::Acquire(subtle::LockTracking tracking) {
+  Acquire(GetBaseLockMetricTagList(), tracking);
+}
+
+void Lock::Acquire(const LockMetricTagList& tags,
+                   subtle::LockTracking tracking) {
+  lock_.Lock(tags);
+  if (tracking == subtle::LockTracking::kEnabled) {
+    AddToLocksHeldOnCurrentThread();
+  }
+  CheckUnheldAndMark();
+}
+
+void Lock::Release() {
+  CheckHeldAndUnmark();
+  if (in_tracked_locks_held_by_current_thread_) {
+    RemoveFromLocksHeldOnCurrentThread();
+  }
+  lock_.Unlock();
+}
+
+bool Lock::Try(subtle::LockTracking tracking) {
+  const bool rv = lock_.Try();
+  if (rv) {
+    if (tracking == subtle::LockTracking::kEnabled) {
+      AddToLocksHeldOnCurrentThread();
+    }
+    CheckUnheldAndMark();
+  }
+  return rv;
+}
+
+void Lock::AssertAcquired() const {
+  DCHECK_EQ(owning_thread_ref_, PlatformThread::CurrentRef());
+}
+
+void Lock::AssertNotHeld() const {
+  DCHECK(owning_thread_ref_.is_null());
+}
+
+void Lock::CheckHeldAndUnmark() {
+  DCHECK_EQ(owning_thread_ref_, PlatformThread::CurrentRef());
+  owning_thread_ref_ = PlatformThreadRef();
+}
+
+void Lock::CheckUnheldAndMark() {
+  DCHECK(owning_thread_ref_.is_null());
+  owning_thread_ref_ = PlatformThread::CurrentRef();
+}
+
+void Lock::AddToLocksHeldOnCurrentThread() {
+  CHECK(!in_tracked_locks_held_by_current_thread_);
+
+  // Check if capacity is exceeded.
+  CHECK_LT(g_num_tracked_locks_held_by_thread, kHeldLocksCapacity)
+      << "This thread holds more than " << kHeldLocksCapacity
+      << " tracked locks simultaneously. Reach out to //base OWNERS to "
+         "determine whether `kHeldLocksCapacity` should be increased.";
+
+  // Add to the list of held locks.
+  g_tracked_locks_held_by_thread[g_num_tracked_locks_held_by_thread] =
+      reinterpret_cast<uintptr_t>(this);
+  ++g_num_tracked_locks_held_by_thread;
+  in_tracked_locks_held_by_current_thread_ = true;
+}
+
+void Lock::RemoveFromLocksHeldOnCurrentThread() {
+  CHECK(in_tracked_locks_held_by_current_thread_);
+  for (size_t i = 0; i < g_num_tracked_locks_held_by_thread; ++i) {
+    // Traverse from the end since locks are typically acquired and released in
+    // opposite order.
+    const size_t index = g_num_tracked_locks_held_by_thread - i - 1;
+    if (g_tracked_locks_held_by_thread[index] ==
+        reinterpret_cast<uintptr_t>(this)) {
+      g_tracked_locks_held_by_thread[index] =
+          g_tracked_locks_held_by_thread[g_num_tracked_locks_held_by_thread -
+                                         1];
+      g_tracked_locks_held_by_thread[g_num_tracked_locks_held_by_thread - 1] =
+          reinterpret_cast<uintptr_t>(nullptr);
+      --g_num_tracked_locks_held_by_thread;
+      break;
+    }
+  }
+  in_tracked_locks_held_by_current_thread_ = false;
+}
+
+namespace subtle {
+
+span<const uintptr_t> GetTrackedLocksHeldByCurrentThread() {
+  return span(g_tracked_locks_held_by_thread)
+      .first(g_num_tracked_locks_held_by_thread);
+}
+
+}  // namespace subtle
+#endif  // DCHECK_IS_ON()
+
+#if BUILDFLAG(IS_POSIX)
+// static
+void Lock::InitializeFeatures() {
+  if (FeatureList::IsEnabled(base::features::kBaseLockTrySpin)) {
+    base::internal::LockImpl::SetTrySpinCount(GetBaseLockSpinCount());
+  }
+}
+#endif  // BUILDFLAG(IS_POSIX)
+
+}  // namespace base

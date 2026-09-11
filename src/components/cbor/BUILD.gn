@@ -1,0 +1,74 @@
+# Copyright 2017 The Chromium Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/buildflag_header.gni")
+import("//build/config/cronet/config.gni")
+import("//testing/libfuzzer/fuzzer_test.gni")
+
+buildflag_header("buildflags") {
+  header = "cbor_buildflags.h"
+
+  # TODO(crbug.com/535682335): Remove `USE_CBOR_RUST` buildflag entirely,
+  # unconditionally enable Rust CBOR parser, and drop `is_cronet_build` check
+  # once Cronet supports Crubit dependencies.
+  flags = [ "USE_CBOR_RUST=!$is_cronet_build" ]
+}
+
+component("cbor") {
+  sources = [
+    "constants.h",
+    "diagnostic_writer.cc",
+    "diagnostic_writer.h",
+    "reader.cc",
+    "reader.h",
+    "values.cc",
+    "values.h",
+    "writer.cc",
+    "writer.h",
+  ]
+
+  defines = [ "CBOR_IMPLEMENTATION" ]
+
+  deps = [
+    ":buildflags",
+    "//base",
+  ]
+
+  if (!is_cronet_build) {
+    public_deps = [
+      "//build/rust/crubit",
+      "//components/cbor/rust:cbor_rust_bindings",
+    ]
+  }
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "diagnostic_writer_unittest.cc",
+    "fuzz_unittest.cc",
+    "reader_unittest.cc",
+    "values_unittest.cc",
+    "writer_unittest.cc",
+  ]
+
+  deps = [
+    ":buildflags",
+    ":cbor",
+    "//base",
+    "//base/test:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//third_party/fuzztest",
+  ]
+  if (!is_cronet_build) {
+    deps += [ "//components/cbor/rust:cbor_rust_unittests" ]
+  }
+
+  data = [ "reader_fuzzer_corpus/" ]
+
+  # TODO(crbug.com/40031409): Fix code that adds exit-time destructors and
+  # enable the diagnostic by removing this line.
+  configs += [ "//build/config/compiler:no_exit_time_destructors" ]
+}

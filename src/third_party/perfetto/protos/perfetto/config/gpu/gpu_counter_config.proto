@@ -1,0 +1,133 @@
+/*
+ * Copyright (C) 2019 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+package perfetto.protos;
+
+message GpuCounterConfig {
+  // Desired sampling interval for counters.
+  optional uint64 counter_period_ns = 1;
+
+  // Selects which counters to sample. Use either counter_ids or counter_names,
+  // not both. Counter IDs and names correspond to the ones described in
+  // GpuCounterSpec in the data source descriptor.
+
+  // List of counter IDs to be sampled.
+  repeated uint32 counter_ids = 2;
+
+  // List of counter names to be sampled. Requires producer support; check
+  // GpuCounterDescriptor.supports_counter_names in the data source descriptor.
+  // Glob patterns may be used to match multiple counters by name; check
+  // GpuCounterDescriptor.supports_counter_name_globs for support.
+  repeated string counter_names = 6;
+
+  // Configuration for sampling counters by instrumenting command buffers.
+  //
+  // When instrumented_sampling_config is used (instead of the
+  // instrumented_sampling bool), the following steps determine whether
+  // instrumented counters are enabled for a given GPU activity:
+  //
+  // 1. Activity name filtering: If activity_name_filters is non-empty, the
+  //    activity must match at least one filter. If empty, all activities
+  //    pass this step.
+  // 2. TX range filtering: If activity_tx_include_globs is non-empty, the
+  //    activity must fall within a matching TX range. Activities in TX
+  //    ranges matching activity_tx_exclude_globs are excluded (excludes
+  //    take precedence over includes). If both are empty, all activities
+  //    pass this step.
+  // 3. Range-based sampling: If activity_ranges is non-empty, only
+  //    activities within the specified skip/count ranges are instrumented.
+  //    If empty, all activities that passed the previous steps are
+  //    instrumented.
+  message InstrumentedSamplingConfig {
+    // Filters GPU activities by name. Each filter specifies a glob pattern
+    // and the basis for matching (mangled or demangled kernel name).
+    message ActivityNameFilter {
+      enum NameBase {
+        // Match against the mangled (compiler-encoded) kernel name.
+        // Example: for a kernel whose demangled name is
+        // "matmul(float*,int,int)", the mangled name might be
+        // "_Z6matmulPfii". The glob pattern is matched against this
+        // mangled form.
+        MANGLED_KERNEL_NAME = 0;
+
+        // Match against the fully demangled kernel name, including
+        // parameters, templates, and qualifiers.
+        // Example: "matmul(float*,int,int)". The glob pattern is
+        // matched against this full demangled form.
+        DEMANGLED_KERNEL_NAME = 1;
+
+        // Match against only the function name portion of the
+        // demangled kernel name, without parameters, templates,
+        // return types, or namespaces.
+        // Example: "matmul". The glob pattern is matched against
+        // just the bare function name.
+        FUNCTION_NAME = 2;
+      }
+
+      // required. Glob pattern to use for GPU activity name filtering.
+      optional string name_glob = 1;
+
+      // Basis for name filtering. Defaults to MANGLED_KERNEL_NAME if not
+      // specified.
+      optional NameBase name_base = 2;
+    }
+
+    // GPU activity name filters. An activity matches if it matches any filter.
+    repeated ActivityNameFilter activity_name_filters = 3;
+
+    // Glob patterns to use for including GPU activities in TX ranges. TX
+    // ranges are in-process annotations that mark different sections of GPU
+    // work (e.g. NVTX ranges for CUDA). TX ranges can be nested, and an
+    // activity is included if any range in its nesting hierarchy matches.
+    // Only activities that fall within a matching TX range will be
+    // instrumented.
+    repeated string activity_tx_include_globs = 6;
+
+    // Glob patterns to use for excluding GPU activities from TX ranges.
+    // TX ranges can be nested, and an activity is excluded if any range
+    // in its nesting hierarchy matches. Excludes take precedence over
+    // includes.
+    repeated string activity_tx_exclude_globs = 7;
+
+    // Defines a range of GPU activities to instrument.
+    message ActivityRange {
+      // Number of GPU activities to skip before starting to instrument
+      // command buffers. Defaults to 0 if not specified.
+      optional uint32 skip = 1;
+
+      // Limit for the number of GPU activities to sample counters for by
+      // instrumenting command buffers. Defaults to UINT32_MAX (all
+      // remaining activities) if not specified.
+      optional uint32 count = 2;
+    }
+
+    // Ranges of GPU activities to instrument. Applied after activity name
+    // and TX range filters. If empty, all activities that passed the
+    // previous filters are instrumented.
+    repeated ActivityRange activity_ranges = 5;
+  }
+
+  // Sample counters by instrumenting command buffers.
+  oneof instrumented_sampling_mode {
+    bool instrumented_sampling = 3;
+    InstrumentedSamplingConfig instrumented_sampling_config = 5;
+  }
+
+  // Fix gpu clock rate during trace session.
+  optional bool fix_gpu_clock = 4;
+}

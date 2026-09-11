@@ -1,0 +1,53 @@
+#!special-case-list-v2
+
+# This ignore list is the set of suppressions that's needed in is_ubsan_security
+# builds. It has a lot in common with ignorelist.txt, but is_ubsan_security also
+# builds with -fsanitize=function, which is_ubsan does not enable. See
+# https://crbug.com/40942951.
+#
+# is_ubsan_security builds also use vptr_ignorelist.txt. This file does not
+# duplicate the contents of that file.
+
+#############################################################################
+# UBSan security ignorelist.
+
+#############################################################################
+# V8 gives too many false positives. Ignore them for now.
+[undefined]
+src:*/v8/*
+
+#############################################################################
+# V8 UBSan suppressions, commented out for now since we are ignoring v8
+# completely.
+
+# Bug v8:8735: PropertyCallbackInfo<void> vs PropertyCallbackInfo<T>.
+# [function]
+# fun:*v8*internal*PropertyCallbackArguments*CallAccessorSetter*
+# fun:*v8*internal*PropertyCallbackArguments*BasicCallNamedGetterCallback*
+# fun:*v8*internal*InvokeAccessorGetterCallback*
+
+# Bug v8:8735: WeakCallbackInfo<void> vs. WeakCallbackInfo<T>.
+# [function]
+# fun:*v8*internal*GlobalHandles*PendingPhantomCallback*Invoke*
+# fun:*v8*internal*GlobalHandles*Node*PostGarbageCollectionProcessing*
+
+#############################################################################
+# Generic cleanup function pointer of wrong type.
+[function]
+fun:sqlite3ParseObjectReset
+
+#############################################################################
+# Function pointer of wrong type.
+[function]
+# Vulkan in ANGLE indirects through function pointers implemented elsewhere, but
+# -fsanitize=function does not seem to read the separate definitions of Vulkan
+# types as the same.
+src:*/third_party/angle/src/libANGLE/renderer/vulkan/*
+src:*/third_party/swiftshader/src/Vulkan/*
+src:*/third_party/vulkan_memory_allocator/include/vk_mem_alloc.h
+fun:vmaFindMemoryTypeIndexForBufferInfo
+fun:*rx*vk*GarbageObject*destroy*
+
+#############################################################################
+# -fsanitize=vptr suppressions should go in vptr_ignorelist.txt, not here.
+#############################################################################

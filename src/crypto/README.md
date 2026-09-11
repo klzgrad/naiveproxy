@@ -1,0 +1,69 @@
+# //crypto README
+
+This directory contains implementations of crypto primitives for use in
+Chromium. Most of these are either:
+
+* Wrappers around platform-specific APIs (DPAPI, libsecret, etc), so that code
+  elsewhere in Chromium can use cross-platform abstractions, or
+* Wrappers around BoringSSL APIs that use Chromium-native types like base::span
+  and similar
+
+There is very little actual cryptographic code in //crypto - it is mostly
+wrappers.
+
+This directory is actively being refactored as of 2025-06. See
+[PLAN.md](PLAN.md).
+
+## Commonly-Used Interfaces
+
+* AEAD: [crypto/aead](aead.h)
+* Hashing: [crypto/hash](hash.h)
+* HMACs: [crypto/hmac](hmac.h)
+* Key derivation: [crypto/kdf](kdf.h)
+* Public / private keys: [crypto/keypair](keypair.h)
+* Randomness: [crypto/random](random.h)
+* Signatures: [crypto/sign](sign.h)
+
+Many interfaces in this directory are deprecated and being changed or removed;
+check the comment at the top of the header file before using them.
+
+## Recommended Primitives & Constructions
+
+If you are designing a new protocol in Chromium using cryptography, these are
+our recommended primitives and constructions to use. They balance performance
+with security, are "post-quantum", and have reasonably well-understood margins
+of safety.
+
+* If you need to encrypt to a public key, use HPKE with ML-KEM-768,
+  HKDF-SHA256, and AES-128-GCM via crypto/hpke.
+* If you need to encrypt to a symmetric key, use AES-128-GCM via crypto/aead.
+* If you need to sign with a private key, use ML-DSA-44 via crypto/sign.
+* If you need to sign with a symmetric key, use HMAC-SHA256 via crypto/hmac.
+* If you need to hash, use SHA256 via crypto/hash.
+* If you need to do key exchange, use ML-KEM-768, which does not yet have a
+  //crypto API. TODO(https://crbug.com/549892109): add one.
+
+## Advice For Clients
+
+* Ciphertext, keys, certificates, and other cryptographic material are generally
+  sequences of bytes, not characters, so prefer using byte-oriented types to
+  represent them: `vector<uint8_t>`, `array<uint8_t>`, and `span<uint8_t>`
+  rather than `string` and `string_view`.
+* To serialize private keys, use `keypair::PrivateKey::ToPrivateKeyInfo()`,
+  which returns a [PKCS#8][pkcs8] PrivateKeyInfo structure serialized as a
+  byte vector. To unserialize keys in this format, use
+  `keypair::PrivateKey::FromPrivateKeyInfo()`.
+* To serialize public keys, use `keypair::PublicKey::ToSubjectPublicKeyInfo()`
+  or `keypair::PrivateKey::ToSubjectPublicKeyInfo()`, which return a
+  [X.509][x509] SubjectPublicKeyInfo structure serialized as a byte vector. To
+  unserialize public keys in this format, use
+  `keypair::PublicKey::FromSubjectPublicKeyInfo()`.
+* SubjectPublicKeyInfo and PrivateKeyInfo can represent many kinds of keys, so
+  code that expects a specific kind of key must check the kind after
+  deserialization.
+* To serialize symmetric keys (AEAD, HMAC, or symmetric encryption keys), use a
+  raw sequence of bytes for the key material. Represent these keys in memory
+  using `vector<uint8_t>`, `array<uint8_t>`, or `span<uint8_t>` directly.
+
+[pkcs8]: https://datatracker.ietf.org/doc/html/rfc5208
+[x509]: https://datatracker.ietf.org/doc/html/rfc5280

@@ -1,0 +1,91 @@
+# Copyright (C) 2022 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../gn/perfetto.gni")
+
+# Makes the public ABI headers annotate symbols for shared library usage
+# (dllimport on Windows) in consumers of libperfetto_c. See
+# include/perfetto/public/abi/export.h.
+config("shlib_config") {
+  defines = [ "PERFETTO_SDK_SHLIB" ]
+}
+
+# Makes the public ABI headers annotate symbols for export from the shared
+# library, in the targets that implement it. Empty in the amalgamated SDK,
+# where the consumer chooses between static and shared linking when compiling
+# the generated sources. See include/perfetto/public/abi/export.h.
+config("shlib_impl_config") {
+  if (!perfetto_amalgamated_sdk) {
+    defines = [ "PERFETTO_SDK_SHLIB_IMPLEMENTATION" ]
+  }
+}
+
+source_set("for_testing") {
+  configs += [ ":shlib_impl_config" ]
+  deps = [
+    "../../gn:default_deps",
+    "../../include/perfetto/public",
+  ]
+  sources = [ "reset_for_testing.h" ]
+}
+
+source_set("shared_lib") {
+  configs += [ ":shlib_impl_config" ]
+  deps = [
+    ":for_testing",
+    "../../gn:default_deps",
+    "../../include/perfetto/protozero",
+    "../../include/perfetto/public",
+    "../base",
+    "../tracing:client_api",
+    "track_event",
+  ]
+  sources = [
+    "data_source.cc",
+    "heap_buffer.cc",
+    "pb_decoder.cc",
+    "producer.cc",
+    "stream_writer.cc",
+    "stream_writer.h",
+    "thread_utils.cc",
+    "tracing_session.cc",
+  ]
+
+  # Abseil is only used in Perfetto via:
+  # - the gRPC/libprotobuf
+  # - re2
+  if (!enable_perfetto_re2 &&
+      (perfetto_build_standalone || is_perfetto_build_generator)) {
+    assert_no_deps = [ "../../buildtools:abseil_cpp" ]
+  }
+}
+
+shared_library("libperfetto_c") {
+  deps = [
+    ":shared_lib",
+    "../../gn:default_deps",
+  ]
+  public_configs = [ ":shlib_config" ]
+  public_deps = [ "../../include/perfetto/public" ]
+}
+
+# This is only used by the Bazel build (see //BUILD), where it gets mapped to a
+# cc_library exposing the C public headers without linking the implementation.
+# We skip it in other configurations because an empty static_library has no
+# .obj inputs, which makes lld-link fail on Windows ("no input files").
+if (is_perfetto_build_generator) {
+  static_library("libperfetto_c_headers") {
+    public_deps = [ "../../include/perfetto/public" ]
+  }
+}

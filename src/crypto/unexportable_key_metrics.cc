@@ -1,0 +1,399 @@
+// Copyright 2022 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "crypto/unexportable_key_metrics.h"
+
+#include <array>
+#include <memory>
+#include <optional>
+#include <string>
+
+#include "base/feature_list.h"
+#include "base/metrics/histogram_functions.h"
+#include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
+#include "base/timer/elapsed_timer.h"
+#include "crypto/keypair.h"
+#include "crypto/sign.h"
+#include "crypto/unexportable_key.h"
+
+namespace crypto {
+
+namespace {
+
+enum class KeyType {
+  kHardwareKey,
+  kVirtualizedKey,
+};
+
+const SignatureVerifier::SignatureAlgorithm kAllAlgorithms[] = {
+    SignatureVerifier::SignatureAlgorithm::ECDSA_SHA256,
+    SignatureVerifier::SignatureAlgorithm::RSA_PKCS1_SHA256,
+};
+
+constexpr char kTestKeyName[] = "ChromeMetricsTestKey";
+
+// Leaving HW empty will keep the existing metric as is today.
+std::string GetHistogramPrefixForKeyType(KeyType type) {
+  switch (type) {
+    case KeyType::kHardwareKey:
+      return "";
+    case KeyType::kVirtualizedKey:
+      return "Virtual.";
+  }
+}
+
+std::string GetHistogramSuffixForAlgo(internal::TPMSupport algo) {
+  switch (algo) {
+    case internal::TPMSupport::kECDSA:
+      return "ECDSA";
+    case internal::TPMSupport::kRSA:
+      return "RSA";
+    case internal::TPMSupport::kNone:
+      return "";
+  }
+  return "";
+}
+
+internal::TPMType GetSupportedTpm(internal::TPMSupport hw,
+                                  internal::TPMSupport virt) {
+  if (hw != internal::TPMSupport::kNone &&
+      virt != internal::TPMSupport::kNone) {
+    return internal::TPMType::kBoth;
+  }
+
+  if (hw != internal::TPMSupport::kNone) {
+    return internal::TPMType::kHW;
+  }
+
+  // This is not expected
+  if (virt != internal::TPMSupport::kNone) {
+    return internal::TPMType::kVirtual;
+  }
+
+  return internal::TPMType::kNone;
+}
+
+void ReportUmaLatency(TPMOperation operation,
+                      internal::TPMSupport algo,
+                      base::TimeDelta latency,
+                      KeyType type = KeyType::kHardwareKey) {
+  std::string histogram_name =
+      "Crypto.TPMDuration." + GetHistogramPrefixForKeyType(type) +
+      OperationToString(operation) + GetHistogramSuffixForAlgo(algo);
+  base::UmaHistogramMediumTimes(histogram_name, latency);
+}
+
+void ReportUmaOperationSuccess(TPMOperation operation,
+                               internal::TPMSupport algo,
+                               bool status,
+                               KeyType type = KeyType::kHardwareKey) {
+  std::string histogram_name =
+      "Crypto.TPMOperation." + GetHistogramPrefixForKeyType(type) +
+      OperationToString(operation) + GetHistogramSuffixForAlgo(algo);
+  base::UmaHistogramBoolean(histogram_name, status);
+}
+
+void ReportUmaTpmOperation(TPMOperation operation,
+                           internal::TPMSupport algo,
+                           base::TimeDelta latency,
+                           bool status,
+                           KeyType type = KeyType::kHardwareKey) {
+  ReportUmaOperationSuccess(operation, algo, status, type);
+  if (status && operation != TPMOperation::kMessageVerify) {
+    // Only report latency for successful operations
+    // No latency reported for verification that is done outside of TPM
+    ReportUmaLatency(operation, algo, latency, type);
+  }
+}
+
+constexpr sign::SignatureKind ToSignatureKind(
+    SignatureVerifier::SignatureAlgorithm alg) {
+  switch (alg) {
+    case SignatureVerifier::RSA_PKCS1_SHA1:
+      return sign::RSA_PKCS1_SHA1;
+    case SignatureVerifier::RSA_PKCS1_SHA256:
+      return sign::RSA_PKCS1_SHA256;
+    case SignatureVerifier::ECDSA_SHA256:
+      return sign::ECDSA_SHA256;
+    case SignatureVerifier::RSA_PSS_SHA256:
+      return sign::RSA_PSS_SHA256;
+  }
+
+  NOTREACHED();
+}
+
+bool VerifySignature(SignatureVerifier::SignatureAlgorithm alg,
+                     base::span<const uint8_t> spki,
+                     base::span<const uint8_t> data,
+                     base::span<const uint8_t> signature) {
+  std::optional<keypair::PublicKey> public_key =
+      keypair::PublicKey::FromSubjectPublicKeyInfo(spki);
+  return public_key.has_value() &&
+         sign::Verify(ToSignatureKind(alg), *public_key, data, signature);
+}
+
+internal::TPMSupport MeasureVirtualTpmOperations() {
+  internal::TPMSupport supported_virtual_algo = internal::TPMSupport::kNone;
+  std::unique_ptr<VirtualUnexportableKeyProvider> virtual_provider =
+      GetVirtualUnexportableKeyProvider_DO_NOT_USE_METRICS_ONLY();
+
+  if (!virtual_provider) {
+    return supported_virtual_algo;
+  }
+
+  auto algo = virtual_provider->SelectAlgorithm(kAllAlgorithms);
+  if (algo) {
+    switch (*algo) {
+      case SignatureVerifier::SignatureAlgorithm::ECDSA_SHA256:
+        supported_virtual_algo = internal::TPMSupport::kECDSA;
+        break;
+      case SignatureVerifier::SignatureAlgorithm::RSA_PKCS1_SHA256:
+        supported_virtual_algo = internal::TPMSupport::kRSA;
+        break;
+      case SignatureVerifier::SignatureAlgorithm::RSA_PKCS1_SHA1:
+      case SignatureVerifier::SignatureAlgorithm::RSA_PSS_SHA256:
+        // Not supported for this metric.
+        break;
+    }
+  }
+
+  // Report if virtual TPM is supported and best algo
+  base::UmaHistogramEnumeration("Crypto.VirtualKeySupport",
+                                supported_virtual_algo);
+
+  base::ElapsedTimer key_creation_timer;
+  std::unique_ptr<VirtualUnexportableSigningKey> current_key =
+      virtual_provider->GenerateSigningKey(kAllAlgorithms, kTestKeyName);
+  ReportUmaTpmOperation(TPMOperation::kNewKeyCreation, supported_virtual_algo,
+                        key_creation_timer.Elapsed(), current_key != nullptr,
+                        KeyType::kVirtualizedKey);
+  if (!current_key) {
+    // Report no support if keys cannot be created, Windows appears to always
+    // mark the keys as available in SelectAlgorithm.
+    return internal::TPMSupport::kNone;
+  }
+
+  base::ElapsedTimer open_key_timer;
+  std::string key_name = current_key->GetKeyName();
+  std::unique_ptr<VirtualUnexportableSigningKey> opened_key =
+      virtual_provider->FromKeyName(key_name);
+  // Re-using TPMOperation::kWrappedKeyCreation for restoring keys even though
+  // there are no wrapped keys involved.
+  ReportUmaTpmOperation(TPMOperation::kWrappedKeyCreation,
+                        supported_virtual_algo, open_key_timer.Elapsed(),
+                        opened_key != nullptr, KeyType::kVirtualizedKey);
+
+  const uint8_t msg[] = {1, 2, 3, 4};
+  base::ElapsedTimer message_signing_timer;
+  std::optional<std::vector<uint8_t>> signed_bytes = current_key->Sign(msg);
+  ReportUmaTpmOperation(TPMOperation::kMessageSigning, supported_virtual_algo,
+                        message_signing_timer.Elapsed(),
+                        signed_bytes.has_value(), KeyType::kVirtualizedKey);
+
+  if (signed_bytes.has_value()) {
+    ReportUmaOperationSuccess(
+        TPMOperation::kMessageVerify, supported_virtual_algo,
+        VerifySignature(current_key->Algorithm(),
+                        current_key->GetSubjectPublicKeyInfo(), msg,
+                        *signed_bytes),
+        KeyType::kVirtualizedKey);
+  }
+
+  current_key.get()->DeleteKey();
+  return supported_virtual_algo;
+}
+
+void MeasureTpmOperationsInternal(UnexportableKeyProvider::Config config) {
+  internal::TPMSupport supported_algo = internal::TPMSupport::kNone;
+  std::unique_ptr<UnexportableKeyProvider> provider =
+      GetUnexportableKeyProvider(std::move(config));
+  if (!provider) {
+    base::UmaHistogramEnumeration("Crypto.TPMSupportType", supported_algo);
+    return;
+  }
+
+  auto algo = provider->SelectAlgorithm(kAllAlgorithms);
+  if (algo) {
+    switch (*algo) {
+      case SignatureVerifier::SignatureAlgorithm::ECDSA_SHA256:
+        supported_algo = internal::TPMSupport::kECDSA;
+        break;
+      case SignatureVerifier::SignatureAlgorithm::RSA_PKCS1_SHA256:
+        supported_algo = internal::TPMSupport::kRSA;
+        break;
+      case SignatureVerifier::SignatureAlgorithm::RSA_PKCS1_SHA1:
+      case SignatureVerifier::SignatureAlgorithm::RSA_PSS_SHA256:
+        // Not supported for this metric.
+        break;
+    }
+  }
+
+  internal::TPMSupport supported_virtual_algo = MeasureVirtualTpmOperations();
+  base::UmaHistogramEnumeration(
+      "Crypto.TPMSupportType",
+      GetSupportedTpm(supported_algo, supported_virtual_algo));
+
+  // Report if TPM is supported and best algo
+  base::UmaHistogramEnumeration("Crypto.TPMSupport2", supported_algo);
+  if (supported_algo == internal::TPMSupport::kNone) {
+    return;
+  }
+
+  auto delete_key = [&provider](UnexportableSigningKey* key) {
+    if (StatefulUnexportableKeyProvider* stateful_provider =
+            provider->AsStatefulUnexportableKeyProvider()) {
+      stateful_provider->DeleteWrappedKeysSlowly({key->GetWrappedKey()});
+    }
+    delete key;
+  };
+
+  auto wrap_delete_key =
+      [delete_key]<typename KeyT>(std::unique_ptr<KeyT> key) {
+        return std::unique_ptr<KeyT, decltype(delete_key)>(
+            std::move(key).release(), delete_key);
+      };
+
+  base::ElapsedTimer key_creation_timer;
+  auto current_key =
+      wrap_delete_key(provider->GenerateSigningKeySlowly(kAllAlgorithms));
+  ReportUmaTpmOperation(TPMOperation::kNewKeyCreation, supported_algo,
+                        key_creation_timer.Elapsed(), current_key != nullptr);
+  if (!current_key) {
+    return;
+  }
+
+  base::ElapsedTimer wrapped_key_creation_timer;
+  auto wrapped_key = wrap_delete_key(
+      provider->FromWrappedSigningKeySlowly(current_key->GetWrappedKey()));
+  ReportUmaTpmOperation(TPMOperation::kWrappedKeyCreation, supported_algo,
+                        wrapped_key_creation_timer.Elapsed(),
+                        wrapped_key != nullptr);
+
+  base::ElapsedTimer attestation_key_creation_timer;
+  auto attestation_key =
+      wrap_delete_key(provider->GenerateAttestationKeySlowly(kAllAlgorithms));
+  ReportUmaTpmOperation(
+      TPMOperation::kNewAttestationKeyCreation, supported_algo,
+      attestation_key_creation_timer.Elapsed(), attestation_key != nullptr);
+
+  if (attestation_key) {
+    base::ElapsedTimer wrapped_attestation_key_creation_timer;
+    auto wrapped_attestation_key =
+        wrap_delete_key(provider->FromWrappedAttestationKeySlowly(
+            attestation_key->GetWrappedKey()));
+    ReportUmaTpmOperation(TPMOperation::kWrappedAttestationKeyCreation,
+                          supported_algo,
+                          wrapped_attestation_key_creation_timer.Elapsed(),
+                          wrapped_attestation_key != nullptr);
+
+    base::ElapsedTimer certification_timer;
+    std::optional<AttestationStatement> certification =
+        attestation_key->CertifySlowly(*current_key, {5, 6, 7, 8});
+    ReportUmaTpmOperation(TPMOperation::kKeyCertification, supported_algo,
+                          certification_timer.Elapsed(),
+                          certification.has_value());
+
+    // Multi-part TPM hashing sequences (TPM2_HashSequenceStart,
+    // TPM2_SequenceUpdate, TPM2_SequenceComplete) are used for payloads larger
+    // than 1024 bytes. Use a 2048-byte buffer to ensure the streaming TPM
+    // sequence path is benchmarked.
+    std::array<uint8_t, 2048> msg;
+    msg.fill(1);
+    base::ElapsedTimer attestation_signing_timer;
+    std::optional<std::vector<uint8_t>> signed_attestation_bytes =
+        attestation_key->SignSlowly(msg);
+    ReportUmaTpmOperation(TPMOperation::kRestrictedMessageSigning,
+                          supported_algo, attestation_signing_timer.Elapsed(),
+                          signed_attestation_bytes.has_value());
+    if (signed_attestation_bytes.has_value()) {
+      ReportUmaOperationSuccess(
+          TPMOperation::kRestrictedMessageVerify, supported_algo,
+          VerifySignature(attestation_key->Algorithm(),
+                          attestation_key->GetSubjectPublicKeyInfo(), msg,
+                          *signed_attestation_bytes));
+    }
+  }
+
+  const uint8_t msg[] = {1, 2, 3, 4};
+  base::ElapsedTimer message_signing_timer;
+  std::optional<std::vector<uint8_t>> signed_bytes =
+      current_key->SignSlowly(msg);
+  ReportUmaTpmOperation(TPMOperation::kMessageSigning, supported_algo,
+                        message_signing_timer.Elapsed(),
+                        signed_bytes.has_value());
+  if (!signed_bytes.has_value()) {
+    return;
+  }
+
+  ReportUmaOperationSuccess(
+      TPMOperation::kMessageVerify, supported_algo,
+      VerifySignature(current_key->Algorithm(),
+                      current_key->GetSubjectPublicKeyInfo(), msg,
+                      *signed_bytes));
+}
+
+}  // namespace
+
+namespace internal {
+
+void MeasureTpmOperationsInternalForTesting() {
+  MeasureTpmOperationsInternal(/*config=*/{});
+}
+
+}  // namespace internal
+
+std::string OperationToString(TPMOperation operation) {
+  switch (operation) {
+    case TPMOperation::kMessageSigning:
+      return "MessageSigning";
+    case TPMOperation::kMessageVerify:
+      return "MessageVerify";
+    case TPMOperation::kNewKeyCreation:
+      return "NewKeyCreation";
+    case TPMOperation::kWrappedKeyCreation:
+      return "WrappedKeyCreation";
+    case TPMOperation::kWrappedKeyExport:
+      return "WrappedKeyExport";
+    case TPMOperation::kSelectAlgorithm:
+      return "SelectAlgorithm";
+    case TPMOperation::kKeyDeletion:
+      return "KeyDeletion";
+    case TPMOperation::kKeyCertification:
+      return "KeyCertification";
+    case TPMOperation::kNewAttestationKeyCreation:
+      return "NewAttestationKeyCreation";
+    case TPMOperation::kWrappedAttestationKeyCreation:
+      return "WrappedAttestationKeyCreation";
+    case TPMOperation::kWrappedAttestationKeyExport:
+      return "WrappedAttestationKeyExport";
+    case TPMOperation::kMessageHashing:
+      return "MessageHashing";
+    case TPMOperation::kRestrictedMessageSigning:
+      return "RestrictedMessageSigning";
+    case TPMOperation::kRestrictedMessageVerify:
+      return "RestrictedMessageVerify";
+  }
+}
+
+std::string AlgorithmToString(SignatureVerifier::SignatureAlgorithm algorithm) {
+  switch (algorithm) {
+    case SignatureVerifier::SignatureAlgorithm::RSA_PKCS1_SHA1:
+    case SignatureVerifier::SignatureAlgorithm::RSA_PKCS1_SHA256:
+    case SignatureVerifier::SignatureAlgorithm::RSA_PSS_SHA256:
+      return "RSA";
+    case SignatureVerifier::SignatureAlgorithm::ECDSA_SHA256:
+      return "ECDSA";
+  }
+}
+
+void MaybeMeasureTpmOperations(UnexportableKeyProvider::Config config) {
+  base::ThreadPool::PostTask(
+      FROM_HERE,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
+       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
+      base::BindOnce(&MeasureTpmOperationsInternal, std::move(config)));
+}
+
+}  // namespace crypto

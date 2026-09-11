@@ -1,0 +1,88 @@
+# Copyright 2026 The Chromium Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+component("internal") {
+  sources = [
+    "bcp47_known_subtags.h",
+    "bcp47_parser.h",
+    "immutable_string.cc",
+    "immutable_string.h",
+    "legacy_icu_converter.cc",
+    "legacy_icu_converter.h",
+  ]
+  defines = [
+    "BASE_I18N_IMPLEMENTATION",
+    "IS_I18N_INTERNAL_IMPL",
+  ]
+  public_deps = [
+    ":bcp47_languages_gen",
+    ":bcp47_regions_gen",
+    ":bcp47_scripts_gen",
+    ":bcp47_variants_gen",
+    "//base",
+    "//base/i18n:base_i18n_export",
+  ]
+  visibility = [
+    ":*",
+    "//base/i18n:*",
+  ]
+}
+
+action("canonical_language_tags_gen") {
+  script = "//tools/i18n/generate_canonical_locales_list.py"
+  outputs = [ "$root_gen_dir/base/i18n/internal/canonical_language_tags.inc" ]
+  args = rebase_path(outputs, root_build_dir)
+  visibility = [
+    ":*",
+    "//base/i18n/*",
+  ]
+}
+
+source_set("canonical_language_tags") {
+  deps = [ ":canonical_language_tags_gen" ]
+  sources = [ "$root_gen_dir/base/i18n/internal/canonical_language_tags.inc" ]
+  visibility = [
+    ":*",
+    "//base/i18n/*",
+  ]
+}
+
+action("bcp47_languages_gen") {
+  script = "//tools/i18n/generate_known_bcp47_subtags.py"
+  outputs = [ "$root_gen_dir/base/i18n/internal/bcp47_languages.inc" ]
+  args = rebase_path(outputs, root_build_dir) + [ "language" ]
+}
+
+action("bcp47_scripts_gen") {
+  script = "//tools/i18n/generate_known_bcp47_subtags.py"
+  outputs = [ "$root_gen_dir/base/i18n/internal/bcp47_scripts.inc" ]
+  args = rebase_path(outputs, root_build_dir) + [ "script" ]
+}
+
+action("bcp47_regions_gen") {
+  script = "//tools/i18n/generate_known_bcp47_subtags.py"
+  outputs = [ "$root_gen_dir/base/i18n/internal/bcp47_regions.inc" ]
+  args = rebase_path(outputs, root_build_dir) + [ "region" ]
+}
+
+action("bcp47_variants_gen") {
+  script = "//tools/i18n/generate_known_bcp47_subtags.py"
+  outputs = [ "$root_gen_dir/base/i18n/internal/bcp47_variants.inc" ]
+  args = rebase_path(outputs, root_build_dir) + [ "variant" ]
+}
+
+source_set("unittests") {
+  testonly = true
+  sources = [
+    "bcp47_known_subtags_unittest.cc",
+    "bcp47_parser_unittest.cc",
+    "immutable_string_unittest.cc",
+  ]
+  deps = [
+    ":internal",
+    "//base",
+    "//base/test:test_support",
+    "//testing/gtest",
+  ]
+}

@@ -1,0 +1,107 @@
+# Copyright (C) 2026 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../../../../../../gn/proto_library.gni")
+
+# Out-of-tree winscope schema, mirroring the Android tree layout
+# (frameworks/native/tracing/winscope and frameworks/base/proto/tracing/winscope;
+# shared leaves under native .../winscope/common). It's split in two: protos
+# that use custom options can't be compiled with the C++ proto backend, so they
+# go in winscope_extensions (protozero only); everything else is in
+# winscope_regular, which also builds C++ for the unittests. When adding a proto,
+# put it in winscope_extensions if it (or anything it imports) uses a custom
+# option.
+perfetto_proto_library("winscope_regular_@TYPE@") {
+  sources = [
+    # native-owned (this directory)
+    "protolog.proto",
+    "surfaceflinger_common.proto",
+    "surfaceflinger_layers.proto",
+    "surfaceflinger_transactions.proto",
+
+    # shared leaves
+    "common/corner_radii.proto",
+    "common/rect.proto",
+
+    # base-owned (frameworks/base/proto/tracing/winscope)
+    "../../../base/proto/tracing/winscope/app/statusbarmanager.proto",
+    "../../../base/proto/tracing/winscope/content/activityinfo.proto",
+    "../../../base/proto/tracing/winscope/content/locale.proto",
+    "../../../base/proto/tracing/winscope/graphics/insets.proto",
+    "../../../base/proto/tracing/winscope/graphics/pixelformat.proto",
+    "../../../base/proto/tracing/winscope/graphics/point.proto",
+    "../../../base/proto/tracing/winscope/inputmethodservice/inputmethodservice.proto",
+    "../../../base/proto/tracing/winscope/inputmethodservice/softinputwindow.proto",
+    "../../../base/proto/tracing/winscope/server/inputmethod/inputmethodmanagerservice.proto",
+    "../../../base/proto/tracing/winscope/shell_transition.proto",
+    "../../../base/proto/tracing/winscope/view/display.proto",
+    "../../../base/proto/tracing/winscope/view/displaycutout.proto",
+    "../../../base/proto/tracing/winscope/view/displayinfo.proto",
+    "../../../base/proto/tracing/winscope/view/enums.proto",
+    "../../../base/proto/tracing/winscope/view/imefocuscontroller.proto",
+    "../../../base/proto/tracing/winscope/view/imeinsetssourceconsumer.proto",
+    "../../../base/proto/tracing/winscope/view/inputmethod/editorinfo.proto",
+    "../../../base/proto/tracing/winscope/view/inputmethod/inputconnection.proto",
+    "../../../base/proto/tracing/winscope/view/inputmethod/inputmethodmanager.proto",
+    "../../../base/proto/tracing/winscope/view/insetsanimationcontrolimpl.proto",
+    "../../../base/proto/tracing/winscope/view/insetscontroller.proto",
+    "../../../base/proto/tracing/winscope/view/insetssource.proto",
+    "../../../base/proto/tracing/winscope/view/insetssourceconsumer.proto",
+    "../../../base/proto/tracing/winscope/view/insetssourcecontrol.proto",
+    "../../../base/proto/tracing/winscope/view/insetsstate.proto",
+    "../../../base/proto/tracing/winscope/view/surface.proto",
+    "../../../base/proto/tracing/winscope/view/surfacecontrol.proto",
+    "../../../base/proto/tracing/winscope/viewcapture.proto",
+  ]
+  public_deps = [
+    "../../../../../../perfetto/common:@TYPE@",
+    "../../../../../../perfetto/trace:non_minimal_@TYPE@",
+  ]
+}
+
+# The protos that use custom options -- protozero only (see above). Includes the
+# two split wiring files, each of which transitively imports a custom-option
+# proto (android_input_event/typedef on native, windowmanagerservice/privacy on
+# base).
+perfetto_proto_library("winscope_extensions_@TYPE@") {
+  proto_generators = [ "zero" ]
+  sources = [
+    # native-owned (this directory)
+    "android_input_event.proto",
+    "frameworks_native_winscope.proto",
+
+    # shared leaves
+    "common/typedef.proto",
+
+    # base-owned (frameworks/base/proto/tracing/winscope)
+    "../../../base/proto/tracing/winscope/app/window_configuration.proto",
+    "../../../base/proto/tracing/winscope/content/configuration.proto",
+    "../../../base/proto/tracing/winscope/frameworks_base_winscope.proto",
+    "../../../base/proto/tracing/winscope/inputmethodeditor.proto",
+    "../../../base/proto/tracing/winscope/privacy.proto",
+    "../../../base/proto/tracing/winscope/server/animationadapter.proto",
+    "../../../base/proto/tracing/winscope/server/surfaceanimator.proto",
+    "../../../base/proto/tracing/winscope/server/windowcontainerthumbnail.proto",
+    "../../../base/proto/tracing/winscope/server/windowmanagerservice.proto",
+    "../../../base/proto/tracing/winscope/view/remote_animation_target.proto",
+    "../../../base/proto/tracing/winscope/view/viewrootimpl.proto",
+    "../../../base/proto/tracing/winscope/view/windowlayoutparams.proto",
+    "../../../base/proto/tracing/winscope/windowmanager.proto",
+  ]
+  public_deps = [
+    ":winscope_regular_@TYPE@",
+    "../../../../../../perfetto/trace:non_minimal_@TYPE@",
+  ]
+  import_dirs = [ "${perfetto_protobuf_src_dir}" ]
+}

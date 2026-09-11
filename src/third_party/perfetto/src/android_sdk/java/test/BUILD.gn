@@ -1,0 +1,70 @@
+import("../../../../gn/perfetto.gni")
+import("../../../../gn/perfetto_android_sdk.gni")
+
+assert(enable_perfetto_android_java_sdk)
+
+perfetto_android_library("perfetto_trace_test_lib") {
+  sources = [ "dev/perfetto/sdk/test/PerfettoTraceTest.java" ]
+  testonly = true
+  deps = [
+    "../../../../gn:android_test_common",
+    "../main:perfetto_trace_lib",
+  ]
+  manifest = "AndroidTestManifest.xml"
+}
+
+perfetto_android_app("perfetto_trace_test_app") {
+  deps = [ ":perfetto_trace_test_lib" ]
+  manifest = "AndroidTestManifest.xml"
+  testonly = true
+}
+
+perfetto_android_instrumentation_test("perfetto_trace_instrumentation_test") {
+  app = "../main:perfetto_trace_app"
+  test_app = ":perfetto_trace_test_app"
+  android_bp_test_manifest = "AndroidSelfInstrumentTestManifest.xml"
+  android_bp_test_config = "PerfettoAndroidSdkTest.xml"
+  testonly = true
+}
+
+# Java sources for the perfetto protos PerfettoTraceTest imports.
+# protoc follows the transitive imports from these roots (~250 .proto
+# files under protos/perfetto/) at build time. Output is a stamp file
+# because Java codegen filenames vary per .proto; consumers glob the
+# output directory for *.java. Used by tools/run_android_sdk_host_test
+# on host; AOSP / device builds get the equivalent codegen from
+# perfetto_trace_java_protos via Soong/Bazel.
+action("perfetto_test_java_protos") {
+  testonly = true
+  _protoc_label = "../../../../gn:protoc($host_toolchain)"
+  _protoc = get_label_info(_protoc_label, "root_out_dir") + "/protoc"
+  _proto_path = rebase_path("../../../..", root_build_dir)
+  stamp_file = "$target_gen_dir/.$target_name.stamp"
+
+  script = "../../../../gn/standalone/run_java_protoc.py"
+  sources = [
+    "../../../../protos/perfetto/config/trace_config.proto",
+    "../../../../protos/perfetto/config/track_event/track_event_config.proto",
+    "../../../../protos/perfetto/trace/interned_data/interned_data.proto",
+    "../../../../protos/perfetto/trace/trace.proto",
+    "../../../../protos/perfetto/trace/trace_packet.proto",
+    "../../../../protos/perfetto/trace/track_event/chrome_latency_info.proto",
+    "../../../../protos/perfetto/trace/track_event/debug_annotation.proto",
+    "../../../../protos/perfetto/trace/track_event/source_location.proto",
+    "../../../../protos/perfetto/trace/track_event/track_descriptor.proto",
+    "../../../../protos/perfetto/trace/track_event/track_event.proto",
+  ]
+  inputs = [ _protoc ]
+  deps = [ _protoc_label ]
+  outputs = [ stamp_file ]
+  args = [
+           "--protoc",
+           "./" + rebase_path(_protoc, root_build_dir),
+           "--proto-path",
+           _proto_path,
+           "--java-out",
+           rebase_path(target_gen_dir, root_build_dir),
+           "--stamp",
+           rebase_path(stamp_file, root_build_dir),
+         ] + rebase_path(sources, "../../../..")
+}

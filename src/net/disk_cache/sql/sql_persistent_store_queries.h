@@ -1,0 +1,870 @@
+// Copyright 2025 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#ifndef NET_DISK_CACHE_SQL_SQL_PERSISTENT_STORE_QUERIES_H_
+#define NET_DISK_CACHE_SQL_SQL_PERSISTENT_STORE_QUERIES_H_
+
+#include "base/notreached.h"
+#include "base/strings/cstring_view.h"
+
+namespace disk_cache_sql_queries {
+namespace internal {
+
+// The query strings are defined in this namespace to hide them from the public
+// API. Callers should use `GetQuery()` instead.
+//
+// The query strings are defined as `inline constexpr` variables in this header
+// file. This allows for compile-time optimization.
+
+// The `resources` table stores the main metadata for each cache entry.
+inline constexpr const char
+    kInitSchema_CreateTableResources_SharedCacheDisabled[] =
+        // clang-format off
+    "CREATE TABLE resources("
+        // Unique ID for the resource
+        "res_id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,"
+        // Timestamp for LRU
+        "last_used INTEGER NOT NULL,"
+        // In memory hints (MemoryEntryDataHints).
+        "hints INTEGER NOT NULL,"
+        // End offset of the body
+        "body_end INTEGER NOT NULL,"
+        // Total bytes consumed by the entry
+        "bytes_usage INTEGER NOT NULL,"
+        // Flag for entries pending deletion
+        "doomed INTEGER NOT NULL,"
+        // The checksum `crc32(head + cache_key_hash)`.
+        "check_sum INTEGER NOT NULL,"
+        // The hash of `cache_key` created by simple_util::GetEntryHashKey()
+        "cache_key_hash INTEGER NOT NULL,"
+        // The cache key created by HttpCache::GenerateCacheKeyForRequest()
+        "cache_key TEXT NOT NULL,"
+        // Serialized response headers
+        "head BLOB)";
+// clang-format on
+
+inline constexpr const char
+    kInitSchema_CreateTableResources_SharedCacheEnabled[] =
+        // clang-format off
+    "CREATE TABLE resources("
+        // Unique ID for the resource
+        "res_id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,"
+        // Timestamp for LRU
+        "last_used INTEGER NOT NULL,"
+        // In memory hints (MemoryEntryDataHints).
+        "hints INTEGER NOT NULL,"
+        // End offset of the body
+        "body_end INTEGER NOT NULL,"
+        // Total bytes consumed by the entry
+        "bytes_usage INTEGER NOT NULL,"
+        // Flag for entries pending deletion
+        "doomed INTEGER NOT NULL,"
+        // The checksum `crc32(head + cache_key_hash)`.
+        "check_sum INTEGER NOT NULL,"
+        // The hash of `cache_key` created by simple_util::GetEntryHashKey()
+        "cache_key_hash INTEGER NOT NULL,"
+        // The cache key created by HttpCache::GenerateCacheKeyForRequest()
+        "cache_key TEXT NOT NULL,"
+        // Serialized response headers
+        "head BLOB,"
+        // Unique ID for the database in the shared cache
+        "shared_cache_db_id INTEGER NOT NULL,"
+        // Row ID in the database in the shared cache
+        "shared_cache_row_id INTEGER NOT NULL)";
+// clang-format on
+
+// The `blobs` table stores the data chunks of the cached body.
+inline constexpr const char kInitSchema_CreateTableBlobs[] =
+    // clang-format off
+    "CREATE TABLE blobs("
+        // Unique ID for the blob
+        "blob_id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,"
+        // Foreign key to resources.res_id
+        "res_id INTEGER NOT NULL,"
+        // Start offset of this blob chunk
+        "start INTEGER NOT NULL,"
+        // End offset of this blob chunk
+        "end INTEGER NOT NULL,"
+        // The checksum `crc32(blob + cache_key_hash)`.
+        "check_sum INTEGER NOT NULL,"
+        // The actual data chunk
+        "blob BLOB NOT NULL)";
+// clang-format on
+
+// An index on `(cache_key_hash, doomed)` to speed up lookups for live entries.
+// This is frequently used in operations like `OpenEntry` to quickly find a
+// non-doomed entry for a given cache key.
+inline constexpr const char kIndex_ResourcesCacheKeyHashDoomed[] =
+    "CREATE INDEX index_resources_cache_key_hash_doomed ON "
+    "resources(cache_key_hash, doomed)";
+
+// An index on `last_used` and `bytes_usage` for live entries (`doomed=0`). This
+// is crucial for eviction logic, which targets the least recently used entries.
+// To avoid looking at the actual resources table during eviction, this creates
+// a covering index.
+inline constexpr const char kIndex_LiveResourcesLastUsed[] =
+    "CREATE INDEX index_live_resources_last_used_bytes_usage ON "
+    "resources(last_used, bytes_usage) WHERE doomed=0";
+
+// Index for quickly loading entries with non-zero hints into the in-memory
+// index.
+inline constexpr const char kIndex_LiveResourcesHints[] =
+    "CREATE INDEX index_live_resources_hints ON "
+    "resources(hints) WHERE hints!=0 AND doomed=0";
+
+// A unique index on `(res_id, start)` in the `blobs` table. This is critical
+// for quickly finding the correct data blobs for a given entry when reading or
+// writing data at a specific offset. The `UNIQUE` constraint ensures that
+// there are no overlapping blobs starting at the same offset for the same
+// entry, which is important for data integrity.
+inline constexpr const char kIndex_BlobsResIdStart[] =
+    "CREATE UNIQUE INDEX index_blobs_res_id_start ON "
+    "blobs(res_id, start)";
+
+inline constexpr const char
+    kOpenEntry_SelectLiveResources_SharedCacheDisabled[] =
+        // clang-format off
+    "SELECT "
+        "res_id,"      // 0
+        "last_used,"   // 1
+        "body_end,"    // 2
+        "check_sum,"   // 3
+        "head "        // 4
+    "FROM resources "
+    "WHERE "
+        "cache_key_hash=? AND " // 0
+        "cache_key=? AND "      // 1
+        "doomed=0 "
+    "ORDER BY res_id DESC";
+// clang-format on
+
+inline constexpr const char
+    kOpenEntry_SelectLiveResources_SharedCacheEnabled[] =
+        // clang-format off
+    "SELECT "
+        "res_id,"              // 0
+        "last_used,"           // 1
+        "body_end,"            // 2
+        "check_sum,"           // 3
+        "head,"                // 4
+        "shared_cache_db_id,"  // 5
+        "shared_cache_row_id " // 6
+    "FROM resources "
+    "WHERE "
+        "cache_key_hash=? AND " // 0
+        "cache_key=? AND "      // 1
+        "doomed=0 "
+    "ORDER BY res_id DESC";
+// clang-format on
+
+inline constexpr const char
+    kCreateEntry_InsertIntoResources_SharedCacheDisabled[] =
+        // clang-format off
+    "INSERT INTO resources("
+        "last_used,"      // 0
+        "hints,"
+        "body_end,"       // 1
+        "bytes_usage,"    // 2
+        "doomed,"         // 3
+        "check_sum,"      // 4
+        "cache_key_hash," // 5
+        "cache_key) "     // 6
+    "VALUES(?,0,?,?,?,?,?,?) "
+    "RETURNING res_id";
+// clang-format on
+
+inline constexpr const char
+    kCreateEntry_InsertIntoResources_SharedCacheEnabled[] =
+        // clang-format off
+    "INSERT INTO resources("
+        "last_used,"            // 0
+        "hints,"
+        "body_end,"             // 1
+        "bytes_usage,"          // 2
+        "doomed,"               // 3
+        "check_sum,"            // 4
+        "cache_key_hash,"       // 5
+        "cache_key,"            // 6
+        "shared_cache_db_id,"
+        "shared_cache_row_id) "
+    "VALUES(?,0,?,?,?,?,?,?,0,0) "
+    "RETURNING res_id";
+// clang-format on
+
+inline constexpr const char kDoomEntry_MarkDoomedResources[] =
+    // clang-format off
+    "UPDATE resources "
+    "SET "
+        "doomed=1 "
+    "WHERE "
+        "res_id=? AND "      // 0
+        "cache_key=? AND "   // 1
+        "doomed=0 "
+    "RETURNING "
+        "bytes_usage";       // 0
+// clang-format on
+
+inline constexpr const char
+    kDeleteDoomedEntry_DeleteFromResources_SharedCacheDisabled[] =
+        // clang-format off
+    "DELETE FROM resources "
+    "WHERE "
+        "res_id=? AND "  // 0
+        "doomed=1";
+// clang-format on
+
+inline constexpr const char
+    kDeleteDoomedEntry_DeleteFromResources_SharedCacheEnabled[] =
+        // clang-format off
+    "DELETE FROM resources "
+    "WHERE "
+        "res_id=? AND "  // 0
+        "doomed=1 "
+    "RETURNING "
+        "shared_cache_db_id,"   // 0
+        "shared_cache_row_id";  // 1
+// clang-format on
+
+inline constexpr const char
+    kDeleteLiveEntry_DeleteFromResources_SharedCacheDisabled[] =
+        // clang-format off
+    "DELETE FROM resources "
+    "WHERE "
+        "cache_key_hash=? AND " // 0
+        "cache_key=? AND "      // 1
+        "doomed=0 "
+    "RETURNING "
+        "res_id,"           // 0
+        "bytes_usage";      // 1
+// clang-format on
+
+inline constexpr const char
+    kDeleteLiveEntry_DeleteFromResources_SharedCacheEnabled[] =
+        // clang-format off
+    "DELETE FROM resources "
+    "WHERE "
+        "cache_key_hash=? AND " // 0
+        "cache_key=? AND "      // 1
+        "doomed=0 "
+    "RETURNING "
+        "res_id,"               // 0
+        "bytes_usage,"          // 1
+        "shared_cache_db_id,"   // 2
+        "shared_cache_row_id";  // 3
+// clang-format on
+
+inline constexpr const char kDeleteAllEntries_DeleteFromResources[] =
+    "DELETE FROM resources";
+
+inline constexpr const char kDeleteAllEntries_DeleteFromBlobs[] =
+    "DELETE FROM blobs";
+
+inline constexpr const char kDeleteLiveEntriesBetween_SelectLiveResources[] =
+    // clang-format off
+    "SELECT "
+        "res_id,"       // 0
+        "bytes_usage "  // 1
+    "FROM resources "
+    "WHERE "
+        "last_used>=? AND "  // 0
+        "last_used<? AND "   // 1
+        "doomed=0";
+// clang-format on
+
+inline constexpr const char
+    kDeleteResourceByResIds_DeleteFromResources_SharedCacheDisabled[] =
+        "DELETE FROM resources WHERE res_id=?";
+
+inline constexpr const char
+    kDeleteResourceByResIds_DeleteFromResources_SharedCacheEnabled[] =
+        "DELETE FROM resources WHERE res_id=? "
+        "RETURNING shared_cache_db_id, shared_cache_row_id";
+
+inline constexpr const char
+    kDeleteResourceByResIdReturnHash_SharedCacheDisabled[] =
+        "DELETE FROM resources WHERE res_id=? RETURNING cache_key_hash";
+
+inline constexpr const char
+    kDeleteResourceByResIdReturnHash_SharedCacheEnabled[] =
+        "DELETE FROM resources WHERE res_id=? RETURNING cache_key_hash, "
+        "shared_cache_db_id, shared_cache_row_id";
+
+inline constexpr const char
+    kDeleteLiveResourceByResIdReturnUsageAndHash_SharedCacheDisabled[] =
+        "DELETE FROM resources WHERE res_id=? AND doomed=0 RETURNING "
+        "bytes_usage, cache_key_hash";
+
+inline constexpr const char
+    kDeleteLiveResourceByResIdReturnUsageAndHash_SharedCacheEnabled[] =
+        "DELETE FROM resources WHERE res_id=? AND doomed=0 RETURNING "
+        "bytes_usage, cache_key_hash, shared_cache_db_id, shared_cache_row_id";
+
+inline constexpr const char kUpdateEntryLastUsedByKey_UpdateResourceLastUsed[] =
+    // clang-format off
+    "UPDATE resources "
+    "SET "
+        "last_used=? "          // 0
+    "WHERE "
+        "cache_key_hash=? AND " // 1
+        "cache_key=? AND "      // 2
+        "doomed=0 "
+    "RETURNING res_id";
+// clang-format on
+
+inline constexpr const char kInsertIntoResources_SharedCacheDisabled[] =
+    // clang-format off
+    "INSERT INTO resources("
+        "last_used,"      // 0
+        "hints,"          // 1
+        "body_end,"       // 2
+        "bytes_usage,"    // 3
+        "doomed,"         // 4
+        "check_sum,"      // 5
+        "cache_key_hash," // 6
+        "cache_key,"      // 7
+        "head) "          // 8
+    "VALUES(?,?,?,?,?,?,?,?,?) "
+    "RETURNING res_id";
+// clang-format on
+
+inline constexpr const char kInsertIntoResources_SharedCacheEnabled[] =
+    // clang-format off
+    "INSERT INTO resources("
+        "last_used,"            // 0
+        "hints,"                // 1
+        "body_end,"             // 2
+        "bytes_usage,"          // 3
+        "doomed,"               // 4
+        "check_sum,"            // 5
+        "cache_key_hash,"       // 6
+        "cache_key,"            // 7
+        "head,"                 // 8
+        "shared_cache_db_id,"
+        "shared_cache_row_id) "
+    "VALUES(?,?,?,?,?,?,?,?,?,0,0) "
+    "RETURNING res_id";
+// clang-format on
+
+// Use RETURNING 1 so that the caller can detect if the UPDATE affected
+// any rows via the return value of Statement::Step().
+inline constexpr const char kUpdateLastUsed[] =
+    // clang-format off
+    "UPDATE resources "
+    "SET "
+        "last_used=? "      // 0
+    "WHERE "
+        "res_id=? AND "     // 1
+        "doomed=0 "
+    "RETURNING 1";
+// clang-format on
+
+inline constexpr const char kUpdateLastUsedHeader[] =
+    // clang-format off
+    "UPDATE resources "
+    "SET "
+        "last_used=?, "                // 0
+        "bytes_usage=bytes_usage+?, "  // 1
+        "check_sum=?, "                // 2
+        "head=? "                      // 3
+    "WHERE "
+        "res_id=? AND "                // 4
+        "doomed=0 "
+    "RETURNING "
+        "bytes_usage";                 // 0
+// clang-format on
+
+inline constexpr const char kUpdateLastUsedHeaderHints[] =
+    // clang-format off
+    "UPDATE resources "
+    "SET "
+        "last_used=?, "                // 0
+        "hints=?, "                    // 1
+        "bytes_usage=bytes_usage+?, "  // 2
+        "check_sum=?, "                // 3
+        "head=? "                      // 4
+    "WHERE "
+        "res_id=? AND "                // 5
+        "doomed=0 "
+    "RETURNING "
+        "bytes_usage";                 // 0
+// clang-format on
+
+// Use RETURNING 1 so that the caller can detect if the UPDATE affected
+// any rows via the return value of Statement::Step().
+inline constexpr const char kUpdateLastUsedHints[] =
+    // clang-format off
+    "UPDATE resources "
+    "SET "
+        "last_used=?, "     // 0
+        "hints=? "          // 1
+    "WHERE "
+        "res_id=? AND "     // 2
+        "doomed=0 "
+    "RETURNING 1";
+// clang-format on
+
+inline constexpr const char kUpdateLastUsedBody[] =
+    // clang-format off
+    "UPDATE resources "
+    "SET "
+        "last_used=?, "                // 0
+        "body_end=body_end+?, "        // 1
+        "bytes_usage=bytes_usage+? "   // 2
+    "WHERE "
+        "res_id=? AND "                // 3
+        "doomed=0 "
+    "RETURNING "
+        "bytes_usage,"                 // 0
+        "body_end";                    // 1
+// clang-format on
+
+inline constexpr const char kUpdateLastUsedBodyHints[] =
+    // clang-format off
+    "UPDATE resources "
+    "SET "
+        "last_used=?, "                // 0
+        "hints=?, "                    // 1
+        "body_end=body_end+?, "        // 2
+        "bytes_usage=bytes_usage+? "   // 3
+    "WHERE "
+        "res_id=? AND "                // 4
+        "doomed=0 "
+    "RETURNING "
+        "bytes_usage,"                 // 0
+        "body_end";                    // 1
+// clang-format on
+
+inline constexpr const char kUpdateLastUsedBodyHeader[] =
+    // clang-format off
+    "UPDATE resources "
+    "SET "
+        "last_used=?, "                // 0
+        "body_end=body_end+?, "        // 1
+        "bytes_usage=bytes_usage+?, "  // 2
+        "check_sum=?, "                // 3
+        "head=? "                      // 4
+    "WHERE "
+        "res_id=? AND "                // 5
+        "doomed=0 "
+    "RETURNING "
+        "bytes_usage, "                // 0
+        "body_end";                    // 1
+// clang-format on
+
+inline constexpr const char kUpdateLastUsedBodyHeaderHints[] =
+    // clang-format off
+    "UPDATE resources "
+    "SET "
+        "last_used=?, "                // 0
+        "hints=?, "                    // 1
+        "body_end=body_end+?, "        // 2
+        "bytes_usage=bytes_usage+?, "  // 3
+        "check_sum=?, "                // 4
+        "head=? "                      // 5
+    "WHERE "
+        "res_id=? AND "                // 6
+        "doomed=0 "
+    "RETURNING "
+        "bytes_usage, "                // 0
+        "body_end";                    // 1
+// clang-format on
+
+inline constexpr const char kWriteEntryData_UpdateResource[] =
+    // clang-format off
+    "UPDATE resources "
+    "SET "
+        "body_end=body_end+?, "       // 0
+        "bytes_usage=bytes_usage+? "  // 1
+    "WHERE "
+        "res_id=? "                   // 2
+    "RETURNING "
+        "body_end,"                   // 0
+        "doomed,"                     // 1
+        "bytes_usage,"                // 2
+        "last_used";                  // 3
+// clang-format on
+
+inline constexpr const char kMoveBlobsToSharedCache_UpdateResource[] =
+    // clang-format off
+    "UPDATE resources "
+    "SET "
+        "shared_cache_db_id=?, "   // 0
+        "shared_cache_row_id=? "   // 1
+    "WHERE "
+        "res_id=? AND "            // 2
+        "doomed=0 "
+    "RETURNING 1";
+// clang-format on
+
+inline constexpr const char kTrimOverlappingBlobs_DeleteContained[] =
+    // clang-format off
+    "DELETE FROM blobs "
+    "WHERE "
+        "res_id=? AND "      // 0
+        "start>=? AND "      // 1
+        "end<=? "            // 2
+    "RETURNING "
+        "start,"             // 0
+        "end";               // 1
+// clang-format on
+
+inline constexpr const char kTrimOverlappingBlobs_SelectOverlapping[] =
+    // clang-format off
+  "SELECT "
+      "blob_id,"           // 0
+      "start,"             // 1
+      "end,"               // 2
+      "check_sum,"         // 3
+      "blob "              // 4
+  "FROM blobs "
+  "WHERE "
+      "res_id=? AND "      // 0
+      "start<? AND "       // 1
+      "end>?";             // 2
+// clang-format on
+
+inline constexpr const char kTruncateBlobsAfter_DeleteAfter[] =
+    // clang-format off
+    "DELETE FROM blobs "
+    "WHERE "
+        "res_id=? AND "      // 0
+        "start>=? "          // 1
+    "RETURNING "
+        "start,"             // 0
+        "end";               // 1
+// clang-format on
+
+inline constexpr const char kInsertNewBlob_InsertIntoBlobs[] =
+    // clang-format off
+    "INSERT INTO blobs("
+        "res_id,"      // 0
+        "start,"       // 1
+        "end,"         // 2
+        "check_sum,"   // 3
+        "blob) "       // 4
+    "VALUES(?,?,?,?,?)";
+// clang-format on
+
+inline constexpr const char kDeleteBlobById_DeleteFromBlobs[] =
+    // clang-format off
+    "DELETE FROM blobs "
+    "WHERE "
+        "blob_id=? "  // 0
+    "RETURNING "
+        "start,"      // 0
+        "end";        // 1
+// clang-format on
+
+inline constexpr const char kDeleteBlobsByResId_DeleteFromBlobs[] =
+    // clang-format off
+    "DELETE FROM blobs "
+    "WHERE "
+        "res_id=?";       // 0
+// clang-format on
+
+inline constexpr const char kReadEntryData_SelectOverlapping[] =
+    // clang-format off
+    "SELECT "
+        "start,"             // 0
+        "end,"               // 1
+        "check_sum,"         // 2
+        "blob "              // 3
+    "FROM blobs "
+    "WHERE "
+        "res_id=? AND "      // 0
+        "start<? AND "       // 1
+        "end>? "             // 2
+    "ORDER BY start";
+// clang-format on
+
+inline constexpr const char kGetEntryAvailableRange_SelectOverlapping[] =
+    // clang-format off
+    "SELECT "
+        "start,"  // 0
+        "end "    // 1
+    "FROM blobs "
+    "WHERE "
+        "res_id=? AND "      // 0
+        "start<? AND "       // 1
+        "end>? "             // 2
+    "ORDER BY start";
+// clang-format on
+
+inline constexpr const char
+    kCalculateSizeOfEntriesBetween_SelectLiveResources[] =
+        // clang-format off
+    "SELECT "
+        "bytes_usage "  // 0
+    "FROM resources "
+    "WHERE "
+        "last_used>=? AND "  // 0
+        "last_used<? AND "   // 1
+        "doomed=0";
+// clang-format on
+
+inline constexpr const char
+    kOpenNextEntry_SelectLiveResources_SharedCacheDisabled[] =
+        // clang-format off
+    "SELECT "
+        "res_id,"      // 0
+        "last_used,"   // 1
+        "body_end,"    // 2
+        "check_sum,"   // 3
+        "cache_key,"   // 4
+        "head "        // 5
+    "FROM resources "
+    "WHERE "
+        "res_id<? AND "  // 0
+        "doomed=0 "
+    "ORDER BY res_id DESC";
+// clang-format on
+
+inline constexpr const char
+    kOpenNextEntry_SelectLiveResources_SharedCacheEnabled[] =
+        // clang-format off
+    "SELECT "
+        "res_id,"              // 0
+        "last_used,"           // 1
+        "body_end,"            // 2
+        "check_sum,"           // 3
+        "cache_key,"           // 4
+        "head,"                // 5
+        "shared_cache_db_id,"  // 6
+        "shared_cache_row_id " // 7
+    "FROM resources "
+    "WHERE "
+        "res_id<? AND "  // 0
+        "doomed=0 "
+    "ORDER BY res_id DESC";
+// clang-format on
+
+inline constexpr const char kStartEviction_SelectLiveResources[] =
+    // clang-format off
+    "SELECT "
+        "res_id,"        // 0
+        "bytes_usage, "  // 1
+        "last_used "     // 2
+    "FROM resources "
+    "WHERE "
+        "doomed=0 "
+    "ORDER BY last_used";
+// clang-format on
+
+inline constexpr const char
+    kCalculateResourceEntryCount_SelectCountFromLiveResources[] =
+        "SELECT COUNT(*) FROM resources WHERE doomed=0";
+
+inline constexpr const char
+    kCalculateTotalSize_SelectTotalSizeFromLiveResources[] =
+        "SELECT SUM(bytes_usage) FROM resources WHERE doomed=0";
+
+inline constexpr const char
+    kLoadInMemoryIndex_SelectCacheKeyHashFromLiveResources[] =
+        // clang-format off
+    "SELECT "
+        "res_id, "          // 0
+        "cache_key_hash, "  // 1
+        "doomed "           // 2
+    "FROM resources "
+    "ORDER BY cache_key_hash";
+// clang-format on
+
+inline constexpr const char kLoadInMemoryIndex_SelectHintsFromLiveResources[] =
+    // clang-format off
+    "SELECT "
+        "res_id, "          // 0
+        "hints "            // 1
+    "FROM resources "
+    "WHERE hints!=0 AND doomed=0";
+// clang-format on
+
+}  // namespace internal
+
+// An enum for all SQL queries. This helps ensure that all queries are tested.
+enum class Query {
+  kInitSchema_CreateTableResources,
+  kInitSchema_CreateTableBlobs,
+
+  kIndex_ResourcesCacheKeyHashDoomed,
+  kIndex_LiveResourcesLastUsed,
+  kIndex_LiveResourcesHints,
+  kIndex_BlobsResIdStart,
+  kOpenEntry_SelectLiveResources,
+  kCreateEntry_InsertIntoResources,
+  kDoomEntry_MarkDoomedResources,
+  kDeleteDoomedEntry_DeleteFromResources,
+  kDeleteLiveEntry_DeleteFromResources,
+  kDeleteAllEntries_DeleteFromResources,
+  kDeleteAllEntries_DeleteFromBlobs,
+  kDeleteLiveEntriesBetween_SelectLiveResources,
+  kDeleteResourceByResIds_DeleteFromResources,
+  kDeleteResourceByResIdReturnHash,
+  kDeleteLiveResourceByResIdReturnUsageAndHash,
+  kUpdateEntryLastUsedByKey_UpdateResourceLastUsed,
+  kInsertIntoResources,
+  kUpdateLastUsed,
+  kUpdateLastUsedHeader,
+  kUpdateLastUsedHeaderHints,
+  kUpdateLastUsedHints,
+  kUpdateLastUsedBody,
+  kUpdateLastUsedBodyHints,
+  kUpdateLastUsedBodyHeader,
+  kUpdateLastUsedBodyHeaderHints,
+  kWriteEntryData_UpdateResource,
+  kMoveBlobsToSharedCache_UpdateResource,
+  kTrimOverlappingBlobs_DeleteContained,
+  kTrimOverlappingBlobs_SelectOverlapping,
+  kTruncateBlobsAfter_DeleteAfter,
+  kInsertNewBlob_InsertIntoBlobs,
+  kDeleteBlobById_DeleteFromBlobs,
+  kDeleteBlobsByResId_DeleteFromBlobs,
+  kReadEntryData_SelectOverlapping,
+  kGetEntryAvailableRange_SelectOverlapping,
+  kCalculateSizeOfEntriesBetween_SelectLiveResources,
+  kOpenNextEntry_SelectLiveResources,
+  kStartEviction_SelectLiveResources,
+  kCalculateResourceEntryCount_SelectCountFromLiveResources,
+  kCalculateTotalSize_SelectTotalSizeFromLiveResources,
+  kLoadInMemoryIndex_SelectCacheKeyHashFromLiveResources,
+  kLoadInMemoryIndex_SelectHintsFromLiveResources,
+
+  kMaxValue = kLoadInMemoryIndex_SelectHintsFromLiveResources,
+};
+
+inline base::cstring_view GetQuery(Query query, bool shared_cache_enabled) {
+  switch (query) {
+    case Query::kInitSchema_CreateTableResources:
+      if (shared_cache_enabled) {
+        return internal::kInitSchema_CreateTableResources_SharedCacheEnabled;
+      }
+      return internal::kInitSchema_CreateTableResources_SharedCacheDisabled;
+    case Query::kInitSchema_CreateTableBlobs:
+      return internal::kInitSchema_CreateTableBlobs;
+
+    case Query::kIndex_ResourcesCacheKeyHashDoomed:
+      return internal::kIndex_ResourcesCacheKeyHashDoomed;
+    case Query::kIndex_LiveResourcesLastUsed:
+      return internal::kIndex_LiveResourcesLastUsed;
+    case Query::kIndex_LiveResourcesHints:
+      return internal::kIndex_LiveResourcesHints;
+    case Query::kIndex_BlobsResIdStart:
+      return internal::kIndex_BlobsResIdStart;
+    case Query::kOpenEntry_SelectLiveResources:
+      if (shared_cache_enabled) {
+        return internal::kOpenEntry_SelectLiveResources_SharedCacheEnabled;
+      }
+      return internal::kOpenEntry_SelectLiveResources_SharedCacheDisabled;
+    case Query::kCreateEntry_InsertIntoResources:
+      if (shared_cache_enabled) {
+        return internal::kCreateEntry_InsertIntoResources_SharedCacheEnabled;
+      }
+      return internal::kCreateEntry_InsertIntoResources_SharedCacheDisabled;
+    case Query::kDoomEntry_MarkDoomedResources:
+      return internal::kDoomEntry_MarkDoomedResources;
+    case Query::kDeleteDoomedEntry_DeleteFromResources:
+      if (shared_cache_enabled) {
+        return internal::
+            kDeleteDoomedEntry_DeleteFromResources_SharedCacheEnabled;
+      }
+      return internal::
+          kDeleteDoomedEntry_DeleteFromResources_SharedCacheDisabled;
+    case Query::kDeleteLiveEntry_DeleteFromResources:
+      if (shared_cache_enabled) {
+        return internal::
+            kDeleteLiveEntry_DeleteFromResources_SharedCacheEnabled;
+      }
+      return internal::kDeleteLiveEntry_DeleteFromResources_SharedCacheDisabled;
+    case Query::kDeleteAllEntries_DeleteFromResources:
+      return internal::kDeleteAllEntries_DeleteFromResources;
+    case Query::kDeleteAllEntries_DeleteFromBlobs:
+      return internal::kDeleteAllEntries_DeleteFromBlobs;
+    case Query::kDeleteLiveEntriesBetween_SelectLiveResources:
+      return internal::kDeleteLiveEntriesBetween_SelectLiveResources;
+    case Query::kDeleteResourceByResIds_DeleteFromResources:
+      if (shared_cache_enabled) {
+        return internal::
+            kDeleteResourceByResIds_DeleteFromResources_SharedCacheEnabled;
+      }
+      return internal::
+          kDeleteResourceByResIds_DeleteFromResources_SharedCacheDisabled;
+    case Query::kDeleteResourceByResIdReturnHash:
+      if (shared_cache_enabled) {
+        return internal::kDeleteResourceByResIdReturnHash_SharedCacheEnabled;
+      }
+      return internal::kDeleteResourceByResIdReturnHash_SharedCacheDisabled;
+    case Query::kDeleteLiveResourceByResIdReturnUsageAndHash:
+      if (shared_cache_enabled) {
+        return internal::
+            kDeleteLiveResourceByResIdReturnUsageAndHash_SharedCacheEnabled;
+      }
+      return internal::
+          kDeleteLiveResourceByResIdReturnUsageAndHash_SharedCacheDisabled;
+    case Query::kUpdateEntryLastUsedByKey_UpdateResourceLastUsed:
+      return internal::kUpdateEntryLastUsedByKey_UpdateResourceLastUsed;
+    case Query::kInsertIntoResources:
+      if (shared_cache_enabled) {
+        return internal::kInsertIntoResources_SharedCacheEnabled;
+      }
+      return internal::kInsertIntoResources_SharedCacheDisabled;
+    case Query::kUpdateLastUsed:
+      return internal::kUpdateLastUsed;
+    case Query::kUpdateLastUsedHeader:
+      return internal::kUpdateLastUsedHeader;
+    case Query::kUpdateLastUsedHeaderHints:
+      return internal::kUpdateLastUsedHeaderHints;
+    case Query::kUpdateLastUsedHints:
+      return internal::kUpdateLastUsedHints;
+    case Query::kUpdateLastUsedBody:
+      return internal::kUpdateLastUsedBody;
+    case Query::kUpdateLastUsedBodyHints:
+      return internal::kUpdateLastUsedBodyHints;
+    case Query::kUpdateLastUsedBodyHeader:
+      return internal::kUpdateLastUsedBodyHeader;
+    case Query::kUpdateLastUsedBodyHeaderHints:
+      return internal::kUpdateLastUsedBodyHeaderHints;
+    case Query::kWriteEntryData_UpdateResource:
+      return internal::kWriteEntryData_UpdateResource;
+    case Query::kMoveBlobsToSharedCache_UpdateResource:
+      return internal::kMoveBlobsToSharedCache_UpdateResource;
+    case Query::kTrimOverlappingBlobs_DeleteContained:
+      return internal::kTrimOverlappingBlobs_DeleteContained;
+    case Query::kTrimOverlappingBlobs_SelectOverlapping:
+      return internal::kTrimOverlappingBlobs_SelectOverlapping;
+    case Query::kTruncateBlobsAfter_DeleteAfter:
+      return internal::kTruncateBlobsAfter_DeleteAfter;
+    case Query::kInsertNewBlob_InsertIntoBlobs:
+      return internal::kInsertNewBlob_InsertIntoBlobs;
+    case Query::kDeleteBlobById_DeleteFromBlobs:
+      return internal::kDeleteBlobById_DeleteFromBlobs;
+    case Query::kDeleteBlobsByResId_DeleteFromBlobs:
+      return internal::kDeleteBlobsByResId_DeleteFromBlobs;
+    case Query::kReadEntryData_SelectOverlapping:
+      return internal::kReadEntryData_SelectOverlapping;
+    case Query::kGetEntryAvailableRange_SelectOverlapping:
+      return internal::kGetEntryAvailableRange_SelectOverlapping;
+    case Query::kCalculateSizeOfEntriesBetween_SelectLiveResources:
+      return internal::kCalculateSizeOfEntriesBetween_SelectLiveResources;
+    case Query::kOpenNextEntry_SelectLiveResources:
+      if (shared_cache_enabled) {
+        return internal::kOpenNextEntry_SelectLiveResources_SharedCacheEnabled;
+      }
+      return internal::kOpenNextEntry_SelectLiveResources_SharedCacheDisabled;
+    case Query::kStartEviction_SelectLiveResources:
+      return internal::kStartEviction_SelectLiveResources;
+    case Query::kCalculateResourceEntryCount_SelectCountFromLiveResources:
+      return internal::
+          kCalculateResourceEntryCount_SelectCountFromLiveResources;
+    case Query::kCalculateTotalSize_SelectTotalSizeFromLiveResources:
+      return internal::kCalculateTotalSize_SelectTotalSizeFromLiveResources;
+    case Query::kLoadInMemoryIndex_SelectCacheKeyHashFromLiveResources:
+      return internal::kLoadInMemoryIndex_SelectCacheKeyHashFromLiveResources;
+    case Query::kLoadInMemoryIndex_SelectHintsFromLiveResources:
+      return internal::kLoadInMemoryIndex_SelectHintsFromLiveResources;
+  }
+  NOTREACHED();
+}
+
+}  // namespace disk_cache_sql_queries
+
+#endif  // NET_DISK_CACHE_SQL_SQL_PERSISTENT_STORE_QUERIES_H_

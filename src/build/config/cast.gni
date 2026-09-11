@@ -1,0 +1,53 @@
+# Copyright 2015 The Chromium Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# The args declared in this file should be referenced by components outside of
+# //chromecast. Args needed only in //chromecast should be declared in
+# //chromecast/chromecast.gni.
+declare_args() {
+  # If non empty, rpath of executables is set to this.
+  # If empty, default value is used.
+  target_rpath = ""
+
+  # Set this to true to build for Nest hardware running Linux (aka "CastOS").
+  # Set this to false to use the defaults for Linux.
+  is_castos = false
+
+  # Set this to true to build for Android-based Cast devices.
+  # Set this to false to use the defaults for Android.
+  is_cast_android = false
+}
+
+# Restrict is_castos and is_cast_android to only be set on the target toolchain.
+is_castos = is_castos && current_toolchain == default_toolchain
+is_cast_android = is_cast_android && current_toolchain == default_toolchain
+
+declare_args() {
+  # Set this true for a Chromecast build. Chromecast builds are supported on
+  # Linux, Android, ChromeOS, and Fuchsia.
+  enable_cast_receiver = false
+}
+
+declare_args() {
+  # True to enable the cast renderer.  It is enabled by default for Linux and
+  # Android audio only builds.
+  #
+  # TODO(crbug.com/1293520):  Remove this buildflag.
+  enable_cast_renderer = enable_cast_receiver && (is_linux || is_chromeos)
+}
+
+
+# Assert that Chromecast is being built for a supported platform.
+assert(is_linux || is_chromeos || is_android || is_fuchsia ||
+           !enable_cast_receiver,
+       "Cast receiver builds are not supported on $current_os")
+
+assert(enable_cast_receiver || !is_castos,
+       "is_castos = true requires enable_cast_receiver = true.")
+assert(is_linux || !is_castos, "is_castos = true requires is_linux = true.")
+
+assert(enable_cast_receiver || !is_cast_android,
+       "is_cast_android = true requires enable_cast_receiver = true.")
+assert(is_android || !is_cast_android,
+       "is_cast_android = true requires is_android = true.")

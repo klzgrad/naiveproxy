@@ -1,0 +1,75 @@
+# Copyright (C) 2023 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("perfetto.gni")
+
+declare_args() {
+  # These are provided by chromium's build/config/linux/pkg_config.gni, but
+  # need to be defined if they have not been already.
+  if (perfetto_use_pkgconfig) {
+    if (!defined(pkg_config)) {
+      pkg_config = "pkg-config"
+    }
+    if (!defined(host_pkg_config)) {
+      host_pkg_config = "pkg-config"
+    }
+  }
+}
+
+# Defines a config specifying the result of running pkg-config for the given
+# packages. Put the package names you want to query in the "pkg_deps" variable
+# inside the template invocation.
+template("pkg_config") {
+  config(target_name) {
+    assert(defined(invoker.pkg_deps), "pkg_deps must be set")
+    if (perfetto_use_pkgconfig) {
+      forward_variables_from(invoker, "*")
+
+      if (current_toolchain == host_toolchain) {
+        _cmd = host_pkg_config
+      } else {
+        _cmd = pkg_config
+      }
+      _pkg_config_result =
+          exec_script("//gn/pkg-config_wrapper.py", [ _cmd ] + pkg_deps, "json")
+
+      if (_pkg_config_result.cflags != []) {
+        if (!defined(cflags)) {
+          cflags = []
+        }
+        cflags += _pkg_config_result.cflags
+      }
+      if (_pkg_config_result.libs != []) {
+        if (!defined(libs)) {
+          libs = []
+        }
+        libs += _pkg_config_result.libs
+      }
+      if (_pkg_config_result.lib_dirs != []) {
+        if (!defined(lib_dirs)) {
+          lib_dirs = []
+        }
+        lib_dirs += _pkg_config_result.lib_dirs
+      }
+      if (_pkg_config_result.ldflags != []) {
+        if (!defined(ldflags)) {
+          ldflags = []
+        }
+        ldflags += _pkg_config_result.ldflags
+      }
+    } else {  # !perfetto_use_pkgconfig
+      not_needed(invoker, "*")
+    }
+  }
+}

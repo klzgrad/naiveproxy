@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<AutoVisualizer
+  xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+
+  <!--
+      COMPONENT-BUILD ONLY. See //tools/win/DebugVisualizers/BUILD.gn for why
+      the cc::ListContainer visualizer is split by build variant and why the
+      component build needs the cc_base.dll! module-qualified cast below.
+  -->
+
+  <!--
+      cc::ListContainer<T> stores its elements in a chain of InnerLists owned
+      by a ListContainerHelper::CharAllocator. The element memory is opaque
+      char[] storage, so we have to walk the InnerLists by hand and reinterpret
+      each slot as a T ($T1).
+
+      All access to the libc++ containers is delegated to the visualizers in
+      build/config/c++/libc++.natvis instead of poking their private members
+      directly. This visualizer therefore requires libc++.natvis to be loaded.
+
+      This type should be identical to the definition in the other natvis
+      file modulo the different expression for getting the CharAllocator.
+  -->
+  <Type Name="cc::ListContainer&lt;*&gt;">
+    <!-- Returns the owned CharAllocator that holds the storage. -->
+    <Intrinsic Name="alloc" Expression="(cc_base.dll!cc::ListContainerHelper::CharAllocator*)(helper_.data_.value())" />
+
+    <!-- CharAllocator scalar fields. -->
+    <Intrinsic Name="size" Expression="alloc()-&gt;size_" />
+    <Intrinsic Name="elementSize" Expression="alloc()-&gt;element_size_" />
+    <Intrinsic Name="alignment" Expression="alloc()-&gt;alignment_" />
+    <Intrinsic Name="lastListIndex" Expression="alloc()-&gt;last_list_index_" />
+
+    <!-- storage_ is a std::vector<InnerList>; size() (from libc++.natvis) is the
+         number of InnerLists, and storage_[i] indexes into them. -->
+    <Intrinsic Name="innerListCount" Expression="alloc()-&gt;storage_.size()" />
+
+    <DisplayString>{{ size={size()} }}</DisplayString>
+    <Expand>
+      <Item Name="[size]">size()</Item>
+      <Item Name="[element_size]">elementSize()</Item>
+      <Item Name="[alignment]">alignment()</Item>
+      <Item Name="[last_list_index]">lastListIndex()</Item>
+      <Item Name="[inner_list_count]">innerListCount()</Item>
+
+      <CustomListItems MaxItemsPerView="5000">
+        <!-- Index of the InnerList currently being walked. -->
+        <Variable Name="listIdx" InitialValue="0" />
+        <!-- Number of elements already emitted from the current InnerList. -->
+        <Variable Name="elemIdx" InitialValue="0" />
+        <!-- Start of the current InnerList's raw char[] element storage. -->
+        <Variable Name="base" InitialValue="(char*)0" />
+        <!-- Bytes between the start of consecutive elements (InnerList::step). -->
+        <Variable Name="stepBytes" InitialValue="(unsigned __int64)0" />
+        <!-- Number of elements in the current InnerList (InnerList::size). -->
+        <Variable Name="innerSize" InitialValue="(unsigned __int64)0" />
+
+        <Size>size()</Size>
+
+        <!-- Outer loop: iterate over every InnerList in storage_. Empty
+             InnerLists (size == 0) are naturally skipped because their inner
+             loop body never executes. -->
+        <Loop Condition="listIdx &lt; innerListCount()">
+          <!-- Exec requires __ptr_ instead of value(). -->
+          <Exec>base = (char*)alloc()-&gt;storage_[listIdx].data.__ptr_</Exec>
+          <Exec>stepBytes = alloc()-&gt;storage_[listIdx].step</Exec>
+          <Exec>innerSize = alloc()-&gt;storage_[listIdx].size</Exec>
+          <Exec>elemIdx = 0</Exec>
+
+          <!-- Inner loop: each InnerList packs `innerSize` elements end to end,
+               `stepBytes` apart. -->
+          <Loop Condition="elemIdx &lt; innerSize">
+            <Item>($T1*)(base + elemIdx * stepBytes)</Item>
+            <Exec>elemIdx++</Exec>
+          </Loop>
+
+          <Exec>listIdx++</Exec>
+        </Loop>
+      </CustomListItems>
+    </Expand>
+  </Type>
+</AutoVisualizer>

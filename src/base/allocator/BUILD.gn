@@ -1,0 +1,62 @@
+# Copyright 2013 The Chromium Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//base/allocator/allocator.gni")
+import("//base/allocator/partition_allocator/partition_alloc.gni")
+import("//build/buildflag_header.gni")
+import("//build/config/compiler/compiler.gni")
+import("//build/config/dcheck_always_on.gni")
+import("//build/toolchain/toolchain.gni")
+
+buildflag_header("buildflags") {
+  header = "buildflags.h"
+
+  use_partition_alloc_as_gwp_asan_store =
+      enable_backup_ref_ptr_support && use_raw_ptr_backup_ref_impl
+
+  flags = [ "USE_PARTITION_ALLOC_AS_GWP_ASAN_STORE=$use_partition_alloc_as_gwp_asan_store" ]
+}
+
+if (is_apple) {
+  source_set("early_zone_registration_apple") {
+    sources = [
+      "early_zone_registration_apple.cc",
+      "early_zone_registration_apple.h",
+      "partition_allocator/src/partition_alloc/shim/early_zone_registration_utils_apple.h",
+    ]
+
+    deps = [
+      ":buildflags",
+      "//base/allocator/partition_allocator:buildflags",
+    ]
+  }
+}
+
+if (is_win || is_linux) {
+  if (current_toolchain == default_system_allocator_toolchain) {
+    # This binary ends up in the 'system_allocator' build output directory.
+    executable("system_allocator_test_helper") {
+      testonly = true
+      sources = [ "system_allocator_test_helper.cc" ]
+      deps = [ "//base" ]
+    }
+  } else {
+    # This copies the binary (and symbols) from the 'system_allocator' build
+    # output directory into the main build output dir.
+    copy("system_allocator_test_helper") {
+      testonly = true
+      _toolchain = default_system_allocator_toolchain
+      _label = ":system_allocator_test_helper($_toolchain)"
+      _dir = get_label_info(_label, "root_out_dir")
+      _name = get_label_info(_label, "name")
+      sources = [ "$_dir/$_name" ]
+      if (target_os == "win") {
+        sources[0] += ".exe"
+        sources += [ "$_dir/$_name.exe.pdb" ]
+      }
+      outputs = [ "$root_out_dir/{{source_file_part}}" ]
+      deps = [ _label ]
+    }
+  }
+}

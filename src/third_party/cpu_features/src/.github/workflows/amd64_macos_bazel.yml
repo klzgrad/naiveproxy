@@ -1,0 +1,36 @@
+# ref: https://github.com/actions/runner-images
+name: amd64 MacOS Bazel
+
+on:
+  push:
+  pull_request:
+  schedule:
+    # min hours day(month) month day(week)
+    - cron: '0 0 7,22 * *'
+
+jobs:
+  # Building using the github runner environement directly.
+  bazel:
+    runs-on: macos-15-intel  # Using x86 processors
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v6
+      - name: Install Bazel
+        run: |
+          brew update
+          brew unlink bazelisk
+          brew install bazel
+      - name: Check Bazel
+        run: bazel version
+      - name: Build
+        run: >
+          bazel build
+          -c opt
+          --subcommands=true
+          ...
+      - name: Test
+        run: >
+          bazel test
+          -c opt
+          --test_output=errors
+          ...

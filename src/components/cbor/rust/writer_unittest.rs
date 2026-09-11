@@ -1,0 +1,158 @@
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use cbor::*;
+use rust_gtest_interop::prelude::*;
+
+#[gtest(CBORWriterRustTest, TestWriteUint)]
+fn test_write_uint() {
+    let test_cases = [
+        (0, "00"),
+        (1, "01"),
+        (10, "0a"),
+        (23, "17"),
+        (24, "1818"),
+        (25, "1819"),
+        (100, "1864"),
+        (1000, "1903e8"),
+        (1000000, "1a000f4240"),
+        (0xFFFFFFFF, "1affffffff"),
+        (0x100000000, "1b0000000100000000"),
+        (i64::MAX, "1b7fffffffffffffff"),
+    ];
+
+    for test in test_cases {
+        let val = Value::Int(test.0);
+        let expected = hex::decode(test.1).unwrap();
+        assert_eq!(write(&val), expected, "Failed encoding {}", test.0);
+    }
+}
+
+#[gtest(CBORWriterRustTest, TestWriteNegativeInteger)]
+fn test_write_negative_integer() {
+    let test_cases = [
+        (-1, "20"),
+        (-10, "29"),
+        (-23, "36"),
+        (-24, "37"),
+        (-25, "3818"),
+        (-100, "3863"),
+        (-256, "38ff"),
+        (-1000, "3903e7"),
+        (-65536, "39ffff"),
+        (-4294967296, "3affffffff"),
+        (-4294967297, "3b0000000100000000"),
+        (i64::MIN, "3b7fffffffffffffff"),
+    ];
+
+    for test in test_cases {
+        let val = Value::Int(test.0);
+        let expected = hex::decode(test.1).unwrap();
+        assert_eq!(write(&val), expected, "Failed encoding {}", test.0);
+    }
+}
+
+#[gtest(CBORWriterRustTest, TestWriteBytes)]
+fn test_write_bytes() {
+    let test_cases = [
+        (&[] as &[_], "40"),                       //
+        (&[0x01, 0x02, 0x03, 0x04], "4401020304"), //
+    ];
+
+    for test in test_cases {
+        let val = Value::Bytestring(test.0);
+        let expected = hex::decode(test.1).unwrap();
+        assert_eq!(write(&val), expected);
+    }
+}
+
+#[gtest(CBORWriterRustTest, TestWriteString)]
+fn test_write_string() {
+    let test_cases = [
+        ("", "60"),    //
+        ("a", "6161"), //
+    ];
+
+    for test in test_cases {
+        let val = Value::String(test.0);
+        let expected = hex::decode(test.1).unwrap();
+        assert_eq!(write(&val), expected);
+    }
+}
+
+#[gtest(CBORWriterRustTest, TestWriteArray)]
+fn test_write_array() {
+    let test_cases = [
+        (Value::Array(Vec::new()), "80"),
+        (Value::Array(vec![Value::Int(1)]), "8101"),
+        (Value::Array(vec![Value::Array(vec![Value::Int(1)])]), "818101"),
+    ];
+
+    for test in test_cases {
+        let expected = hex::decode(test.1).unwrap();
+        assert_eq!(write(&test.0), expected);
+    }
+}
+
+#[gtest(CBORWriterRustTest, TestWriteMap)]
+fn test_write_map() {
+    let test_cases = [
+        (Value::Map(vec![].into()), "a0"),
+        (Value::Map(vec![(MapKey::Int(1), Value::Int(1)).into()].into()), "a10101"),
+        (Value::Map(vec![(MapKey::Int(-2), Value::Int(1)).into()].into()), "a12101"),
+        (
+            Value::Map(
+                vec![
+                    (MapKey::Int(1), Value::Int(1)).into(),
+                    (MapKey::Int(2), Value::Int(2)).into(),
+                ]
+                .into(),
+            ),
+            "a201010202",
+        ),
+        (Value::Map(vec![(MapKey::Bytestring(&[0x0a]), Value::Int(1)).into()].into()), "a1410a01"),
+    ];
+
+    for test in test_cases {
+        let expected = hex::decode(test.1).unwrap();
+        assert_eq!(write(&test.0), expected);
+    }
+}
+
+#[gtest(CBORWriterRustTest, TestWriteSimpleValues)]
+fn test_write_simple_values() {
+    let test_cases = [
+        (Value::Boolean(false), "f4"),
+        (Value::Boolean(true), "f5"),
+        (Value::Null, "f6"),
+        (Value::Undefined, "f7"),
+    ];
+
+    for test in test_cases {
+        let expected = hex::decode(test.1).unwrap();
+        assert_eq!(write(&test.0), expected);
+    }
+}
+
+#[gtest(CBORWriterRustTest, TestWriteMapKeyCanonicalization)]
+fn test_write_map_key_canonicalization() {
+    let map = Map::from(vec![
+        (MapKey::String("bb"), Value::Int(1)).into(),
+        (MapKey::String("c"), Value::Int(2)).into(), // Length 1 should precede length 2
+        (MapKey::Int(-1), Value::Int(3)).into(),     // Major Type 1
+        (MapKey::Int(1), Value::Int(4)).into(),      // Major Type 0
+    ]);
+
+    // Expected CTAP2 Canonical Order:
+    // 1. MapKey::Int(1) -> 0x01
+    // 2. MapKey::Int(-1) -> 0x20
+    // 3. MapKey::String("c") -> 0x6163
+    // 4. MapKey::String("bb") -> 0x626262
+    // Map Envelope: 0xa4
+    // Values: 0x04 (for 1), 0x03 (for -1), 0x02 (for "c"), 0x01 (for "bb")
+    // Total raw expected payload bytes: a4 01 04 20 03 61 63 02 62 62 62 01
+
+    let expected = hex::decode("a40104200361630262626201").unwrap();
+    assert_eq!(write(&Value::Map(map)), expected);
+}

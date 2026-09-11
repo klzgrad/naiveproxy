@@ -1,0 +1,57 @@
+# Copyright (C) 2026 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../../../gn/test.gni")
+
+assert(enable_perfetto_trace_processor_sqlite)
+
+# Amalgamated C tokenizer + parser generated from `perfetto.y` (grammar)
+# and `perfetto.synq` (AST node definitions) by `tools/gen_syntaqlite_parser`.
+_syntaqlite_sources = [
+  "syntaqlite_perfetto.c",
+  "syntaqlite_perfetto.h",
+]
+
+source_set("syntaqlite") {
+  sources = _syntaqlite_sources + [
+              "inline_dispatch.h",
+              "utils.h",
+            ]
+
+  # Inline the dialect dispatch macros instead of going through dialect
+  # function pointers. Drops call_indirect on the parser hot path.
+  defines = [ "SYNTAQLITE_INLINE_DIALECT_DISPATCH=\"src/trace_processor/perfetto_sql/syntaqlite/inline_dispatch.h\"" ]
+  deps = [ "../../../../gn:default_deps" ]
+  visibility = [
+    "../../util:sql_module_doc_parser",
+    "../lineage_resolver:lineage_resolver",
+    "../parser:*",
+    "../tokenizer",
+  ]
+}
+
+# Loadable dialect library consumed by `syntaqlite fmt --dialect`. Links the
+# same amalgamated sources as `source_set("syntaqlite")` as a shared library so
+# the prebuilt syntaqlite CLI can dlopen it when formatting `.sql` files. Not
+# used at runtime by any Perfetto binary.
+if (perfetto_build_standalone) {
+  shared_library("perfetto_fmt_dialect") {
+    sources = _syntaqlite_sources
+    deps = [ "../../../../gn:default_deps" ]
+    defines = [ "SYNTAQLITE_SHARED" ]
+    if (is_mac) {
+      ldflags = [ "-Wl,-undefined,dynamic_lookup" ]
+    }
+  }
+}

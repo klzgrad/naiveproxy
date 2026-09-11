@@ -1,0 +1,106 @@
+# -*- makefile -*-
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright 1996-2025 The NASM Authors - All Rights Reserved
+
+#
+# Makefile for various extra NASM programs and files
+#
+
+@SET_MAKE@
+
+top_srcdir	= @top_srcdir@
+srcdir		= @srcdir@
+top_objdir	= @top_builddir@
+objdir		= @builddir@
+VPATH		= @srcdir@
+prefix		= @prefix@
+exec_prefix	= @exec_prefix@
+bindir		= @bindir@
+mandir		= @mandir@
+docdir		= @docdir@
+htmldir		= @htmldir@
+infodir		= @infodir@
+datarootdir	= @datarootdir@
+
+datadir		= $(datarootdir)/nasm
+
+CC		= @CC@
+CFLAGS		= @CFLAGS@
+CPPFLAGS	= @CPPFLAGS@
+BUILD_CFLAGS	= $(CPPFLAGS) $(CFLAGS) @DEFS@
+INTERNAL_CFLAGS = -I$(srcdir) -I$(objdir) \
+		  -I$(top_srcdir) -I$(top_objdir) \
+		  -I$(top_srcdir)/include -I$(top_objdir)/include \
+		  -I$(top_srcdir)/config  -I$(top_objdir)/config
+ALL_CFLAGS	= $(BUILD_CFLAGS) $(INTERNAL_CFLAGS)
+LDFLAGS		= @LDFLAGS@
+ALL_LDFLAGS     = $(ALL_CFLAGS) $(LDFLAGS)
+LIBS		= @LIBS@
+
+INSTALL		= @INSTALL@
+INSTALL_PROGRAM	= @INSTALL_PROGRAM@
+INSTALL_DATA	= @INSTALL_DATA@
+
+PERL		= perl
+RUNPERL		= $(PERL) -I$(top_srcdir)/perllib -I$(srcdir)
+
+MKDIR_P		= @MKDIR_P@
+RM_F		= rm -f
+RM_RF		= rm -rf
+CP_F		= cp -f
+CP_UF		= cp -uf
+
+PROGS		= omfdump$(X)
+GENDATA		=
+SRCDATA		= README \
+		  c16.mac c32.mac exebin.mac exebin2.mac \
+		  myC32.mac scitech.mac \
+		  nasmstab
+
+# Binary suffixes
+O		= @OBJEXT@
+X		= @EXEEXT@
+A		= @LIBEXT@
+
+# Don't delete intermediate files
+.SECONDARY:
+
+# Delete files on error
+.DELETE_ON_ERROR:
+
+.SUFFIXES:
+.SUFFIXES:	.$(O) .$(A) $(X) .c .i .s
+
+all: $(PROGS) $(GENDATA)
+
+.c.$(O):
+	$(CC) $(ALL_CFLAGS) -c -o $@ $<
+
+.c.s:
+	$(CC) $(ALL_CFLAGS) -S -o $@ $<
+
+.c.i:
+	$(CC) $(ALL_CFLAGS) -E -o $@ $<
+
+omfdump$(X): omfdump.$(O)
+	$(CC) $(ALL_LDFLAGS) -o $@ $< $(LIBS)
+
+install-prog: $(PROGS)
+	$(MKDIR_P) $(DESTDIR)$(bindir)
+	$(INSTALL_PROGRAM) $(PROGS) $(DESTDIR)$(bindir)/
+
+DATAFILES = $(GENDATA) $(SRCDATA:%=$(srcdir)/%)
+
+install-data: $(DATAFILES)
+	$(MKDIR_P) $(DESTDIR)$(datadir)
+	$(INSTALL_DATA) $(DATAFILES) $(DESTDIR)$(datadir)/
+
+install: install-prog install-data
+
+clean:
+	-$(RM_F) *.$(O) *.$(A) $(PROGS) $(GENDATA)
+
+spotless: clean
+
+Makefile: Makefile.in ../config.status
+	$(SHELL) ../config.status

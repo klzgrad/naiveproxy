@@ -1,0 +1,37 @@
+// Copyright 2011 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "base/system/sys_info.h"
+
+#include <stddef.h>
+#include <stdint.h>
+#include <sys/sysctl.h>
+
+#include "base/notreached.h"
+#include "base/numerics/safe_conversions.h"
+
+namespace base {
+
+ByteSize SysInfo::AmountOfTotalPhysicalMemoryImpl() {
+  int pages, page_size;
+  size_t size = sizeof(pages);
+  sysctlbyname("vm.stats.vm.v_page_count", &pages, &size, NULL, 0);
+  sysctlbyname("vm.stats.vm.v_page_size", &page_size, &size, NULL, 0);
+  if (pages == -1 || page_size == -1) {
+    NOTREACHED();
+  }
+  return ByteSize(checked_cast<unsigned>(page_size)) * pages;
+}
+
+// static
+uint64_t SysInfo::MaxSharedMemorySize() {
+  size_t limit;
+  size_t size = sizeof(limit);
+  if (sysctlbyname("kern.ipc.shmmax", &limit, &size, NULL, 0) < 0) {
+    NOTREACHED();
+  }
+  return static_cast<uint64_t>(limit);
+}
+
+}  // namespace base

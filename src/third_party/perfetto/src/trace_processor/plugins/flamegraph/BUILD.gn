@@ -1,0 +1,93 @@
+# Copyright (C) 2026 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../../../gn/perfetto.gni")
+import("../../../../gn/test.gni")
+
+assert(enable_perfetto_trace_processor_sqlite)
+
+# The flamegraph computation, free of any SQLite dependency so it can be
+# reused by future PerfettoSQL operator implementations.
+source_set("flamegraph") {
+  sources = [
+    "flamegraph.cc",
+    "flamegraph.h",
+  ]
+  deps = [
+    "../../../../gn:default_deps",
+    "../../../../include/perfetto/ext/base",
+    "../../../base",
+    "../../../base/regex",
+    "../../containers",
+    "../../core/common",
+    "../../core/tree",
+    "../../core/util",
+  ]
+}
+
+# The SQL intrinsics exposing the computation to PerfettoSQL.
+source_set("intrinsics") {
+  sources = [
+    "flamegraph_function.cc",
+    "flamegraph_function.h",
+  ]
+  deps = [
+    ":flamegraph",
+    "../../../../gn:default_deps",
+    "../../../../gn:sqlite",
+    "../../../base",
+    "../../../base/regex",
+    "../../containers",
+    "../../core/common",
+    "../../core/dataframe",
+    "../../core/plugin",
+    "../../core/tree",
+    "../../core/util",
+    "../../perfetto_sql/engine",
+    "../../sqlite",
+    "../../storage",
+    "../../types",
+  ]
+}
+
+if (enable_perfetto_benchmarks) {
+  source_set("benchmarks") {
+    testonly = true
+    sources = [ "flamegraph_benchmark.cc" ]
+    deps = [
+      ":flamegraph",
+      "../../../../gn:benchmark",
+      "../../../../gn:default_deps",
+      "../../../base",
+      "../../containers",
+      "../../core/common",
+      "../../core/tree",
+      "../../core/util",
+    ]
+  }
+}
+
+perfetto_unittest_source_set("unittests") {
+  testonly = true
+  sources = [ "flamegraph_unittest.cc" ]
+  deps = [
+    ":flamegraph",
+    "../../../../gn:default_deps",
+    "../../../../gn:gtest_and_gmock",
+    "../../../base",
+    "../../containers",
+    "../../core/tree",
+    "../../core/util",
+  ]
+}

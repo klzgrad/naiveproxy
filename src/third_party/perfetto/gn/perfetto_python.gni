@@ -1,0 +1,73 @@
+# Copyright (C) 2022 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("perfetto.gni")
+
+template("perfetto_py_library") {
+  action(target_name) {
+    forward_variables_from(invoker, [ "deps" ])
+
+    data = []
+    if (defined(invoker.data)) {
+      data += invoker.data
+    }
+
+    out_path = "$target_gen_dir/" + target_name
+    rebased_out_path =
+        rebase_path(target_gen_dir, root_build_dir) + "/" + target_name
+
+    sources = []
+    if (defined(invoker.sources)) {
+      sources += invoker.sources
+    }
+    script = "$perfetto_root_path/tools/touch_file.py"
+    args = [
+      "--output",
+      rebased_out_path,
+    ]
+    outputs = [ out_path ]
+    metadata = {
+      perfetto_action_type_for_generator = [ "python_library" ]
+      perfetto_data = data
+    }
+  }
+}
+
+template("perfetto_py_binary") {
+  action(target_name) {
+    forward_variables_from(invoker, [ "deps" ])
+
+    data = []
+    if (defined(invoker.data)) {
+      data += invoker.data
+    }
+
+    out_path = "$target_gen_dir/" + target_name
+    rebased_out_path =
+        rebase_path(target_gen_dir, root_build_dir) + "/" + target_name
+
+    sources = invoker.sources
+    script = "$perfetto_root_path/tools/touch_file.py"
+    args = [
+      "--output",
+      rebased_out_path,
+    ]
+    outputs = [ out_path ]
+    metadata = {
+      perfetto_action_type_for_generator = [ "python_binary" ]
+      perfetto_python_main = [ invoker.main ]
+      perfetto_data = data
+    }
+  }
+}

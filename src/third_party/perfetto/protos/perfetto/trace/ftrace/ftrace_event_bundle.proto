@@ -1,0 +1,164 @@
+/*
+ * Copyright (C) 2017 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+import "protos/perfetto/trace/ftrace/ftrace_event.proto";
+import "protos/perfetto/trace/ftrace/ftrace_stats.proto";
+
+package perfetto.protos;
+
+// The result of tracing one or more ftrace data pages from a single per-cpu
+// kernel ring buffer. If collating multiple pages' worth of events, all of
+// them come from contiguous pages, with no kernel data loss in between.
+message FtraceEventBundle {
+  optional uint32 cpu = 1;
+  repeated FtraceEvent event = 2;
+
+  // Set to true if there was data loss between the last time we've read from
+  // the corresponding per-cpu kernel buffer, and the earliest event recorded
+  // in this bundle.
+  optional bool lost_events = 3;
+
+  // Optionally-enabled compact encoding of a batch of scheduling events. Only
+  // a subset of events & their fields is recorded.
+  // All fields (except comms) are stored in a structure-of-arrays form, one
+  // entry in each repeated field per event.
+  message CompactSched {
+    // Interned table of unique strings for this bundle.
+    repeated string intern_table = 5;
+
+    // Delta-encoded timestamps across all sched_switch events within this
+    // bundle. The first is absolute, each next one is relative to its
+    // predecessor.
+    repeated uint64 switch_timestamp = 1 [packed = true];
+    repeated int64 switch_prev_state = 2 [packed = true];
+    repeated int32 switch_next_pid = 3 [packed = true];
+    repeated int32 switch_next_prio = 4 [packed = true];
+    // One per event, index into |intern_table| corresponding to the
+    // next_comm field of the event.
+    repeated uint32 switch_next_comm_index = 6 [packed = true];
+
+    // Delta-encoded timestamps across all sched_waking events within this
+    // bundle. The first is absolute, each next one is relative to its
+    // predecessor.
+    repeated uint64 waking_timestamp = 7 [packed = true];
+    repeated int32 waking_pid = 8 [packed = true];
+    repeated int32 waking_target_cpu = 9 [packed = true];
+    repeated int32 waking_prio = 10 [packed = true];
+    // One per event, index into |intern_table| corresponding to the
+    // comm field of the event.
+    repeated uint32 waking_comm_index = 11 [packed = true];
+    repeated uint32 waking_common_flags = 12 [packed = true];
+  }
+  optional CompactSched compact_sched = 4;
+
+  // Perfetto will by default try to use the boottime ("boot") clock for ftrace
+  // timestamps as that counts during suspend, is available to userspace, and
+  // is coherent across cpus.
+  //
+  // If this field is set, it means that a different clock was used during
+  // recording. Either because the boot clock is unavailable (e.g. old kernels
+  // before 3.x), or the trace config has set an incompatible option
+  // (use_monotonic_raw_clock / preserve_ftrace_buffer). In that case,
+  // trace_processor will do best-effort clock alignment using timestamp pairs
+  // from |ftrace_timestamp| and |boot_timestamp| fields. This field is omitted
+  // when the ftrace clock is "boot", as that is the default assumption.
+  //
+  // Some clocks (local/global) are technically per-cpu, but we make a
+  // simplifying assumption that they are global, as their inter-cpu skew
+  // should be reasonably bounded on modern systems.
+  //
+  // Added in: perfetto v19. Android T (13).
+  optional FtraceClock ftrace_clock = 5;
+
+  // The timestamp according to the ftrace clock, taken at the same instant as
+  // |boot_timestamp|. Note: timestamping is done at buffer read time, so it
+  // will be in the future relative to the data covered by this bundle.
+  // Implementation note: Populated by reading the 'now ts:' field in
+  // tracefs/per_cpu/cpu0/stat.
+  //
+  // Set only if |ftrace_clock| != FTRACE_CLOCK_UNSPECIFIED.
+  optional int64 ftrace_timestamp = 6;
+
+  // The timestamp according to CLOCK_BOOTTIME, taken at the same instant as
+  // |ftrace_timestamp|.
+  //
+  // Set only if |ftrace_clock| != FTRACE_CLOCK_UNSPECIFIED.
+  optional int64 boot_timestamp = 7;
+
+  // Errors encountered during parsing of the raw ftrace data. In case of ring
+  // buffer layout errors, the parser skips the rest of the offending kernel
+  // buffer page and continues from the next page.
+  // See also FtraceStats.ftrace_parse_errors, which collates all unique errors
+  // seen within the duration of the trace (even if the affected bundles get
+  // overwritten in ring buffer mode).
+  message FtraceError {
+    // Timestamp of the data that we're unable to parse, in the ftrace clock
+    // domain. Currently, we use the base timestamp of the tracing page
+    // containing the bad record rather than the time of the record itself.
+    optional uint64 timestamp = 1;
+    optional FtraceParseStatus status = 2;
+  }
+  repeated FtraceError error = 8;
+
+  // Superseded by |previous_bundle_end_timestamp| in perfetto v47+. The
+  // primary difference is that this field tracked the last timestamp read from
+  // the per-cpu buffer, while the newer field tracks events that get
+  // serialised into the trace.
+  // Added in: perfetto v44.
+  optional uint64 last_read_event_timestamp = 9;
+
+  // The timestamp (using ftrace clock) of the last event written into this
+  // data source on this cpu. In other words: the last event in the previous
+  // bundle.
+  // Lets the trace processing find an initial timestamp after which ftrace
+  // data is known to be valid across all cpus. Of particular importance when
+  // the perfetto trace buffer is a ring buffer as well, as the overwriting of
+  // oldest bundles can skew the first valid timestamp per cpu significantly.
+  // Added in: perfetto v47.
+  optional uint64 previous_bundle_end_timestamp = 10;
+
+  // Describes the serialised |FtraceEvent| protos for events not known at
+  // compile time, when using the |denser_generic_event_encoding| option.
+  // Addded in: perfetto v50.
+  message GenericEventDescriptor {
+    // submessage id within FtraceEvent described by |event_descriptor|.
+    optional int32 field_id = 1;
+    // optional: the event's group, e.g. "sched" for "sched/sched_switch".
+    // The event name itself is in |event_descriptor.name|.
+    optional string group_name = 3;
+    // serialised DescriptorProto.
+    optional bytes event_descriptor = 2;
+  }
+  repeated GenericEventDescriptor generic_event_descriptors = 11;
+
+  // Written only on android builds if the config sets |debug_ftrace_abi|.
+  // Contains the raw ring buffer tracing page that the implementation could
+  // not parse.
+  // Addded in: perfetto v50.
+  optional bytes broken_abi_trace_page = 512;
+}
+
+enum FtraceClock {
+  // There is no FTRACE_CLOCK_BOOT entry as that's the default assumption. When
+  // the ftrace clock is "boot", it's just omitted (so UNSPECIFIED == BOOT).
+  FTRACE_CLOCK_UNSPECIFIED = 0;
+  FTRACE_CLOCK_UNKNOWN = 1;
+  FTRACE_CLOCK_GLOBAL = 2;
+  FTRACE_CLOCK_LOCAL = 3;
+  FTRACE_CLOCK_MONO_RAW = 4;
+}

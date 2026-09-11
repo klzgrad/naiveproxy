@@ -1,0 +1,114 @@
+// Copyright 2025 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "base/memory_coordinator/memory_consumer_registry.h"
+
+#include "base/check.h"
+#include "base/check_op.h"
+#include "base/hash/hash.h"
+
+namespace base {
+
+namespace {
+
+MemoryConsumerRegistry* g_memory_consumer_registry = nullptr;
+
+}  // namespace
+
+void MemoryConsumerRegistry::NotifyReleaseMemory(MemoryConsumer* consumer) {
+  CHECK(consumer);
+  consumer->ReleaseMemory();
+}
+
+void MemoryConsumerRegistry::NotifyUpdateMemoryLimit(MemoryConsumer* consumer,
+                                                     MemoryLimit memory_limit) {
+  CHECK(consumer);
+  consumer->UpdateMemoryLimit(memory_limit);
+}
+
+void MemoryConsumerRegistry::NotifyUpdateMemoryLimitNoNotification(
+    MemoryConsumer* consumer,
+    MemoryLimit memory_limit) {
+  CHECK(consumer);
+  consumer->UpdateMemoryLimitNoNotification(memory_limit);
+}
+
+// static
+bool MemoryConsumerRegistry::Exists() {
+  return g_memory_consumer_registry;
+}
+
+// static
+MemoryConsumerRegistry& MemoryConsumerRegistry::Get() {
+  CHECK(g_memory_consumer_registry);
+  return *g_memory_consumer_registry;
+}
+
+// static
+MemoryConsumerRegistry* MemoryConsumerRegistry::MaybeGet() {
+  return g_memory_consumer_registry;
+}
+
+// static
+void MemoryConsumerRegistry::Set(MemoryConsumerRegistry* instance) {
+  CHECK_NE(bool(g_memory_consumer_registry), bool(instance));
+  g_memory_consumer_registry = instance;
+}
+
+MemoryConsumerRegistry::MemoryConsumerRegistry() = default;
+
+MemoryConsumerRegistry::~MemoryConsumerRegistry() {
+  // Checks that implementations of this class correctly call
+  // NotifyDestruction().
+  CHECK(destruction_observers_notified_);
+
+  // Checks that implementations of the destruction observer interface correctly
+  // unregister themselves.
+  CHECK(destruction_observers_.empty());
+}
+
+void MemoryConsumerRegistry::AddMemoryConsumer(std::string_view consumer_name,
+                                               MemoryConsumerTraits traits,
+                                               MemoryConsumer* consumer) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  if (traits.consumer_type == MemoryConsumerTraits::ConsumerType::kPassive) {
+    CHECK(consumer->IsPassive())
+        << "Active MemoryConsumer registered with Passive traits: "
+        << consumer_name;
+  }
+  // TODO(crbug.com/489671163): Re-enable the check that passive consumers
+  // don't register with active traits once all clients have been migrated.
+
+  uint32_t consumer_id = PersistentHash(consumer_name);
+  OnMemoryConsumerAdded(consumer_id, consumer_name, traits, consumer);
+}
+
+void MemoryConsumerRegistry::RemoveMemoryConsumer(
+    std::string_view consumer_name,
+    MemoryConsumer* consumer) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  uint32_t consumer_id = PersistentHash(consumer_name);
+  OnMemoryConsumerRemoved(consumer_id, consumer);
+}
+
+void MemoryConsumerRegistry::AddDestructionObserver(
+    PassKey<MemoryConsumerRegistration>,
+    MemoryConsumerRegistryDestructionObserver* observer) {
+  destruction_observers_.AddObserver(observer);
+}
+
+void MemoryConsumerRegistry::RemoveDestructionObserver(
+    PassKey<MemoryConsumerRegistration>,
+    MemoryConsumerRegistryDestructionObserver* observer) {
+  destruction_observers_.RemoveObserver(observer);
+}
+
+void MemoryConsumerRegistry::NotifyDestruction() {
+  destruction_observers_.Notify(&MemoryConsumerRegistryDestructionObserver::
+                                    OnBeforeMemoryConsumerRegistryDestroyed);
+  destruction_observers_notified_ = true;
+}
+
+}  // namespace base

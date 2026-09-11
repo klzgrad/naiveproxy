@@ -1,0 +1,119 @@
+/*
+ * Copyright (C) 2026 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+// frameworks/native TrackEvent extensions. Source of truth lives at
+// frameworks/native/tracing/ in the Android tree. See
+// https://github.com/google/perfetto/discussions/4783
+
+syntax = "proto2";
+
+import public "protos/perfetto/trace/track_event/track_event.proto";
+
+package com.android.internal;
+
+// Information about a compositing workload submitted by SurfaceFlinger.
+message AndroidSurfaceFlingerWorkload {
+  // ID of the "parent" requesting the workload
+  enum Source {
+    // Unknown source
+    UNKNOWN = 0;
+    // Workload was triggered by a frame signal event
+    FRAME_SIGNAL = 1;
+  }
+  optional Source source = 1;
+
+  // Output that the workload is eventually compositing into
+  optional string output_name = 2;
+
+  // Frame timeline vsync ID corresponding to this workload.
+  optional int64 vsync_id = 3;
+
+  // Interesting properties for a workload
+  message Summary {
+    // Corresponds to Atrace slices, but with stable names
+    message Timings {
+      // Walltime for slices corresponding to CPU work done by SurfaceFlinger
+      message SfCpu {
+        // Top-level time spent signaling a frame update
+        optional int64 frame_signal_nanos = 1;
+        // Time spent committing new transactions to be composited
+        optional int64 commit_nanos = 2;
+        // Time spent for the compositing operation itself
+        optional int64 composite_nanos = 3;
+      }
+      optional SfCpu sf_cpu = 1;
+
+      // Walltime for slices corresponding to HWC work, observed by
+      // SurfaceFlinger
+      message Hwc {
+        // Time spent presenting a frame
+        optional int64 present_nanos = 1;
+        // Time spent validating a frame
+        optional int64 validate_nanos = 2;
+        // Time spent either validating or presenting, if HWC is choosing a path
+        // to take
+        optional int64 present_or_validate_nanos = 3;
+      }
+      optional Hwc hwc = 2;
+
+      // Walltime for slices corresponding to RenderEngine work
+      message Re {
+        // Time spent drawing layers on the CPU
+        optional int64 draw_layers_nanos = 1;
+        // Time spent waiting for a GPU fence to signal GPU completion
+        optional int64 gpu_completion_nanos = 2;
+      }
+      optional Re re = 3;
+
+      // Walltime for slices corresponding to Skia work, observed by
+      // SurfaceFlinger
+      message Skia {
+        // Time spent flushing commands
+        optional int64 flush_nanos = 1;
+        // Time spent submitting commands to the GPU driver
+        optional int64 submit_nanos = 2;
+      }
+      optional Skia skia = 4;
+    }
+    optional Timings timings = 1;
+
+    // Statistics tracked that describes a workload
+    message Stats {
+      // Number of layers that needed to be composited via the GPU.
+      optional int32 gpu_composited_layers = 1;
+      // Number of layers that needed to be composited via the DPU.
+      optional int32 dpu_composited_layers = 2;
+    }
+    optional Stats stats = 2;
+  }
+  optional Summary summary = 4;
+}
+
+message AndroidFrameworksNativeTrackEvent {
+  // Usable range: [2001, 2003], [2007, 2007], [2100, 2199].
+  // 2001-2003 and 2007 are historical (predate the fw/base / fw/native split).
+  // Next id: 2100.
+  extend perfetto.protos.TrackEvent {
+    // The name of a binder service.
+    optional string binder_service_name = 2001;
+    // The name of a binder interface.
+    optional string binder_interface_name = 2002;
+    // The name of an apex.
+    optional string apex_name = 2003;
+    // SurfaceFlinger workload.
+    optional AndroidSurfaceFlingerWorkload surfaceflinger_workload = 2007;
+  }
+}
