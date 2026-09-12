@@ -485,7 +485,7 @@ class BASE_EXPORT ThreadTypeManager {
     uint32_t bitmask = 0;
   };
   ThreadTypeManager() = default;
-  virtual ~ThreadTypeManager() = default;
+  ~ThreadTypeManager() = default;
   ThreadTypeManager(const ThreadTypeManager&) = delete;
   ThreadTypeManager& operator=(const ThreadTypeManager&) = delete;
 
@@ -497,7 +497,7 @@ class BASE_EXPORT ThreadTypeManager {
   bool HasLeases() const;
 
  private:
-  virtual void SetCurrentThreadTypeImpl(ThreadType thread_type,
+  void SetCurrentThreadTypeImpl(ThreadType thread_type,
                                         MessagePumpType pump_type_hint);
 
   // `default_thread_type_` can be nullopt to be able to express the state
