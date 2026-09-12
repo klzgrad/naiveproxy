@@ -258,7 +258,9 @@ void __assign_cpp_exception_ptr_from_record(void*& __dest, const EHExceptionReco
     return;
   }
 
+#if _LIBCPP_HAS_EXCEPTIONS
   try {
+#endif // _LIBCPP_HAS_EXCEPTIONS
     __copy_exception_object(static_cast<__exception_ptr_normal*>(__rx_raw) + 1,
                             __record.params.pExceptionObject,
                             __type
@@ -272,6 +274,7 @@ void __assign_cpp_exception_ptr_from_record(void*& __dest, const EHExceptionReco
     reinterpret_cast<EHExceptionRecord&>(const_cast<__exception_ptr_normal*>(__rx)->__record_).params.pExceptionObject =
         static_cast<__exception_ptr_normal*>(__rx_raw) + 1;
     __dest = const_cast<__exception_ptr_normal*>(__rx);
+#if _LIBCPP_HAS_EXCEPTIONS
   } catch (...) { // Copying the exception object threw an exception.
     // Exception thrown by the original exception's copy ctor.
     const auto* __inner_record_ptr = __get_current_exception();
@@ -341,6 +344,7 @@ void __assign_cpp_exception_ptr_from_record(void*& __dest, const EHExceptionReco
         static_cast<__exception_ptr_normal*>(__rx_raw) + 1;
     __dest = const_cast<__exception_ptr_normal*>(__rx);
   }
+#endif // _LIBCPP_HAS_EXCEPTIONS
 }
 
 } // namespace
@@ -404,7 +408,11 @@ exception_ptr current_exception() noexcept {
 
 [[noreturn]] void rethrow_exception(exception_ptr __p) {
   if (!__p)
+#if _LIBCPP_HAS_EXCEPTIONS
     throw bad_exception();
+#else
+    terminate();
+#endif // _LIBCPP_HAS_EXCEPTIONS
 
   auto* __rep = static_cast<__exception_ptr_storage*>(__p.__ptr_);
   auto __record_copy = __rep->__record_;
