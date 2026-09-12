@@ -63,7 +63,12 @@ std::optional<FDAccessModeError> CheckFDAccessMode(int fd, int expected_mode) {
   return std::nullopt;
 }
 
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+#if defined(__MUSL__) && !defined(MFD_CLOEXEC)
+#define MUSL_NO_MFD 1
+#else
+#define MUSL_NO_MFD 0
+#endif
+#if BUILDFLAG(IS_LINUX) && !MUSL_NO_MFD || BUILDFLAG(IS_CHROMEOS)
 
 // Added in Linux 6.3; not in all sysroot headers yet.
 #ifndef MFD_NOEXEC_SEAL
@@ -279,7 +284,7 @@ PlatformSharedMemoryRegion PlatformSharedMemoryRegion::Create(Mode mode,
   CHECK_NE(mode, Mode::kReadOnly) << "Creating a region in read-only mode will "
                                      "lead to this region being non-modifiable";
 
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+#if BUILDFLAG(IS_LINUX) && !MUSL_NO_MFD || BUILDFLAG(IS_CHROMEOS)
   if (!executable) {
     ScopedFDPair anonymous_region = CreateAnonymousRegion(mode, size);
     if (anonymous_region.fd.is_valid()) {
