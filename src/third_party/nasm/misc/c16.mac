@@ -1,0 +1,82 @@
+; NASM macro set to make interfacing to 16-bit programs easier -*- nasm -*-
+
+
+
+%imacro proc 1			; begin a procedure definition
+
+%push proc
+
+	  global %1
+
+%1:	  push bp
+
+	  mov bp,sp
+
+%ifdef FARCODE PASCAL		; arguments may start at bp+4 or bp+6
+
+%assign %$arg 6
+
+%define %$firstarg 6
+
+%else
+
+%assign %$arg 4
+
+%define %$firstarg 4
+
+%endif
+
+%define %$procname %1
+
+%endmacro
+
+
+
+%imacro arg 0-1 2		; used with the argument name as a label
+
+%00	  equ %$arg
+
+				; we could possibly be adding some
+
+				; debug information at this point...?
+
+%assign %$arg %1+%$arg
+
+%endmacro
+
+
+
+%imacro endproc 0
+
+%ifnctx proc
+
+%error Mismatched `endproc'/`proc'
+
+%else
+
+          mov sp,bp
+
+          pop bp
+
+%ifdef PASCAL
+
+          retf %$arg - %$firstarg
+
+%elifdef FARCODE
+
+	  retf
+
+%else
+
+	  retn
+
+%endif
+
+__end_%$procname:		; useful for calculating function size
+
+%pop
+
+%endif
+
+%endmacro
+

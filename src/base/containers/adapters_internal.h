@@ -1,0 +1,63 @@
+// Copyright 2014 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#ifndef BASE_CONTAINERS_ADAPTERS_INTERNAL_H_
+#define BASE_CONTAINERS_ADAPTERS_INTERNAL_H_
+
+#include <stddef.h>
+
+#include <iterator>
+#include <ranges>
+#include <utility>
+
+#include "base/compiler_specific.h"
+#include "base/memory/raw_ptr_exclusion.h"
+
+namespace base::internal {
+template <typename Range>
+class ReversedAdapter;
+}  // namespace base::internal
+
+template <typename Range>
+inline constexpr bool
+    std::ranges::enable_borrowed_range<base::internal::ReversedAdapter<Range>> =
+        std::ranges::borrowed_range<Range>;
+
+namespace base::internal {
+
+// Internal adapter class for implementing base::Reversed.
+// TODO(crbug.com/378623811): Parts of this (e.g. the `size()` helper) should be
+// extracted to a base template that can be shared/reused.
+template <typename Range>
+class ReversedAdapter {
+ public:
+  explicit ReversedAdapter(Range&& range LIFETIME_BOUND)
+      : range_(std::forward<Range>(range)) {}
+  ReversedAdapter(const ReversedAdapter&) = default;
+  ReversedAdapter& operator=(const ReversedAdapter&) = delete;
+
+  auto begin() { return std::ranges::rbegin(range_); }
+  auto begin() const { return std::ranges::rbegin(range_); }
+  auto cbegin() const { return std::ranges::crbegin(range_); }
+
+  auto end() { return std::ranges::rend(range_); }
+  auto end() const { return std::ranges::rend(range_); }
+  auto cend() const { return std::ranges::crend(range_); }
+
+  auto size() const
+    requires std::ranges::sized_range<Range>
+  {
+    return std::ranges::size(range_);
+  }
+
+ private:
+  // RAW_PTR_EXCLUSION: References a STACK_ALLOCATED class. It is only used
+  // inside for loops. Ideally, the container being iterated over should be the
+  // one held via a raw_ref/raw_ptrs.
+  RAW_PTR_EXCLUSION Range&& range_;
+};
+
+}  // namespace base::internal
+
+#endif  // BASE_CONTAINERS_ADAPTERS_INTERNAL_H_

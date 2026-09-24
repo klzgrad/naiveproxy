@@ -1,0 +1,63 @@
+/*
+ * Copyright (C) 2026 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+package perfetto.protos;
+
+// Emitted by the tracing service to record a state change of another tracing
+// session that was active while this trace was being recorded. Opt-in via
+// TraceConfig.BuiltinDataSource.enable_concurrent_session_events.
+//
+// One packet per state change; its time is carried by the enclosing
+// TracePacket's timestamp (CLOCK_BOOTTIME). Events of the same session share
+// the same |session_id|. The trace UUID is deliberately not included.
+//
+// Introduced in v58 / Android 26Q3+.
+message ConcurrentSessionEvent {
+  // Mirrors the tracing service's internal session state machine
+  // (TracingSession::State in the service): keep these two enums in sync.
+  // These values are part of the trace wire format and must stay stable: never
+  // renumber or reuse an existing value, only append new ones at the end.
+  enum State {
+    STATE_UNSPECIFIED = 0;
+    // Not recording (initial and final state).
+    STATE_DISABLED = 1;
+    // Configured but waiting for a start signal (e.g. a trigger).
+    STATE_CONFIGURED = 2;
+    // Actively recording data.
+    STATE_STARTED = 3;
+    // Stopping, waiting for data sources to ack and drain their final data.
+    STATE_DISABLING_WAITING_STOP_ACKS = 4;
+    // A read-only snapshot of another session, created by a clone operation.
+    STATE_CLONED_READ_ONLY = 5;
+  }
+  // The state the session transitioned to at this timestamp.
+  optional State state = 1;
+
+  // unique_session_name from the session's TraceConfig. May be empty.
+  optional string session_name = 2;
+
+  // Service-local monotonic counter identifying the session. Shared by all
+  // state changes of one session, never reused within a service instance.
+  optional uint64 session_id = 3;
+
+  // Unix uid of the consumer that started the session.
+  optional int32 consumer_uid = 4;
+
+  // Number of data sources in the session at the time of the state change.
+  optional uint32 num_data_sources = 5;
+}

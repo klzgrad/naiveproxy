@@ -1,0 +1,260 @@
+/*
+ * Copyright (C) 2026 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+import "protos/perfetto/trace/profiling/inline_callstack.proto";
+
+package perfetto.protos;
+
+// A single stack sample: a callstack captured for a task, measured against a
+// counter timebase. This is transport-neutral and timebase-neutral. The
+// timebase can be CPU cycles, wall-clock nanoseconds, allocated bytes, page
+// faults, etc.; the primary CounterDescriptor says which. It is not specific to
+// CPU profiling.
+//
+// Each context/callstack/descriptor can be given inline or as an `iid`
+// referencing an InternedData entry. Producers that reuse a context across
+// samples should intern it so the per-sample cost is a single varint.
+message StackSample {
+  // The privilege level a sample was taken at. Append-only: never renumber or
+  // repurpose an existing value.
+  enum Mode {
+    MODE_UNKNOWN = 0;
+    MODE_USER = 1;
+    MODE_KERNEL = 2;
+    MODE_HYPERVISOR = 3;
+    MODE_GUEST_USER = 4;
+    MODE_GUEST_KERNEL = 5;
+  }
+
+  // The unit a CounterDescriptor's values are expressed in. Append-only: new
+  // units may be added, but existing values are never renumbered or
+  // repurposed. If none of these fit, set CounterDescriptor.unit_str instead.
+  enum Unit {
+    UNIT_UNSPECIFIED = 0;
+    UNIT_NANOSECONDS = 1;
+    UNIT_CPU_CYCLES = 2;
+    UNIT_INSTRUCTIONS = 3;
+    UNIT_BYTES = 4;
+    UNIT_PAGE_FAULTS = 5;
+    UNIT_CACHE_MISSES = 6;
+    UNIT_CACHE_REFERENCES = 7;
+    UNIT_BRANCH_MISSES = 8;
+    UNIT_COUNT = 9;
+  }
+
+  // The task an observation is attributed to. At least one of pid / tid /
+  // async_id should be set. async_id identifies a stackful async context
+  // (goroutine, fiber, ...) described by an AsyncContextDescriptor whose iid
+  // equals the async_id.
+  message TaskContext {
+    // Interning key, used when this context is emitted via
+    // InternedData.stack_sample_task_contexts and referenced by
+    // StackSample.task_context_iid. Starts from 1; 0 is the same as "not set".
+    optional uint64 iid = 1;
+
+    // OS process id the sample belongs to.
+    optional uint32 pid = 2;
+
+    // OS thread id the sample belongs to. If only tid is set, the process is
+    // inferred from thread association elsewhere in the trace.
+    optional uint32 tid = 3;
+    optional uint64 async_id = 4;
+  }
+
+  // Describes an async context referenced by TaskContext.async_id: a stackful
+  // unit of execution that is not an OS thread (goroutine, fiber, coroutine).
+  message AsyncContextDescriptor {
+    // Interning key, equal to the TaskContext.async_id it describes. Starts
+    // from 1, 0 is the same as "not set".
+    optional uint64 iid = 1;
+
+    // A human-readable name for this specific context, e.g. "worker-7".
+    optional string name = 2;
+
+    // The kind of async context, e.g. "goroutine", "fiber".
+    optional string kind = 3;
+
+    // iid of the structural parent AsyncContextDescriptor, if any.
+    optional uint64 parent_iid = 4;
+  }
+
+  // The execution state a sample was taken in. All fields are optional: an
+  // off-CPU sample (e.g. a wall-clock sampler catching a sleeping thread) has
+  // no meaningful cpu or mode.
+  message ExecutionContext {
+    // Interning key, used when this context is emitted via
+    // InternedData.stack_sample_execution_contexts and referenced by
+    // StackSample.execution_context_iid. Starts from 1; 0 is the same as "not
+    // set".
+    optional uint64 iid = 1;
+
+    // The cpu the sample was taken on.
+    optional uint32 cpu = 2;
+
+    // The privilege level the sampled code was running at.
+    optional Mode mode = 3;
+  }
+
+  // Describes a counter: a named, typed quantity a sample is measured against
+  // (the sampling timebase) or observed alongside (a follower). Values live on
+  // the sample as weights; this only describes their meaning.
+  message CounterDescriptor {
+    // The scope of a counter instance: which stream of values the per-sample
+    // weights belong to. Counter instances accumulate independently, so
+    // values from different instances must never be merged into one stream.
+    // Trace processor keeps sampling streams separate and materializes one
+    // counter track per instance within each stream: SCOPE_GLOBAL yields one
+    // track per sampling stream and SCOPE_CPU one track per
+    // (sampling stream, cpu).
+    enum Scope {
+      // Treated as SCOPE_GLOBAL.
+      SCOPE_UNSPECIFIED = 0;
+
+      // A single counter instance, not split by cpu, thread or anything
+      // else.
+      SCOPE_GLOBAL = 1;
+
+      // One counter instance per cpu. Each sample's weight belongs to the
+      // instance of the cpu in its ExecutionContext; samples without a cpu
+      // cannot be attributed and their weights for this counter are dropped.
+      SCOPE_CPU = 2;
+
+      // If your profiler needs a scope that is not listed here, please file
+      // a bug at https://github.com/google/perfetto/issues explaining what
+      // you are trying to record and which scope you would like added.
+      // Append-only: never renumber or repurpose an existing value.
+    }
+
+    // Interning key, used when this descriptor is emitted via
+    // InternedData.stack_sample_counter_descriptors and referenced by
+    // StackSample.primary_descriptor_iid. Starts from 1; 0 is the same as "not
+    // set".
+    optional uint64 iid = 1;
+
+    // Human-readable counter name, e.g. "cycles", "wall-time", "cache-misses".
+    optional string name = 2;
+
+    // The unit weights are expressed in. Set the well-known `unit` when one
+    // fits, otherwise set `unit_str` to a custom label.
+    oneof unit_field {
+      // A well-known unit from the Unit enum.
+      Unit unit = 3;
+
+      // A custom unit label, used when no Unit enum value fits.
+      string unit_str = 4;
+    }
+
+    // Scales raw weights to `unit`. E.g. unit=UNIT_BYTES, unit_multiplier=1024
+    // means weights are in KiB. Absent means 1.
+    optional uint64 unit_multiplier = 5;
+
+    // Free-form description of what the counter measures.
+    optional string description = 6;
+
+    // The scope of this counter's instances. Absent means SCOPE_GLOBAL.
+    optional Scope scope = 7;
+  }
+
+  // The task (thread / process / async context) this sample is attributed to.
+  // Give it inline via `task_context` or reference an interned TaskContext via
+  // `task_context_iid`.
+  oneof task_context_field {
+    // Inline task context.
+    TaskContext task_context = 1;
+
+    // Interned task context, referencing
+    // InternedData.stack_sample_task_contexts.
+    uint64 task_context_iid = 2;
+  }
+
+  // The execution state (cpu, privilege mode) at sample time. Absent for
+  // samplers that observe off-CPU tasks. Give it inline via `execution_context`
+  // or reference an interned ExecutionContext via `execution_context_iid`.
+  oneof execution_context_field {
+    // Inline execution context.
+    ExecutionContext execution_context = 3;
+
+    // Interned execution context, referencing
+    // InternedData.stack_sample_execution_contexts.
+    uint64 execution_context_iid = 4;
+  }
+
+  // The captured callstack, bottom frame first. Give it fully inline via
+  // `callstack` or reference an interned Callstack via `callstack_iid`.
+  oneof callstack_field {
+    // Fully-inline callstack: each frame carries its function name and source
+    // location directly, no interning. Simple but larger; prefer
+    // `callstack_iid` when callstacks repeat or frames need binary/library
+    // information (mappings, build ids, relative pcs).
+    InlineCallstack callstack = 5;
+
+    // Interned callstack, referencing InternedData.callstacks.
+    uint64 callstack_iid = 6;
+  }
+
+  // Set if stack unwinding was incomplete; describes the data, not producer
+  // internal state. Give it inline via `unwind_error` or reference an interned
+  // string via `unwind_error_iid`.
+  //
+  // TODO(lalitm): not yet parsed by trace_processor. Defined now to lock the
+  // wire layout; a table column will surface it later.
+  oneof unwind_error_field {
+    // Inline unwind error string.
+    string unwind_error = 7;
+
+    // Interned unwind error string, referencing an InternedData string entry.
+    uint64 unwind_error_iid = 8;
+  }
+
+  // The sampling timebase: the counter this sample's weight is measured
+  // against. Set one of the two; may be omitted entirely if declared in
+  // StackSampleDefaults.primary_descriptor.
+  oneof primary_descriptor_field {
+    // Inline timebase descriptor.
+    CounterDescriptor primary_descriptor = 9;
+
+    // Interned timebase descriptor, referencing
+    // InternedData.stack_sample_counter_descriptors.
+    uint64 primary_descriptor_iid = 10;
+  }
+
+  // The value attributed to this sample for the primary counter (e.g. the
+  // number of cycles or nanoseconds this sample represents).
+  optional uint64 primary_weight = 11;
+
+  // Additional counters read at the same sample (e.g. instructions, cache
+  // misses read alongside a cycles timebase). follower_weights is positional
+  // with whichever of follower_descriptors / follower_descriptor_iids is set.
+  repeated CounterDescriptor follower_descriptors = 12;
+  repeated uint64 follower_descriptor_iids = 13 [packed = true];
+  repeated uint64 follower_weights = 14 [packed = true];
+}
+
+// Per-sequence defaults for StackSample. Lets a producer declare the source and
+// the common timebase / followers once instead of on every sample.
+message StackSampleDefaults {
+  // Identifies the profiler that produced these samples, e.g. "linux.perf",
+  // "python.wall". Recorded once per sampling stream.
+  optional string source = 1;
+
+  // Default primary timebase for samples that omit their own.
+  optional StackSample.CounterDescriptor primary_descriptor = 2;
+
+  // Default follower counters, positional with StackSample.follower_weights.
+  repeated StackSample.CounterDescriptor follower_descriptors = 3;
+}

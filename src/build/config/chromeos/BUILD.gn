@@ -1,0 +1,44 @@
+# Copyright 2019 The Chromium Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/chromeos/args.gni")
+import("//build/config/compiler_cpu_abi.gn")
+
+assert(is_chromeos)
+
+config("compiler") {
+  cflags = [ "-faddrsig" ]
+
+  # Strip prefix paths from predefined preprocessor macros and __builtin_FILE()
+  # so that log lines is easier to read. See crbug.com/405206784.
+  # This makes source file paths relative to the src directory, instead of
+  # prefixing them with something like "../../../../../path/to/chromium/src".
+  src_prefix = rebase_path("//", root_build_dir)
+  cflags += [ "-fmacro-prefix-map=${src_prefix}=" ]
+}
+
+config("compiler_cpu_abi") {
+  # These flags are added by the Chrome OS toolchain compiler wrapper,
+  # or are implicitly passed by Chome OS's toolchain's clang due to
+  # the cmake flags that clang was built with. Passing them redundantly
+  # is harmless and prepares for using Chromium's toolchain.
+  if (is_chromeos_device) {
+    asmflags = cros_cpu_abi_asmflags
+    cflags = cros_cpu_abi_cflags
+    ldflags = cros_cpu_abi_ldflags
+  }
+}
+
+config("runtime_library") {
+  # These flags are added by the Chrome OS toolchain compiler wrapper,
+  # or are implicitly passed by Chome OS's toolchain's clang due to
+  # the cmake flags that clang was built with. Passing them redundantly
+  # is harmless and prepares for using Chromium's toolchain.
+  if (is_chromeos_device) {
+    ldflags = [
+      "--rtlib=compiler-rt",
+      "--unwindlib=libunwind",
+    ]
+  }
+}

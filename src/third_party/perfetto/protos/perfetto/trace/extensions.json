@@ -1,0 +1,188 @@
+{
+  "comment": [
+    "Allocation registry for out-of-tree extensions against Perfetto trace",
+    "protos. Three scopes are tracked here:",
+    "  * TrackEvent   -- typed-event payloads emitted on a track (`extend TrackEvent`)",
+    "  * TracePacket  -- top-level trace packet types (`extend TracePacket`)",
+    "  * InternedData -- per-sequence interned data types (`extend InternedData`)",
+    "",
+    "Adding a new allocation:",
+    "  * Pick an unused tag range and add it as a new entry under the matching",
+    "    scope's `allocations`. Existing ranges are immutable -- bumping or",
+    "    overlapping them breaks wire compatibility.",
+    "  * Each allocation must declare exactly one of:",
+    "      `proto`    -- path to a leaf .proto in this repo,",
+    "      `registry` -- path to a sub-registry (delegates further),",
+    "      neither    -- the entry MUST be named \"unallocated\" (this is the",
+    "                    only way to reserve a hole; entries with any other",
+    "                    name are required to have `proto`, `registry`, or",
+    "                    -- for remote sources -- `repo`).",
+    "  * `repo` is set for entries whose source of truth lives outside this repo",
+    "    (e.g. android-internal). Tooling skips downloading those.",
+    "",
+    "See docs/instrumentation/extensions.md for the full extension model.",
+    "tools/tracing_proto_extensions reads this file and a CI check enforces",
+    "that every proto file's extend-block tag numbers fall inside an allocation."
+  ],
+  "extensions": [
+    {
+      "scope": "perfetto.protos.TrackEvent",
+      "range": [1000, 9999],
+      "allocations": [
+        {
+          "name": "chromium",
+          "range": [1000, 1999],
+          "contact": "tracing@chromium.org",
+          "description": "Chrome browser and chromium-based projects",
+          "comment": [
+            "The source of truth lives in chromium. A copy exists in ",
+            "the Perfetto GitHub repo under ",
+            "protos/third_party/chromium/chrome_track_event.proto ",
+            "and is kept up-to-date via a Skia autoroller."
+          ],
+          "repo": "https://chromium.googlesource.com/chromium/src",
+          "proto": "base/tracing/protos/chrome_track_event.proto"
+        },
+        {
+          "name": "android_system",
+          "description": "Android OS platform (System image)",
+          "comment": [
+            "Sub-registry lives in the Android tree. Schema is ",
+            "split between frameworks/base/proto/tracing/ and ",
+            "frameworks/native/tracing/, aggregated into the ",
+            "descriptor zip installed at the path below. See ",
+            "https://github.com/google/perfetto/discussions/4783."
+          ],
+          "registry": "/system/extras/tracing/system_tracing_protos.json",
+          "repo": "android-internal",
+          "range": [2000, 2999]
+        },
+        {
+          "name": "perfetto_gpu",
+          "range": [3000, 3099],
+          "contact": "perfetto-dev@googlegroups.com",
+          "description": "Reserved for Perfetto GPU integration",
+          "proto": "protos/perfetto/trace/gpu/gpu_track_event.proto"
+        },
+        {
+          "name": "unallocated",
+          "comment": [
+            "The next allocation goes here. Shrink and take from here."
+          ],
+          "range": [3100, 4999]
+        },
+        {
+          "name": "android_vendor",
+          "description": "Android OS platform (Vendor image)",
+          "comment": ["Introduced by ag/39003368"],
+          "registry": "/vendor/google/data/etc/tracing/vendor_tracing_protos.json",
+          "repo": "android-internal",
+          "range": [5000, 8999]
+        },
+        {
+          "name": "perfetto_tests",
+          "range": [9000, 9999],
+          "contact": "perfetto-dev@googlegroups.com",
+          "description": "Reserved for Perfetto unit and integration tests",
+          "proto": "protos/perfetto/trace/test_extensions.proto"
+        }
+      ]
+    },
+    {
+      "scope": "perfetto.protos.TracePacket",
+      "ranges": [
+        [56, 56],
+        [76, 76],
+        [88, 88],
+        [92, 92],
+        [93, 94],
+        [96, 97],
+        [104, 105],
+        [112, 112],
+        [114, 114],
+        [116, 116],
+        [121, 121],
+        [1000, 9999]
+      ],
+      "allocations": [
+        {
+          "name": "android_system",
+          "description": "Android OS platform (System image)",
+          "comment": [
+            "Sub-registry lives in the Android tree. Wrappers span multiple",
+            "components (ART, Bluetooth, Connectivity, frameworks/base,",
+            "frameworks/native, Winscope), aggregated into the descriptor zip",
+            "installed at the path below. See",
+            "https://github.com/google/perfetto/discussions/4783."
+          ],
+          "ranges": [
+            [56, 56],
+            [76, 76],
+            [88, 88],
+            [92, 92],
+            [93, 94],
+            [96, 97],
+            [104, 105],
+            [112, 112],
+            [114, 114],
+            [116, 116],
+            [121, 121],
+            [1000, 1999]
+          ],
+          "registry": "/system/extras/tracing/system_tracing_protos.json",
+          "repo": "android-internal"
+        },
+        {
+          "name": "unallocated",
+          "comment": [
+            "The next allocation goes here. Shrink and take from here."
+          ],
+          "range": [2000, 9999]
+        }
+      ]
+    },
+    {
+      "scope": "perfetto.protos.InternedData",
+      "ranges": [
+        [30, 30],
+        [36, 42],
+        [44, 46],
+        [1000, 9999]
+      ],
+      "allocations": [
+        {
+          "name": "android_system",
+          "description": "Android OS platform (System image)",
+          "comment": [
+            "Sub-registry lives in the Android tree. Wrappers span",
+            "frameworks/base (42, 44) and Connectivity (30), aggregated into",
+            "the descriptor zip installed at the path below. See",
+            "https://github.com/google/perfetto/discussions/4783."
+          ],
+          "ranges": [
+            [30, 30],
+            [36, 42],
+            [44, 46],
+            [1100, 1999]
+          ],
+          "registry": "/system/extras/tracing/system_tracing_protos.json",
+          "repo": "android-internal"
+        },
+        {
+          "name": "perfetto_gpu",
+          "range": [1000, 1099],
+          "contact": "perfetto-dev@googlegroups.com",
+          "description": "Reserved for Perfetto GPU integration",
+          "proto": "protos/perfetto/trace/gpu/gpu_interned_data.proto"
+        },
+        {
+          "name": "unallocated",
+          "comment": [
+            "The next allocation goes here. Shrink and take from here."
+          ],
+          "range": [2000, 9999]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,87 @@
+# -*- coding: utf-8 -*-
+# SPDX-License-Identifier: BSD-2-Clause
+# Copyright 1996-2025 The NASM Authors - All Rights Reserved
+
+%define nasm_version @@NASM_VER@@
+Summary: The Netwide Assembler, a portable x86 assembler with Intel-like syntax
+Name: nasm
+Version: @@NASM_MANGLED_VER@@
+Release: 0%{?dist}
+License: BSD-2-Clause
+Source: https://www.nasm.us/pub/nasm/releasebuilds/%{nasm_version}/nasm-%{nasm_version}.tar.xz
+URL: https://www.nasm.us/
+BuildRoot: /tmp/rpm-build-nasm
+Prefix: %{_prefix}
+BuildRequires: autoconf
+BuildRequires: automake
+BuildRequires: asciidoc
+BuildRequires: xmlto
+BuildRequires: perl
+BuildRequires: gcc
+BuildRequires: make
+BuildRequires: gzip
+BuildRequires: xz
+BuildRequires: zlib-devel
+BuildRequires: sed
+BuildRequires: findutils
+BuildRequires: coreutils
+@@PERLBUILDREQS@@
+BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
+Obsoletes: %{name}-rdoff < 2.16
+
+%package doc
+Summary: Detailed manual for the Netwide Assembler
+BuildArch: noarch
+BuildRequires: ghostscript
+BuildRequires: fontconfig
+BuildRequires: google-roboto-fonts
+BuildRequires: google-roboto-mono-fonts
+Requires: google-roboto-fonts
+Requires: google-roboto-mono-fonts
+Requires: %{name} = %{version}-%{release}
+
+%define _pkgdatadir %{_datadir}/%{name}
+%define  pkgdatadir %{?buildroot:%{buildroot}}%{_datadir}/%{name}
+%define _pkgdocdir  %{_docdir}/%{name}
+
+%description
+NASM is the Netwide Assembler, a free portable assembler for the Intel
+80x86 microprocessor series, using primarily the traditional Intel
+instruction mnemonics and syntax.
+
+%description doc
+Extensive documentation for the Netwide Assembler (NASM) in HTML and
+PDF formats.
+
+%prep
+%setup -q -n nasm-%{nasm_version}
+
+%build
+sh autogen.sh --clearenv
+%configure --enable-gc $([ -z "%{_lto_cflags}" ] || echo --enable-lto)
+make %{?_smp_mflags} everything
+
+%install
+rm -rf "%{buildroot}"
+make DESTDIR="%{buildroot}" PDFZ=".xz" install_everything
+gzip -9 "%{pkgdatadir}"/nasmtok.*
+
+%files
+%defattr(-,root,root)
+%doc AUTHORS
+%doc LICENSE
+%{_bindir}/nasm
+%{_bindir}/ndisasm
+%{_mandir}/man1/nasm.1*
+%{_mandir}/man1/ndisasm.1*
+%dir %{_pkgdatadir}
+%{_pkgdatadir}/nasmtok.*.gz
+
+%files doc
+%defattr(-,root,root)
+%doc %{_pkgdocdir}/nasmdoc.pdf.xz
+%dir %{_pkgdocdir}/html
+%doc %{_pkgdocdir}/html/*
+
+# This is the upstream spec file; the change log is in git
+%changelog

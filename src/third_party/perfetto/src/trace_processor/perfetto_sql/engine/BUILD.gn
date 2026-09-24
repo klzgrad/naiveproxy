@@ -1,0 +1,88 @@
+# Copyright (C) 2019 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../../../gn/test.gni")
+
+assert(enable_perfetto_trace_processor_sqlite)
+
+source_set("engine") {
+  sources = [
+    "created_function.cc",
+    "created_function.h",
+    "dataframe_module.cc",
+    "dataframe_module.h",
+    "perfetto_sql_connection.cc",
+    "perfetto_sql_connection.h",
+    "perfetto_sql_database.cc",
+    "perfetto_sql_database.h",
+    "runtime_table_function.cc",
+    "runtime_table_function.h",
+    "sqlite_dataframe_builder.cc",
+    "sqlite_dataframe_builder.h",
+    "static_table_function_module.cc",
+    "static_table_function_module.h",
+  ]
+  deps = [
+    "../..:metatrace",
+    "../../../../gn:default_deps",
+    "../../../../include/perfetto/trace_processor:basic_types",
+    "../../../../protos/perfetto/trace_processor:zero",
+    "../../../base",
+    "../../containers",
+    "../../core/dataframe",
+    "../../core/plugin",
+    "../../types",
+    "../../util:owned_sql_value",
+    "../../util:sql_argument",
+    "../../util:stdlib",
+    "../parser",
+    "../tokenizer",
+  ]
+
+  # We export the SQLite bindings.
+  public_deps = [ "../../sqlite" ]
+}
+
+perfetto_unittest_source_set("unittests") {
+  testonly = true
+  sources = [ "perfetto_sql_connection_unittest.cc" ]
+  deps = [
+    ":engine",
+    "../../../../gn:default_deps",
+    "../../../../gn:gtest_and_gmock",
+    "../../../../gn:sqlite",
+    "../../../base",
+    "../../../base:test_support",
+    "../..//tables:tables_python",
+    "../../containers",
+    "../../core/plugin",
+    "../../sqlite",
+    "../../util:stdlib",
+  ]
+}
+
+if (enable_perfetto_benchmarks) {
+  source_set("benchmarks") {
+    testonly = true
+    deps = [
+      ":engine",
+      "../../../../gn:benchmark",
+      "../../../../gn:default_deps",
+      "../../../base",
+      "../../containers",
+      "../../sqlite",
+    ]
+    sources = [ "perfetto_sql_connection_benchmark.cc" ]
+  }
+}

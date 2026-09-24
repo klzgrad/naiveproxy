@@ -1,0 +1,39 @@
+#!/bin/bash
+
+DASHO=0
+
+declare -a param1
+declare -a param2
+for p; do
+    case "$p" in
+        -o ) param1+=("$p")
+	     param2+=("$p")
+             DASHO=1
+             ;;
+	*.o | *.obj)
+             if [ "${DASHO}" -eq "1" ]; then
+                 DASHO=0
+                 ofile="$p"
+                 param1+=("$p.1" '-l' "$p.lst.1")
+	         param2+=("$p.2" '-l' "$p.lst.2")
+                 printf '%s\n%s.2\n%s.lst.2\n' "$ofile" "$ofile" "$ofile" \
+		    >> "$projnasm_filelist"
+             else
+                 param1+=("$p")
+                 param2+=("$p")
+             fi
+	     ;;
+	*)   param1+=("$p")
+	     param2+=("$p")
+	     ;;
+    esac
+done
+
+printf '%s\n' "$*" >> "$projnasm_logfile"
+
+rm -f "$ofile"
+"$projnasm_nasm2" "${param2[@]}"
+"$projnasm_nasm1" "${param1[@]}" || exit $?
+if [ -f $ofile.1 ]; then
+	cp -f "$ofile.1" "$ofile"
+fi

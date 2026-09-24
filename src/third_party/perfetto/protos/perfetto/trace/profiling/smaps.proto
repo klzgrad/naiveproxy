@@ -1,0 +1,102 @@
+/*
+ * Copyright (C) 2020 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+package perfetto.protos;
+
+message SmapsEntry {
+  optional string path = 1;
+  optional uint64 size_kb = 2;
+  optional uint64 private_dirty_kb = 3;
+  optional uint64 swap_kb = 4;
+
+  // for field upload (instead of path).
+  optional string file_name = 5;
+
+  // Fields below added and used only for Chromium memory infra, see
+  // crbug.com/1098746.
+  optional uint64 start_address = 6;
+  optional uint64 module_timestamp = 7;
+  optional string module_debugid = 8;
+  optional string module_debug_path = 9;
+  optional uint32 protection_flags = 10;
+
+  optional uint64 private_clean_resident_kb = 11;
+  optional uint64 shared_dirty_resident_kb = 12;
+  optional uint64 shared_clean_resident_kb = 13;
+  optional uint64 locked_kb = 14;
+  optional uint64 proportional_resident_kb = 15;
+}
+
+// Structure-of-arrays style smaps packet of a single process. All packed
+// repeated fields, if set, must have the same length.
+message PackedSmaps {
+  // Table of path names. Notes:
+  // * first element is the empty string, serialised explicitly.
+  // * the table might contain duplicates.
+  repeated string string_table = 1;
+
+  // Interned file paths as an index into |string_table|.
+  // Note: the "(deleted)" suffix is kept as part of the string_table entry, and
+  // is to be handled during trace import stage.
+  // Written only if config.unaggregated == true. Otherwise the string_table is
+  // exactly the ordered names of the aggregated mappings.
+  repeated uint32 name_id = 2 [packed = true];
+
+  // How many mappings were merged by name, summing the values below.
+  // Written only if config.unaggregated == false.
+  repeated uint32 aggregate_count = 3 [packed = true];
+
+  repeated uint64 size_kb = 4 [packed = true];
+  repeated uint64 rss_kb = 5 [packed = true];
+  repeated uint64 anonymous_kb = 6 [packed = true];
+  repeated uint64 swap_kb = 7 [packed = true];
+  repeated uint64 shared_clean_kb = 8 [packed = true];
+  repeated uint64 shared_dirty_kb = 9 [packed = true];
+  repeated uint64 private_clean_kb = 10 [packed = true];
+  repeated uint64 private_dirty_kb = 11 [packed = true];
+  repeated uint64 locked_kb = 12 [packed = true];
+  repeated uint64 pss_kb = 13 [packed = true];
+  repeated uint64 pss_dirty_kb = 14 [packed = true];
+  repeated uint64 swap_pss_kb = 15 [packed = true];
+}
+
+message SmapsPacket {
+  optional uint32 pid = 1;
+  repeated SmapsEntry entries = 2;
+  optional PackedSmaps packed_entries = 3;
+
+  // Records how the snapshot was generated, as the message is shared by
+  // multiple smaps writers.
+  // If populating |packed_entries|, set explicitly to RECORDING_TYPE_STANDALONE
+  // as otherwise the trace importer might transform the data.
+  enum RecordingType {
+    RECORDING_TYPE_UNKNOWN = 0;
+    // Normal recording.
+    RECORDING_TYPE_STANDALONE = 1;
+    // Android: recorded in the perfetto_hprof ART plugin as part of a managed
+    // heap dump. Recording is done inside of a forked child process, which
+    // means private/shared and pss fields are misleading as there is
+    // copy-on-write page sharing with the forked child.
+    RECORDING_TYPE_ART_HPROF_POSTFORK = 2;
+    // Android: recorded in the perfetto_hprof ART plugin as part of a managed
+    // heap dump, but with the original smaps calculated before forking in the
+    // plugin.
+    RECORDING_TYPE_ART_HPROF_PREFORK = 3;
+  }
+  optional RecordingType recording_type = 4;
+}

@@ -1,0 +1,77 @@
+// Copyright 2023 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package privacy.ppn;
+
+import "quiche/blind_sign_auth/proto/attestation.proto";
+import "quiche/blind_sign_auth/proto/proxy_layer.proto";
+import "quiche/blind_sign_auth/proto/public_metadata.proto";
+import "anonymous_tokens/proto/anonymous_tokens.proto";
+
+option java_multiple_files = true;
+option java_package = "com.google.privacy.ppn.proto";
+
+// Request data needed to prepare for AuthAndSign.
+message GetInitialDataRequest {
+
+  // Whether the client wants to use attestation as part of authentication.
+  bool use_attestation = 1;
+
+  // A string uniquely identifying the strategy this client should be
+  // authenticated with.
+  string service_type = 2;
+
+  enum LocationGranularity {
+    UNKNOWN = 0;
+    COUNTRY = 1;
+
+    // Geographic area with population greater than 1 million.
+    CITY_GEOS = 2;
+  }
+
+  // The user selected granularity of exit IP location.
+  LocationGranularity location_granularity = 3;
+
+  // Indicates what validation rules the client uses for public metadata.
+  int64 validation_version = 4;
+
+  // Only set for some service types where multi layer proxies are supported.
+  ProxyLayer proxy_layer = 5;
+}
+
+// Contains data needed to perform blind signing and prepare for calling
+// AuthAndSign.
+message GetInitialDataResponse {
+  reserved 4;
+
+  anonymous_tokens.RSABlindSignaturePublicKey
+      at_public_metadata_public_key = 1;
+
+  // Version will match the validation version in the request.
+  privacy.ppn.PublicMetadataInfo public_metadata_info = 2;
+
+  // Data needed to set up attestation, included if use_attestation is true or
+  // if the service_type input requires it.
+  privacy.ppn.PrepareAttestationData attestation = 3;
+
+  // Data needed to support the privacy pass specification.
+  message PrivacyPassData {
+    bytes token_key_id = 1;
+    bytes public_metadata_extensions = 2;
+  }
+
+  PrivacyPassData privacy_pass_data = 5;
+}

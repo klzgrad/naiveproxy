@@ -1,0 +1,357 @@
+// Copyright 2025 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#ifndef CRYPTO_KEYPAIR_H_
+#define CRYPTO_KEYPAIR_H_
+
+#include <array>
+#include <vector>
+
+#include "base/containers/span.h"
+#include "crypto/crypto_export.h"
+#include "crypto/subtle_passkey.h"
+#include "third_party/boringssl/src/include/openssl/base.h"
+
+namespace crypto::keypair {
+
+// This class wraps an EVP_PKEY containing a private key. Since EVP_PKEY is
+// refcounted, PrivateKey is extremely cheap to copy and is intended to be
+// passed around by value. All the public constructors are static functions that
+// enforce constraints on the type of key they will generate or import; the
+// constructor that accepts a raw EVP_PKEY requires a SubtlePassKey to
+// discourage client code from dealing in EVP_PKEYs directly.
+class CRYPTO_EXPORT PrivateKey {
+ public:
+  // Directly construct a PrivateKey from an EVP_PKEY. Prefer to use one of the
+  // static factory functions below, which do not require a SubtlePassKey.
+  PrivateKey(bssl::UniquePtr<EVP_PKEY> key, crypto::SubtlePassKey);
+  ~PrivateKey();
+  PrivateKey(PrivateKey&& other);
+  PrivateKey(const PrivateKey& other);
+
+  PrivateKey& operator=(PrivateKey&& other);
+  PrivateKey& operator=(const PrivateKey& other);
+
+  // This function generates a fresh, random RSA private key of the named size
+  // with e = 65537.
+  // If you believe you need an RSA key of a size other than this, or with a
+  // different exponent, please contact a member of //CRYPTO_OWNERS.
+  static PrivateKey GenerateRsa2048();
+
+  // Generates a fresh, random elliptic curve key on the specified curve.
+  static PrivateKey GenerateEcP256();
+  static PrivateKey GenerateEcP384();
+
+  // Generates a fresh, random Ed25519 key.
+  static PrivateKey GenerateEd25519();
+
+  // Generates a fresh, random X25519 key.
+  static PrivateKey GenerateX25519();
+
+  // Generates a fresh, random ML-DSA-44 key.
+  static PrivateKey GenerateMldsa44();
+
+  // Generates a fresh, random ML-DSA-65 key.
+  static PrivateKey GenerateMldsa65();
+
+  // Generates a fresh, random ML-DSA-87 key.
+  static PrivateKey GenerateMldsa87();
+
+  // Generates a fresh, random ML-KEM-768 key.
+  static PrivateKey GenerateMlkem768();
+
+  // Imports a PKCS#8 PrivateKeyInfo block. Returns nullopt if the passed-in
+  // buffer is not a valid PrivateKeyInfo block, or if there is trailing data in
+  // it after the PrivateKeyInfo block.
+  static std::optional<PrivateKey> FromPrivateKeyInfo(
+      base::span<const uint8_t> pki);
+
+  // Importing algorithm-specific formats.
+  //
+  // The following methods import private keys in algorithm-specific formats.
+  // The formats encode the private key itself, without the key type or EC
+  // curve. They are appropriate when the full key type (e.g. EC P-256 or
+  // Ed25519) is known in context. When multiple key types are needed, use
+  // PrivateKeyInfo, which also encodes the key type.
+
+  // Imports an RFC 8017-encoded RSA private key. Returns nullopt if the
+  // passed-in buffer is not a valid RSA private key.
+  static std::optional<PrivateKey> FromRSAPrivateKey(
+      base::span<const uint8_t> key);
+
+  // Imports an RFC 5915-encoded EC private key. Returns nullopt if the
+  // passed-in buffer is not a valid P-256 private key. If the passed-in key
+  // does not specify a group, it will be treated as though it was P-256.
+  static std::optional<PrivateKey> FromEcP256PrivateKey(
+      base::span<const uint8_t> key);
+
+  // Imports a "raw" EC P-256 private scalar, from a big-endian encoded
+  // bignum. This can fail if the given scalar is not of the right order.
+  static std::optional<PrivateKey> FromEcP256PrivateScalar(
+      base::span<const uint8_t> key);
+
+  // Imports an RFC 8032-encoded Ed25519 private key.
+  //
+  // The encoding used doesn't allow for importing to fail (all input bit
+  // strings are potentially valid keys).
+  static PrivateKey FromEd25519PrivateKey(base::span<const uint8_t, 32> key);
+
+  // Imports an X25519 private key.
+  static PrivateKey FromX25519PrivateKey(base::span<const uint8_t, 32> key);
+
+  // Imports an ML-DSA-44 private key seed (32 bytes).
+  static PrivateKey FromMldsa44PrivateKey(base::span<const uint8_t, 32> seed);
+
+  // Imports an ML-DSA-65 private key seed (32 bytes).
+  static PrivateKey FromMldsa65PrivateKey(base::span<const uint8_t, 32> seed);
+
+  // Imports an ML-DSA-87 private key seed (32 bytes).
+  static PrivateKey FromMldsa87PrivateKey(base::span<const uint8_t, 32> seed);
+
+  // Imports an ML-KEM-768 private key seed.
+  static PrivateKey FromMlkem768PrivateKey(base::span<const uint8_t, 64> key);
+
+  // Deliberately not present in this API:
+  // ECPrivateKey::CreateFromEncryptedPrivateKeyInfo(): imports a PKCS#8
+  // EncryptedPrivateKeyInfo with a hardcoded empty password. There is no reason
+  // to ever do this and there is only one client (the GCM code).
+
+  // Exports a PKCS#8 PrivateKeyInfo block.
+  std::vector<uint8_t> ToPrivateKeyInfo() const;
+
+  // Exporting algorithm-specific formats.
+  //
+  // The following methods export private keys in algorithm-specific formats.
+  // The formats encode the private key itself, without the key type or EC
+  // curve. They are appropriate when the full key type (e.g. EC P-256 or
+  // Ed25519) is known in context. When multiple key types are needed, use
+  // PrivateKeyInfo, which also encodes the key type.
+
+  // Exports an RFC 8017-encoded RSA private key. It is illegal to call this if
+  // !IsRsa().
+  std::vector<uint8_t> ToRSAPrivateKey() const;
+
+  // Exports an RFC 5915-encoded EC private key. It is illegal to call this if
+  // !IsEcP256(). The returned ECPrivateKey struct does *not* include the
+  // optional parameters or publicKey fields, despite what RFC 5915 recommends,
+  // because existing clients don't use them. If you need those fields, please
+  // talk to an owner of this class.
+  std::vector<uint8_t> ToEcP256PrivateKey() const;
+
+  // Exports an EC P-256 private key as a private scalar value, encoded as a
+  // big-endian bignum. It is illegal to call this if !IsEcP256().
+  std::array<uint8_t, 32> ToEcP256PrivateScalar() const;
+
+  // Exports an Ed25519 private key in RFC 8032 format. It is illegal to call
+  // this if !IsEd25519().
+  std::array<uint8_t, 32> ToEd25519PrivateKey() const;
+
+  // Exports an X25519 private key.
+  std::array<uint8_t, 32> ToX25519PrivateKey() const;
+
+  // Exports an ML-DSA-44 private key seed (32 bytes). It is illegal to call
+  // this if !IsMldsa44().
+  std::array<uint8_t, 32> ToMldsa44PrivateKey() const;
+
+  // Exports an ML-DSA-65 private key seed (32 bytes). It is illegal to call
+  // this if !IsMldsa65().
+  std::array<uint8_t, 32> ToMldsa65PrivateKey() const;
+
+  // Exports an ML-DSA-87 private key seed (32 bytes). It is illegal to call
+  // this if !IsMldsa87().
+  std::array<uint8_t, 32> ToMldsa87PrivateKey() const;
+
+  // Exports an ML-KEM-768 private key seed.
+  std::array<uint8_t, 64> ToMlkem768PrivateKey() const;
+
+  // Computes and exports an X.509 SubjectPublicKeyInfo block corresponding to
+  // this key.
+  std::vector<uint8_t> ToSubjectPublicKeyInfo() const;
+
+  // Exports an EC public key in X9.62 uncompressed form. It is illegal to call
+  // this on a non-EC PrivateKey.
+  std::vector<uint8_t> ToUncompressedX962Point() const;
+
+  // Exports an Ed25519 public key in RFC 8032 format. It is illegal to call
+  // this if !IsEd25519().
+  std::array<uint8_t, 32> ToEd25519PublicKey() const;
+
+  // Exports an X25519 public key.
+  std::array<uint8_t, 32> ToX25519PublicKey() const;
+
+  // Exports an ML-DSA-44 public key in RFC 9881 raw format. It is illegal to
+  // call this if !IsMldsa44().
+  std::vector<uint8_t> ToMldsa44PublicKey() const;
+
+  // Exports an ML-DSA-65 public key in RFC 9881 raw format. It is illegal to
+  // call this if !IsMldsa65().
+  std::vector<uint8_t> ToMldsa65PublicKey() const;
+
+  // Exports an ML-DSA-87 public key in RFC 9881 raw format. It is illegal to
+  // call this if !IsMldsa87().
+  std::vector<uint8_t> ToMldsa87PublicKey() const;
+
+  // Exports an ML-KEM-768 public key.
+  std::array<uint8_t, 1184> ToMlkem768PublicKey() const;
+
+  EVP_PKEY* key() { return key_.get(); }
+  const EVP_PKEY* key() const { return key_.get(); }
+
+  bool IsRsa() const;
+  bool IsEc() const;
+  bool IsEd25519() const;
+  bool IsX25519() const;
+  bool IsMldsa44() const;
+  bool IsMldsa65() const;
+  bool IsMldsa87() const;
+  bool IsMlkem768() const;
+
+  bool IsEcP256() const;
+  bool IsEcP384() const;
+
+ private:
+  explicit PrivateKey(bssl::UniquePtr<EVP_PKEY> key);
+
+  bssl::UniquePtr<EVP_PKEY> key_;
+};
+
+class CRYPTO_EXPORT PublicKey {
+ public:
+  // Construct a PublicKey directly from an EVP_PKEY. Prefer to use one of the
+  // static factory functions below, which do not require a SubtlePassKey.
+  PublicKey(bssl::UniquePtr<EVP_PKEY> key, crypto::SubtlePassKey);
+  ~PublicKey();
+  PublicKey(PublicKey&& other);
+  PublicKey(const PublicKey& other);
+
+  PublicKey& operator=(PublicKey&& other);
+  PublicKey& operator=(const PublicKey& other);
+
+  // Produces the PublicKey corresponding to the given PrivateKey. This is
+  // mostly useful in tests but is fine to use in production as well.
+  static PublicKey FromPrivateKey(const PrivateKey& key);
+
+  // Imports a PublicKey from an X.509 SubjectPublicKeyInfo. This may return
+  // nullopt if the SubjectPublicKeyInfo is ill-formed.
+  static std::optional<PublicKey> FromSubjectPublicKeyInfo(
+      base::span<const uint8_t> spki);
+
+  // Imports a pair of big-endian big integers (n, e) to form an RSA public key.
+  // Returns nullopt if the parameters are invalid for some reason.
+  //
+  // Note: if you need to serialize and deserialize RSA keys, you should
+  // probably use SubjectPublicKeyInfo instead of rolling your own serialization
+  // format for the (n, e) pair.
+  static std::optional<PublicKey> FromRsaPublicKeyComponents(
+      base::span<const uint8_t> n,
+      base::span<const uint8_t> e);
+
+  // Importing algorithm-specific formats.
+  //
+  // The following methods import public keys in algorithm-specific formats. The
+  // formats encode the public key itself, without the key type or EC curve.
+  // They are appropriate when the full key type (e.g. EC P-256 or Ed25519) is
+  // known in context. When multiple key types are needed, use
+  // SubjectPublicKeyInfo, which also encodes the key type.
+
+  // Imports an EC point in X9.62 point format to form an EC public key. Returns
+  // nullopt if the input is invalid, e.g. if the point is not on the curve.
+  // Both uncompressed (`ToUncompressedX962Point`) and compressed forms are
+  // supported.
+  static std::optional<PublicKey> FromEcP256Point(
+      base::span<const uint8_t> point);
+  static std::optional<PublicKey> FromEcP384Point(
+      base::span<const uint8_t> point);
+
+  // Imports an Ed25519 public key in RFC 8032 format.
+  //
+  // Note: the size is hardcoded to 32 here rather than ED25519_PUBLIC_KEY_LEN
+  // to avoid pulling curve25519.h into this file. Also, it's impossible for
+  // importing to fail.
+  static PublicKey FromEd25519PublicKey(base::span<const uint8_t, 32> key);
+
+  // Imports an X25519 public key.
+  static PublicKey FromX25519PublicKey(base::span<const uint8_t, 32> key);
+
+  // Imports an ML-DSA-44 public key in RFC 9881 raw format.
+  static std::optional<PublicKey> FromMldsa44PublicKey(
+      base::span<const uint8_t> key);
+
+  // Imports an ML-DSA-65 public key in RFC 9881 raw format.
+  static std::optional<PublicKey> FromMldsa65PublicKey(
+      base::span<const uint8_t> key);
+
+  // Imports an ML-DSA-87 public key in RFC 9881 raw format.
+  static std::optional<PublicKey> FromMldsa87PublicKey(
+      base::span<const uint8_t> key);
+
+  // Imports an ML-KEM-768 public key. Returns nullopt if the input is invalid.
+  static std::optional<PublicKey> FromMlkem768PublicKey(
+      base::span<const uint8_t, 1184> key);
+
+  // Exports a PublicKey as an X.509 SubjectPublicKeyInfo.
+  std::vector<uint8_t> ToSubjectPublicKeyInfo() const;
+
+  // Exporting algorithm-specific formats.
+  //
+  // The following methods export public keys in algorithm-specific formats. The
+  // formats encode the public key itself, without the key type or EC curve.
+  // They are appropriate when the full key type (e.g. EC P-256 or Ed25519) is
+  // known in context. When multiple key types are needed, use
+  // SubjectPublicKeyInfo, which also encodes the key type.
+
+  // Exports an EC public key in X9.62 uncompressed form. It is illegal to call
+  // this on a non-EC PublicKey.
+  std::vector<uint8_t> ToUncompressedX962Point() const;
+
+  // Exports an Ed25519 public key in RFC 8032 format.
+  std::array<uint8_t, 32> ToEd25519PublicKey() const;
+
+  // Exports an X25519 public key.
+  std::array<uint8_t, 32> ToX25519PublicKey() const;
+
+  // Exports an ML-DSA-44 public key in RFC 9881 raw format. It is
+  // illegal to call this if !IsMldsa44().
+  std::vector<uint8_t> ToMldsa44PublicKey() const;
+
+  // Exports an ML-DSA-65 public key in RFC 9881 raw format. It is
+  // illegal to call this if !IsMldsa65().
+  std::vector<uint8_t> ToMldsa65PublicKey() const;
+
+  // Exports an ML-DSA-87 public key in RFC 9881 raw format. It is
+  // illegal to call this if !IsMldsa87().
+  std::vector<uint8_t> ToMldsa87PublicKey() const;
+
+  // Exports an ML-KEM-768 public key.
+  std::array<uint8_t, 1184> ToMlkem768PublicKey() const;
+
+  // Export the components (e, n) of an RSA public key, as big-endian integers.
+  // It is illegal to call these on a non-RSA PublicKey.
+  std::vector<uint8_t> GetRsaExponent() const;
+  std::vector<uint8_t> GetRsaModulus() const;
+
+  EVP_PKEY* key() { return key_.get(); }
+  const EVP_PKEY* key() const { return key_.get(); }
+
+  bool IsRsa() const;
+  bool IsEc() const;
+  bool IsEd25519() const;
+  bool IsX25519() const;
+  bool IsMldsa44() const;
+  bool IsMldsa65() const;
+  bool IsMldsa87() const;
+  bool IsMlkem768() const;
+
+  bool IsEcP256() const;
+  bool IsEcP384() const;
+
+ private:
+  explicit PublicKey(bssl::UniquePtr<EVP_PKEY> key);
+
+  bssl::UniquePtr<EVP_PKEY> key_;
+};
+
+}  // namespace crypto::keypair
+
+#endif  // CRYPTO_KEYPAIR_H_

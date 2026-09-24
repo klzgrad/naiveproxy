@@ -1,0 +1,69 @@
+# Copyright 2025 The Chromium Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# Generates build targets for a specific type of Private Metrics builders.
+#
+# Parameters:
+#   type: type of the metrics, e.g. dwa.
+template("private_metrics_builders") {
+  assert(defined(invoker.type),
+         "private_metrics_builders() requires 'type' to be defined.")
+
+  # Generate builders for specific Private Metrics type.
+  action("generate_${target_name}") {
+    script = "//tools/metrics/private_metrics/gen_private_metrics_builders.py"
+
+    # Re-generate the outputs if the codegen code changes:
+    inputs = [
+      "//tools/metrics/private_metrics/dwa_builders_template.py",
+      "//tools/metrics/private_metrics/dwa_decode_template.py",
+      "//tools/metrics/private_metrics/private_metrics_codegen.py",
+      "//tools/metrics/private_metrics/setup_modules.py",
+      "//tools/metrics/python_support/setup_modules_lib.py",
+      "//tools/metrics/private_metrics/dwa_model.py",
+      "//tools/metrics/private_metrics/private_metrics_model_shared.py",
+      "//tools/metrics/common/models.py",
+      "//tools/metrics/common/model_shared.py",
+      "//tools/metrics/common/pretty_print_xml.py",
+      "//tools/metrics/common/etree_util.py",
+      "//tools/metrics/common/codegen_shared.py",
+    ]
+
+    sources = [ "//tools/metrics/private_metrics/${invoker.type}.xml" ]
+
+    outdir = "$target_gen_dir"
+
+    if (invoker.type == "dwa") {
+      outputs = [
+        outdir + "/dwa_builders.cc",
+        outdir + "/dwa_builders.h",
+        outdir + "/dwa_decode.cc",
+        outdir + "/dwa_decode.h",
+      ]
+    } else {
+      error("unknown Private Metrics type: ${invoker.type}")
+    }
+
+    args = [
+      "--input-${invoker.type}",
+      rebase_path(sources[0], root_build_dir),
+      "--output",
+      rebase_path(outdir, root_build_dir),
+    ]
+  }
+
+  # Static library containing the generated metrics.
+  #
+  # Targets should depend on it when they use builders of this specific Private
+  # Metrics type.
+  static_library(target_name) {
+    sources = get_target_outputs(":generate_${target_name}")
+
+    deps = [
+      ":generate_${target_name}",
+      "//base",
+      "//components/metrics/private_metrics",
+    ]
+  }
+}

@@ -1,0 +1,161 @@
+/*
+ * Copyright (C) 2026 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+// frameworks/base TracePacket extensions. Source of truth lives at
+// frameworks/base/proto/tracing/ in the Android tree.
+
+syntax = "proto2";
+
+import public "protos/perfetto/trace/trace_packet.proto";
+import "protos/third_party/android/frameworks/base/proto/tracing/frameworks_base_common.proto";
+import "protos/third_party/android/frameworks/base/proto/tracing/frameworks_base_interned_data.proto";
+
+package com.android.internal;
+
+// AppWakelockBundle describes one or more wakelock events. Events are written
+// in two paired array, such that the details for event i are in intern_id[i]
+// and encoded_ts[i].
+message AppWakelockBundle {
+  // The interned id for the WakelockInfo of the event.
+  repeated uint32 intern_id = 1 [packed = true];
+
+  // The timestamp and event type, encoded as:
+  //   (event_time - packet_time) << 1 | (acquired ? 1 : 0)
+  repeated uint64 encoded_ts = 2 [packed = true];
+
+  // For writing single packets (mainly by tokenization).
+  optional AppWakelockInfo info = 3;
+  optional bool acquired = 4;
+}
+
+// A captured frame from a device display.
+//
+// Each display is captured as a hardware video elementary stream: a
+// codec_config-only VideoFrame first, then one VideoFrame per on-screen
+// change carrying a single access unit (au_data).
+message VideoFrame {
+  // Per-session display index (0, 1, ...). Groups frames into per-display
+  // tracks.
+  optional uint32 display_id = 1;
+
+  optional uint64 frame_number = 2;
+
+  enum Codec {
+    CODEC_UNSPECIFIED = 0;
+    CODEC_H264 = 1;
+    CODEC_HEVC = 2;
+  }
+  optional Codec codec = 3;
+
+  // Decoder config, emitted once per stream before any au_data. Annex-B
+  // (SPS/PPS for H.264; VPS/SPS/PPS for HEVC). Required to decode au_data.
+  optional bytes codec_config = 4;
+
+  // One access unit (a single encoded frame), Annex-B bytes.
+  optional bytes au_data = 5;
+
+  optional bool is_key_frame = 6;
+
+  // Codec presentation timestamp (us) of au_data. Distinct from the
+  // TracePacket timestamp, which places the frame on the timeline.
+  optional uint64 pts_us = 7;
+
+  // Set on the codec_config packet only.
+  optional string display_name = 8;
+
+  // RFC 6381 codec string (e.g. "avc1.42c00b"), passed straight to
+  // WebCodecs VideoDecoder.configure. Set on the codec_config packet only.
+  optional string codec_string = 9;
+}
+
+// Per-stream failure indicator. One is emitted per failure on a stream;
+// clean streams produce none. Trace processor maps each reason to its own
+// kIndexed entry in the global stats table, keyed by display_id.
+message VideoFrameError {
+  optional uint32 display_id = 1;
+
+  enum Reason {
+    REASON_UNKNOWN = 0;
+    // Hit DisplayVideoConfig.max_stream_size_bytes.
+    SIZE_CAP_HIT = 1;
+    // MediaCodec.Callback.onError fired.
+    CODEC_ERROR = 2;
+    // Source display removed mid-session.
+    DISPLAY_GONE = 3;
+    // No MediaCodec encoder for the requested format on this device.
+    NO_ENCODER = 4;
+    // getDisplay returned null at session start.
+    DISPLAY_NOT_FOUND = 5;
+    // MediaCodec configure/start threw.
+    ENCODER_SETUP_FAILED = 6;
+    // createVirtualDisplay returned null.
+    VIRTUAL_DISPLAY_FAILED = 7;
+  }
+  optional Reason reason = 2;
+}
+
+// Snapshot of all running process states written at trace stop.
+// See AndroidProcessStateChangedEvent in frameworks_base_track_event.proto
+message AndroidProcessStateSnapshot {
+  // A single process state entry.
+  message Record {
+    // Process ID.
+    optional int32 pid = 1;
+    // Package UID of the process.
+    optional int32 uid = 2;
+    // Process state (ActivityManager process state enum).
+    optional int32 proc_state = 3;
+    // OOM score adjustment value.
+    optional int32 oom_score = 4;
+    // Process capability flags.
+    optional int32 capability_flags = 5;
+    // Process name.
+    optional string process_name = 6;
+    // start sequence id which is assigned to a process during start update
+    optional int64 start_seq_id = 7;
+    // Process start elapsed realtime in milliseconds.
+    optional int64 start_time_ms = 8;
+  }
+  repeated Record record = 1;
+}
+
+// Snapshot of frozen process states written at trace stop.
+message AndroidFreezerStateSnapshot {
+  // A single freezer state entry for a frozen process.
+  message Record {
+    // Package UID of the process being frozen or unfrozen.
+    optional int32 uid = 1;
+    // Process ID of the process being frozen or unfrozen.
+    optional int32 pid = 2;
+    // Time in milliseconds since last unfrozen.
+    optional int64 unfrozen_dur_ms = 3;
+    // Time in milliseconds since last frozen.
+    optional int64 frozen_dur_ms = 4;
+    // Unfreeze reason.
+    optional UnfreezeReason unfreeze_reason = 5;
+  }
+  repeated Record record = 1;
+}
+
+message FrameworksBaseTracePacket {
+  extend perfetto.protos.TracePacket {
+    optional AppWakelockBundle app_wakelock_bundle = 116;
+    optional VideoFrame video_frame = 1000;
+    optional VideoFrameError video_frame_error = 1001;
+    optional AndroidProcessStateSnapshot android_process_state = 1002;
+    optional AndroidFreezerStateSnapshot android_freezer_state = 1003;
+  }
+}

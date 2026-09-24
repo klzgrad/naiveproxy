@@ -1,0 +1,67 @@
+/*
+ * Copyright (C) 2025 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "src/trace_processor/importers/generic_kernel/generic_kernel_module.h"
+
+#include <cstdint>
+
+#include "protos/perfetto/trace/trace_packet.pbzero.h"
+#include "src/trace_processor/importers/common/parser_types.h"
+#include "src/trace_processor/importers/generic_kernel/generic_kernel_parser.h"
+#include "src/trace_processor/importers/proto/proto_importer_module.h"
+
+namespace perfetto::trace_processor {
+
+using perfetto::protos::pbzero::TracePacket;
+
+GenericKernelModule::GenericKernelModule(
+    ProtoImporterModuleContext* module_context,
+    TraceProcessorContext* context)
+    : ProtoImporterModule(module_context), parser_(context) {
+  RegisterForField(TracePacket::kGenericKernelCpuFreqEventFieldNumber);
+  RegisterForField(TracePacket::kGenericKernelProcessTreeFieldNumber);
+  RegisterForField(TracePacket::kGenericKernelTaskStateEventFieldNumber);
+  RegisterForField(TracePacket::kGenericKernelTaskRenameEventFieldNumber);
+  RegisterForField(TracePacket::kGenericGpuFrequencyEventFieldNumber);
+}
+
+void GenericKernelModule::ParseField(const ParseFieldArgs& args) {
+  switch (args.field.id()) {
+    case TracePacket::kGenericKernelTaskStateEventFieldNumber:
+      parser_.ParseGenericTaskStateEvent(
+          args.ts,
+          args.field.Cast<TracePacket::kGenericKernelTaskStateEvent>());
+      return;
+    case TracePacket::kGenericKernelTaskRenameEventFieldNumber:
+      parser_.ParseGenericTaskRenameEvent(
+          args.field.Cast<TracePacket::kGenericKernelTaskRenameEvent>());
+      return;
+    case TracePacket::kGenericKernelProcessTreeFieldNumber:
+      parser_.ParseGenericProcessTree(
+          args.field.Cast<TracePacket::kGenericKernelProcessTree>());
+      return;
+    case TracePacket::kGenericKernelCpuFreqEventFieldNumber:
+      parser_.ParseGenericCpuFrequencyEvent(
+          args.ts, args.field.Cast<TracePacket::kGenericKernelCpuFreqEvent>());
+      return;
+    case TracePacket::kGenericGpuFrequencyEventFieldNumber:
+      parser_.ParseGenericGpuFrequencyEvent(
+          args.ts, args.field.Cast<TracePacket::kGenericGpuFrequencyEvent>());
+      return;
+  }
+}
+
+}  // namespace perfetto::trace_processor

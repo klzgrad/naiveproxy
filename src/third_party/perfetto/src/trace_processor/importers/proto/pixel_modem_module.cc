@@ -1,0 +1,118 @@
+/*
+ * Copyright (C) 2024 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "src/trace_processor/importers/proto/pixel_modem_module.h"
+
+#include <cstdint>
+#include <utility>
+
+#include "perfetto/base/status.h"
+#include "perfetto/protozero/field.h"
+#include "perfetto/trace_processor/ref_counted.h"
+#include "perfetto/trace_processor/trace_blob_view.h"
+#include "src/trace_processor/importers/common/parser_types.h"
+#include "src/trace_processor/importers/common/stats_tracker.h"
+#include "src/trace_processor/importers/proto/blob_packet_writer.h"
+#include "src/trace_processor/importers/proto/packet_sequence_state_generation.h"
+#include "src/trace_processor/importers/proto/pixel_modem_parser.h"
+#include "src/trace_processor/importers/proto/proto_importer_module.h"
+#include "src/trace_processor/sorter/trace_sorter.h"
+#include "src/trace_processor/storage/stats.h"
+
+#include "protos/perfetto/trace/android/pixel_modem_events.pbzero.h"
+#include "protos/perfetto/trace/trace_packet.pbzero.h"
+
+namespace perfetto::trace_processor {
+
+using perfetto::protos::pbzero::TracePacket;
+
+PixelModemModule::PixelModemModule(ProtoImporterModuleContext* module_context,
+                                   TraceProcessorContext* context)
+    : ProtoImporterModule(module_context), context_(context), parser_(context) {
+  RegisterForField(TracePacket::kPixelModemEventsFieldNumber);
+  RegisterForField(TracePacket::kPixelModemTokenDatabaseFieldNumber);
+}
+
+ModuleResult PixelModemModule::TokenizePacket(const TokenizePacketArgs& args) {
+  // The database packet does not have a timestamp so needs to be handled at
+  // the tokenization phase.
+  if (args.field.id() == TracePacket::kPixelModemTokenDatabaseFieldNumber) {
+    auto db = args.field.Cast<TracePacket::kPixelModemTokenDatabase>();
+    protos::pbzero::PixelModemTokenDatabase::Decoder database(db);
+
+    base::Status status = parser_.SetDatabase(database.database());
+    if (status.ok()) {
+      return ModuleResult::Handled();
+    }
+    return ModuleResult::Error(status.message());
+  }
+
+  if (args.field.id() != TracePacket::kPixelModemEventsFieldNumber) {
+    return ModuleResult::Ignored();
+  }
+
+  // Pigweed events are similar to ftrace in that they have many events, each
+  // with their own timestamp, packed inside a single TracePacket. This means
+  // that, similar to ftrace, we need to unpack them and individually sort them.
+
+  // However, as these events are not perf sensitive, it's not worth adding
+  // a lot of machinery to shepherd these events through the sorting queues
+  // in a special way. Therefore, we just forge new packets and sort them as if
+  // they came from the underlying trace.
+  auto events = args.field.Cast<TracePacket::kPixelModemEvents>();
+  protos::pbzero::PixelModemEvents::Decoder evt(events.data, events.size);
+
+  // To reduce overhead we store events and timestamps in parallel lists.
+  // We also store timestamps within a packet as deltas.
+  auto ts_it = evt.event_time_nanos();
+  int64_t ts = 0;
+  for (auto it = evt.events(); it && ts_it; ++it, ++ts_it) {
+    protozero::ConstBytes event_bytes = *it;
+    ts += *ts_it;
+    if (ts < 0) {
+      context_->stats_tracker->IncrementStats(
+          stats::pixel_modem_negative_timestamp);
+      continue;
+    }
+
+    TraceBlobView tbv =
+        context_->blob_packet_writer->WritePacket([&](auto* data_packet) {
+          // Keep the original timestamp to later extract as an arg; the sorter
+          // does not read this.
+          data_packet->set_timestamp(static_cast<uint64_t>(args.ts));
+          data_packet->set_pixel_modem_events()->add_events(event_bytes);
+        });
+    module_context_->trace_packet_stream->Push(
+        ts, TracePacketData{std::move(tbv), args.state});
+  }
+
+  return ModuleResult::Handled();
+}
+
+void PixelModemModule::ParseField(const ParseFieldArgs& args) {
+  if (args.field.id() != TracePacket::kPixelModemEventsFieldNumber) {
+    return;
+  }
+
+  protos::pbzero::PixelModemEvents::Decoder evt(
+      args.field.Cast<TracePacket::kPixelModemEvents>());
+  auto it = evt.events();
+
+  // We guarantee above there will be exactly one event.
+  parser_.ParseEvent(args.ts, args.decoder.timestamp(), *it);
+}
+
+}  // namespace perfetto::trace_processor

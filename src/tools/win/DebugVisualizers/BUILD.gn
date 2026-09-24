@@ -1,0 +1,76 @@
+# Copyright 2017 The Chromium Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# The .natvis files define "native visualizers" for the Visual Studio debugger
+# that allow one to define how custom types appear.
+#
+# One can use them by adding them to a project in visual studio, and they can
+# be embedded in a project's PDB file using the undocumented linker flag
+# /NATVIS. These configs would generally be added to all_dependent_configs
+# on a target so all targets that link to them will reference the visualizers
+# from their PDB files.
+#
+# See https://msdn.microsoft.com/en-us/library/jj620914.aspx for how they work.
+
+import("//build/config/compiler/compiler.gni")
+
+assert(is_win)
+
+config("absl") {
+  # absl.natvis listed as an input in //third_party/abseil-cpp/BUILD.gn to
+  # guarantee relinking on changes.
+  ldflags = [ "/NATVIS:" + rebase_path("absl.natvis", root_build_dir) ]
+}
+
+config("chrome") {
+  # chrome.natvis listed as an input in //base:base to guarantee relinking on
+  # changes.
+  ldflags = [ "/NATVIS:" + rebase_path("chrome.natvis", root_build_dir) ]
+}
+
+config("blink") {
+  # blink.natvis listed as an input in
+  # //third_party/blink/renderer/platform/wtf to guarantee relinking on changes.
+  ldflags = [ "/NATVIS:" + rebase_path("blink.natvis", root_build_dir) ]
+}
+
+# The cc/viz visualizers are split across three files.
+#
+# The split exists because the cc::ListContainer<T> visualizer needs the
+# complete debug type for ListContainerHelper::CharAllocator.
+# list_container_helper.h only forward-declares `class CharAllocator;`; its
+# complete definition lives solely in list_container_helper.cc, so (given our
+# clang options) the complete debug type is emitted only into the module that
+# compiles that .cc, which is cc/base.
+#
+#   * cc.natvis: visualizers valid in BOTH component and non-component builds
+#     (build-agnostic).
+#   * cc-component-build.natvis: component builds only. The type info lives in
+#     cc_base.dll's PDB, so the visualizer must reach CharAllocator through a
+#     `cc_base.dll!` module-qualified cast.
+#   * cc-non-component-build.natvis: non-component builds only. The PDB this file
+#     is embedded in already contains the type info, so no module-qualified cast
+#     is needed.
+#
+# The two ListContainer definitions are identical modulo that cast. They are
+# wired up conditionally from //cc/base based on is_component_build.
+
+config("cc") {
+  # cc.natvis listed as an input in //cc/base to guarantee relinking on changes.
+  ldflags = [ "/NATVIS:" + rebase_path("cc.natvis", root_build_dir) ]
+}
+
+config("cc_component_build") {
+  # cc-component-build.natvis listed as an input in //cc/base to guarantee
+  # relinking on changes.
+  ldflags =
+      [ "/NATVIS:" + rebase_path("cc-component-build.natvis", root_build_dir) ]
+}
+
+config("cc_non_component_build") {
+  # cc-non-component-build.natvis listed as an input in //cc/base to guarantee
+  # relinking on changes.
+  ldflags = [ "/NATVIS:" +
+              rebase_path("cc-non-component-build.natvis", root_build_dir) ]
+}

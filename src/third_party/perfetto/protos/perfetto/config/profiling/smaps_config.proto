@@ -1,0 +1,102 @@
+/*
+ * Copyright (C) 2026 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto2";
+
+package perfetto.protos;
+
+// Config for collecting /proc/pid/smaps.
+message SmapsConfig {
+  enum VmaField {
+    VMA_FIELD_UNKNOWN = 0;
+    VMA_FIELD_SIZE = 1;
+    VMA_FIELD_RSS = 2;
+    VMA_FIELD_ANONYMOUS = 3;
+    VMA_FIELD_SWAP = 4;
+    VMA_FIELD_SHARED_CLEAN = 5;
+    VMA_FIELD_SHARED_DIRTY = 6;
+    VMA_FIELD_PRIVATE_CLEAN = 7;
+    VMA_FIELD_PRIVATE_DIRTY = 8;
+    VMA_FIELD_LOCKED = 9;
+    VMA_FIELD_PSS = 10;
+    VMA_FIELD_PSS_DIRTY = 11;
+    VMA_FIELD_SWAP_PSS = 12;
+  }
+
+  // Set of fields to collect.
+  // If unset, defaults to: size, rss, anonymous, swap.
+  repeated VmaField vma_fields = 1;
+
+  // If false, mappings are aggregated by their path name.
+  // If true, each mapping is serialised separately.
+  optional bool unaggregated = 2;
+
+  // Optional ordered list of redaction rules for the name of the mapping.
+  // Note that all mappings will still be emitted, these rules only affect the
+  // emitted name.
+  // If unset, all names are written as is.
+  // If set, the first matching rule decides on the action.
+  // If no rules match, the name is written as is.
+  repeated RedactionRule name_redaction_rules = 3;
+}
+
+message RedactionRule {
+  // How to match |pattern| against the name of the mapping.
+  // Note for future extensions: unrecognised enums are treated as always
+  // matching.
+  enum MatchMode {
+    MATCH_MODE_UNKNOWN = 0;
+    // The pattern matches if it is a prefix of the mapping name.
+    MATCH_MODE_PREFIX = 1;
+    // The pattern is matched against the mapping name as a pathname glob
+    // (see "man 7 glob" and FNM_PATHNAME in "man 3 fnmatch").
+    // The key distinction is that path separators in the name are *not* matched
+    // against wildcards. So a pattern of the form "/usr/*/llvm" would match
+    // "/usr/lib/llvm" but not "/usr/lib/nested/llvm".
+    // Note: any "(deleted)" suffix is excluded before matching.
+    MATCH_MODE_GLOB_PATH = 2;
+    // The pattern is matched against the mapping name without special-casing
+    // path separators. So a pattern of the form "/usr/*/llvm" would match
+    // both "/usr/lib/llvm" and "/usr/lib/nested/llvm".
+    // Note: any "(deleted)" suffix is excluded before matching.
+    MATCH_MODE_GLOB_STRING = 3;
+  }
+
+  // The pattern to match against.
+  optional string pattern = 1;
+  optional MatchMode match_mode = 2;
+
+  // If the pattern matches, keep the entire name. In other words, do not
+  // redact. This option exists since the rules are evaluated in order, so a
+  // more specific allow rule with keep_full can match before a more general
+  // deny rule. This option is mutually exclusive with |keep_file_extension| and
+  // |keep_path_elements|.
+  optional bool keep_full = 3;
+
+  // If the pattern matches, replace the name with this string (defaulting to
+  // <pf_redacted> if unset). The final emitted name might be further augmented
+  // by the options below keeping parts of the original name.
+  optional string replacement_name = 4;
+
+  // If the pattern matches, keep the file extension, if any.
+  // Can be combined with |keep_path_elements|.
+  optional bool keep_file_extension = 5;
+
+  // If the pattern matches, keep the first N path elements (as separated by
+  // '/'). If the name is not a path, this option does nothing. Can be combined
+  // with |keep_file_extension|.
+  optional uint32 keep_path_elements = 6;
+}

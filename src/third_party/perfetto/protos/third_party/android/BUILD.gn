@@ -1,0 +1,52 @@
+# Copyright (C) 2026 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("../../../gn/perfetto.gni")
+import("../../../gn/proto_library.gni")
+import("../../../gn/protozero_descriptor_diff.gni")
+
+# Only produces android_extensions.descriptor for the diff below; nothing uses
+# its generated code, so it emits none (proto_generators = []).
+perfetto_proto_library("android_extensions_@TYPE@") {
+  proto_generators = []
+  sources = [ "android_extensions.proto" ]
+  public_deps = [
+    "art:art_heap_graph_@TYPE@",
+    "connectivity:connectivity_network_trace_@TYPE@",
+    "frameworks/base/proto/tracing:frameworks_base_common_@TYPE@",
+    "frameworks/base/proto/tracing:frameworks_base_interned_data_@TYPE@",
+    "frameworks/base/proto/tracing:frameworks_base_trace_packet_@TYPE@",
+    "frameworks/base/proto/tracing:frameworks_base_track_event_@TYPE@",
+    "frameworks/native/tracing:frameworks_native_interned_data_@TYPE@",
+    "frameworks/native/tracing:frameworks_native_trace_packet_@TYPE@",
+    "frameworks/native/tracing:frameworks_native_track_event_@TYPE@",
+    "frameworks/native/tracing/winscope:winscope_extensions_@TYPE@",
+    "frameworks/native/tracing/winscope:winscope_regular_@TYPE@",
+    "packages/modules/bluetooth/tracing:bluetooth_tracing_@TYPE@",
+  ]
+  generate_descriptor = "android_extensions.descriptor"
+  descriptor_root_source = "android_extensions.proto"
+
+  # Some of these protos use custom options, so the descriptor build needs the
+  # well-known protobuf types on its import path.
+  import_dirs = [ "${perfetto_protobuf_src_dir}" ]
+}
+
+protozero_descriptor_diff("extension_descriptor") {
+  minuend_descriptor_target = ":android_extensions_descriptor"
+  minuend_descriptor_name = "android_extensions.descriptor"
+  subtrahend_descriptor_target = "../../perfetto/trace:descriptor"
+  subtrahend_descriptor_name = "trace.descriptor"
+  generate_descriptor = "android_extension.descriptor"
+}

@@ -1,0 +1,38 @@
+import("../../../gn/perfetto.gni")
+import("../../../gn/test.gni")
+
+assert(enable_perfetto_android_java_sdk)
+
+source_set("perfetto_sdk_for_jni_public") {
+  sources = [ "tracing_sdk.h" ]
+}
+
+source_set("perfetto_sdk_for_jni") {
+  sources = [ "tracing_sdk.cc" ]
+  deps = [
+    "../../../gn:default_deps",
+
+    # We want to static link 'shared_lib:shared_lib' in unittests and
+    # dynamic link 'shared_lib:libperfetto_c' in 'libperfetto_jni', so we
+    # add public header dependncy here to not break compilation.
+    "../../../include/perfetto/public:public",
+    "../../../include/perfetto/public/abi:public",
+  ]
+  public_deps = [ ":perfetto_sdk_for_jni_public" ]
+}
+
+perfetto_unittest_source_set("unittests") {
+  testonly = true
+  deps = [
+    ":perfetto_sdk_for_jni",
+    "../../../gn:default_deps",
+    "../../../gn:gtest_and_gmock",
+    "../../../protos/perfetto/trace:cpp",
+    "../../../protos/perfetto/trace/interned_data:cpp",
+    "../../../protos/perfetto/trace/track_event:cpp",
+    "../../../src/base:base",
+    "../../shared_lib:shared_lib",
+    "../../shared_lib/test:utils",
+  ]
+  sources = [ "tracing_sdk_unittest.cc" ]
+}

@@ -1,0 +1,441 @@
+// Copyright 2012 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "net/dns/dns_client.h"
+
+#include <algorithm>
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+
+#include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/logging.h"
+#include "base/memory/raw_ptr.h"
+#include "base/metrics/histogram_functions.h"
+#include "base/metrics/histogram_macros.h"
+#include "base/notimplemented.h"
+#include "base/rand_util.h"
+#include "base/values.h"
+#include "net/base/features.h"
+#include "net/base/ip_address.h"
+#include "net/base/ip_endpoint.h"
+#include "net/dns/address_sorter.h"
+#include "net/dns/dns_session.h"
+#include "net/dns/dns_transaction.h"
+#include "net/dns/dns_util.h"
+#include "net/dns/public/dns_over_https_config.h"
+#include "net/dns/public/dns_protocol.h"
+#include "net/dns/public/secure_dns_mode.h"
+#include "net/dns/resolve_context.h"
+#include "net/log/net_log.h"
+#include "net/log/net_log_event_type.h"
+#include "net/socket/client_socket_factory.h"
+#include "net/third_party/uri_template/uri_template.h"
+#include "url/gurl.h"
+#include "url/scheme_host_port.h"
+
+namespace net {
+
+namespace {
+
+DnsConfigLocalNameserverState GetDnsConfigLocalNameserverState(
+    bool has_loopback_nameserver,
+    bool has_local_non_loopback_nameserver) {
+  if (has_loopback_nameserver && has_local_non_loopback_nameserver) {
+    return DnsConfigLocalNameserverState::kLoopbackAndNonLoopback;
+  }
+  if (has_loopback_nameserver) {
+    return DnsConfigLocalNameserverState::kOnlyLoopback;
+  }
+  if (has_local_non_loopback_nameserver) {
+    return DnsConfigLocalNameserverState::kOnlyNonLoopbackLocal;
+  }
+  return DnsConfigLocalNameserverState::kNoLocal;
+}
+
+
+void UpdateConfigForDohUpgrade(DnsConfig* config) {
+  config->should_perform_doh_fallback_upgrade = false;
+  bool has_doh_servers = !config->doh_config.servers().empty();
+  // Do not attempt upgrade when there are already DoH servers specified or
+  // when there are aspects of the system DNS config that are unhandled.
+  if (!config->unhandled_options && !has_doh_servers &&
+      config->allow_dns_over_https_upgrade &&
+      config->secure_dns_mode == SecureDnsMode::kAutomatic) {
+    // If we're in strict mode on Android, only attempt to upgrade the
+    // specified DoT hostname.
+    if (!config->dns_over_tls_hostname.empty()) {
+      config->doh_config = DnsOverHttpsConfig(
+          GetDohUpgradeServersFromDotHostname(config->dns_over_tls_hostname));
+      has_doh_servers = !config->doh_config.servers().empty();
+      UMA_HISTOGRAM_BOOLEAN("Net.DNS.UpgradeConfig.DotUpgradeSucceeded",
+                            has_doh_servers);
+    } else {
+      bool all_local = true;
+      for (const auto& server : config->nameservers) {
+        if (server.address().IsPubliclyRoutable()) {
+          all_local = false;
+          break;
+        }
+      }
+      UMA_HISTOGRAM_BOOLEAN("Net.DNS.UpgradeConfig.HasPublicInsecureNameserver",
+                            !all_local);
+      config->doh_config = DnsOverHttpsConfig(
+          GetDohUpgradeServersFromNameservers(config->nameservers));
+      // If the DoH upgrade fails because there aren't matching providers
+      // in the hardcoded list use a well-known DoH provider as a fallback.
+      //
+      // Note: we don't apply this upgrade if the DNS config has a local
+      // nameserver to give local resolvers priority over fallback DoH.
+      has_doh_servers = !config->doh_config.servers().empty();
+      if (!has_doh_servers) {
+        bool fallback_doh_nameservers_provided =
+            !config->fallback_doh_nameservers.empty();
+        bool has_loopback_nameserver = false;
+        bool has_local_non_loopback_nameserver = false;
+        for (const auto& server : config->nameservers) {
+          if (server.address().IsLoopback()) {
+            has_loopback_nameserver = true;
+          } else if (!server.address().IsPubliclyRoutable()) {
+            has_local_non_loopback_nameserver = true;
+          }
+        }
+
+        UMA_HISTOGRAM_ENUMERATION(
+            "Net.DNS.UpgradeConfigFailed.LocalNameserverState",
+            GetDnsConfigLocalNameserverState(
+                has_loopback_nameserver, has_local_non_loopback_nameserver));
+        bool has_local_nameserver =
+            has_loopback_nameserver || has_local_non_loopback_nameserver;
+        if ((!has_local_nameserver ||
+             base::FeatureList::IsEnabled(
+                 features::kDohFallbackAllowedWithLocalNameservers)) &&
+            fallback_doh_nameservers_provided &&
+            base::FeatureList::IsEnabled(
+                net::features::kAddAutomaticWithDohFallbackMode)) {
+          config->doh_config =
+              DnsOverHttpsConfig(GetDohUpgradeServersFromNameservers(
+                  config->fallback_doh_nameservers));
+          config->should_perform_doh_fallback_upgrade =
+              !config->doh_config.servers().empty();
+        }
+        has_doh_servers = !config->doh_config.servers().empty();
+      }
+      UMA_HISTOGRAM_BOOLEAN(
+          "Net.DNS.UpgradeConfig.InsecureUpgradeWithFallbackSucceeded",
+          config->should_perform_doh_fallback_upgrade);
+      UMA_HISTOGRAM_BOOLEAN("Net.DNS.UpgradeConfig.InsecureUpgradeSucceeded",
+                            has_doh_servers);
+    }
+  } else {
+    UMA_HISTOGRAM_BOOLEAN("Net.DNS.UpgradeConfig.Ineligible.DohSpecified",
+                          has_doh_servers);
+    UMA_HISTOGRAM_BOOLEAN("Net.DNS.UpgradeConfig.Ineligible.UnhandledOptions",
+                          config->unhandled_options);
+  }
+}
+
+class DnsClientImpl : public DnsClient {
+ public:
+  DnsClientImpl(NetLog* net_log, const RandIntCallback& rand_int_callback)
+      : net_log_(net_log), rand_int_callback_(rand_int_callback) {
+    UpdateSession(BuildEffectiveConfig());
+  }
+
+  DnsClientImpl(const DnsClientImpl&) = delete;
+  DnsClientImpl& operator=(const DnsClientImpl&) = delete;
+
+  ~DnsClientImpl() override = default;
+
+  bool CanUseSecureDnsTransactions() const override {
+    return !GetEffectiveConfig().doh_config.servers().empty();
+  }
+
+  bool CanUseInsecureDnsTransactions(
+      std::optional<EchMode> ech_mode) const override {
+    switch (GetInsecureDnsMode(ech_mode)) {
+      case InsecureDnsMode::kDisabled:
+        return false;
+      case InsecureDnsMode::kEnabledPlatform:
+      case InsecureDnsMode::kEnabledPlatformNoSystem:
+        return true;
+      case InsecureDnsMode::kEnabledBuiltIn: {
+        const DnsConfig& config = GetEffectiveConfig();
+        return !config.nameservers.empty() && !config.unhandled_options &&
+               !config.dns_over_tls_active;
+      }
+    }
+  }
+
+  bool CanQueryAdditionalTypesViaInsecureDns(
+      std::optional<EchMode> ech_mode) const override {
+    // Only useful information if insecure DNS is usable, so expect this to
+    // never be called if that is not the case.
+    DCHECK(CanUseInsecureDnsTransactions(ech_mode));
+
+    // When InsecureDnsMode is being overridden due to the selected EchMode (see
+    // `GetInsecureDnsMode`), we must make sure we support additional query
+    // types for this resolution.
+    if (UseDnsPlatformDueToEchMode(ech_mode)) {
+      return true;
+    }
+    return can_query_additional_types_via_insecure_;
+  }
+
+  void SetInsecureEnabled(InsecureDnsMode mode,
+                          bool additional_types_enabled) override {
+    insecure_dns_mode_ = mode;
+    can_query_additional_types_via_insecure_ = additional_types_enabled;
+  }
+
+  InsecureDnsMode GetInsecureDnsMode(
+      std::optional<EchMode> ech_mode) const override {
+    if (UseDnsPlatformDueToEchMode(ech_mode)) {
+      // To support EchMode::kStrict, without causing a performance regression
+      // for non-kStrict requests, selectively override the InsecureDnsMode to
+      // kEnabledPlatformNoSystem for kStrict requests only. We pick
+      // kEnabledPlatformNoSystem instead of kEnabledPlatform, or
+      // kEnabledBuiltIn, because
+      // - kEnabledBuiltIn would fallback onto TaskType::SYSTEM if
+      //   DnsConfig::dns_over_tls_active == true
+      // - kEnabledPlatform, would fallback onto TaskType::SYSTEM if
+      //   TaskType::DNS_PLATFORM failed.
+      // In both cases, falling back would lead to a failure since
+      // TaskType::SYSTEM cannot query HTTPS RR (necessary for EchMode::kStrict
+      // to succeed).
+      return InsecureDnsMode::kEnabledPlatformNoSystem;
+    }
+    return insecure_dns_mode_;
+  }
+
+  void RecordFallbackFromSecureTransactionPreferred(
+      FallbackFromSecureTransactionPreferredReason reason) const {
+    base::UmaHistogramEnumeration(
+        "Net.DNS.FallbackFromSecureTransactionPreferred", reason);
+  }
+
+  bool FallbackFromSecureTransactionPreferred(
+      ResolveContext* context) const override {
+    if (!CanUseSecureDnsTransactions()) {
+      RecordFallbackFromSecureTransactionPreferred(
+          FallbackFromSecureTransactionPreferredReason::
+              kFallbackPreferredCannotUseSecureDns);
+      return true;
+    }
+
+    DCHECK(session_);  // Should be true if CanUseSecureDnsTransactions() true.
+
+    // Otherwise, fall back to insecure DNS if there are no available DoH
+    // servers.
+    if (context->NumAvailableDohServers(session_.get()) == 0) {
+      RecordFallbackFromSecureTransactionPreferred(
+          FallbackFromSecureTransactionPreferredReason::
+              kFallbackPreferredNoAvailableDohServers);
+      return true;
+    }
+
+    RecordFallbackFromSecureTransactionPreferred(
+        FallbackFromSecureTransactionPreferredReason::kFallbackNotPreferred);
+    return false;
+  }
+
+  bool FallbackFromInsecureTransactionPreferred(
+      std::optional<EchMode> ech_mode) const override {
+    // When InsecureDnsMode is being overridden due to the selected EchMode (see
+    // `GetInsecureDnsMode`), we must make sure we never fallback regardless of
+    // whether the insecure DNS transaction succeeded or failed.
+    if (UseDnsPlatformDueToEchMode(ech_mode)) {
+      return false;
+    }
+
+    return !CanUseInsecureDnsTransactions(ech_mode) ||
+           insecure_fallback_failures_ >= kMaxInsecureFallbackFailures;
+  }
+
+  bool SetSystemConfig(std::optional<DnsConfig> system_config) override {
+    if (system_config == system_config_)
+      return false;
+
+    system_config_ = std::move(system_config);
+
+    return UpdateDnsConfig();
+  }
+
+  bool SetConfigOverrides(DnsConfigOverrides config_overrides) override {
+    if (config_overrides == config_overrides_)
+      return false;
+
+    config_overrides_ = std::move(config_overrides);
+
+    return UpdateDnsConfig();
+  }
+
+  void ReplaceCurrentSession() override {
+    DCHECK(session_);
+    UpdateSession(session_->config());
+  }
+
+  DnsSession* GetCurrentSession() override {
+    DCHECK(session_);
+    return session_.get();
+  }
+
+  const DnsConfig& GetEffectiveConfig() const override {
+    DCHECK(session_);
+    return session_->config();
+  }
+
+  const DnsHosts* GetHosts() const override {
+    return &GetEffectiveConfig().hosts;
+  }
+
+  std::optional<std::vector<IPEndPoint>> GetPresetAddrs(
+      const url::SchemeHostPort& endpoint) const override {
+    DCHECK(endpoint.IsValid());
+    if (!session_)
+      return std::nullopt;
+    const auto& servers = session_->config().doh_config.servers();
+    auto it = std::ranges::find_if(servers, [&](const auto& server) {
+      std::string uri;
+      bool valid = uri_template::Expand(server.server_template(), {}, &uri);
+      // Server templates are validated before being allowed into the config.
+      DCHECK(valid);
+      GURL gurl(uri);
+      return url::SchemeHostPort(gurl) == endpoint;
+    });
+    if (it == servers.end())
+      return std::nullopt;
+    std::vector<IPEndPoint> combined;
+    for (const IPAddressList& ips : it->endpoints()) {
+      for (const IPAddress& ip : ips) {
+        combined.emplace_back(ip, endpoint.port());
+      }
+    }
+    return combined;
+  }
+
+  DnsTransactionFactory* GetTransactionFactory() override {
+    DCHECK(factory_);
+    return factory_.get();
+  }
+
+  AddressSorter* GetAddressSorter() override { return address_sorter_.get(); }
+
+  void IncrementInsecureFallbackFailures() override {
+    ++insecure_fallback_failures_;
+  }
+
+  void ClearInsecureFallbackFailures() override {
+    insecure_fallback_failures_ = 0;
+  }
+
+  base::DictValue GetDnsConfigAsValueForNetLog() const override {
+    base::DictValue dict = GetEffectiveConfig().ToDict();
+    dict.Set("can_use_secure_dns_transactions", CanUseSecureDnsTransactions());
+    dict.Set("can_use_insecure_dns_transactions",
+             CanUseInsecureDnsTransactions(/*ech_mode=*/std::nullopt));
+    return dict;
+  }
+
+  std::optional<DnsConfig> GetSystemConfigForTesting() const override {
+    return system_config_;
+  }
+
+  DnsConfigOverrides GetConfigOverridesForTesting() const override {
+    return config_overrides_;
+  }
+
+  void SetTransactionFactoryForTesting(
+      std::unique_ptr<DnsTransactionFactory> factory) override {
+    factory_ = std::move(factory);
+  }
+
+  void SetAddressSorterForTesting(
+      std::unique_ptr<AddressSorter> address_sorter) override {
+    address_sorter_ = std::move(address_sorter);
+  }
+
+ private:
+  DnsConfig BuildEffectiveConfig() const {
+    DnsConfig config;
+    if (config_overrides_.OverridesEverything()) {
+      config = config_overrides_.ApplyOverrides(DnsConfig());
+    } else {
+      config = config_overrides_.ApplyOverrides(
+          system_config_.value_or(DnsConfig()));
+    }
+
+    UpdateConfigForDohUpgrade(&config);
+
+    // TODO(ericorth): Consider keeping a separate DnsConfig for pure Chrome-
+    // produced configs to allow respecting all fields like |unhandled_options|
+    // while still being able to fallback to system config for DoH.
+    // For now, clear the nameservers for extra security if parts of the system
+    // config are unhandled.
+    if (config.unhandled_options) {
+      config.nameservers.clear();
+    }
+
+    return config;
+  }
+
+  bool UpdateDnsConfig() {
+    DnsConfig new_effective_config = BuildEffectiveConfig();
+    if (session_->config() == new_effective_config)
+      return false;
+
+    insecure_fallback_failures_ = 0;
+    UpdateSession(std::move(new_effective_config));
+
+    if (net_log_) {
+      net_log_->AddGlobalEntry(NetLogEventType::DNS_CONFIG_CHANGED, [this] {
+        return GetDnsConfigAsValueForNetLog();
+      });
+    }
+
+    return true;
+  }
+
+  void UpdateSession(DnsConfig new_effective_config) {
+    factory_.reset();
+    session_ = base::MakeRefCounted<DnsSession>(
+        std::move(new_effective_config), rand_int_callback_, net_log_);
+    factory_ = DnsTransactionFactory::CreateFactory(session_.get());
+  }
+
+  InsecureDnsMode insecure_dns_mode_ = InsecureDnsMode::kDisabled;
+  bool can_query_additional_types_via_insecure_ = false;
+  int insecure_fallback_failures_ = 0;
+
+  std::optional<DnsConfig> system_config_;
+  DnsConfigOverrides config_overrides_;
+
+  scoped_refptr<DnsSession> session_;
+  std::unique_ptr<DnsTransactionFactory> factory_;
+  std::unique_ptr<AddressSorter> address_sorter_ =
+      AddressSorter::CreateAddressSorter();
+
+  raw_ptr<NetLog> net_log_;
+
+  const RandIntCallback rand_int_callback_;
+};
+
+}  // namespace
+
+// static
+std::unique_ptr<DnsClient> DnsClient::CreateClient(NetLog* net_log) {
+  return std::make_unique<DnsClientImpl>(
+      net_log, base::BindRepeating(&base::RandIntInclusive));
+}
+
+// static
+std::unique_ptr<DnsClient> DnsClient::CreateClientForTesting(
+    NetLog* net_log,
+    const RandIntCallback& rand_int_callback) {
+  return std::make_unique<DnsClientImpl>(net_log, rand_int_callback);
+}
+
+}  // namespace net

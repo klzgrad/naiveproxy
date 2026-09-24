@@ -1,0 +1,86 @@
+--
+-- Copyright 2020 The Android Open Source Project
+--
+-- Licensed under the Apache License, Version 2.0 (the "License");
+-- you may not use this file except in compliance with the License.
+-- You may obtain a copy of the License at
+--
+--     https://www.apache.org/licenses/LICENSE-2.0
+--
+-- Unless required by applicable law or agreed to in writing, software
+-- distributed under the License is distributed on an "AS IS" BASIS,
+-- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-- See the License for the specific language governing permissions and
+-- limitations under the License.
+
+INSERT OR REPLACE INTO power_profile VALUES
+("bramble", 0, 0, 300000, 6.98666666667),
+("bramble", 0, 0, 576000, 9.93166666667),
+("bramble", 0, 0, 614400, 10.3216666667),
+("bramble", 0, 0, 864000, 13.31),
+("bramble", 0, 0, 1075200, 15.9866666667),
+("bramble", 0, 0, 1363200, 20.3283333333),
+("bramble", 0, 0, 1516800, 23.4533333333),
+("bramble", 0, 0, 1651200, 26.53),
+("bramble", 0, 0, 1804800, 29.365),
+("bramble", 1, 0, 300000, 6.98666666667),
+("bramble", 1, 0, 576000, 9.93166666667),
+("bramble", 1, 0, 614400, 10.3216666667),
+("bramble", 1, 0, 864000, 13.31),
+("bramble", 1, 0, 1075200, 15.9866666667),
+("bramble", 1, 0, 1363200, 20.3283333333),
+("bramble", 1, 0, 1516800, 23.4533333333),
+("bramble", 1, 0, 1651200, 26.53),
+("bramble", 1, 0, 1804800, 29.365),
+("bramble", 2, 0, 300000, 6.98666666667),
+("bramble", 2, 0, 576000, 9.93166666667),
+("bramble", 2, 0, 614400, 10.3216666667),
+("bramble", 2, 0, 864000, 13.31),
+("bramble", 2, 0, 1075200, 15.9866666667),
+("bramble", 2, 0, 1363200, 20.3283333333),
+("bramble", 2, 0, 1516800, 23.4533333333),
+("bramble", 2, 0, 1651200, 26.53),
+("bramble", 2, 0, 1804800, 29.365),
+("bramble", 3, 0, 300000, 6.98666666667),
+("bramble", 3, 0, 576000, 9.93166666667),
+("bramble", 3, 0, 614400, 10.3216666667),
+("bramble", 3, 0, 864000, 13.31),
+("bramble", 3, 0, 1075200, 15.9866666667),
+("bramble", 3, 0, 1363200, 20.3283333333),
+("bramble", 3, 0, 1516800, 23.4533333333),
+("bramble", 3, 0, 1651200, 26.53),
+("bramble", 3, 0, 1804800, 29.365),
+("bramble", 4, 0, 300000, 6.98666666667),
+("bramble", 4, 0, 576000, 9.93166666667),
+("bramble", 4, 0, 614400, 10.3216666667),
+("bramble", 4, 0, 864000, 13.31),
+("bramble", 4, 0, 1075200, 15.9866666667),
+("bramble", 4, 0, 1363200, 20.3283333333),
+("bramble", 4, 0, 1516800, 23.4533333333),
+("bramble", 4, 0, 1651200, 26.53),
+("bramble", 4, 0, 1804800, 29.365),
+("bramble", 5, 0, 300000, 6.98666666667),
+("bramble", 5, 0, 576000, 9.93166666667),
+("bramble", 5, 0, 614400, 10.3216666667),
+("bramble", 5, 0, 864000, 13.31),
+("bramble", 5, 0, 1075200, 15.9866666667),
+("bramble", 5, 0, 1363200, 20.3283333333),
+("bramble", 5, 0, 1516800, 23.4533333333),
+("bramble", 5, 0, 1651200, 26.53),
+("bramble", 5, 0, 1804800, 29.365),
+("bramble", 6, 1, 652800, 32.13),
+("bramble", 6, 1, 940800, 35.98),
+("bramble", 6, 1, 1152000, 40.03),
+("bramble", 6, 1, 1478400, 51.02),
+("bramble", 6, 1, 1728000, 77.06),
+("bramble", 6, 1, 1900800, 86.25),
+("bramble", 6, 1, 2092800, 97.3),
+("bramble", 6, 1, 2208000, 101.61),
+("bramble", 7, 2, 806400, 56.44),
+("bramble", 7, 2, 1094400, 65.72),
+("bramble", 7, 2, 1401600, 77.01),
+("bramble", 7, 2, 1766400, 104.91),
+("bramble", 7, 2, 1996800, 112.35),
+("bramble", 7, 2, 2188800, 118.53),
+("bramble", 7, 2, 2304000, 122.34),
+("bramble", 7, 2, 2400000, 135.0);

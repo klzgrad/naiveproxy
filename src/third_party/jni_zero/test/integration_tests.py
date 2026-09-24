@@ -1,0 +1,752 @@
+#!/usr/bin/env python3
+# Copyright 2012 The Chromium Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+"""Tests for jni_zero.py.
+
+This test suite contains various tests for the JNI generator.
+It exercises the low-level parser all the way up to the
+code generator and ensures the output matches a golden
+file.
+"""
+
+import collections
+import copy
+import difflib
+import glob
+import json
+import logging
+import os
+import pathlib
+import re
+import shlex
+import subprocess
+import sys
+import tempfile
+import unittest
+import zipfile
+
+_SCRIPT_DIR = os.path.normpath(os.path.dirname(__file__))
+_GOLDENS_DIR = os.path.join(_SCRIPT_DIR, 'golden')
+_EXTRA_INCLUDES = 'extra_include.h'
+_JAVA_SRC_DIR = os.path.join(_SCRIPT_DIR, 'java', 'src', 'org', 'jni_zero')
+_JAVA_BIN_DIR = os.path.join(_SCRIPT_DIR, os.pardir, os.pardir, 'jdk',
+                             'current', 'bin')
+_JAVAP_PATH = os.path.normpath(os.path.join(_JAVA_BIN_DIR, 'javap'))
+
+# Set this environment variable in order to regenerate the golden text
+# files.
+_REBASELINE = os.environ.get('REBASELINE', '0') != '0'
+
+_accessed_goldens = set()
+
+
+class CliOptions:
+
+  def __init__(self,
+               is_final=False,
+               is_javap=False,
+               is_gen_register_natives=False,
+               **kwargs):
+    if is_final:
+      self.action = 'generate-final'
+    elif is_javap:
+      self.action = 'from-jar'
+    elif is_gen_register_natives:
+      self.action = 'gen-register-natives'
+    else:
+      self.action = 'from-source'
+
+    self.input_files = []
+    self.jar_file = None
+    self.jar_files = []
+    self.output_dir = None
+    self.shared_header_files = None if is_final else []
+    self.unshared_header_files = None if is_final else []
+    self.header_path = None
+    self.linker_script_path = None
+    self.register_natives_name = None
+    self.class_blocklist = None
+    self.enable_jni_multiplexing = False
+    self.weak_called_by_natives = False
+    self.package_prefix = None
+    self.package_prefix_filter = None
+    self.use_proxy_hash = False
+    self.extra_include = None if is_final else _EXTRA_INCLUDES
+    self.module_name = None
+    self.add_stubs_for_missing_native = False
+    self.include_test_only = False
+    self.manual_jni_registration = False
+    self.header_path = None
+    self.impl_path = None
+    self.jni_pickle = None
+    self.remove_uncalled_methods = False
+    self.needs_javap = is_javap or is_gen_register_natives
+    self.__dict__.update(kwargs)
+
+  def to_args(self):
+    ret = [
+        os.path.join(_SCRIPT_DIR, os.pardir, 'jni_zero.py'),
+        self.action,
+        '--include-path-prefix=overridden/',
+    ]
+
+    if self.enable_jni_multiplexing:
+      ret.append('--enable-jni-multiplexing')
+    if self.weak_called_by_natives:
+      ret.append('--weak-called-by-natives')
+    if self.package_prefix:
+      ret += ['--package-prefix', self.package_prefix]
+    if self.package_prefix_filter:
+      ret += ['--package-prefix-filter', self.package_prefix_filter]
+    if self.use_proxy_hash:
+      ret.append('--use-proxy-hash')
+    if self.output_dir:
+      ret += ['--output-dir', self.output_dir]
+    if self.input_files:
+      for f in self.input_files:
+        ret += ['--input-file', f]
+    if self.shared_header_files:
+      for f in self.shared_header_files:
+        ret += ['--shared-header-name', f]
+    if self.unshared_header_files:
+      for f in self.unshared_header_files:
+        ret += ['--unshared-header-name', f]
+    if self.jar_file:
+      ret += ['--jar-file', self.jar_file]
+    if self.extra_include:
+      ret += ['--extra-include', self.extra_include]
+    if self.add_stubs_for_missing_native:
+      ret.append('--add-stubs-for-missing-native')
+    if self.header_path:
+      ret += ['--header-path', self.header_path]
+    if self.impl_path:
+      ret += ['--impl-path', self.impl_path]
+    if self.jni_pickle:
+      ret += ['--jni-pickle', self.jni_pickle]
+    if self.linker_script_path:
+      ret += ['--linker-script-path', self.linker_script_path]
+    if self.register_natives_name:
+      ret += ['--register-natives-name', self.register_natives_name]
+    if self.class_blocklist:
+      ret += ['--class-blocklist', self.class_blocklist]
+    if self.include_test_only:
+      ret.append('--include-test-only')
+    if self.manual_jni_registration:
+      ret.append('--manual-jni-registration')
+    if self.module_name:
+      ret += ['--module-name', self.module_name]
+    if self.remove_uncalled_methods:
+      ret.append('--remove-uncalled-methods')
+    if self.action == 'gen-register-natives':
+      ret += self.jar_files
+    if self.needs_javap:
+      ret += ['--javap', _JAVAP_PATH]
+    return ret
+
+
+def _MakePrefixes(options):
+  package_prefix = ''
+  if options.package_prefix:
+    package_prefix = options.package_prefix.replace('.', '/') + '/'
+  module_prefix = ''
+  if options.module_name:
+    module_prefix = f'{options.module_name}_'
+  return package_prefix, module_prefix
+
+
+def _WriteMetadataJson(path, sources, use_weak=False):
+  modules = collections.defaultdict(list)
+  for src in sources:
+    module = 'module' if 'SampleModule.java' in src else ''
+    modules[module].append(src)
+
+  metadata = []
+  for module, files in modules.items():
+    m = {'java_files': files}
+    if module:
+      m['module_name'] = module
+    if use_weak:
+      m['use_weak_called_by_natives'] = True
+    metadata.append(m)
+  path.write_text(json.dumps(metadata))
+
+
+class BaseTest(unittest.TestCase):
+  def _CheckSrcjarGoldens(self, srcjar_path, name_to_goldens):
+    with zipfile.ZipFile(srcjar_path, 'r') as srcjar:
+      self.assertEqual(set(srcjar.namelist()), set(name_to_goldens))
+      for name in srcjar.namelist():
+        self.assertTrue(
+            name in name_to_goldens,
+            f'Found {name} output, but not present in name_to_goldens map.')
+        contents = srcjar.read(name).decode('utf-8')
+        self.AssertGoldenTextEquals(contents, name_to_goldens[name])
+
+  def _CheckPlaceholderSrcjarGolden(self, srcjar_path, golden_path):
+    expected_contents = [
+        'This is the concatenated contents of all files '
+        'inside the placeholder srcjar.\n\n'
+    ]
+    with zipfile.ZipFile(srcjar_path, 'r') as srcjar:
+      for name in srcjar.namelist():
+        file_contents = srcjar.read(name).decode('utf-8')
+        expected_contents += [f'## Contents of {name}:', file_contents, '\n']
+
+    self.AssertGoldenTextEquals('\n'.join(expected_contents), golden_path)
+
+  def _TestGenerateJni(self,
+                       input_files,
+                       *,
+                       srcjar=False,
+                       generate_placeholders=False,
+                       enable_jni_multiplexing=False,
+                       per_file_natives=False,
+                       **kwargs):
+    is_javap = input_files[0].endswith('.class')
+    golden_name = self._testMethodName
+    options = CliOptions(is_javap=is_javap, **kwargs)
+    name_to_goldens = {}
+    if srcjar:
+      dir_prefix, file_prefix = _MakePrefixes(options)
+      # GEN_JNI ends up in placeholder srcjar instead if passed.
+      if not per_file_natives:
+        name_to_goldens.update({
+            f'{dir_prefix}org/jni_zero/{file_prefix}GEN_JNI.java':
+            f'{golden_name}-Placeholder-GEN_JNI.java.golden',
+        })
+    with tempfile.TemporaryDirectory() as tdir:
+      for i in input_files:
+        basename_and_folder = os.path.splitext(i)[0]
+        basename = os.path.basename(basename_and_folder)
+        options.shared_header_files.append(f'{basename}_shared_jni.h')
+        options.unshared_header_files.append(f'{basename}_jni.h')
+        if srcjar:
+          name_to_goldens.update({
+              f'org/jni_zero/{basename_and_folder}Jni.java':
+              f'{golden_name}-{basename}Jni.java.golden',
+          })
+
+        relative_input_file = os.path.join(_JAVA_SRC_DIR, i)
+        if is_javap:
+          jar_path = os.path.join(tdir, 'input.jar')
+          with zipfile.ZipFile(jar_path, 'w') as z:
+            z.write(relative_input_file, i)
+          options.jar_file = jar_path
+          options.input_files.append(i)
+        else:
+          options.input_files.append(relative_input_file)
+
+      options.output_dir = tdir
+      cmd = options.to_args()
+      if not is_javap:
+        cmd += ['--allow-private-called-by-natives']
+
+      if srcjar:
+        srcjar_path = os.path.join(tdir, 'srcjar.jar')
+        cmd += ['--srcjar-path', srcjar_path]
+      if generate_placeholders:
+        placeholder_srcjar_path = os.path.join(tdir, 'placeholders.srcjar')
+        cmd += ['--placeholder-srcjar-path', placeholder_srcjar_path]
+      if enable_jni_multiplexing:
+        cmd += ['--enable-jni-multiplexing']
+      if per_file_natives:
+        cmd += ['--per-file-natives']
+
+      logging.info('Running: %s', shlex.join(cmd))
+      subprocess.check_call(cmd)
+      for o in (options.shared_header_files + options.unshared_header_files):
+        output_path = os.path.join(tdir, o)
+        with open(output_path, 'r') as f:
+          contents = f.read()
+          basename = os.path.splitext(o)[0]
+          header_golden = f'{golden_name}-{basename}.h.golden'
+          self.AssertGoldenTextEquals(contents, header_golden)
+
+      if srcjar:
+        self._CheckSrcjarGoldens(srcjar_path, name_to_goldens)
+      if generate_placeholders:
+        placeholder_srcjar_golden = f'{golden_name}-placeholder.srcjar.golden'
+        self._CheckPlaceholderSrcjarGolden(placeholder_srcjar_path,
+                                           placeholder_srcjar_golden)
+
+  def _TestGenerateFinal(self,
+                         input_files,
+                         golden_name=None,
+                         src_files_for_asserts_and_stubs=None,
+                         priority_java_files=None,
+                         inspection_func=None,
+                         **kwargs):
+    golden_name = golden_name or self._testMethodName
+    options = CliOptions(is_final=True, **kwargs)
+    dir_prefix, file_prefix = _MakePrefixes(options)
+    name_to_goldens = {
+        f'{dir_prefix}org/jni_zero/{file_prefix}GEN_JNI.java':
+        f'{golden_name}-Final-GEN_JNI.java.golden',
+    }
+    if options.use_proxy_hash or options.enable_jni_multiplexing:
+      name_to_goldens[f'{dir_prefix}J/{file_prefix}N.java'] = (
+          f'{golden_name}-Final-N.java.golden')
+    header_golden = None
+    if options.manual_jni_registration:
+      header_golden = f'{golden_name}-Final.h.golden'
+    impl_golden = None
+    if options.manual_jni_registration or options.enable_jni_multiplexing:
+      impl_golden = f'{golden_name}-Final.cc.golden'
+
+    with tempfile.TemporaryDirectory() as tdir:
+      native_sources = [
+          f if f.endswith('.jni.pickle') else os.path.join(_JAVA_SRC_DIR, f)
+          for f in input_files
+      ]
+
+      if src_files_for_asserts_and_stubs:
+        java_sources = [
+            f if f.endswith('.jni.pickle') else os.path.join(_JAVA_SRC_DIR, f)
+            for f in src_files_for_asserts_and_stubs
+        ]
+      else:
+        java_sources = native_sources
+
+      cmd = options.to_args()
+
+      java_sources_file = pathlib.Path(tdir) / 'java_sources.json'
+      _WriteMetadataJson(java_sources_file,
+                         java_sources,
+                         use_weak=options.weak_called_by_natives)
+      cmd += ['--java-sources-file', str(java_sources_file)]
+      if native_sources:
+        native_sources_file = pathlib.Path(tdir) / 'native_sources.json'
+        _WriteMetadataJson(native_sources_file,
+                           native_sources,
+                           use_weak=options.weak_called_by_natives)
+        cmd += ['--native-sources-file', str(native_sources_file)]
+      if priority_java_files:
+        priority_java_sources = [
+            os.path.join(_JAVA_SRC_DIR, f) for f in priority_java_files
+        ]
+        priority_java_file = pathlib.Path(tdir) / 'java_priority_sources.json'
+        _WriteMetadataJson(priority_java_file,
+                           priority_java_sources,
+                           use_weak=options.weak_called_by_natives)
+        cmd += ['--priority-java-sources-file', str(priority_java_file)]
+      if priority_java_files is not None:
+        cmd += ['--never-omit-switch-num']
+
+      srcjar_path = os.path.join(tdir, 'srcjar.jar')
+      cmd += ['--srcjar-path', srcjar_path]
+      if impl_golden:
+        impl_path = os.path.join(tdir, 'impl.cc')
+        cmd += ['--impl-path', impl_path]
+      if header_golden:
+        header_path = os.path.join(tdir, 'header.h')
+        cmd += ['--header-path', header_path]
+
+      logging.info('Running: %s', shlex.join(cmd))
+      subprocess.check_call(cmd)
+
+      self._CheckSrcjarGoldens(srcjar_path, name_to_goldens)
+
+      if impl_golden:
+        with open(impl_path, 'r') as f:
+          contents = f.read().replace(
+              tdir.replace('/', '_').upper(), 'TEMP_DIR')
+          self.AssertGoldenTextEquals(contents, impl_golden)
+
+      if header_golden:
+        with open(header_path, 'r') as f:
+          contents = f.read().replace(
+              tdir.replace('/', '_').upper(), 'TEMP_DIR')
+          self.AssertGoldenTextEquals(contents, header_golden)
+      if inspection_func:
+        inspection_func(tdir)
+
+  def _TestParseError(self, error_snippet, input_data):
+    with tempfile.TemporaryDirectory() as tdir:
+      input_file = os.path.join(tdir, 'MyFile.java')
+      pathlib.Path(input_file).write_text(input_data)
+      options = CliOptions()
+      options.input_files = [input_file]
+      options.shared_header_files = [f'{input_file}_shared_jni.h']
+      options.unshared_header_files = [f'{input_file}_jni.h']
+      options.output_dir = tdir
+      cmd = options.to_args()
+
+      logging.info('Running: %s', shlex.join(cmd))
+      result = subprocess.run(cmd, capture_output=True, check=False, text=True)
+      if 'Traceback' in result.stderr:
+        sys.stderr.write(result.stderr)
+        result.check_returncode()
+      self.assertIn('MyFile.java', result.stderr)
+      self.assertIn(error_snippet, result.stderr)
+      self.assertEqual(result.returncode, 1)
+      return result.stderr
+
+  def _ReadGoldenFile(self, path):
+    _accessed_goldens.add(path)
+    if not os.path.exists(path):
+      return None
+    with open(path, 'r') as f:
+      return f.read()
+
+  def AssertTextEquals(self, golden_text, generated_text):
+    if not self.CompareText(golden_text, generated_text):
+      self.fail('Golden text mismatch.')
+
+  def CompareText(self, golden_text, generated_text):
+    def FilterText(text):
+      return [
+          l.strip() for l in text.split('\n')
+          if not l.startswith('// Copyright')
+      ]
+
+    stripped_golden = FilterText(golden_text)
+    stripped_generated = FilterText(generated_text)
+    if stripped_golden == stripped_generated:
+      return True
+    print(self.id())
+    for line in difflib.context_diff(stripped_golden, stripped_generated):
+      print(line)
+    print('\n\nGenerated')
+    print('=' * 80)
+    print(generated_text)
+    print('=' * 80)
+    print('Run with:')
+    print('REBASELINE=1', sys.argv[0])
+    print('to regenerate the data files.')
+
+  def AssertGoldenTextEquals(self, generated_text, golden_file):
+    """Compares generated text with the corresponding golden_file
+
+    It will instead compare the generated text with
+    script_dir/golden/golden_file."""
+    golden_path = os.path.join(_GOLDENS_DIR, golden_file)
+    golden_text = self._ReadGoldenFile(golden_path)
+    if _REBASELINE:
+      if golden_text != generated_text:
+        print('Updated', golden_path)
+        with open(golden_path, 'w') as f:
+          f.write(generated_text)
+      return
+    # golden_text is None if no file is found. Better to fail than in
+    # AssertTextEquals so we can give a clearer message.
+    if golden_text is None:
+      self.fail('Golden file does not exist: ' + golden_path)
+    self.AssertTextEquals(golden_text, generated_text)
+
+
+@unittest.skipIf(os.name == 'nt', 'Not intended to work on Windows')
+class Tests(BaseTest):
+
+  def testGenerics(self):
+    self._TestGenerateJni(['SampleGenerics.java'], srcjar=True)
+
+  def testBidirectionalClass(self):
+    self._TestGenerateJni(['SampleForTests.java'], srcjar=True)
+    self._TestGenerateFinal(['SampleForTests.java'])
+
+  def testFromClassFile(self):
+    self._TestGenerateJni(['JavapClass.class'])
+
+  def testJavaUtilList(self):
+    self._TestGenerateJni(['List.class'])
+
+  def testUniqueAnnotations(self):
+    self._TestGenerateJni(['SampleUniqueAnnotations.java'], srcjar=True)
+
+  def testPerFileNatives(self):
+    self._TestGenerateJni(['SampleForAnnotationProcessor.java'],
+                          srcjar=True,
+                          per_file_natives=True)
+
+  def testEndToEndProxyHashed(self):
+    self._TestGenerateJni(['SampleForAnnotationProcessor.java'],
+                          srcjar=True,
+                          generate_placeholders=True)
+    self._TestGenerateFinal(['SampleForAnnotationProcessor.java'],
+                            use_proxy_hash=True)
+
+  def testEndToEndManualRegistration(self):
+    self._TestGenerateFinal(['SampleForAnnotationProcessor.java'],
+                            manual_jni_registration=True)
+
+  def testEndToEndProxyJniWithModules(self):
+    self._TestGenerateJni(['SampleModule.java'],
+                          srcjar=True,
+                          use_proxy_hash=True,
+                          module_name='module')
+    self._TestGenerateFinal(
+        ['SampleForAnnotationProcessor.java', 'SampleModule.java'],
+        use_proxy_hash=True,
+        manual_jni_registration=True,
+        module_name='module')
+
+  def testModulesWithMultiplexing(self):
+    self._TestGenerateFinal(
+        ['SampleForAnnotationProcessor.java', 'SampleModule.java'],
+        enable_jni_multiplexing=True,
+        manual_jni_registration=True,
+        module_name='module')
+
+  def testStubRegistration(self):
+    input_java_files = ['SampleForAnnotationProcessor.java']
+    stubs_java_files = input_java_files + [
+        'TinySample.java', 'SampleProxyEdgeCases.java'
+    ]
+    extra_input_java_files = ['TinySample2.java']
+    self._TestGenerateFinal(input_java_files + extra_input_java_files,
+                            src_files_for_asserts_and_stubs=stubs_java_files,
+                            add_stubs_for_missing_native=True,
+                            remove_uncalled_methods=True)
+
+  def testPriorityRegistration(self):
+    input_java_files = [
+        'TinySample2.java', 'TinySample.java', 'SampleProxyEdgeCases.java'
+    ]
+    # Add an entry not in input_java_files to simulate one that is in native
+    # sources but not java source (e.g. contains only @CalledByNative)
+    priority_java_files = ['TinySample2.java', 'SampleModule.java']
+
+    hash_holder = []
+
+    def inspection_func(tdir):
+      impl_path = os.path.join(tdir, 'impl.cc')
+      impl_text = pathlib.Path(impl_path).read_text()
+      whole = re.findall(r'HashWhole.*?= (.*?);', impl_text)[0]
+      priority = re.findall(r'HashPriority.*?= (.*?);', impl_text)[0]
+      hash_holder.append((whole, priority))
+
+    self._TestGenerateFinal(input_java_files,
+                            priority_java_files=priority_java_files,
+                            inspection_func=inspection_func,
+                            enable_jni_multiplexing=True)
+
+    self._TestGenerateFinal(priority_java_files,
+                            golden_name='testPriorityRegistrationPart2',
+                            priority_java_files=[],
+                            inspection_func=inspection_func,
+                            enable_jni_multiplexing=True)
+    self.assertEqual(hash_holder[0][1], hash_holder[1][0])
+
+  def testFullStubs(self):
+    self._TestGenerateFinal([],
+                            src_files_for_asserts_and_stubs=['TinySample.java'],
+                            add_stubs_for_missing_native=True)
+
+  def testForTestingKeptHash(self):
+    input_java_file = 'SampleProxyEdgeCases.java'
+    self._TestGenerateJni([input_java_file], srcjar=True)
+    self._TestGenerateFinal([input_java_file],
+                            use_proxy_hash=True,
+                            include_test_only=True)
+
+  def testForTestingRemovedHash(self):
+    self._TestGenerateFinal(['SampleProxyEdgeCases.java'],
+                            use_proxy_hash=True,
+                            include_test_only=False)
+
+  def testForTestingKeptMultiplexing(self):
+    input_java_file = 'SampleProxyEdgeCases.java'
+    self._TestGenerateJni([input_java_file],
+                          enable_jni_multiplexing=True,
+                          srcjar=True)
+    self._TestGenerateFinal([input_java_file],
+                            enable_jni_multiplexing=True,
+                            include_test_only=True)
+
+  def testForTestingRemovedMultiplexing(self):
+    self._TestGenerateFinal(['SampleProxyEdgeCases.java'],
+                            enable_jni_multiplexing=True,
+                            include_test_only=False)
+
+  def testPackagePrefixGenerator(self):
+    self._TestGenerateJni(['SampleForTests.java'],
+                          srcjar=True,
+                          package_prefix='this.is.a.package.prefix',
+                          generate_placeholders=True)
+
+  def testPackagePrefixWithFilter(self):
+    self._TestGenerateJni(['SampleForTests.java'],
+                          srcjar=True,
+                          package_prefix='this.is.a.package.prefix',
+                          package_prefix_filter='org.jni_zero')
+
+  def testPackagePrefixWithManualRegistration(self):
+    self._TestGenerateFinal(['SampleForAnnotationProcessor.java'],
+                            package_prefix='this.is.a.package.prefix',
+                            manual_jni_registration=True)
+
+  def testPackagePrefixWithMultiplexing(self):
+    self._TestGenerateFinal(['SampleForAnnotationProcessor.java'],
+                            package_prefix='this.is.a.package.prefix',
+                            enable_jni_multiplexing=True)
+
+  def testPackagePrefixWithManualRegistrationWithMultiplexing(self):
+    self._TestGenerateFinal(['SampleForAnnotationProcessor.java'],
+                            package_prefix='this.is.a.package.prefix',
+                            enable_jni_multiplexing=True,
+                            manual_jni_registration=True)
+
+  def testPlaceholdersOverlapping(self):
+    self._TestGenerateJni([
+        'TinySample.java',
+        'extrapackage/ImportsTinySample.java',
+    ],
+                          srcjar=True,
+                          generate_placeholders=True)
+
+  def testMultiplexing(self):
+    with tempfile.TemporaryDirectory() as tdir:
+      sample_for_tests_pickle = os.path.join(tdir,
+                                             'sample_for_tests.jni.pickle')
+      self._TestGenerateJni(['SampleForTests.java'],
+                            enable_jni_multiplexing=True,
+                            weak_called_by_natives=True,
+                            jni_pickle=sample_for_tests_pickle)
+      sample_for_annotation_processor_pickle = os.path.join(
+          tdir, 'sample_for_annotation_processor.jni.pickle')
+      self._TestGenerateJni(['SampleForAnnotationProcessor.java'],
+                            enable_jni_multiplexing=True,
+                            srcjar=True,
+                            jni_pickle=sample_for_annotation_processor_pickle)
+      self._TestGenerateFinal([
+          sample_for_annotation_processor_pickle,
+          sample_for_tests_pickle,
+      ],
+                              enable_jni_multiplexing=True)
+
+  def testGenRegisterNatives(self):
+    with tempfile.TemporaryDirectory() as tdir:
+      java_file = os.path.join(_JAVA_SRC_DIR, 'SampleForLinker.java')
+
+      javac_cmd = [
+          os.path.normpath(os.path.join(_JAVA_BIN_DIR, 'javac')), '-d', tdir,
+          java_file
+      ]
+      logging.info('Running: %s', shlex.join(javac_cmd))
+      subprocess.check_call(javac_cmd)
+
+      jar_path = os.path.join(tdir, 'test.jar')
+      class_relative_path = 'org/jni_zero/SampleForLinker.class'
+      class_absolute_path = os.path.join(tdir, class_relative_path)
+      with zipfile.ZipFile(jar_path, 'w') as z:
+        z.write(class_absolute_path, class_relative_path)
+
+      header_path = os.path.join(tdir, 'header.h')
+      linker_script_path = os.path.join(tdir, 'linker_script.txt')
+
+      options = CliOptions(is_gen_register_natives=True)
+      options.jar_files = [jar_path]
+      options.header_path = header_path
+      options.linker_script_path = linker_script_path
+      options.register_natives_name = 'RegisterNativesForTest'
+
+      cmd = options.to_args()
+
+      logging.info('Running: %s', shlex.join(cmd))
+      subprocess.check_call(cmd)
+
+      self.assertTrue(os.path.exists(header_path))
+      self.assertTrue(os.path.exists(linker_script_path))
+
+      header_content = pathlib.Path(header_path).read_text().replace(
+          tdir.replace('/', '_').upper(), 'TEMP_DIR')
+      linker_content = pathlib.Path(linker_script_path).read_text()
+
+      self.AssertGoldenTextEquals(header_content,
+                                  'testGenRegisterNatives-Final.h.golden')
+      self.AssertGoldenTextEquals(
+          linker_content, 'testGenRegisterNatives-LinkerScript.txt.golden')
+
+  def testParseError_noPackage(self):
+    data = """
+class MyFile {}
+"""
+    self._TestParseError('Unable to find "package" line', data)
+
+  def testParseError_noClass(self):
+    data = """
+package foo;
+"""
+    self._TestParseError('No classes found', data)
+
+  def testParseError_wrongClass(self):
+    data = """
+package foo;
+class YourFile {}
+"""
+    self._TestParseError('Found class "YourFile" but expected "MyFile"', data)
+
+  def testParseError_noMethods(self):
+    data = """
+package foo;
+class MyFile {
+  void foo() {}
+}
+"""
+    self._TestParseError('No native methods found', data)
+
+  def testParseError_noInterfaceMethods(self):
+    data = """
+package foo;
+class MyFile {
+  @NativeMethods
+  interface A {}
+}
+"""
+    self._TestParseError('Found no methods within', data)
+
+  def testParseError_twoInterfaces(self):
+    data = """
+package foo;
+class MyFile {
+  @NativeMethods
+  interface A {
+    void a();
+  }
+  @NativeMethods
+  interface B {
+    void b();
+  }
+}
+"""
+    self._TestParseError('Multiple @NativeMethod interfaces', data)
+
+  def testParseError_twoNamespaces(self):
+    data = """
+package foo;
+@JNINamespace("one")
+@JNINamespace("two")
+class MyFile {
+  @NativeMethods
+  interface A {
+    void a();
+  }
+}
+"""
+    self._TestParseError('Found multiple @JNINamespace', data)
+
+  def testParseError_jniTypeInGenerics(self):
+    data = """
+package foo;
+class MyFile {
+  @CalledByNative
+  void foo(List<@JniType("bar") String> arg) {}
+}
+"""
+    self._TestParseError('@JniType not allowed within generics', data)
+
+
+def main():
+  try:
+    unittest.main()
+  finally:
+    if _REBASELINE and not any(not x.startswith('-') for x in sys.argv[1:]):
+      for path in glob.glob(os.path.join(_GOLDENS_DIR, '*.golden')):
+        if path not in _accessed_goldens:
+          print('Removing obsolete golden:', path)
+          os.unlink(path)
+
+
+if __name__ == '__main__':
+  main()

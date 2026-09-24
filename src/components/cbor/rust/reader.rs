@@ -1,0 +1,307 @@
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use alloc::vec::Vec;
+use core::cmp::Ordering;
+use core::str;
+
+use crate::constants::*;
+use crate::values::{Map, MapEntry, MapKey, Value};
+
+// LINT.IfChange(Error)
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Error {
+    UnsupportedMajorType = 1,
+    UnknownAdditionalInfo = 2,
+    IncompleteCborData = 3,
+    IncorrectMapKeyType = 4,
+    TooMuchNesting = 5,
+    InvalidUtf8 = 6,
+    ExtraneousData = 7,
+    OutOfOrderKey = 8,
+    NonMinimalCborEncoding = 9,
+    UnsupportedSimpleValue = 10,
+    UnsupportedFloatingPointValue = 11,
+    OutOfRangeIntegerValue = 12,
+    DuplicateKey = 13,
+    UnknownError = 14,
+}
+// LINT.ThenChange(//components/cbor/reader.h:DecoderError,
+// //components/cbor/reader.cc:DecoderErrorAsserts)
+
+impl Error {
+    pub const fn to_str(self) -> &'static str {
+        match self {
+            Self::UnsupportedMajorType => "Unsupported major type.",
+            Self::UnknownAdditionalInfo => {
+                "Unknown additional info format in the first byte."
+            }
+            Self::IncompleteCborData => {
+                "Prematurely terminated CBOR data byte array."
+            }
+            Self::IncorrectMapKeyType => {
+                "Specified map key type is not supported by the current implementation."
+            }
+            Self::TooMuchNesting => "Too much nesting.",
+            Self::InvalidUtf8 => {
+                "String encodings other than UTF-8 are not allowed."
+            }
+            Self::ExtraneousData => "Trailing data bytes are not allowed.",
+            Self::OutOfOrderKey => {
+                "Map keys must be strictly monotonically increasing based on byte length and then by byte-wise lexical order."
+            }
+            Self::NonMinimalCborEncoding => {
+                "Unsigned integers must be encoded with minimum number of bytes."
+            }
+            Self::UnsupportedSimpleValue => {
+                "Unsupported or unassigned simple value."
+            }
+            Self::UnsupportedFloatingPointValue => {
+                "Floating point numbers are not supported."
+            }
+            Self::OutOfRangeIntegerValue => {
+                "Integer values must be between INT64_MIN and INT64_MAX."
+            }
+            Self::DuplicateKey => "Duplicate map keys are not allowed.",
+            Self::UnknownError => "An unknown error occured.",
+        }
+    }
+}
+
+impl core::fmt::Display for Error {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(self.to_str())
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct Config {
+    pub allow_invalid_utf8: bool,
+    pub max_nesting_level: usize,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self { allow_invalid_utf8: false, max_nesting_level: 16 }
+    }
+}
+
+fn get_u8(bytes: &mut &[u8]) -> Result<u8, Error> {
+    bytes.split_off_first().copied().ok_or(Error::IncompleteCborData)
+}
+
+fn get<'a>(bytes: &mut &'a [u8], num_bytes: usize) -> Result<&'a [u8], Error> {
+    bytes.split_off(..num_bytes).ok_or(Error::IncompleteCborData)
+}
+
+#[repr(C)]
+#[derive(Debug, PartialEq, Clone)]
+pub struct ParseResult<'a> {
+    pub value: Value<'a>,
+    pub bytes_consumed: usize,
+}
+
+/// Parses CBOR bytes into a `Value`.
+///
+/// Returns the parsed value and the number of bytes consumed.
+pub fn parse_with_config<'a>(
+    mut input: &'a [u8],
+    config: Config,
+) -> Result<ParseResult<'a>, Error> {
+    let orig_len = input.len();
+    let value = parse_value(&mut input, 0, &config)?;
+    let bytes_consumed = orig_len - input.len();
+    Ok(ParseResult { value, bytes_consumed })
+}
+
+fn parse_value<'a>(
+    input: &mut &'a [u8],
+    depth: usize,
+    config: &Config,
+) -> Result<Value<'a>, Error> {
+    if depth > config.max_nesting_level {
+        return Err(Error::TooMuchNesting);
+    }
+    let (major_type, info, arg) = parse_header(input)?;
+    match major_type {
+        MAJOR_TYPE_UNSIGNED_INT => to_int(arg, false).map(Value::Int),
+        MAJOR_TYPE_NEGATIVE_INT => to_int(arg, true).map(Value::Int),
+        MAJOR_TYPE_BYTE_STRING => to_bytestring(input, arg).map(Value::Bytestring),
+        MAJOR_TYPE_TEXT_STRING => to_string(input, arg, config),
+        MAJOR_TYPE_ARRAY => to_array(input, arg, depth + 1, config).map(Value::Array),
+        MAJOR_TYPE_MAP => to_map(input, arg, depth + 1, config).map(Value::Map),
+        MAJOR_TYPE_SIMPLE_VALUE => to_simple_value(info),
+        _ => Err(Error::UnsupportedMajorType),
+    }
+}
+
+fn parse_header(input: &mut &[u8]) -> Result<(u8, u8, u64), Error> {
+    let b = get_u8(input)?;
+    let major_type = b >> 5;
+    let info = b & 0x1f;
+    let arg = match (major_type, info) {
+        (_, 0..=23) => Ok(info as u64),
+        (_, ADDL_INFO_1_BYTE) => get_argument::<1, u8>(input),
+        (_, ADDL_INFO_2_BYTES) => get_argument::<2, u16>(input),
+        (_, ADDL_INFO_4_BYTES) => get_argument::<4, u32>(input),
+        (_, ADDL_INFO_8_BYTES) => get_argument::<8, u64>(input),
+        _ => Err(Error::UnknownAdditionalInfo),
+    }?;
+    Ok((major_type, info, arg))
+}
+
+// N should really be an associated const, or even replaced with `const {
+// core::mem::size_of::<Self>() }`, but those can't be used in generic
+// expressions: https://github.com/rust-lang/rust/issues/76560.
+trait FromBytes<const N: usize>: Into<u64> {
+    fn from_be_bytes(bytes: [u8; N]) -> Self;
+}
+
+impl FromBytes<1> for u8 {
+    fn from_be_bytes(bytes: [u8; 1]) -> Self {
+        Self::from_be_bytes(bytes)
+    }
+}
+
+impl FromBytes<2> for u16 {
+    fn from_be_bytes(bytes: [u8; 2]) -> Self {
+        Self::from_be_bytes(bytes)
+    }
+}
+
+impl FromBytes<4> for u32 {
+    fn from_be_bytes(bytes: [u8; 4]) -> Self {
+        Self::from_be_bytes(bytes)
+    }
+}
+
+impl FromBytes<8> for u64 {
+    fn from_be_bytes(bytes: [u8; 8]) -> Self {
+        Self::from_be_bytes(bytes)
+    }
+}
+
+fn u64_from_be_bytes<const N: usize, T: FromBytes<N>>(input: &mut &[u8]) -> Result<u64, Error> {
+    const {
+        assert!(N == core::mem::size_of::<T>());
+    }
+
+    let Some((bytes, rest)) = input.split_first_chunk::<N>() else {
+        return Err(Error::IncompleteCborData);
+    };
+    *input = rest;
+    Ok(T::from_be_bytes(*bytes).into())
+}
+
+fn get_argument<const N: usize, T: FromBytes<N>>(input: &mut &[u8]) -> Result<u64, Error> {
+    let v = u64_from_be_bytes::<N, T>(input)?;
+    let (_, expected_num_bytes) = crate::writer::low_bits_and_length(v);
+    if N != expected_num_bytes {
+        Err(Error::NonMinimalCborEncoding)
+    } else {
+        Ok(v)
+    }
+}
+
+fn to_int(arg: u64, is_negative: bool) -> Result<i64, Error> {
+    if is_negative {
+        if arg > i64::MAX as u64 {
+            Err(Error::OutOfRangeIntegerValue)
+        } else {
+            Ok(!arg as i64)
+        }
+    } else if arg > i64::MAX as u64 {
+        Err(Error::OutOfRangeIntegerValue)
+    } else {
+        Ok(arg as i64)
+    }
+}
+
+fn to_bytestring<'a>(input: &mut &'a [u8], len64: u64) -> Result<&'a [u8], Error> {
+    let Ok(len) = usize::try_from(len64) else {
+        return Err(Error::IncompleteCborData);
+    };
+    get(input, len)
+}
+
+fn to_string<'a>(input: &mut &'a [u8], len64: u64, config: &Config) -> Result<Value<'a>, Error> {
+    let bytes = to_bytestring(input, len64)?;
+    match str::from_utf8(bytes) {
+        Ok(string) => Ok(Value::String(string)),
+        Err(_) => {
+            if config.allow_invalid_utf8 {
+                Ok(Value::InvalidUtf8(bytes))
+            } else {
+                Err(Error::InvalidUtf8)
+            }
+        }
+    }
+}
+
+fn to_array<'a>(
+    input: &mut &'a [u8],
+    num_elements: u64,
+    depth: usize,
+    config: &Config,
+) -> Result<Vec<Value<'a>>, Error> {
+    let mut ret = Vec::new();
+    for _ in 0..num_elements {
+        ret.push(parse_value(input, depth, config)?);
+    }
+    Ok(ret)
+}
+
+fn to_map<'a>(
+    input: &mut &'a [u8],
+    num_elements: u64,
+    depth: usize,
+    config: &Config,
+) -> Result<Map<'a>, Error> {
+    let mut ret: Vec<MapEntry> = Vec::new();
+
+    for _ in 0..num_elements {
+        // TODO(crbug.com/259749095): Validate key type + order (and possibly return
+        // early) before attempting to parse the value.
+        let key_value = parse_value(input, depth, config)?;
+        let value = parse_value(input, depth, config)?;
+
+        let key = match MapKey::try_from(key_value) {
+            Ok(key) => key,
+            Err(Value::InvalidUtf8(_)) => return Err(Error::InvalidUtf8),
+            Err(_) => return Err(Error::IncorrectMapKeyType),
+        };
+
+        if let Some(previous) = ret.last() {
+            match previous.key.cmp(&key) {
+                Ordering::Less => {}
+                Ordering::Greater
+                    if ret.binary_search_by_key(&&key, |entry| &entry.key).is_err() =>
+                {
+                    return Err(Error::OutOfOrderKey);
+                }
+                // Covers `Ordering::Equal` and `Ordering::Greater` when the key is already
+                // in the map (e.g. an out-of-order duplicate).
+                _ => {
+                    return Err(Error::DuplicateKey);
+                }
+            }
+        }
+
+        ret.push(MapEntry { key, value });
+    }
+    Ok(Map::from_sorted_vec_unchecked(ret))
+}
+
+fn to_simple_value(info: u8) -> Result<Value<'static>, Error> {
+    match info {
+        SIMPLE_VALUE_FALSE => Ok(Value::Boolean(false)),
+        SIMPLE_VALUE_TRUE => Ok(Value::Boolean(true)),
+        SIMPLE_VALUE_NULL => Ok(Value::Null),
+        SIMPLE_VALUE_UNDEFINED => Ok(Value::Undefined),
+        SIMPLE_VALUE_FLOAT_16..=SIMPLE_VALUE_FLOAT_64 => Err(Error::UnsupportedFloatingPointValue),
+        _ => Err(Error::UnsupportedSimpleValue),
+    }
+}

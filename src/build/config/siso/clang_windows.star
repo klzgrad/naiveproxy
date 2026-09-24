@@ -1,0 +1,257 @@
+# -*- bazel-starlark -*-
+# Copyright 2023 The Chromium Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+"""Siso configuration for clang-cl/windows."""
+
+load("@builtin//struct.star", "module")
+load("./clang_all.star", "clang_all")
+load("./clang_exception.star", "clang_exception")
+load("./config.star", "config")
+load("./gn_logs.star", "gn_logs")
+load("./platform.star", "platform")
+load("./reclient.star", "reclient")
+load("./rewrapper_cfg.star", "rewrapper_cfg")
+load("./win_sdk.star", "win_sdk")
+
+def __filegroups(ctx):
+    fg = {}
+    fg.update(win_sdk.filegroups(ctx))
+    fg.update(clang_all.filegroups(ctx))
+    return fg
+
+__handlers = {}
+__handlers.update(clang_all.handlers)
+
+def __step_config(ctx, step_config):
+    cfg = "buildtools/reclient_cfgs/chromium-browser-clang/rewrapper_windows.cfg"
+    if ctx.fs.exists(cfg):
+        rewrapper_config = rewrapper_cfg.parse(ctx, cfg)
+        largePlatform = {}
+        for k, v in rewrapper_config["platform"].items():
+            if k.startswith("label:action"):
+                continue
+            largePlatform[k] = v
+
+        # no "action_large" Windows worker pool
+        use_windows_worker = True
+        if rewrapper_config["platform"]["OSFamily"] != "Windows":
+            largePlatform["label:action_large"] = "1"
+            use_windows_worker = False
+        step_config["platforms"].update({
+            "clang-cl": rewrapper_config["platform"],
+            "clang-cl_large": largePlatform,
+            "lld-link": largePlatform,
+        })
+        step_config["input_deps"].update(clang_all.input_deps(ctx))
+
+        # when win_toolchain_dir is unknown (e.g.
+        # missing build/win_toolchain.json), we can't run
+        # clang-cl remotely as we can find sysroot files
+        # under exec_root, so just run locally.
+        # When building with ToT Clang, we can't run clang-cl
+        # remotely, too.
+        remote = False
+        link_inputs = []
+        win_toolchain_dir = win_sdk.toolchain_dir(ctx)
+        if win_toolchain_dir:
+            remote = True
+            link_inputs = [
+                "third_party/llvm-build/Release+Asserts/bin/lld-link.exe",
+                win_toolchain_dir + ":libs",
+            ]
+            if rewrapper_config["platform"]["OSFamily"] == "Windows":
+                step_config["input_deps"].update({
+                    win_toolchain_dir + ":headers": [
+                        win_toolchain_dir + ":headers-ci",
+                    ],
+                })
+        remote_wrapper = rewrapper_config.get("remote_wrapper")
+        input_root_absolute_path = gn_logs.read(ctx).get("clang_need_input_root_absolute_path") == "true"
+
+        timeout = "2m"
+        if (not reclient.enabled(ctx)) and use_windows_worker:
+            # use longer timeout for siso native
+            # it takes long time for input fetch (many files in sysroot etc)
+            timeout = "4m"
+
+        # Remote linking with ThinLTO takes much longer.
+        # Linking browser_tests takes 50m locally. On remote with gVisor,
+        # it takes even more.
+        use_thin_lto = gn_logs.read(ctx).get("use_thin_lto") == "true"
+        remote_link_timeout = "80m" if use_thin_lto else "10m"
+
+        remote_link = config.get(ctx, "remote-link") or config.get(ctx, "default-remote")
+
+        rewrapper_config_inputs = []
+        rewrapper_config_inputs.extend(rewrapper_config.get("inputs", []))
+        rewrapper_config_inputs.extend(rewrapper_config.get("toolchain_inputs", []))
+
+        rules = step_config.setdefault("rules", [])
+        rules.extend([
+            {
+                "name": "clang-cl/cxx",
+                "handler": "clang_compile",
+                "action": "(.*_)?cxx",
+                "command_prefix": "..\\..\\third_party\\llvm-build\\Release+Asserts\\bin\\clang-cl.exe",
+                "inputs": rewrapper_config_inputs + [
+                    "third_party/llvm-build/Release+Asserts/bin/clang-cl.exe",
+                ],
+                "platform_ref": "clang-cl",
+                "remote": remote,
+                "input_root_absolute_path": input_root_absolute_path,
+                "remote_wrapper": remote_wrapper,
+                "timeout": timeout,
+            },
+            {
+                "name": "clang-cl/cxx_module",
+                "handler": "clang_compile",
+                "action": "(.*_)?cxx_module",
+                "command_prefix": "..\\..\\third_party\\llvm-build\\Release+Asserts\\bin\\clang-cl.exe",
+                "inputs": rewrapper_config_inputs + [
+                    "third_party/llvm-build/Release+Asserts/bin/clang-cl.exe",
+                ],
+                "platform_ref": "clang-cl",
+                "remote": remote,
+                "input_root_absolute_path": input_root_absolute_path,
+                "remote_wrapper": remote_wrapper,
+                "timeout": timeout,
+                # TODO(https://crbug.com/477762548): Remove this when LLVM_WINDOWS_PREFER_FORWARD_SLASH is set for LLVM.
+                "strict_remote": True,
+            },
+            {
+                "name": "clang-cl/cc",
+                "handler": "clang_compile",
+                "action": "(.*_)?cc",
+                "command_prefix": "..\\..\\third_party\\llvm-build\\Release+Asserts\\bin\\clang-cl.exe",
+                "inputs": rewrapper_config_inputs + [
+                    "third_party/llvm-build/Release+Asserts/bin/clang-cl.exe",
+                ],
+                "platform_ref": "clang-cl",
+                "remote": remote,
+                "input_root_absolute_path": input_root_absolute_path,
+                "remote_wrapper": remote_wrapper,
+                "timeout": timeout,
+            },
+            {
+                "name": "clang-coverage/cxx",
+                "action": "(.*_)?cxx",
+                "command_prefix": platform.python_bin + " ../../build/toolchain/clang_code_coverage_wrapper.py",
+                "inputs": rewrapper_config_inputs + [
+                    "third_party/llvm-build/Release+Asserts/bin/clang++",
+                ],
+                "handler": "clang_compile_coverage",
+                "platform_ref": "clang-cl",
+                "remote": remote,
+                "input_root_absolute_path": input_root_absolute_path,
+                "remote_wrapper": remote_wrapper,
+                "timeout": timeout,
+            },
+            {
+                "name": "clang-coverage/cxx_module",
+                "action": "(.*_)?cxx_module",
+                "command_prefix": platform.python_bin + " ../../build/toolchain/clang_code_coverage_wrapper.py",
+                "inputs": rewrapper_config_inputs + [
+                    "third_party/llvm-build/Release+Asserts/bin/clang++",
+                ],
+                "handler": "clang_compile_coverage",
+                "platform_ref": "clang-cl",
+                "remote": remote,
+                "input_root_absolute_path": input_root_absolute_path,
+                "remote_wrapper": remote_wrapper,
+                "timeout": timeout,
+                # TODO(https://crbug.com/477762548): Remove this when LLVM_WINDOWS_PREFER_FORWARD_SLASH is set for LLVM.
+                "strict_remote": True,
+            },
+            {
+                "name": "clang-coverage/cc",
+                "action": "(.*_)?cc",
+                "command_prefix": platform.python_bin + " ../../build/toolchain/clang_code_coverage_wrapper.py",
+                "inputs": rewrapper_config_inputs + [
+                    "third_party/llvm-build/Release+Asserts/bin/clang",
+                ],
+                "handler": "clang_compile_coverage",
+                "platform_ref": "clang-cl",
+                "remote": remote,
+                "input_root_absolute_path": input_root_absolute_path,
+                "remote_wrapper": remote_wrapper,
+                "timeout": timeout,
+            },
+            {
+                "name": "lld-link/alink",
+                "action": "(.*_)?alink",
+                "command_prefix": "..\\..\\third_party\\llvm-build\\Release+Asserts\\bin\\lld-link.exe /lib",
+                "handler": "lld_thin_archive",
+                "inputs": rewrapper_config_inputs,
+                "remote": False,
+                "accumulate": True,
+            },
+            {
+                "name": "lld-link/solink",
+                "action": "(.*_)?solink",
+                "command_prefix": "..\\..\\third_party\\llvm-build\\Release+Asserts\\bin\\lld-link.exe",
+                "handler": "lld_link",
+                "inputs": rewrapper_config_inputs + link_inputs,
+                "exclude_input_patterns": [
+                    "*.cc",
+                    "*.h",
+                    "*.js",
+                    "*.pak",
+                    "*.py",
+                ],
+                "remote": remote_link,
+                "remote_wrapper": remote_wrapper,
+                "platform_ref": "lld-link",
+                "input_root_absolute_path": input_root_absolute_path,
+                "timeout": remote_link_timeout,
+            },
+            {
+                "name": "lld-link/solink_module",
+                "action": "(.*_)?solink_module",
+                "command_prefix": "..\\..\\third_party\\llvm-build\\Release+Asserts\\bin\\lld-link.exe",
+                "handler": "lld_link",
+                "inputs": rewrapper_config_inputs + link_inputs,
+                "exclude_input_patterns": [
+                    "*.cc",
+                    "*.h",
+                    "*.js",
+                    "*.pak",
+                    "*.py",
+                ],
+                "remote": remote_link,
+                "remote_wrapper": remote_wrapper,
+                "platform_ref": "lld-link",
+                "input_root_absolute_path": input_root_absolute_path,
+                "timeout": remote_link_timeout,
+            },
+            {
+                "name": "lld-link/link",
+                "action": "(.*_)?link",
+                "command_prefix": "..\\..\\third_party\\llvm-build\\Release+Asserts\\bin\\lld-link.exe",
+                "handler": "lld_link",
+                "inputs": rewrapper_config_inputs + link_inputs,
+                "exclude_input_patterns": [
+                    "*.cc",
+                    "*.h",
+                    "*.js",
+                    "*.pak",
+                    "*.py",
+                ],
+                "remote": remote_link,
+                "remote_wrapper": remote_wrapper,
+                "platform_ref": "lld-link",
+                "input_root_absolute_path": input_root_absolute_path,
+                "timeout": remote_link_timeout,
+            },
+        ])
+        step_config = clang_exception.step_config(ctx, step_config, use_windows_worker)
+    elif gn_logs.read(ctx).get("use_remoteexec") == "true":
+        fail("remoteexec requires rewrapper config")
+    return step_config
+
+clang = module(
+    "clang",
+    step_config = __step_config,
+    filegroups = __filegroups,
+    handlers = __handlers,
+)
