@@ -62,13 +62,17 @@ NaiveConnection::NaiveConnection(
     const NetworkAnonymizationKey& network_anonymization_key,
     const NetLogWithSource& net_log,
     std::unique_ptr<StreamSocket> accepted_socket,
-    const NetworkTrafficAnnotationTag& traffic_annotation)
+    const NetworkTrafficAnnotationTag& traffic_annotation,
+    URLRequestContext* websocket_context,
+    std::optional<WebSocketTunnelConfig> websocket_config)
     : id_(id),
       protocol_(protocol),
       negotiated_client_padding_(std::move(negotiated_client_padding)),
       proxy_info_(proxy_info),
       resolver_(resolver),
       session_(session),
+      websocket_context_(websocket_context),
+      websocket_config_(std::move(websocket_config)),
       network_anonymization_key_(network_anonymization_key),
       net_log_(net_log),
       next_state_(STATE_NONE),
@@ -113,6 +117,9 @@ int NaiveConnection::Connect(CompletionOnceCallback callback) {
 void NaiveConnection::Disconnect() {
   full_duplex_ = false;
   // Closes server side first because latency is higher.
+  if (websocket_socket_) {
+    websocket_socket_->Disconnect();
+  }
   if (server_socket_handle_->socket()) {
     server_socket_handle_->socket()->Disconnect();
   }
@@ -267,6 +274,16 @@ int NaiveConnection::DoConnectServer() {
 #endif
   }
 
+  if (websocket_config_) {
+    CHECK(websocket_context_);
+    LOG(INFO) << "Connection " << id_ << " to " << origin.ToString()
+              << " via WebSocket " << websocket_config_->url.spec();
+    websocket_socket_ = std::make_unique<WebSocketTunnelSocket>(
+        websocket_config_->url, websocket_config_->credentials, origin,
+        websocket_context_, net_log_, traffic_annotation_);
+    return websocket_socket_->Connect(io_callback_);
+  }
+
   url::CanonHostInfo host_info;
   url::SchemeHostPort endpoint(
       "http", CanonicalizeHost(origin.HostForURL(), &host_info), origin.port(),
@@ -292,6 +309,18 @@ int NaiveConnection::DoConnectServer() {
 int NaiveConnection::DoConnectServerComplete(int result) {
   if (result < 0) {
     return result;
+  }
+
+  if (websocket_config_) {
+    CHECK(websocket_socket_);
+    sockets_[kServer] = std::make_unique<NaivePaddingSocket>(
+        websocket_socket_.get(),
+        static_cast<WebSocketTunnelSocket*>(websocket_socket_.get())
+            ->negotiated_padding_type(),
+        kServer);
+    full_duplex_ = true;
+    next_state_ = STATE_NONE;
+    return OK;
   }
 
   std::optional<PaddingType> server_padding_type = GetServerPaddingType();

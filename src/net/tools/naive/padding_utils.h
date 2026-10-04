@@ -5,15 +5,23 @@
 #define NET_TOOLS_NAIVE_PADDING_UTILS_H_
 
 #include <cstdint>
+#include <optional>
 
 #include "base/containers/span.h"
 
+#include "net/tools/naive/naive_protocol.h"
+
 namespace net {
+
+class HttpResponseHeaders;
 
 void InitializeNonindexCodes();
 
 // |unique_bits| SHOULD have relatively unique values.
 void FillNonindexHeaderValue(uint64_t unique_bits, base::span<uint8_t> span);
+
+std::optional<PaddingType> ParsePaddingHeaders(
+    const HttpResponseHeaders& headers);
 }  // namespace net
 
 #endif  // NET_TOOLS_NAIVE_PADDING_UTILS_H_

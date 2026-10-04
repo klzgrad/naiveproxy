@@ -22,6 +22,7 @@
 #include "net/http/http_request_headers.h"
 #include "net/tools/naive/naive_protocol.h"
 #include "url/scheme_host_port.h"
+#include "url/gurl.h"
 
 namespace net {
 
@@ -57,6 +58,10 @@ struct NaiveConfig {
 #endif
 
   HttpRequestHeaders extra_headers;
+
+  bool websocket_transport = false;
+  GURL websocket_url;
+  AuthCredentials websocket_auth;
 
   // The last server is assumed to be Naive.
   std::vector<ProxyChain> proxy_chains;

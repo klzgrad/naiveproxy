@@ -64,7 +64,7 @@ flags="$flags"'
   is_perfetto_embedder=true
 
   disable_file_support=true
-  enable_websockets=false
+  enable_websockets=true
   use_kerberos=false
   disable_file_support=true
   disable_zstd_filter=false

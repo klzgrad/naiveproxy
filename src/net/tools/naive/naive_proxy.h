@@ -7,6 +7,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -20,6 +21,7 @@
 #include "net/tools/naive/naive_connection.h"
 #include "net/tools/naive/naive_protocol.h"
 #include "net/tools/naive/preamble_getter.h"
+#include "net/tools/naive/websocket_tunnel_socket.h"
 
 namespace net {
 
@@ -30,6 +32,7 @@ class ServerSocket;
 class StreamSocket;
 struct NetworkTrafficAnnotationTag;
 class RedirectResolver;
+class URLRequestContext;
 
 class NaiveProxy {
  public:
@@ -43,7 +46,9 @@ class NaiveProxy {
              RedirectResolver* resolver,
              HttpNetworkSession* session,
              const NetworkTrafficAnnotationTag& traffic_annotation,
-             const std::vector<PaddingType>& supported_padding_types);
+             const std::vector<PaddingType>& supported_padding_types,
+             URLRequestContext* websocket_context,
+             std::optional<WebSocketTunnelConfig> websocket_config);
   ~NaiveProxy();
   NaiveProxy(const NaiveProxy&) = delete;
   NaiveProxy& operator=(const NaiveProxy&) = delete;
@@ -101,6 +106,8 @@ class NaiveProxy {
   ProxyServer last_proxy_server_;
   RedirectResolver* resolver_;
   HttpNetworkSession* session_;
+  URLRequestContext* websocket_context_;
+  std::optional<WebSocketTunnelConfig> websocket_config_;
   NetLogWithSource net_log_;
 
   unsigned int next_id_;

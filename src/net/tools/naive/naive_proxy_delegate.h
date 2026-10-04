@@ -74,9 +74,6 @@ class NaiveProxyDelegate : public ProxyDelegate {
       size_t preamble_index) const;
 
  private:
-  static std::optional<PaddingType> ParsePaddingHeaders(
-      const HttpResponseHeaders& headers);
-
   HttpRequestHeaders extra_headers_;
 
   // Empty value means padding type has not been negotiated.

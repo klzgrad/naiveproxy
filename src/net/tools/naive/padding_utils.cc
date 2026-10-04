@@ -7,6 +7,9 @@
 
 #include "base/check.h"
 #include "base/containers/span.h"
+#include "base/logging.h"
+#include "net/http/http_response_headers.h"
+#include "net/tools/naive/naive_protocol.h"
 #include "net/third_party/quiche/src/quiche/http2/hpack/hpack_constants.h"
 
 namespace net {
@@ -43,5 +46,24 @@ void FillNonindexHeaderValue(uint64_t unique_bits, base::span<uint8_t> span) {
   for (size_t i = first; i < span.size(); ++i) {
     span[i] = g_nonindex_codes[16];
   }
+}
+
+std::optional<PaddingType> ParsePaddingHeaders(
+    const HttpResponseHeaders& headers) {
+  const bool has_padding = headers.HasHeader(kPaddingHeader);
+  const std::optional<std::string> padding_type_reply =
+      headers.GetNormalizedHeader(kPaddingTypeReplyHeader);
+
+  if (!padding_type_reply.has_value()) {
+    // Backward compatibility with before kVariant1 when the padding-version
+    // header does not exist.
+    return has_padding ? PaddingType::kVariant1 : PaddingType::kNone;
+  }
+  std::optional<PaddingType> padding_type =
+      ParsePaddingType(*padding_type_reply);
+  if (!padding_type.has_value()) {
+    LOG(ERROR) << "Received invalid padding type: " << *padding_type_reply;
+  }
+  return padding_type;
 }
 }  // namespace net
