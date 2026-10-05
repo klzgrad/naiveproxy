@@ -11,7 +11,9 @@ import subprocess
 # //chrome/installer/linux/rpm/dist_package_provides.json
 MAX_ALLOWED_GLIBC_VERSION = [2, 26]
 MAX_ALLOWED_GLIBC_VERSION_ARCH = {
-    "riscv64": [2, 33],
+    # riscv64 was added to glibc 2.33, but res_search (needed by Go CGO net package)
+    # was not available until glibc 2.34 on this architecture.
+    "riscv64": [2, 34],
     "loong64": [2, 99],
 }
 
