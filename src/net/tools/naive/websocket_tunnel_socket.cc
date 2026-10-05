@@ -335,32 +335,10 @@ void WebSocketTunnelSocket::OnReadFrames(int result) {
   }
 
   frame_buffer_.Append(std::move(read_frames_));
-  if (connect_callback_) {
-    const auto control_frames = frame_buffer_.ProcessControlFrames();
-    if (control_frames.closed) {
-      stream_.reset();
-      Fail(ERR_TUNNEL_CONNECTION_FAILED);
-      return;
-    }
-    uint8_t status = 0;
-    if (!frame_buffer_.TakeStatus(&status) || status != 0) {
-      stream_.reset();
-      Fail(ERR_TUNNEL_CONNECTION_FAILED);
-      return;
-    }
-    state_ = State::kConnected;
-    ever_used_ = true;
-    CompleteConnect(OK);
-    return;
-  }
-
   const auto control_frames = frame_buffer_.ProcessControlFrames();
   if (control_frames.closed) {
     stream_.reset();
-    state_ = State::kDisconnected;
-    if (read_pending_) {
-      CompleteRead(ERR_CONNECTION_CLOSED);
-    }
+    Fail(ERR_TUNNEL_CONNECTION_FAILED);
     return;
   }
   if (control_frames.ping_payload) {
@@ -372,6 +350,20 @@ void WebSocketTunnelSocket::OnReadFrames(int result) {
     }
     pong_pending_ = true;
   }
+  if (connect_callback_) {
+    uint8_t status = 0;
+    if (!frame_buffer_.TakeStatus(&status) || status != 0) {
+      stream_.reset();
+      Fail(ERR_TUNNEL_CONNECTION_FAILED);
+      return;
+    }
+    state_ = State::kConnected;
+    ever_used_ = true;
+    SendPong();
+    CompleteConnect(OK);
+    return;
+  }
+
   if (!read_pending_) {
     SendPong();
     return;
@@ -434,7 +426,7 @@ void WebSocketTunnelSocket::SendPong() {
       &pong_frames_, base::BindOnce(&WebSocketTunnelSocket::OnPongComplete,
                                     weak_factory_.GetWeakPtr()));
   if (result != ERR_IO_PENDING) {
-    PostOnPongComplete(result);
+    OnPongComplete(result);
   }
 }
 
