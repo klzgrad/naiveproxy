@@ -4,6 +4,11 @@
 
 #include "net/tools/naive/websocket_frame_buffer.h"
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify the buffer arithmetic.
+#pragma allow_unsafe_buffers
+#endif
+
 #include <algorithm>
 #include <utility>
 

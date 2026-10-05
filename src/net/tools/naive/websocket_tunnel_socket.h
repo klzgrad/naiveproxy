@@ -84,6 +84,7 @@ class WebSocketTunnelSocket : public StreamSocket {
 
  private:
   class ConnectDelegate;
+  friend class WebSocketTunnelSocketTest;
   enum class State { kDisconnected, kConnecting, kConnected };
 
   void OnConnectSuccess(
