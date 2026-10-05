@@ -58,6 +58,7 @@
 #include "net/proxy_resolution/proxy_config.h"
 #include "net/proxy_resolution/proxy_config_service_fixed.h"
 #include "net/proxy_resolution/proxy_config_with_annotation.h"
+#include "net/quic/quic_context.h"
 #include "net/socket/client_socket_pool.h"
 #include "net/socket/client_socket_pool_manager.h"
 #include "net/socket/ssl_client_socket.h"
@@ -299,18 +300,24 @@ std::unique_ptr<URLRequestContext> BuildURLRequestContext(
   builder.set_ssl_config_service(
       std::make_unique<MySSLConfigService>(config.no_post_quantum == true));
 
+  if (!config.proxy_configs.empty()) {
+    const auto& config2 = config.proxy_configs.at(proxy_chain_index);
+    if (!config2.origins_to_force_quic_on.empty()) {
+      // The QUIC session pool copies these parameters during Build(),
+      // including the hosts allowed to use locally trusted certificate roots.
+      auto quic_context = std::make_unique<QuicContext>();
+      auto* quic = quic_context->params();
+      quic->origins_to_force_quic_on.insert(
+          config2.origins_to_force_quic_on.begin(),
+          config2.origins_to_force_quic_on.end());
+      builder.set_quic_context(std::move(quic_context));
+    }
+  }
+
   auto context = builder.Build();
 
   if (!config.proxy_configs.empty()) {
     const auto& config2 = config.proxy_configs.at(proxy_chain_index);
-    if (!config2.origins_to_force_quic_on.empty()) {
-      auto* quic = context->quic_context()->params();
-      quic->supported_versions = {quic::ParsedQuicVersion::RFCv1()};
-      quic->origins_to_force_quic_on.insert(
-          config2.origins_to_force_quic_on.begin(),
-          config2.origins_to_force_quic_on.end());
-    }
-
     for (const auto& [k, v] : config2.auth_store) {
       auto* session = context->http_transaction_factory()->GetSession();
       auto* auth_cache = session->http_auth_cache();
