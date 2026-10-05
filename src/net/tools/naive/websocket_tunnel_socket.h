@@ -1,4 +1,4 @@
-// Copyright 2026 The Chromium Authors. All rights reserved.
+// Copyright 2026 klzgrad <kizdiv@gmail.com>. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,7 +7,6 @@
 
 #include <memory>
 #include <optional>
-#include <string>
 #include <vector>
 
 #include "base/functional/callback.h"
@@ -17,7 +16,6 @@
 #include "net/base/auth.h"
 #include "net/base/completion_once_callback.h"
 #include "net/base/host_port_pair.h"
-#include "net/base/ip_address.h"
 #include "net/base/ip_endpoint.h"
 #include "net/log/net_log_with_source.h"
 #include "net/socket/next_proto.h"
@@ -40,22 +38,18 @@ struct WebSocketTunnelConfig {
   AuthCredentials credentials;
 };
 
-// Adapts the Chromium WebSocket implementation to the StreamSocket interface.
-// The first binary message is a target-address header; the server replies with
-// a one-byte status before ordinary binary frames carry the TCP payload.
+// Adapts a Chromium WebSocketStream to StreamSocket. The first binary message
+// selects the target; the server replies with one status byte before payload.
 class WebSocketTunnelSocket : public StreamSocket {
  public:
-  WebSocketTunnelSocket(const GURL& socket_url,
+  WebSocketTunnelSocket(const GURL& url,
                         const AuthCredentials& credentials,
                         const HostPortPair& target,
-                        URLRequestContext* url_request_context,
+                        URLRequestContext* context,
                         const NetLogWithSource& net_log,
-                        const NetworkTrafficAnnotationTag& traffic_annotation);
+                        const NetworkTrafficAnnotationTag& annotation);
   ~WebSocketTunnelSocket() override;
-  WebSocketTunnelSocket(const WebSocketTunnelSocket&) = delete;
-  WebSocketTunnelSocket& operator=(const WebSocketTunnelSocket&) = delete;
 
-  // StreamSocket:
   int Connect(CompletionOnceCallback callback) override;
   void Disconnect() override;
   bool IsConnected() const override;
@@ -65,86 +59,78 @@ class WebSocketTunnelSocket : public StreamSocket {
   const NetLogWithSource& NetLog() const override;
   bool WasEverUsed() const override;
   NextProto GetNegotiatedProtocol() const override;
-  bool GetSSLInfo(SSLInfo* ssl_info) override;
+  bool GetSSLInfo(SSLInfo* info) override;
   int64_t GetTotalReceivedBytes() const override;
   void ApplySocketTag(const SocketTag& tag) override;
-
-  PaddingType negotiated_padding_type() const {
-    return negotiated_padding_type_;
-  }
-
-  // Socket:
   int Read(IOBuffer* buf,
            int buf_len,
            CompletionOnceCallback callback) override;
   int Write(IOBuffer* buf,
-            int buf_len,
-            CompletionOnceCallback callback,
-            const NetworkTrafficAnnotationTag& traffic_annotation) override;
+           int buf_len,
+           CompletionOnceCallback callback,
+           const NetworkTrafficAnnotationTag& annotation) override;
   int SetReceiveBufferSize(int32_t size) override;
   int SetSendBufferSize(int32_t size) override;
 
+  PaddingType negotiated_padding_type() const {
+    return padding_type_;
+  }
+
  private:
-  class ConnectDelegateImpl;
-  enum class State {
-    kDisconnected,
-    kConnecting,
-    kSendingTarget,
-    kReadingStatus,
-    kConnected,
-  };
+  class ConnectDelegate;
+  enum class State { kDisconnected, kConnecting, kConnected };
 
   void OnConnectSuccess(
       std::unique_ptr<WebSocketStream> stream,
       std::unique_ptr<WebSocketHandshakeResponseInfo> response);
   void OnConnectFailure(int error);
-  int BeginSendTarget();
-  void OnSendTargetComplete(int result);
-  int BeginReadStatus();
-  void OnReadFramesComplete(int result);
-  int ReadWithBuffer();
-  int CopyAvailableData();
-  void MaybeSendPong(const WebSocketFrame& ping_frame);
-  void OnControlWriteComplete(int result);
-  int BeginUserWrite();
-  void OnWriteFramesComplete(int result);
+  void SendTarget();
+  void OnTargetSent(int result);
+  int ReadFrames();
+  void OnReadFrames(int result);
+  int CopyData();
+  void ProcessControlFrames();
+  int BeginWrite();
+  void OnWriteComplete(int result);
+  void SendPong();
+  void OnPongComplete(int result);
+  void Post(base::OnceClosure task);
+  void CompleteConnect(int result);
+  void CompleteRead(int result);
+  void CompleteWrite(int result);
   void Fail(int error);
-  void CompleteConnect(int error);
 
-  GURL socket_url_;
+  GURL url_;
   AuthCredentials credentials_;
   HostPortPair target_;
-  raw_ptr<URLRequestContext> url_request_context_;
+  raw_ptr<URLRequestContext> context_;
   NetLogWithSource net_log_;
-  const NetworkTrafficAnnotationTag& traffic_annotation_;
+  const NetworkTrafficAnnotationTag& annotation_;
   IPEndPoint peer_address_;
-  NextProto negotiated_protocol_ = NextProto::kProtoUnknown;
-  PaddingType negotiated_padding_type_ = PaddingType::kNone;
-
+  NextProto protocol_ = NextProto::kProtoUnknown;
+  PaddingType padding_type_ = PaddingType::kNone;
   State state_ = State::kDisconnected;
   bool ever_used_ = false;
   bool read_pending_ = false;
   bool write_pending_ = false;
+  bool pong_pending_ = false;
+  bool pong_write_pending_ = false;
+  bool user_write_queued_ = false;
   size_t read_offset_ = 0;
-
   std::unique_ptr<WebSocketStreamRequest> request_;
   std::unique_ptr<WebSocketStream> stream_;
   std::vector<std::unique_ptr<WebSocketFrame>> read_frames_;
   std::vector<std::unique_ptr<WebSocketFrame>> write_frames_;
-  std::vector<std::unique_ptr<WebSocketFrame>> control_frames_;
+  std::vector<std::unique_ptr<WebSocketFrame>> pong_frames_;
   scoped_refptr<IOBuffer> write_payload_;
-  scoped_refptr<IOBuffer> control_payload_;
-
-  raw_ptr<IOBuffer> read_user_buffer_;
-  int read_user_buffer_len_ = 0;
+  scoped_refptr<IOBuffer> pong_payload_;
+  raw_ptr<IOBuffer> read_buffer_ = nullptr;
+  int read_buffer_len_ = 0;
+  int write_size_ = 0;
   CompletionOnceCallback connect_callback_;
   CompletionOnceCallback read_callback_;
   CompletionOnceCallback write_callback_;
-  int write_result_size_ = 0;
-  bool control_write_pending_ = false;
-  bool user_write_queued_ = false;
-
-  base::WeakPtrFactory<WebSocketTunnelSocket> weak_ptr_factory_{this};
+  base::WeakPtrFactory<WebSocketTunnelSocket> weak_factory_{this};
 };
 
 }  // namespace net

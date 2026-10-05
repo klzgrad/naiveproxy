@@ -1,70 +1,68 @@
-// Copyright 2026 The Chromium Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
-
 #include "net/tools/naive/websocket_tunnel_socket.h"
+
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/40284755): Remove this and spanify the buffer arithmetic.
+#pragma allow_unsafe_buffers
+#endif
 
 #include <algorithm>
 #include <cstring>
 #include <utility>
 
 #include "base/base64.h"
+#include "base/check.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/rand_util.h"
-#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/single_thread_task_runner.h"
+#include "components/embedder_support/user_agent_utils.h"
 #include "net/base/io_buffer.h"
 #include "net/base/isolation_info.h"
 #include "net/base/net_errors.h"
 #include "net/base/transport_info.h"
+#include "net/base/url_util.h"
 #include "net/http/http_request_headers.h"
 #include "net/http/http_response_headers.h"
-#include "net/tools/naive/naive_protocol.h"
-#include "net/tools/naive/padding_utils.h"
 #include "net/storage_access_api/status.h"
+#include "net/tools/naive/padding_utils.h"
 #include "net/websockets/websocket_frame.h"
+#include "net/websockets/websocket_handshake_constants.h"
 #include "net/websockets/websocket_handshake_response_info.h"
 #include "net/websockets/websocket_stream.h"
 #include "url/origin.h"
 
 namespace net {
-
 namespace {
 
-constexpr uint8_t kTunnelProtocolVersion = 1;
-constexpr uint8_t kAddressTypeIPv4 = 1;
-constexpr uint8_t kAddressTypeDomain = 3;
-constexpr uint8_t kAddressTypeIPv6 = 4;
-constexpr size_t kMaxDomainLength = 255;
+constexpr uint8_t kVersion = 1;
+constexpr uint8_t kIPv4 = 1;
+constexpr uint8_t kDomain = 3;
+constexpr uint8_t kIPv6 = 4;
 
-WebSocketFrameHeader::OpCode FrameOpcode(const WebSocketFrame& frame) {
-  return frame.header.opcode;
+bool IsData(const WebSocketFrame& frame) {
+  return frame.header.opcode == WebSocketFrameHeader::kOpCodeBinary ||
+         frame.header.opcode == WebSocketFrameHeader::kOpCodeContinuation;
 }
 
 }  // namespace
 
-class WebSocketTunnelSocket::ConnectDelegateImpl
+class WebSocketTunnelSocket::ConnectDelegate
     : public WebSocketStream::ConnectDelegate {
  public:
-  explicit ConnectDelegateImpl(
-      base::WeakPtr<WebSocketTunnelSocket> socket)
+  explicit ConnectDelegate(base::WeakPtr<WebSocketTunnelSocket> socket)
       : socket_(std::move(socket)) {}
-  ~ConnectDelegateImpl() override = default;
 
-  void OnCreateRequest(URLRequest* request) override {}
-
-  int OnURLRequestConnected(URLRequest* request,
-                            const TransportInfo& info,
-                            CompletionOnceCallback callback) override {
+  void OnCreateRequest(URLRequest*) override {}
+  int OnURLRequestConnected(URLRequest*, const TransportInfo& info,
+                            CompletionOnceCallback) override {
     if (socket_) {
       socket_->peer_address_ = info.endpoint;
-      socket_->negotiated_protocol_ = info.negotiated_protocol;
+      socket_->protocol_ = info.negotiated_protocol;
     }
     return OK;
   }
-
   void OnSuccess(
       std::unique_ptr<WebSocketStream> stream,
       std::unique_ptr<WebSocketHandshakeResponseInfo> response) override {
@@ -72,33 +70,22 @@ class WebSocketTunnelSocket::ConnectDelegateImpl
       socket_->OnConnectSuccess(std::move(stream), std::move(response));
     }
   }
-
-  void OnFailure(const std::string& message,
-                 int net_error,
-                 std::optional<int> response_code) override {
+  void OnFailure(const std::string&, int error, std::optional<int>) override {
     if (socket_) {
-      socket_->OnConnectFailure(net_error);
+      socket_->OnConnectFailure(error);
     }
   }
-
   void OnStartOpeningHandshake(
-      std::unique_ptr<WebSocketHandshakeRequestInfo> request) override {}
-
+      std::unique_ptr<WebSocketHandshakeRequestInfo>) override {}
   void OnSSLCertificateError(
-      std::unique_ptr<WebSocketEventInterface::SSLErrorCallbacks>
-          ssl_error_callbacks,
-      int net_error,
-      const SSLInfo& ssl_info,
-      bool fatal) override {
-    ssl_error_callbacks->CancelSSLRequest(net_error, &ssl_info);
+      std::unique_ptr<WebSocketEventInterface::SSLErrorCallbacks> callbacks,
+      int error, const SSLInfo& info, bool) override {
+    callbacks->CancelSSLRequest(error, &info);
   }
-
-  int OnAuthRequired(
-      const AuthChallengeInfo& auth_info,
-      scoped_refptr<HttpResponseHeaders> response_headers,
-      const IPEndPoint& remote_endpoint,
-      base::OnceCallback<void(const AuthCredentials*)> callback,
-      std::optional<AuthCredentials>* credentials) override {
+  int OnAuthRequired(const AuthChallengeInfo&,
+                     scoped_refptr<HttpResponseHeaders>, const IPEndPoint&,
+                     base::OnceCallback<void(const AuthCredentials*)>,
+                     std::optional<AuthCredentials>* credentials) override {
     if (socket_ && !socket_->credentials_.Empty()) {
       *credentials = socket_->credentials_;
     }
@@ -110,20 +97,14 @@ class WebSocketTunnelSocket::ConnectDelegateImpl
 };
 
 WebSocketTunnelSocket::WebSocketTunnelSocket(
-    const GURL& socket_url,
-    const AuthCredentials& credentials,
-    const HostPortPair& target,
-    URLRequestContext* url_request_context,
+    const GURL& url, const AuthCredentials& credentials,
+    const HostPortPair& target, URLRequestContext* context,
     const NetLogWithSource& net_log,
-    const NetworkTrafficAnnotationTag& traffic_annotation)
-    : socket_url_(socket_url),
-      credentials_(credentials),
-      target_(target),
-      url_request_context_(url_request_context),
-      net_log_(net_log),
-      traffic_annotation_(traffic_annotation) {
-  DCHECK(url_request_context_);
-  DCHECK(socket_url_.SchemeIs("ws") || socket_url_.SchemeIs("wss"));
+    const NetworkTrafficAnnotationTag& annotation)
+    : url_(url), credentials_(credentials), target_(target), context_(context),
+      net_log_(net_log), annotation_(annotation) {
+  DCHECK(context_);
+  DCHECK(url_.SchemeIs("ws") || url_.SchemeIs("wss"));
   DCHECK(!target_.IsEmpty());
 }
 
@@ -132,42 +113,36 @@ WebSocketTunnelSocket::~WebSocketTunnelSocket() {
 }
 
 int WebSocketTunnelSocket::Connect(CompletionOnceCallback callback) {
-  if (state_ == State::kConnected) {
-    return OK;
-  }
-  if (state_ != State::kDisconnected) {
-    return ERR_UNEXPECTED;
-  }
-  DCHECK(!connect_callback_);
-  DCHECK(!stream_);
-  DCHECK(!request_);
+  if (state_ == State::kConnected) return OK;
+  if (state_ != State::kDisconnected) return ERR_UNEXPECTED;
+  DCHECK(!connect_callback_ && !stream_ && !request_);
   connect_callback_ = std::move(callback);
 
-  url::Origin origin = url::Origin::Create(socket_url_);
-  HttpRequestHeaders additional_headers;
+  HttpRequestHeaders headers;
+  headers.SetHeader(HttpRequestHeaders::kUserAgent,
+                    embedder_support::GetUserAgent());
+  headers.SetHeader(HttpRequestHeaders::kAcceptLanguage, "en-US,en;q=0.9");
+  headers.SetHeader(HttpRequestHeaders::kCacheControl, "no-cache");
+  headers.SetHeader(HttpRequestHeaders::kPragma, "no-cache");
   InitializeNonindexCodes();
   std::string padding(base::RandIntInclusive(16, 32), '~');
   FillNonindexHeaderValue(base::RandUint64(),
                           base::as_writable_byte_span(padding));
-  additional_headers.SetHeader(kPaddingHeader, padding);
-  additional_headers.SetHeader(kPaddingTypeRequestHeader, "1,0");
+  headers.SetHeader(kPaddingHeader, padding);
+  headers.SetHeader(kPaddingTypeRequestHeader, "1,0");
   if (!credentials_.Empty()) {
-    std::string username = base::UTF16ToUTF8(credentials_.username());
-    std::string password = base::UTF16ToUTF8(credentials_.password());
-    std::string basic_value = base::Base64Encode(username + ":" + password);
-    additional_headers.SetHeader("Authorization", "Basic " + basic_value);
+    headers.SetHeader("Authorization", "Basic " + base::Base64Encode(
+        base::UTF16ToUTF8(credentials_.username()) + ":" +
+        base::UTF16ToUTF8(credentials_.password())));
   }
 
   state_ = State::kConnecting;
   request_ = WebSocketStream::CreateAndConnectStream(
-      socket_url_, {}, origin, StorageAccessApiStatus::kNone,
-      IsolationInfo::CreateTransient(std::nullopt), additional_headers,
-      url_request_context_, net_log_, WebSocketPriorityHint::kDefault,
-      traffic_annotation_,
-      std::make_unique<ConnectDelegateImpl>(weak_ptr_factory_.GetWeakPtr()));
-  if (state_ == State::kDisconnected) {
-    return ERR_CONNECTION_ABORTED;
-  }
+      url_, {}, url::Origin::Create(ChangeWebSocketSchemeToHttpScheme(url_)),
+      StorageAccessApiStatus::kNone,
+      IsolationInfo::CreateTransient(std::nullopt),
+      headers, context_, net_log_, WebSocketPriorityHint::kDefault, annotation_,
+      std::make_unique<ConnectDelegate>(weak_factory_.GetWeakPtr()));
   return ERR_IO_PENDING;
 }
 
@@ -178,42 +153,36 @@ void WebSocketTunnelSocket::Disconnect() {
     stream_.reset();
   }
   state_ = State::kDisconnected;
-  ever_used_ = false;
-  read_pending_ = false;
-  write_pending_ = false;
-  read_offset_ = 0;
+  ever_used_ = read_pending_ = write_pending_ = false;
+  pong_pending_ = pong_write_pending_ = user_write_queued_ = false;
+  read_offset_ = write_size_ = read_buffer_len_ = 0;
   read_frames_.clear();
   write_frames_.clear();
-  control_frames_.clear();
+  pong_frames_.clear();
   write_payload_.reset();
-  control_payload_.reset();
-  read_user_buffer_ = nullptr;
-  read_user_buffer_len_ = 0;
+  pong_payload_.reset();
+  read_buffer_ = nullptr;
   connect_callback_.Reset();
   read_callback_.Reset();
   write_callback_.Reset();
-  write_result_size_ = 0;
-  control_write_pending_ = false;
-  user_write_queued_ = false;
 }
 
 bool WebSocketTunnelSocket::IsConnected() const {
-  return state_ == State::kConnected && stream_ != nullptr;
+  return state_ == State::kConnected && stream_;
 }
 
 bool WebSocketTunnelSocket::IsConnectedAndIdle() const {
-  return IsConnected() && !read_pending_ && !write_pending_;
+  return IsConnected() && !read_pending_ && !write_pending_ &&
+         !pong_write_pending_;
 }
 
 int WebSocketTunnelSocket::GetPeerAddress(IPEndPoint* address) const {
-  if (!peer_address_.address().IsValid()) {
-    return ERR_SOCKET_NOT_CONNECTED;
-  }
+  if (!peer_address_.address().IsValid()) return ERR_SOCKET_NOT_CONNECTED;
   *address = peer_address_;
   return OK;
 }
 
-int WebSocketTunnelSocket::GetLocalAddress(IPEndPoint* address) const {
+int WebSocketTunnelSocket::GetLocalAddress(IPEndPoint*) const {
   return ERR_SOCKET_NOT_CONNECTED;
 }
 
@@ -221,138 +190,91 @@ const NetLogWithSource& WebSocketTunnelSocket::NetLog() const {
   return net_log_;
 }
 
-bool WebSocketTunnelSocket::WasEverUsed() const {
-  return ever_used_;
-}
+bool WebSocketTunnelSocket::WasEverUsed() const { return ever_used_; }
 
 NextProto WebSocketTunnelSocket::GetNegotiatedProtocol() const {
-  return negotiated_protocol_;
+  return protocol_;
 }
 
-bool WebSocketTunnelSocket::GetSSLInfo(SSLInfo* ssl_info) {
-  return false;
-}
+bool WebSocketTunnelSocket::GetSSLInfo(SSLInfo*) { return false; }
 
-int64_t WebSocketTunnelSocket::GetTotalReceivedBytes() const {
-  return 0;
-}
+int64_t WebSocketTunnelSocket::GetTotalReceivedBytes() const { return 0; }
 
-void WebSocketTunnelSocket::ApplySocketTag(const SocketTag& tag) {}
+void WebSocketTunnelSocket::ApplySocketTag(const SocketTag&) {}
 
-int WebSocketTunnelSocket::Read(IOBuffer* buf,
-                                int buf_len,
+int WebSocketTunnelSocket::Read(IOBuffer* buffer, int length,
                                 CompletionOnceCallback callback) {
-  DCHECK(buf);
-  DCHECK_GT(buf_len, 0);
-  if (!IsConnected()) {
-    return ERR_SOCKET_NOT_CONNECTED;
-  }
-  DCHECK(!read_pending_);
-  DCHECK(read_callback_.is_null());
-
-  read_user_buffer_ = buf;
-  read_user_buffer_len_ = buf_len;
-  int rv = CopyAvailableData();
-  if (rv != 0) {
-    read_user_buffer_ = nullptr;
-    read_user_buffer_len_ = 0;
-    if (rv < 0) {
-      stream_->Close();
-      state_ = State::kDisconnected;
-    }
-    return rv;
-  }
-
+  DCHECK(buffer && length > 0);
+  if (!IsConnected()) return ERR_SOCKET_NOT_CONNECTED;
+  DCHECK(!read_pending_ && read_callback_.is_null());
+  read_buffer_ = buffer;
+  read_buffer_len_ = length;
   read_pending_ = true;
   read_callback_ = std::move(callback);
-  return ReadWithBuffer();
-}
-
-int WebSocketTunnelSocket::Write(IOBuffer* buf,
-                                 int buf_len,
-                                 CompletionOnceCallback callback,
-                                 const NetworkTrafficAnnotationTag&) {
-  DCHECK(buf);
-  DCHECK_GE(buf_len, 0);
-  if (!IsConnected()) {
-    return ERR_SOCKET_NOT_CONNECTED;
-  }
-  if (buf_len == 0) {
-    return 0;
-  }
-  DCHECK(!write_pending_);
-  DCHECK(write_frames_.empty());
-
-  ever_used_ = true;
-  write_payload_ = base::MakeRefCounted<IOBufferWithSize>(buf_len);
-  std::memcpy(write_payload_->data(), buf->data(),
-              base::checked_cast<size_t>(buf_len));
-  auto frame = std::make_unique<WebSocketFrame>(
-      WebSocketFrameHeader::kOpCodeBinary);
-  frame->header.final = true;
-  frame->header.masked = true;
-  frame->header.payload_length = base::checked_cast<uint64_t>(buf_len);
-  frame->payload = write_payload_->first(base::checked_cast<size_t>(buf_len));
-  write_frames_.push_back(std::move(frame));
-  write_result_size_ = buf_len;
-
-  write_pending_ = true;
-  write_callback_ = std::move(callback);
-  if (control_write_pending_) {
-    user_write_queued_ = true;
+  if (!read_frames_.empty()) {
+    Post(base::BindOnce(&WebSocketTunnelSocket::OnReadFrames,
+                        weak_factory_.GetWeakPtr(), OK));
     return ERR_IO_PENDING;
   }
-  return BeginUserWrite();
-}
-
-int WebSocketTunnelSocket::BeginUserWrite() {
-  int rv = stream_->WriteFrames(&write_frames_, base::BindOnce(
-      &WebSocketTunnelSocket::OnWriteFramesComplete,
-      weak_ptr_factory_.GetWeakPtr()));
-  if (rv != ERR_IO_PENDING) {
-    OnWriteFramesComplete(rv);
+  const int result = ReadFrames();
+  if (result != ERR_IO_PENDING) {
+    Post(base::BindOnce(&WebSocketTunnelSocket::OnReadFrames,
+                        weak_factory_.GetWeakPtr(), result));
   }
   return ERR_IO_PENDING;
 }
 
-int WebSocketTunnelSocket::SetReceiveBufferSize(int32_t size) {
-  return OK;
+int WebSocketTunnelSocket::Write(IOBuffer* buffer, int length,
+                                 CompletionOnceCallback callback,
+                                 const NetworkTrafficAnnotationTag&) {
+  DCHECK(buffer && length >= 0);
+  if (!IsConnected()) return ERR_SOCKET_NOT_CONNECTED;
+  if (length == 0) return 0;
+  DCHECK(!write_pending_ && write_frames_.empty());
+  ever_used_ = true;
+  write_payload_ = base::MakeRefCounted<IOBufferWithSize>(length);
+  std::memcpy(write_payload_->data(), buffer->data(),
+              base::checked_cast<size_t>(length));
+  auto frame = std::make_unique<WebSocketFrame>(
+      WebSocketFrameHeader::kOpCodeBinary);
+  frame->header.final = true;
+  frame->header.masked = true;
+  frame->header.payload_length = base::checked_cast<uint64_t>(length);
+  frame->payload = write_payload_->first(base::checked_cast<size_t>(length));
+  write_frames_.push_back(std::move(frame));
+  write_size_ = length;
+  write_pending_ = true;
+  write_callback_ = std::move(callback);
+  if (pong_write_pending_) {
+    user_write_queued_ = true;
+    return ERR_IO_PENDING;
+  }
+  return BeginWrite();
 }
 
-int WebSocketTunnelSocket::SetSendBufferSize(int32_t size) {
-  return OK;
-}
+int WebSocketTunnelSocket::SetReceiveBufferSize(int32_t) { return OK; }
+
+int WebSocketTunnelSocket::SetSendBufferSize(int32_t) { return OK; }
 
 void WebSocketTunnelSocket::OnConnectSuccess(
     std::unique_ptr<WebSocketStream> stream,
     std::unique_ptr<WebSocketHandshakeResponseInfo> response) {
-  if (state_ != State::kConnecting) {
-    return;
-  }
-  DCHECK(!stream_);
-  if (!response || !response->headers) {
+  if (state_ != State::kConnecting) return;
+  if (!response || !response->headers ||
+      response->headers->HasHeader(websockets::kSecWebSocketExtensions)) {
     Fail(ERR_INVALID_RESPONSE);
     return;
   }
-
-  std::optional<PaddingType> padding_type =
+  std::optional<PaddingType> negotiated =
       ParsePaddingHeaders(*response->headers);
-  if (!padding_type.has_value()) {
-    LOG(ERROR) << "Received invalid WebSocket padding type";
+  if (!negotiated) {
     Fail(ERR_INVALID_RESPONSE);
     return;
   }
-
-  negotiated_padding_type_ = *padding_type;
-  LOG(INFO) << "Negotiated WebSocket padding type: "
-            << ToReadableString(negotiated_padding_type_);
-
+  padding_type_ = *negotiated;
   stream_ = std::move(stream);
   request_.reset();
-  int rv = BeginSendTarget();
-  if (rv != ERR_IO_PENDING) {
-    OnSendTargetComplete(rv);
-  }
+  SendTarget();
 }
 
 void WebSocketTunnelSocket::OnConnectFailure(int error) {
@@ -361,38 +283,26 @@ void WebSocketTunnelSocket::OnConnectFailure(int error) {
   Fail(error == OK || error == ERR_IO_PENDING ? ERR_CONNECTION_FAILED : error);
 }
 
-int WebSocketTunnelSocket::BeginSendTarget() {
-  DCHECK(stream_);
+void WebSocketTunnelSocket::SendTarget() {
   std::string host = target_.host();
   std::optional<IPAddress> address = IPAddress::FromIPLiteral(host);
   size_t address_size = 0;
-  uint8_t address_type = kAddressTypeDomain;
-  if (address.has_value()) {
+  uint8_t type = kDomain;
+  if (address) {
     address_size = address->size();
-    if (address->IsIPv4()) {
-      address_type = kAddressTypeIPv4;
-    } else if (address->IsIPv6()) {
-      address_type = kAddressTypeIPv6;
-    } else {
-      address.reset();
-    }
+    type = address->IsIPv4() ? kIPv4 : kIPv6;
+  } else if (host.empty() || host.size() > 255) {
+    Fail(ERR_ADDRESS_INVALID);
+    return;
   }
-
-  if (!address.has_value()) {
-    address_type = kAddressTypeDomain;
-    if (host.empty() || host.size() > kMaxDomainLength) {
-      return ERR_ADDRESS_INVALID;
-    }
-  }
-
-  size_t payload_size = 4 + address_size;
+  const size_t size = address ? 4 + address_size : 5 + host.size();
   auto payload = base::MakeRefCounted<IOBufferWithSize>(
-      base::checked_cast<int>(payload_size));
+      base::checked_cast<int>(size));
   uint8_t* bytes = reinterpret_cast<uint8_t*>(payload->data());
   size_t offset = 0;
-  bytes[offset++] = kTunnelProtocolVersion;
-  bytes[offset++] = address_type;
-  if (address.has_value()) {
+  bytes[offset++] = kVersion;
+  bytes[offset++] = type;
+  if (address) {
     std::ranges::copy(address->bytes(), bytes + offset);
     offset += address_size;
   } else {
@@ -400,27 +310,27 @@ int WebSocketTunnelSocket::BeginSendTarget() {
     std::memcpy(bytes + offset, host.data(), host.size());
     offset += host.size();
   }
-  uint16_t port = base::checked_cast<uint16_t>(target_.port());
+  const uint16_t port = base::checked_cast<uint16_t>(target_.port());
   bytes[offset++] = port >> 8;
   bytes[offset] = port & 0xff;
-
   auto frame = std::make_unique<WebSocketFrame>(
       WebSocketFrameHeader::kOpCodeBinary);
   frame->header.final = true;
   frame->header.masked = true;
-  frame->header.payload_length = payload_size;
+  frame->header.payload_length = size;
   frame->payload = payload->span();
   write_payload_ = std::move(payload);
   write_frames_.push_back(std::move(frame));
-
-  state_ = State::kSendingTarget;
-  return stream_->WriteFrames(
-      &write_frames_,
-      base::BindOnce(&WebSocketTunnelSocket::OnSendTargetComplete,
-                     weak_ptr_factory_.GetWeakPtr()));
+  const int result = stream_->WriteFrames(
+      &write_frames_, base::BindOnce(&WebSocketTunnelSocket::OnTargetSent,
+                                     weak_factory_.GetWeakPtr()));
+  if (result != ERR_IO_PENDING) {
+    Post(base::BindOnce(&WebSocketTunnelSocket::OnTargetSent,
+                        weak_factory_.GetWeakPtr(), result));
+  }
 }
 
-void WebSocketTunnelSocket::OnSendTargetComplete(int result) {
+void WebSocketTunnelSocket::OnTargetSent(int result) {
   write_frames_.clear();
   write_payload_.reset();
   if (result != OK) {
@@ -428,263 +338,228 @@ void WebSocketTunnelSocket::OnSendTargetComplete(int result) {
     Fail(result);
     return;
   }
-  state_ = State::kReadingStatus;
-  int rv = BeginReadStatus();
-  if (rv != ERR_IO_PENDING) {
-    OnReadFramesComplete(rv);
+  const int read_result = ReadFrames();
+  if (read_result != ERR_IO_PENDING) {
+    Post(base::BindOnce(&WebSocketTunnelSocket::OnReadFrames,
+                        weak_factory_.GetWeakPtr(), read_result));
   }
 }
 
-int WebSocketTunnelSocket::BeginReadStatus() {
-  DCHECK(read_frames_.empty());
-  return stream_->ReadFrames(&read_frames_, base::BindOnce(
-      &WebSocketTunnelSocket::OnReadFramesComplete,
-      weak_ptr_factory_.GetWeakPtr()));
+int WebSocketTunnelSocket::ReadFrames() {
+  read_frames_.clear();
+  return stream_->ReadFrames(
+      &read_frames_, base::BindOnce(&WebSocketTunnelSocket::OnReadFrames,
+                                    weak_factory_.GetWeakPtr()));
 }
 
-void WebSocketTunnelSocket::OnReadFramesComplete(int result) {
-  State previous_state = state_;
-  if (result == ERR_CONNECTION_CLOSED) {
-    stream_.reset();
-    state_ = State::kDisconnected;
-    if (previous_state == State::kReadingStatus) {
-      Fail(ERR_TUNNEL_CONNECTION_FAILED);
-    } else {
-      read_pending_ = false;
-      read_user_buffer_ = nullptr;
-      read_user_buffer_len_ = 0;
-      CompletionOnceCallback callback = std::move(read_callback_);
-      read_callback_.Reset();
-      std::move(callback).Run(result);
-    }
-    return;
-  }
+void WebSocketTunnelSocket::OnReadFrames(int result) {
   if (result < 0) {
     stream_.reset();
     state_ = State::kDisconnected;
-    if (previous_state == State::kReadingStatus) {
-      Fail(result);
-    } else {
-      read_pending_ = false;
-      read_user_buffer_ = nullptr;
-      read_user_buffer_len_ = 0;
-      CompletionOnceCallback callback = std::move(read_callback_);
-      read_callback_.Reset();
-      std::move(callback).Run(result);
-    }
+    if (read_pending_) CompleteRead(result);
+    else if (connect_callback_) Fail(ERR_TUNNEL_CONNECTION_FAILED);
     return;
   }
-
-  if (state_ == State::kReadingStatus) {
-    uint8_t status = 0xff;
-    bool got_status = false;
-    for (const auto& frame : read_frames_) {
-      if (FrameOpcode(*frame) != WebSocketFrameHeader::kOpCodeBinary ||
-          frame->payload.empty()) {
-        continue;
-      }
-      status = frame->payload[0];
-      got_status = true;
-      break;
-    }
-    read_frames_.clear();
-    if (!got_status || status != 0) {
+  if (connect_callback_) {
+    auto it = std::find_if(read_frames_.begin(), read_frames_.end(),
+                           [](const auto& frame) {
+                             return frame->header.opcode ==
+                                    WebSocketFrameHeader::kOpCodeBinary &&
+                                    !frame->payload.empty();
+                           });
+    if (it == read_frames_.end() || (*it)->payload[0] != 0) {
       stream_.reset();
-      state_ = State::kDisconnected;
       Fail(ERR_TUNNEL_CONNECTION_FAILED);
       return;
     }
+    read_frames_.erase(it);
     state_ = State::kConnected;
     ever_used_ = true;
     CompleteConnect(OK);
     return;
   }
 
-  if (!read_pending_) {
-    read_frames_.clear();
-    return;
-  }
-
-  if (state_ == State::kConnected) {
-    for (const auto& frame : read_frames_) {
-      if (FrameOpcode(*frame) == WebSocketFrameHeader::kOpCodePing) {
-        MaybeSendPong(*frame);
-      }
-    }
-  }
+  ProcessControlFrames();
   if (!IsConnected()) {
-    read_frames_.clear();
-    read_pending_ = false;
-    read_user_buffer_ = nullptr;
-    read_user_buffer_len_ = 0;
-    CompletionOnceCallback callback = std::move(read_callback_);
-    read_callback_.Reset();
-    std::move(callback).Run(ERR_CONNECTION_CLOSED);
+    if (read_pending_) CompleteRead(ERR_CONNECTION_CLOSED);
     return;
   }
-
-  int copied = CopyAvailableData();
+  if (!read_pending_) {
+    SendPong();
+    return;
+  }
+  const int copied = CopyData();
+  if (copied > 0) {
+    CompleteRead(copied);
+    return;
+  }
   if (copied < 0) {
-    read_frames_.clear();
-    read_pending_ = false;
-    read_user_buffer_ = nullptr;
-    read_user_buffer_len_ = 0;
     stream_.reset();
     state_ = State::kDisconnected;
-    CompletionOnceCallback callback = std::move(read_callback_);
-    read_callback_.Reset();
-    std::move(callback).Run(copied);
+    CompleteRead(copied);
     return;
   }
-  if (copied == 0) {
-    read_frames_.clear();
-    ReadWithBuffer();
-    return;
+  const int read_result = ReadFrames();
+  if (read_result != ERR_IO_PENDING) {
+    Post(base::BindOnce(&WebSocketTunnelSocket::OnReadFrames,
+                        weak_factory_.GetWeakPtr(), read_result));
   }
-
-  while (!read_frames_.empty()) {
-    const auto& frame = read_frames_.front();
-    bool is_data_frame =
-        FrameOpcode(*frame) == WebSocketFrameHeader::kOpCodeBinary ||
-        FrameOpcode(*frame) == WebSocketFrameHeader::kOpCodeContinuation;
-    if (!is_data_frame ||
-        read_offset_ != frame->payload.size()) {
-      if (is_data_frame) {
-        read_offset_ = 0;
-      }
-      read_frames_.erase(read_frames_.begin());
-      continue;
-    }
-    break;
-  }
-
-  CompletionOnceCallback callback = std::move(read_callback_);
-  read_pending_ = false;
-  read_user_buffer_ = nullptr;
-  read_user_buffer_len_ = 0;
-  read_callback_.Reset();
-  std::move(callback).Run(copied);
 }
 
-int WebSocketTunnelSocket::ReadWithBuffer() {
-  read_frames_.clear();
-  int rv = stream_->ReadFrames(&read_frames_, base::BindOnce(
-      &WebSocketTunnelSocket::OnReadFramesComplete,
-      weak_ptr_factory_.GetWeakPtr()));
-  if (rv != ERR_IO_PENDING) {
-    OnReadFramesComplete(rv);
-  }
-  return ERR_IO_PENDING;
-}
-
-int WebSocketTunnelSocket::CopyAvailableData() {
+int WebSocketTunnelSocket::CopyData() {
   int copied = 0;
-  for (const auto& frame : read_frames_) {
-    if (FrameOpcode(*frame) == WebSocketFrameHeader::kOpCodeClose) {
-      return ERR_CONNECTION_CLOSED;
-    }
-    if (FrameOpcode(*frame) != WebSocketFrameHeader::kOpCodeBinary &&
-        FrameOpcode(*frame) != WebSocketFrameHeader::kOpCodeContinuation) {
+  for (auto it = read_frames_.begin(); it != read_frames_.end();) {
+    if (!IsData(**it)) {
+      it = read_frames_.erase(it);
       continue;
     }
-    size_t payload_size = frame->payload.size();
-    size_t available = payload_size > read_offset_
-                           ? payload_size - read_offset_
-                           : 0;
-    if (available == 0) {
+    const size_t available = (*it)->payload.size() - read_offset_;
+    const size_t space = base::checked_cast<size_t>(read_buffer_len_ - copied);
+    const size_t count = std::min(available, space);
+    std::memcpy(read_buffer_->data() + copied,
+                (*it)->payload.data() + read_offset_, count);
+    copied += base::checked_cast<int>(count);
+    read_offset_ += count;
+    if (read_offset_ == (*it)->payload.size()) {
+      it = read_frames_.erase(it);
       read_offset_ = 0;
-      continue;
-    }
-    size_t space = base::checked_cast<size_t>(read_user_buffer_len_ - copied);
-    size_t to_copy = std::min(available, space);
-    std::memcpy(read_user_buffer_->data() + copied,
-                frame->payload.data() + read_offset_, to_copy);
-    copied += base::checked_cast<int>(to_copy);
-    read_offset_ += to_copy;
-    if (read_offset_ == payload_size) {
-      read_offset_ = 0;
-    }
-    if (copied == read_user_buffer_len_) {
+    } else {
+      // A partial frame can only remain when the caller's buffer is full.
       break;
     }
+    if (copied == read_buffer_len_) break;
   }
   return copied;
 }
 
-void WebSocketTunnelSocket::OnWriteFramesComplete(int result) {
-  DCHECK(write_pending_);
-  int written = result == OK ? write_result_size_ : result;
+void WebSocketTunnelSocket::ProcessControlFrames() {
+  for (auto it = read_frames_.begin(); it != read_frames_.end();) {
+    const auto opcode = (*it)->header.opcode;
+    if (opcode == WebSocketFrameHeader::kOpCodePing) {
+      pong_payload_ = base::MakeRefCounted<IOBufferWithSize>(
+          base::checked_cast<int>((*it)->payload.size()));
+      if (!(*it)->payload.empty()) {
+        std::memcpy(pong_payload_->data(), (*it)->payload.data(),
+                    (*it)->payload.size());
+      }
+      pong_pending_ = true;
+      it = read_frames_.erase(it);
+    } else if (opcode == WebSocketFrameHeader::kOpCodePong) {
+      it = read_frames_.erase(it);
+    } else if (opcode == WebSocketFrameHeader::kOpCodeClose) {
+      stream_.reset();
+      state_ = State::kDisconnected;
+      return;
+    } else {
+      ++it;
+    }
+  }
+}
+
+int WebSocketTunnelSocket::BeginWrite() {
+  const int result = stream_->WriteFrames(
+      &write_frames_, base::BindOnce(&WebSocketTunnelSocket::OnWriteComplete,
+                                     weak_factory_.GetWeakPtr()));
+  if (result != ERR_IO_PENDING) {
+    Post(base::BindOnce(&WebSocketTunnelSocket::OnWriteComplete,
+                        weak_factory_.GetWeakPtr(), result));
+  }
+  return ERR_IO_PENDING;
+}
+
+void WebSocketTunnelSocket::OnWriteComplete(int result) {
   write_frames_.clear();
   write_payload_.reset();
-  write_result_size_ = 0;
-  write_pending_ = false;
   if (result != OK) {
     stream_.reset();
     state_ = State::kDisconnected;
-  }
-  ever_used_ = true;
-  CompletionOnceCallback callback = std::move(write_callback_);
-  write_callback_.Reset();
-  std::move(callback).Run(written);
-}
-
-void WebSocketTunnelSocket::MaybeSendPong(const WebSocketFrame& ping_frame) {
-  if (state_ != State::kConnected || !stream_ || control_write_pending_ ||
-      write_pending_) {
+    CompleteWrite(result);
     return;
   }
+  const int written = write_size_;
+  write_size_ = 0;
+  write_pending_ = false;
+  SendPong();
+  CompleteWrite(written);
+}
 
-  size_t payload_size = ping_frame.payload.size();
-  auto payload = base::MakeRefCounted<IOBufferWithSize>(
-      base::checked_cast<int>(payload_size));
-  if (payload_size > 0) {
-    std::memcpy(payload->data(), ping_frame.payload.data(), payload_size);
+void WebSocketTunnelSocket::SendPong() {
+  if (!pong_pending_ || !IsConnected() || write_pending_ ||
+      pong_write_pending_) {
+    return;
   }
-  auto frame =
-      std::make_unique<WebSocketFrame>(WebSocketFrameHeader::kOpCodePong);
+  auto frame = std::make_unique<WebSocketFrame>(
+      WebSocketFrameHeader::kOpCodePong);
   frame->header.final = true;
   frame->header.masked = true;
-  frame->header.payload_length = payload_size;
-  frame->payload = payload->span();
-  control_payload_ = std::move(payload);
-  control_frames_.push_back(std::move(frame));
-  control_write_pending_ = true;
-  int rv = stream_->WriteFrames(&control_frames_, base::BindOnce(
-      &WebSocketTunnelSocket::OnControlWriteComplete,
-      weak_ptr_factory_.GetWeakPtr()));
-  if (rv != ERR_IO_PENDING) {
-    OnControlWriteComplete(rv);
+  frame->header.payload_length = pong_payload_ ? pong_payload_->size() : 0;
+  if (pong_payload_) frame->payload = pong_payload_->span();
+  pong_frames_.push_back(std::move(frame));
+  pong_write_pending_ = true;
+  pong_pending_ = false;
+  const int result = stream_->WriteFrames(
+      &pong_frames_, base::BindOnce(&WebSocketTunnelSocket::OnPongComplete,
+                                    weak_factory_.GetWeakPtr()));
+  if (result != ERR_IO_PENDING) {
+    Post(base::BindOnce(&WebSocketTunnelSocket::OnPongComplete,
+                        weak_factory_.GetWeakPtr(), result));
   }
 }
 
-void WebSocketTunnelSocket::OnControlWriteComplete(int result) {
-  DCHECK(control_write_pending_);
-  control_write_pending_ = false;
-  control_frames_.clear();
-  control_payload_.reset();
+void WebSocketTunnelSocket::OnPongComplete(int result) {
+  pong_frames_.clear();
+  pong_payload_.reset();
+  pong_write_pending_ = false;
   if (result != OK) {
     stream_.reset();
     state_ = State::kDisconnected;
-    if (write_pending_) {
-      OnWriteFramesComplete(result);
-    }
+    if (write_pending_) CompleteWrite(result);
+    else if (read_pending_) CompleteRead(result);
     return;
   }
   if (user_write_queued_) {
     user_write_queued_ = false;
-    BeginUserWrite();
+    BeginWrite();
   }
+}
+
+void WebSocketTunnelSocket::Post(base::OnceClosure task) {
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, std::move(task));
+}
+
+void WebSocketTunnelSocket::CompleteConnect(int result) {
+  CompletionOnceCallback callback = std::move(connect_callback_);
+  connect_callback_.Reset();
+  std::move(callback).Run(result);
+}
+
+void WebSocketTunnelSocket::CompleteRead(int result) {
+  read_pending_ = false;
+  read_buffer_ = nullptr;
+  read_buffer_len_ = 0;
+  CompletionOnceCallback callback = std::move(read_callback_);
+  read_callback_.Reset();
+  std::move(callback).Run(result);
+}
+
+void WebSocketTunnelSocket::CompleteWrite(int result) {
+  write_pending_ = false;
+  write_size_ = 0;
+  CompletionOnceCallback callback = std::move(write_callback_);
+  write_callback_.Reset();
+  std::move(callback).Run(result);
 }
 
 void WebSocketTunnelSocket::Fail(int error) {
   state_ = State::kDisconnected;
-  CompleteConnect(error);
-}
-
-void WebSocketTunnelSocket::CompleteConnect(int error) {
-  CompletionOnceCallback callback = std::move(connect_callback_);
-  connect_callback_.Reset();
-  std::move(callback).Run(error);
+  if (connect_callback_) {
+    CompleteConnect(error);
+  } else if (read_pending_) {
+    CompleteRead(error);
+  } else if (write_pending_) {
+    CompleteWrite(error);
+  }
 }
 
 }  // namespace net

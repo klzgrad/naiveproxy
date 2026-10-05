@@ -81,6 +81,23 @@ Run `./naive` with the following `config.json` to get a SOCKS5 proxy at local po
 
 Or `quic://user:pass@example.com`, if it works better. See also [parameter usage](https://github.com/klzgrad/naiveproxy/blob/master/USAGE.txt) and [performance tuning](https://github.com/klzgrad/naiveproxy/wiki/Performance-Tuning).
 
+For an HTTP/CDN path that cannot forward HTTP CONNECT, use a single-hop
+WebSocket upstream:
+
+```json
+{
+  "listen": "socks://127.0.0.1:1080",
+  "proxy": "wss://user:pass@example.com/naive"
+}
+```
+
+The client uses Chromium's WebSocket implementation for DNS, TLS, HTTP/1.1
+upgrade, masking, and framing. After the upgrade, the first binary message is
+`version(1) address_type(1) address port(2)`; the server replies with one
+status byte, then binary messages carry the target TCP stream. Address types
+are 1 for IPv4, 3 for a length-prefixed domain, and 4 for IPv6. Variant 1
+padding is negotiated with the existing padding headers.
+
 ## Third-party integration
 
 * [v2rayN](https://github.com/2dust/v2rayN), GUI client
