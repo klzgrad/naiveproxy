@@ -237,9 +237,9 @@ std::unique_ptr<ConnectJob> ClientSocketPool::CreateConnectJob(
         is_for_websockets_);
   }
 
-  // Force a CONNECT tunnel for websockets. If this is false, the connect job
-  // may still use a tunnel for other reasons.
-  bool force_tunnel = is_for_websockets_;
+  // Naive requires a CONNECT tunnel for raw sockets, even when the endpoint
+  // uses an HTTP scheme. Keep this independent of WebSocket ALPN and pooling.
+  bool force_tunnel = true;
 
   // Only offer HTTP/1.1 for WebSockets. Although RFC 8441 defines WebSockets
   // over HTTP/2, a single WSS/HTTPS origin may support HTTP over HTTP/2
