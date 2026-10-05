@@ -115,29 +115,6 @@ void NaiveProxyDelegate::OnPreambleHeadersReceived(
   headers[preamble_index] = response_headers;
 }
 
-std::optional<PaddingType> NaiveProxyDelegate::ParsePaddingHeaders(
-    const HttpResponseHeaders& headers) {
-  bool has_padding = headers.HasHeader(kPaddingHeader);
-  std::optional<std::string> padding_type_reply =
-      headers.GetNormalizedHeader(kPaddingTypeReplyHeader);
-
-  if (!padding_type_reply.has_value()) {
-    // Backward compatibility with before kVariant1 when the padding-version
-    // header does not exist.
-    if (has_padding) {
-      return PaddingType::kVariant1;
-    } else {
-      return PaddingType::kNone;
-    }
-  }
-  std::optional<PaddingType> padding_type =
-      ParsePaddingType(*padding_type_reply);
-  if (!padding_type.has_value()) {
-    LOG(ERROR) << "Received invalid padding type: " << *padding_type_reply;
-  }
-  return padding_type;
-}
-
 Error NaiveProxyDelegate::OnTunnelHeadersReceived(
     const ProxyChain& proxy_chain,
     size_t chain_index,
