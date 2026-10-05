@@ -185,7 +185,8 @@ std::unique_ptr<URLRequestContext> BuildURLRequestContext(
     const NaiveConfig& config,
     scoped_refptr<CertNetFetcherURLRequest> cert_net_fetcher,
     NetLog* net_log,
-    int proxy_chain_index = 0) {
+    int proxy_chain_index = 0,
+    bool websocket_context = false) {
   URLRequestContextBuilder builder;
 
   builder.DisableHttpCache();
@@ -214,6 +215,12 @@ std::unique_ptr<URLRequestContext> BuildURLRequestContext(
   // are sent after half the window is unacknowledged.
   constexpr int kTypicalWindow = kMaxBdpMB * 2 * 1024 * 1024;
   HttpNetworkSessionParams http_network_session_params;
+  if (websocket_context) {
+    // CDNs usually do not forward CONNECT, and RFC 8441/9220 also replaces
+    // the GET Upgrade request. Keep this transport on HTTP/1.1 WebSockets.
+    http_network_session_params.enable_http2 = false;
+    http_network_session_params.enable_quic = false;
+  }
   http_network_session_params.spdy_session_max_recv_window_size =
       kTypicalWindow * 2;
   http_network_session_params
@@ -448,7 +455,7 @@ int main(int argc, char* argv[]) {
                  "                           proto: socks, http\n"
                  "                                  redir (Linux only)\n"
                  "--proxy=<proto>://[<user>:<pass>@]<hostname>[:<port>]\n"
-                 "                           proto: https, quic\n"
+                 "                           proto: https, quic, ws, wss\n"
                  "--insecure-concurrency=<N> Use N connections, insecure\n"
                  "--tunnel-timeout=<SECONDS> Rotate tunnels after timeout\n"
                  "--idle-timeout=<SECONDS>   Close idle streams after timeout\n"
@@ -564,7 +571,12 @@ int main(int argc, char* argv[]) {
           config.resolver_prefix);
     }
 
-    if (config.proxy_chains.size() >= 2) {
+    if (config.websocket_transport) {
+      if (contexts.empty()) {
+        contexts.push_back(net::BuildURLRequestContext(
+            config, std::move(cert_net_fetcher), net_log, 0, true));
+      }
+    } else if (config.proxy_chains.size() >= 2) {
       contexts.push_back(net::BuildURLRequestContext(
           config, std::move(cert_net_fetcher), net_log, listen_i));
     } else if (contexts.empty()) {
@@ -578,7 +590,13 @@ int main(int argc, char* argv[]) {
         listen_config.pass, config.insecure_concurrency, config.tunnel_timeout,
         config.idle_timeout, resolver.get(), session, kTrafficAnnotation,
         std::vector<net::PaddingType>{net::PaddingType::kVariant1,
-                                      net::PaddingType::kNone});
+                                      net::PaddingType::kNone},
+        context.get(),
+        config.websocket_transport
+            ? std::make_optional<net::WebSocketTunnelConfig>(
+                  net::WebSocketTunnelConfig{config.websocket_url,
+                                             config.websocket_auth})
+            : std::nullopt);
     naive_proxies.push_back(std::move(naive_proxy));
   }
 

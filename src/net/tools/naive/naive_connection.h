@@ -7,6 +7,7 @@
 #define NET_TOOLS_NAIVE_NAIVE_CONNECTION_H_
 
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "base/memory/scoped_refptr.h"
@@ -17,6 +18,7 @@
 #include "net/tools/naive/naive_padding_socket.h"
 #include "net/tools/naive/naive_protocol.h"
 #include "net/tools/naive/naive_proxy_delegate.h"
+#include "net/tools/naive/websocket_tunnel_socket.h"
 
 namespace net {
 
@@ -26,6 +28,7 @@ class HttpNetworkSession;
 class IOBuffer;
 class NetLogWithSource;
 class ProxyInfo;
+class URLRequestContext;
 class StreamSocket;
 struct NetworkTrafficAnnotationTag;
 struct SSLConfig;
@@ -45,7 +48,9 @@ class NaiveConnection {
                   const NetworkAnonymizationKey& network_anonymization_key,
                   const NetLogWithSource& net_log,
                   std::unique_ptr<StreamSocket> accepted_socket,
-                  const NetworkTrafficAnnotationTag& traffic_annotation);
+                  const NetworkTrafficAnnotationTag& traffic_annotation,
+                  URLRequestContext* websocket_context,
+                  std::optional<WebSocketTunnelConfig> websocket_config);
   ~NaiveConnection();
   NaiveConnection(const NaiveConnection&) = delete;
   NaiveConnection& operator=(const NaiveConnection&) = delete;
@@ -99,6 +104,8 @@ class NaiveConnection {
   const ProxyInfo& proxy_info_;
   RedirectResolver* resolver_;
   HttpNetworkSession* session_;
+  URLRequestContext* websocket_context_;
+  std::optional<WebSocketTunnelConfig> websocket_config_;
   NetworkAnonymizationKey network_anonymization_key_;
   const NetLogWithSource& net_log_;
 
@@ -110,6 +117,7 @@ class NaiveConnection {
 
   std::unique_ptr<StreamSocket> client_socket_;
   std::unique_ptr<ClientSocketHandle> server_socket_handle_;
+  std::unique_ptr<StreamSocket> websocket_socket_;
 
   std::unique_ptr<NaivePaddingSocket> sockets_[kNumDirections];
   scoped_refptr<IOBuffer> read_buffers_[kNumDirections];

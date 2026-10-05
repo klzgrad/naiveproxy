@@ -45,7 +45,9 @@ NaiveProxy::NaiveProxy(std::unique_ptr<ServerSocket> listen_socket,
                        RedirectResolver* resolver,
                        HttpNetworkSession* session,
                        const NetworkTrafficAnnotationTag& traffic_annotation,
-                       const std::vector<PaddingType>& supported_padding_types)
+                       const std::vector<PaddingType>& supported_padding_types,
+                       URLRequestContext* websocket_context,
+                       std::optional<WebSocketTunnelConfig> websocket_config)
     : listen_socket_(std::move(listen_socket)),
       protocol_(protocol),
       listen_user_(listen_user),
@@ -55,6 +57,8 @@ NaiveProxy::NaiveProxy(std::unique_ptr<ServerSocket> listen_socket,
       idle_timeout_(base::Seconds(idle_timeout)),
       resolver_(resolver),
       session_(session),
+      websocket_context_(websocket_context),
+      websocket_config_(std::move(websocket_config)),
       net_log_(
           NetLogWithSource::Make(session->net_log(), NetLogSourceType::NONE)),
       next_id_(0),
@@ -224,7 +228,7 @@ int NaiveProxy::DoConnect() {
   auto connection_ptr = std::make_unique<NaiveConnection>(
       next_id_, protocol_, std::move(negotiated_client_padding), proxy_info_,
       resolver_, session_, tunnel.nak, net_log_, std::move(socket),
-      traffic_annotation_);
+      traffic_annotation_, websocket_context_, websocket_config_);
   auto* connection = connection_ptr.get();
   connection_by_id_[connection->id()] = std::move(connection_ptr);
 
@@ -313,6 +317,9 @@ NaiveProxyDelegate* NaiveProxy::naive_proxy_delegate() const {
 }
 
 bool NaiveProxy::IsSessionCapable() const {
+  if (websocket_config_.has_value()) {
+    return false;
+  }
   if (proxy_info_.is_direct()) {
     return false;
   }

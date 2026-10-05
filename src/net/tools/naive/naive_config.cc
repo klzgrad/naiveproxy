@@ -187,9 +187,43 @@ bool NaiveConfig::Parse(const base::DictValue& value) {
       std::vector<ProxyServer> proxy_servers;
       PerProxyConfig proxy_config;
       bool seen_tcp = false;
+      bool seen_websocket = websocket_transport;
+      bool websocket_only = false;
       while (proxy_uri_list.GetNext()) {
         std::string token(proxy_uri_list.token());
         GURL url(token);
+
+        if (url.SchemeIs("ws") || url.SchemeIs("wss")) {
+          if (seen_websocket) {
+            std::cerr << "Only one WebSocket proxy is allowed" << std::endl;
+            return false;
+          }
+          if (!proxy_servers.empty()) {
+            std::cerr << "WebSocket proxy cannot be chained" << std::endl;
+            return false;
+          }
+          if (!url.is_valid() || url.host().empty()) {
+            std::cerr << "Invalid WebSocket proxy URL" << std::endl;
+            return false;
+          }
+
+          std::u16string websocket_user;
+          std::u16string websocket_pass;
+          net::GetIdentityFromURL(url, &websocket_user, &websocket_pass);
+          GURL::Replacements remove_auth;
+          remove_auth.ClearUsername();
+          remove_auth.ClearPassword();
+          websocket_transport = true;
+          websocket_url = url.ReplaceComponents(remove_auth);
+          websocket_auth = AuthCredentials(websocket_user, websocket_pass);
+          seen_websocket = true;
+          websocket_only = true;
+          continue;
+        }
+        if (seen_websocket) {
+          std::cerr << "WebSocket proxy cannot be chained" << std::endl;
+          return false;
+        }
 
         std::u16string proxy_user;
         std::u16string proxy_pass;
@@ -235,6 +269,10 @@ bool NaiveConfig::Parse(const base::DictValue& value) {
         }
       }
 
+      if (websocket_only && proxy_servers.empty()) {
+        continue;
+      }
+
       if (proxy_servers.size() > 1 &&
           std::any_of(proxy_servers.begin(), proxy_servers.end(),
                       [](const ProxyServer& s) { return s.is_socks(); })) {
@@ -260,6 +298,12 @@ bool NaiveConfig::Parse(const base::DictValue& value) {
       }
       proxy_chains.push_back(proxy_chain);
       proxy_configs.push_back(proxy_config);
+    }
+
+    if (websocket_transport && !proxy_chains.empty()) {
+      std::cerr << "WebSocket proxy cannot be combined with proxy chains"
+                << std::endl;
+      return false;
     }
   }
 
