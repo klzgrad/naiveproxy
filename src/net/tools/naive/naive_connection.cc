@@ -111,6 +111,12 @@ int NaiveConnection::Connect(CompletionOnceCallback callback) {
 }
 
 void NaiveConnection::Disconnect() {
+  // Follow TCPClientSocket::DoDisconnect() by invalidating weak pointers.
+  // OnPushComplete() can post a Pull() task, and NaiveProxy::Close() defers
+  // destruction with DeleteSoon(). Waiting for destruction to invalidate weak
+  // pointers could let that task read a closed socket while this connection is
+  // still alive.
+  weak_ptr_factory_.InvalidateWeakPtrs();
   full_duplex_ = false;
   // Closes server side first because latency is higher.
   if (server_socket_handle_->socket()) {
