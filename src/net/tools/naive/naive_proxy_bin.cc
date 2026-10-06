@@ -495,7 +495,8 @@ int main(int argc, char* argv[]) {
   std::unique_ptr<net::FileNetLogObserver> observer;
   if (!config.log_net_log.empty()) {
     observer = net::FileNetLogObserver::CreateUnbounded(
-        config.log_net_log, net::NetLogCaptureMode::kDefault, GetConstants());
+        config.log_net_log, net::NetLogCaptureMode::kDefault, GetConstants(),
+        net::NetLogFileFormat::kNdjson);
     observer->StartObserving(net_log);
   }
 
