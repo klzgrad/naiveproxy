@@ -300,19 +300,16 @@ std::unique_ptr<URLRequestContext> BuildURLRequestContext(
   builder.set_ssl_config_service(
       std::make_unique<MySSLConfigService>(config.no_post_quantum == true));
 
+  // The QUIC session pool copies these parameters during Build().
+  auto quic_context = std::make_unique<QuicContext>();
+  auto* quic = quic_context->params();
+  quic->additional_proxy_packet_length = 0;
   if (!config.proxy_configs.empty()) {
     const auto& config2 = config.proxy_configs.at(proxy_chain_index);
-    if (!config2.origins_to_force_quic_on.empty()) {
-      // The QUIC session pool copies these parameters during Build(),
-      // including the hosts allowed to use locally trusted certificate roots.
-      auto quic_context = std::make_unique<QuicContext>();
-      auto* quic = quic_context->params();
-      quic->origins_to_force_quic_on.insert(
-          config2.origins_to_force_quic_on.begin(),
-          config2.origins_to_force_quic_on.end());
-      builder.set_quic_context(std::move(quic_context));
-    }
+    // Allow these hosts to use locally trusted certificate roots.
+    quic->origins_to_force_quic_on = config2.origins_to_force_quic_on;
   }
+  builder.set_quic_context(std::move(quic_context));
 
   auto context = builder.Build();
 
@@ -386,8 +383,12 @@ int main(int argc, char* argv[]) {
 
   // content/app/content_main.cc: RunContentProcess()
   //   content/app/content_main_runner_impl.cc: Run()
-  base::FeatureList::InitInstance("PartitionConnectionsByNetworkIsolationKey",
-                                  std::string());
+  base::FeatureList::InitInstance(
+      "PartitionConnectionsByNetworkIsolationKey,"
+      "QuicUseReadMultiple,"
+      "EnableUdpGro,"
+      "IgnoreQuicCryptoConfigMemoryPressure",
+      std::string());
 
 #if PA_BUILDFLAG(USE_PARTITION_ALLOC)
   base::allocator::PartitionAllocSupport::Get()
