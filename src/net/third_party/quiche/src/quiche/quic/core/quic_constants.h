@@ -88,9 +88,9 @@ inline constexpr QuicByteCount kDefaultFlowControlSendWindow =
 
 // Maximum flow control receive window limits for connection and stream.
 inline constexpr QuicByteCount kStreamReceiveWindowLimit =
-    16 * 1024 * 1024;  // 16 MB
+    64 * 1024 * 1024;  // 64 MiB
 inline constexpr QuicByteCount kSessionReceiveWindowLimit =
-    24 * 1024 * 1024;  // 24 MB
+    128 * 1024 * 1024;  // 128 MiB
 
 // Minimum size of the CWND, in packets, when doing bandwidth resumption.
 inline constexpr QuicPacketCount kMinCongestionWindowForBandwidthResumption =

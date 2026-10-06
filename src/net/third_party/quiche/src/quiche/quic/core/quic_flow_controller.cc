@@ -273,7 +273,7 @@ bool QuicFlowController::UpdateSendWindowOffset(
 }
 
 void QuicFlowController::EnsureWindowAtLeast(QuicByteCount window_size) {
-  if (receive_window_size_limit_ >= window_size) {
+  if (receive_window_size_ >= window_size) {
     return;
   }
 
