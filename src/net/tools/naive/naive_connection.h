@@ -56,6 +56,9 @@ class NaiveConnection {
   int Run(CompletionOnceCallback callback);
   base::TimeTicks GetLastWriteTime() const;
   base::TimeTicks GetCreationTime() const;
+  const NetworkAnonymizationKey& network_anonymization_key() const {
+    return network_anonymization_key_;
+  }
 
  private:
   enum State {

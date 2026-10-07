@@ -353,13 +353,22 @@ void NaiveProxy::CleanUpIdleConnections() {
   base::TimeTicks now = base::TimeTicks::Now();
   for (const auto& [id, conn] : connection_by_id_) {
     base::TimeDelta idle = now - conn->GetLastWriteTime();
-    base::TimeDelta age = now - conn->GetCreationTime();
-    if (idle > idle_timeout_ || age > tunnel_timeout_) {
+    base::TimeDelta idle_timeout = idle_timeout_;
+    const Tunnel& tunnel = tunnels_[id % concurrency_];
+    if (!tunnel.deadline.is_null() &&
+        (conn->network_anonymization_key() != tunnel.nak ||
+         now > tunnel.deadline)) {
+      idle_timeout = idle_timeout_ / 10;
+    }
+    if (idle > idle_timeout) {
       idle_conns.push_back(conn.get());
     }
   }
   for (NaiveConnection* conn : idle_conns) {
+    unsigned int id = conn->id();
     conn->Disconnect();
+    // A connection still in Connect() has no run callback to remove it.
+    Close(id, ERR_TIMED_OUT);
   }
   session_->CloseIdleConnections("Rotate old tunnels");
 }
