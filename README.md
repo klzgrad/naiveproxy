@@ -44,6 +44,11 @@ Example Caddyfile (replace `user` and `pass` accordingly):
   log {
     exclude http.log.error # Avoid logging user activity
   }
+  servers {
+    timeouts {
+      read_body_idle -1s
+    }
+  }
 }
 :443, example.com {
   tls me@example.com
